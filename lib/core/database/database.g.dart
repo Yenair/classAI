@@ -982,6 +982,11 @@ class $TeachersTable extends Teachers with TableInfo<$TeachersTable, Teacher> {
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('CHECK ("is_deleted" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _saltMeta = const VerificationMeta('salt');
+  @override
+  late final GeneratedColumn<String> salt = GeneratedColumn<String>(
+      'salt', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _lastModifiedByMeta =
       const VerificationMeta('lastModifiedBy');
   @override
@@ -1006,6 +1011,7 @@ class $TeachersTable extends Teachers with TableInfo<$TeachersTable, Teacher> {
         updatedAt,
         updateCounter,
         isDeleted,
+        salt,
         lastModifiedBy
       ];
   @override
@@ -1104,6 +1110,10 @@ class $TeachersTable extends Teachers with TableInfo<$TeachersTable, Teacher> {
       context.handle(_isDeletedMeta,
           isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta));
     }
+    if (data.containsKey('salt')) {
+      context.handle(
+          _saltMeta, salt.isAcceptableOrUnknown(data['salt']!, _saltMeta));
+    }
     if (data.containsKey('last_modified_by')) {
       context.handle(
           _lastModifiedByMeta,
@@ -1152,6 +1162,8 @@ class $TeachersTable extends Teachers with TableInfo<$TeachersTable, Teacher> {
           .read(DriftSqlType.int, data['${effectivePrefix}update_counter'])!,
       isDeleted: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_deleted'])!,
+      salt: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}salt']),
       lastModifiedBy: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}last_modified_by']),
     );
@@ -1180,6 +1192,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
   final DateTime updatedAt;
   final int updateCounter;
   final bool isDeleted;
+  final String? salt;
   final String? lastModifiedBy;
   const Teacher(
       {required this.localId,
@@ -1198,6 +1211,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       required this.updatedAt,
       required this.updateCounter,
       required this.isDeleted,
+      this.salt,
       this.lastModifiedBy});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1226,6 +1240,9 @@ class Teacher extends DataClass implements Insertable<Teacher> {
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['update_counter'] = Variable<int>(updateCounter);
     map['is_deleted'] = Variable<bool>(isDeleted);
+    if (!nullToAbsent || salt != null) {
+      map['salt'] = Variable<String>(salt);
+    }
     if (!nullToAbsent || lastModifiedBy != null) {
       map['last_modified_by'] = Variable<String>(lastModifiedBy);
     }
@@ -1258,6 +1275,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       updatedAt: Value(updatedAt),
       updateCounter: Value(updateCounter),
       isDeleted: Value(isDeleted),
+      salt: salt == null && nullToAbsent ? const Value.absent() : Value(salt),
       lastModifiedBy: lastModifiedBy == null && nullToAbsent
           ? const Value.absent()
           : Value(lastModifiedBy),
@@ -1286,6 +1304,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       updateCounter: serializer.fromJson<int>(json['updateCounter']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      salt: serializer.fromJson<String?>(json['salt']),
       lastModifiedBy: serializer.fromJson<String?>(json['lastModifiedBy']),
     );
   }
@@ -1310,6 +1329,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'updateCounter': serializer.toJson<int>(updateCounter),
       'isDeleted': serializer.toJson<bool>(isDeleted),
+      'salt': serializer.toJson<String?>(salt),
       'lastModifiedBy': serializer.toJson<String?>(lastModifiedBy),
     };
   }
@@ -1331,6 +1351,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
           DateTime? updatedAt,
           int? updateCounter,
           bool? isDeleted,
+          Value<String?> salt = const Value.absent(),
           Value<String?> lastModifiedBy = const Value.absent()}) =>
       Teacher(
         localId: localId ?? this.localId,
@@ -1354,6 +1375,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
         updatedAt: updatedAt ?? this.updatedAt,
         updateCounter: updateCounter ?? this.updateCounter,
         isDeleted: isDeleted ?? this.isDeleted,
+        salt: salt.present ? salt.value : this.salt,
         lastModifiedBy:
             lastModifiedBy.present ? lastModifiedBy.value : this.lastModifiedBy,
       );
@@ -1390,6 +1412,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
           ? data.updateCounter.value
           : this.updateCounter,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      salt: data.salt.present ? data.salt.value : this.salt,
       lastModifiedBy: data.lastModifiedBy.present
           ? data.lastModifiedBy.value
           : this.lastModifiedBy,
@@ -1415,6 +1438,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
           ..write('updatedAt: $updatedAt, ')
           ..write('updateCounter: $updateCounter, ')
           ..write('isDeleted: $isDeleted, ')
+          ..write('salt: $salt, ')
           ..write('lastModifiedBy: $lastModifiedBy')
           ..write(')'))
         .toString();
@@ -1438,6 +1462,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       updatedAt,
       updateCounter,
       isDeleted,
+      salt,
       lastModifiedBy);
   @override
   bool operator ==(Object other) =>
@@ -1459,6 +1484,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
           other.updatedAt == this.updatedAt &&
           other.updateCounter == this.updateCounter &&
           other.isDeleted == this.isDeleted &&
+          other.salt == this.salt &&
           other.lastModifiedBy == this.lastModifiedBy);
 }
 
@@ -1479,6 +1505,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
   final Value<DateTime> updatedAt;
   final Value<int> updateCounter;
   final Value<bool> isDeleted;
+  final Value<String?> salt;
   final Value<String?> lastModifiedBy;
   const TeachersCompanion({
     this.localId = const Value.absent(),
@@ -1497,6 +1524,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
     this.updatedAt = const Value.absent(),
     this.updateCounter = const Value.absent(),
     this.isDeleted = const Value.absent(),
+    this.salt = const Value.absent(),
     this.lastModifiedBy = const Value.absent(),
   });
   TeachersCompanion.insert({
@@ -1516,6 +1544,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
     this.updatedAt = const Value.absent(),
     this.updateCounter = const Value.absent(),
     this.isDeleted = const Value.absent(),
+    this.salt = const Value.absent(),
     this.lastModifiedBy = const Value.absent(),
   })  : email = Value(email),
         teacherName = Value(teacherName),
@@ -1537,6 +1566,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
     Expression<DateTime>? updatedAt,
     Expression<int>? updateCounter,
     Expression<bool>? isDeleted,
+    Expression<String>? salt,
     Expression<String>? lastModifiedBy,
   }) {
     return RawValuesInsertable({
@@ -1559,6 +1589,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
       if (updatedAt != null) 'updated_at': updatedAt,
       if (updateCounter != null) 'update_counter': updateCounter,
       if (isDeleted != null) 'is_deleted': isDeleted,
+      if (salt != null) 'salt': salt,
       if (lastModifiedBy != null) 'last_modified_by': lastModifiedBy,
     });
   }
@@ -1580,6 +1611,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
       Value<DateTime>? updatedAt,
       Value<int>? updateCounter,
       Value<bool>? isDeleted,
+      Value<String?>? salt,
       Value<String?>? lastModifiedBy}) {
     return TeachersCompanion(
       localId: localId ?? this.localId,
@@ -1598,6 +1630,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
       updatedAt: updatedAt ?? this.updatedAt,
       updateCounter: updateCounter ?? this.updateCounter,
       isDeleted: isDeleted ?? this.isDeleted,
+      salt: salt ?? this.salt,
       lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,
     );
   }
@@ -1654,6 +1687,9 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
     }
+    if (salt.present) {
+      map['salt'] = Variable<String>(salt.value);
+    }
     if (lastModifiedBy.present) {
       map['last_modified_by'] = Variable<String>(lastModifiedBy.value);
     }
@@ -1679,6 +1715,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
           ..write('updatedAt: $updatedAt, ')
           ..write('updateCounter: $updateCounter, ')
           ..write('isDeleted: $isDeleted, ')
+          ..write('salt: $salt, ')
           ..write('lastModifiedBy: $lastModifiedBy')
           ..write(')'))
         .toString();
@@ -6461,6 +6498,7 @@ typedef $$TeachersTableCreateCompanionBuilder = TeachersCompanion Function({
   Value<DateTime> updatedAt,
   Value<int> updateCounter,
   Value<bool> isDeleted,
+  Value<String?> salt,
   Value<String?> lastModifiedBy,
 });
 typedef $$TeachersTableUpdateCompanionBuilder = TeachersCompanion Function({
@@ -6480,6 +6518,7 @@ typedef $$TeachersTableUpdateCompanionBuilder = TeachersCompanion Function({
   Value<DateTime> updatedAt,
   Value<int> updateCounter,
   Value<bool> isDeleted,
+  Value<String?> salt,
   Value<String?> lastModifiedBy,
 });
 
@@ -6561,6 +6600,9 @@ class $$TeachersTableFilterComposer
 
   ColumnFilters<bool> get isDeleted => $composableBuilder(
       column: $table.isDeleted, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get salt => $composableBuilder(
+      column: $table.salt, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get lastModifiedBy => $composableBuilder(
       column: $table.lastModifiedBy,
@@ -6647,6 +6689,9 @@ class $$TeachersTableOrderingComposer
   ColumnOrderings<bool> get isDeleted => $composableBuilder(
       column: $table.isDeleted, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get salt => $composableBuilder(
+      column: $table.salt, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get lastModifiedBy => $composableBuilder(
       column: $table.lastModifiedBy,
       builder: (column) => ColumnOrderings(column));
@@ -6726,6 +6771,9 @@ class $$TeachersTableAnnotationComposer
   GeneratedColumn<bool> get isDeleted =>
       $composableBuilder(column: $table.isDeleted, builder: (column) => column);
 
+  GeneratedColumn<String> get salt =>
+      $composableBuilder(column: $table.salt, builder: (column) => column);
+
   GeneratedColumn<String> get lastModifiedBy => $composableBuilder(
       column: $table.lastModifiedBy, builder: (column) => column);
 
@@ -6789,6 +6837,7 @@ class $$TeachersTableTableManager extends RootTableManager<
             Value<DateTime> updatedAt = const Value.absent(),
             Value<int> updateCounter = const Value.absent(),
             Value<bool> isDeleted = const Value.absent(),
+            Value<String?> salt = const Value.absent(),
             Value<String?> lastModifiedBy = const Value.absent(),
           }) =>
               TeachersCompanion(
@@ -6808,6 +6857,7 @@ class $$TeachersTableTableManager extends RootTableManager<
             updatedAt: updatedAt,
             updateCounter: updateCounter,
             isDeleted: isDeleted,
+            salt: salt,
             lastModifiedBy: lastModifiedBy,
           ),
           createCompanionCallback: ({
@@ -6827,6 +6877,7 @@ class $$TeachersTableTableManager extends RootTableManager<
             Value<DateTime> updatedAt = const Value.absent(),
             Value<int> updateCounter = const Value.absent(),
             Value<bool> isDeleted = const Value.absent(),
+            Value<String?> salt = const Value.absent(),
             Value<String?> lastModifiedBy = const Value.absent(),
           }) =>
               TeachersCompanion.insert(
@@ -6846,6 +6897,7 @@ class $$TeachersTableTableManager extends RootTableManager<
             updatedAt: updatedAt,
             updateCounter: updateCounter,
             isDeleted: isDeleted,
+            salt: salt,
             lastModifiedBy: lastModifiedBy,
           ),
           withReferenceMapper: (p0) => p0

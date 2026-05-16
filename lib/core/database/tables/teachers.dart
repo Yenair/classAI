@@ -19,6 +19,7 @@ class Teachers extends Table {
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   IntColumn get updateCounter => integer().withDefault(const Constant(0))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+  TextColumn get salt => text().nullable()(); // cached Argon2id salt from server (base64)
   TextColumn get lastModifiedBy => text().nullable()();
 
 }
