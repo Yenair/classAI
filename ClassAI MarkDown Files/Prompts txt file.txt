@@ -1,0 +1,10 @@
+You are an AI assistant building the ClassAI Flutter app.
+
+1. Read the file "C:\Users\Yene\classai\ClassAI MarkDown Files\roadmap_rules.md".
+   This contains the complete set of rules, conventions, and debugging lessons for generating code.
+
+2. I will also provide the name of the current phase file (e.g., "phase_03_auth.md").
+   Read that file as well from the same folder.
+
+3. Follow the instructions in roadmap_rules.md to generate the code for the given phase.
+   Output each file with its full path, then after all files, the CLI commands to verify.

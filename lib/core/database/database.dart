@@ -1,0 +1,128 @@
+import 'dart:io';
+import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
+import 'package:uuid/uuid.dart';
+import 'tables/schools.dart';
+import 'tables/teachers.dart';
+import 'tables/subjects.dart';
+import 'tables/lessons.dart';
+import 'tables/scheme_of_work.dart';
+import 'tables/exams.dart';
+import 'tables/progress_logs.dart';
+import 'tables/vault_items.dart';
+import 'tables/security_config.dart';
+import 'tables/sync_queue.dart';
+import 'tables/sync_queue_snapshot.dart';
+import 'tables/version_hashes.dart';
+import 'tables/conflicts.dart';
+import 'tables/payment_events.dart';
+import 'tables/recovery_codes.dart';
+import 'tables/pending_recovery_requests.dart';
+import 'tables/teacher_devices.dart';
+import 'tables/scheme_generation_queue.dart';
+
+import 'daos/security_config_dao.dart';
+import 'daos/sync_queue_dao.dart';
+import 'daos/payment_events_dao.dart';
+
+part 'database.g.dart'; // generated
+
+@DriftDatabase(tables: [
+  Schools,
+  Teachers,
+  Subjects,
+  Lessons,
+  SchemeOfWork,
+  Exams,
+  ProgressLogs,
+  VaultItems,
+  SecurityConfig,
+  SyncQueue,
+  SyncQueueSnapshot,
+  VersionHashes,
+  Conflicts,
+  PaymentEvents,
+  RecoveryCodes,
+  PendingRecoveryRequests,
+  TeacherDevices,
+  SchemeGenerationQueue,
+])
+class AppDatabase extends _$AppDatabase {
+  SecurityConfigDao get securityConfigDao => SecurityConfigDao(this);
+  SyncQueueDao get syncQueueDao => SyncQueueDao(this);
+  PaymentEventsDao get paymentEventsDao => PaymentEventsDao(this);
+  
+  AppDatabase() : super(_openConnection());
+  AppDatabase.forTesting() : super(NativeDatabase.memory());
+
+  @override
+  int get schemaVersion => 1;
+
+  static QueryExecutor _openConnection() {
+    return LazyDatabase(() async {
+      final dbFolder = await getApplicationDocumentsDirectory();
+      final file = p.join(dbFolder.path, 'classai.db');
+
+      return NativeDatabase.createInBackground(
+        File(file),
+        // CRITICAL: This uses SQLite Online Backup API internally
+      );
+    });
+  }
+
+  // Run after database opens
+  Future<void> initialize() async {
+    await customStatement('PRAGMA journal_mode=WAL');
+    await customStatement('PRAGMA foreign_keys=ON');
+
+    // Integrity check
+    final result = await customSelect('PRAGMA integrity_check').get();
+    final ok = result.map((r) => r.read<String>('integrity_check')).first;
+    if (ok != 'ok') {
+      throw DatabaseIntegrityException('Database integrity check failed: $ok');
+    }
+
+    // Create FTS5 virtual table for search
+    await customStatement('''
+      CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(
+        content_type,    -- 'lesson', 'exam', 'vault_item'
+        record_local_id,
+        title,
+        body,
+        tokenize='porter unicode61'
+      )
+    ''');
+  }
+
+  // Migration support
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (m) async {
+          await m.createAll();
+        },
+        onUpgrade: (m, from, to) async {
+          // Future migrations go here
+        },
+        beforeOpen: (details) async {
+          await customStatement('PRAGMA foreign_keys=ON');
+
+          // Seed the SecurityConfig singleton row if it doesn't exist
+          final result =
+              await customSelect('SELECT COUNT(*) as c FROM security_config')
+                  .getSingle();
+          if (result.read<int>('c') == 0) {
+            final deviceId = const Uuid().v4();
+            await into(securityConfig).insert(
+              SecurityConfigCompanion.insert(currentDeviceId: deviceId),
+            );
+          }
+        },
+      );
+}
+
+class DatabaseIntegrityException implements Exception {
+  final String message;
+  DatabaseIntegrityException(this.message);
+}
