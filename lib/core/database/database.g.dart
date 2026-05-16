@@ -2697,6 +2697,14 @@ class $SecurityConfigTable extends SecurityConfig
   late final GeneratedColumn<DateTime> syncCooldownUntil =
       GeneratedColumn<DateTime>('sync_cooldown_until', aliasedName, true,
           type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _lastRealtimeEventIdMeta =
+      const VerificationMeta('lastRealtimeEventId');
+  @override
+  late final GeneratedColumn<int> lastRealtimeEventId = GeneratedColumn<int>(
+      'last_realtime_event_id', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
   static const VerificationMeta _heartbeatLastSuccessMeta =
       const VerificationMeta('heartbeatLastSuccess');
   @override
@@ -2804,6 +2812,7 @@ class $SecurityConfigTable extends SecurityConfig
         syncCursor,
         lastSyncAttemptTime,
         syncCooldownUntil,
+        lastRealtimeEventId,
         heartbeatLastSuccess,
         lastVacuumDate,
         encryptionKeyWrapped,
@@ -2906,6 +2915,12 @@ class $SecurityConfigTable extends SecurityConfig
           _syncCooldownUntilMeta,
           syncCooldownUntil.isAcceptableOrUnknown(
               data['sync_cooldown_until']!, _syncCooldownUntilMeta));
+    }
+    if (data.containsKey('last_realtime_event_id')) {
+      context.handle(
+          _lastRealtimeEventIdMeta,
+          lastRealtimeEventId.isAcceptableOrUnknown(
+              data['last_realtime_event_id']!, _lastRealtimeEventIdMeta));
     }
     if (data.containsKey('heartbeat_last_success')) {
       context.handle(
@@ -3025,6 +3040,8 @@ class $SecurityConfigTable extends SecurityConfig
           data['${effectivePrefix}last_sync_attempt_time']),
       syncCooldownUntil: attachedDatabase.typeMapping.read(
           DriftSqlType.dateTime, data['${effectivePrefix}sync_cooldown_until']),
+      lastRealtimeEventId: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}last_realtime_event_id'])!,
       heartbeatLastSuccess: attachedDatabase.typeMapping.read(
           DriftSqlType.dateTime,
           data['${effectivePrefix}heartbeat_last_success']),
@@ -3079,6 +3096,7 @@ class SecurityConfigData extends DataClass
   final String? syncCursor;
   final DateTime? lastSyncAttemptTime;
   final DateTime? syncCooldownUntil;
+  final int lastRealtimeEventId;
   final DateTime? heartbeatLastSuccess;
   final DateTime? lastVacuumDate;
   final String? encryptionKeyWrapped;
@@ -3106,6 +3124,7 @@ class SecurityConfigData extends DataClass
       this.syncCursor,
       this.lastSyncAttemptTime,
       this.syncCooldownUntil,
+      required this.lastRealtimeEventId,
       this.heartbeatLastSuccess,
       this.lastVacuumDate,
       this.encryptionKeyWrapped,
@@ -3152,6 +3171,7 @@ class SecurityConfigData extends DataClass
     if (!nullToAbsent || syncCooldownUntil != null) {
       map['sync_cooldown_until'] = Variable<DateTime>(syncCooldownUntil);
     }
+    map['last_realtime_event_id'] = Variable<int>(lastRealtimeEventId);
     if (!nullToAbsent || heartbeatLastSuccess != null) {
       map['heartbeat_last_success'] = Variable<DateTime>(heartbeatLastSuccess);
     }
@@ -3215,6 +3235,7 @@ class SecurityConfigData extends DataClass
       syncCooldownUntil: syncCooldownUntil == null && nullToAbsent
           ? const Value.absent()
           : Value(syncCooldownUntil),
+      lastRealtimeEventId: Value(lastRealtimeEventId),
       heartbeatLastSuccess: heartbeatLastSuccess == null && nullToAbsent
           ? const Value.absent()
           : Value(heartbeatLastSuccess),
@@ -3269,6 +3290,8 @@ class SecurityConfigData extends DataClass
           serializer.fromJson<DateTime?>(json['lastSyncAttemptTime']),
       syncCooldownUntil:
           serializer.fromJson<DateTime?>(json['syncCooldownUntil']),
+      lastRealtimeEventId:
+          serializer.fromJson<int>(json['lastRealtimeEventId']),
       heartbeatLastSuccess:
           serializer.fromJson<DateTime?>(json['heartbeatLastSuccess']),
       lastVacuumDate: serializer.fromJson<DateTime?>(json['lastVacuumDate']),
@@ -3311,6 +3334,7 @@ class SecurityConfigData extends DataClass
       'syncCursor': serializer.toJson<String?>(syncCursor),
       'lastSyncAttemptTime': serializer.toJson<DateTime?>(lastSyncAttemptTime),
       'syncCooldownUntil': serializer.toJson<DateTime?>(syncCooldownUntil),
+      'lastRealtimeEventId': serializer.toJson<int>(lastRealtimeEventId),
       'heartbeatLastSuccess':
           serializer.toJson<DateTime?>(heartbeatLastSuccess),
       'lastVacuumDate': serializer.toJson<DateTime?>(lastVacuumDate),
@@ -3345,6 +3369,7 @@ class SecurityConfigData extends DataClass
           Value<String?> syncCursor = const Value.absent(),
           Value<DateTime?> lastSyncAttemptTime = const Value.absent(),
           Value<DateTime?> syncCooldownUntil = const Value.absent(),
+          int? lastRealtimeEventId,
           Value<DateTime?> heartbeatLastSuccess = const Value.absent(),
           Value<DateTime?> lastVacuumDate = const Value.absent(),
           Value<String?> encryptionKeyWrapped = const Value.absent(),
@@ -3386,6 +3411,7 @@ class SecurityConfigData extends DataClass
         syncCooldownUntil: syncCooldownUntil.present
             ? syncCooldownUntil.value
             : this.syncCooldownUntil,
+        lastRealtimeEventId: lastRealtimeEventId ?? this.lastRealtimeEventId,
         heartbeatLastSuccess: heartbeatLastSuccess.present
             ? heartbeatLastSuccess.value
             : this.heartbeatLastSuccess,
@@ -3451,6 +3477,9 @@ class SecurityConfigData extends DataClass
       syncCooldownUntil: data.syncCooldownUntil.present
           ? data.syncCooldownUntil.value
           : this.syncCooldownUntil,
+      lastRealtimeEventId: data.lastRealtimeEventId.present
+          ? data.lastRealtimeEventId.value
+          : this.lastRealtimeEventId,
       heartbeatLastSuccess: data.heartbeatLastSuccess.present
           ? data.heartbeatLastSuccess.value
           : this.heartbeatLastSuccess,
@@ -3508,6 +3537,7 @@ class SecurityConfigData extends DataClass
           ..write('syncCursor: $syncCursor, ')
           ..write('lastSyncAttemptTime: $lastSyncAttemptTime, ')
           ..write('syncCooldownUntil: $syncCooldownUntil, ')
+          ..write('lastRealtimeEventId: $lastRealtimeEventId, ')
           ..write('heartbeatLastSuccess: $heartbeatLastSuccess, ')
           ..write('lastVacuumDate: $lastVacuumDate, ')
           ..write('encryptionKeyWrapped: $encryptionKeyWrapped, ')
@@ -3542,6 +3572,7 @@ class SecurityConfigData extends DataClass
         syncCursor,
         lastSyncAttemptTime,
         syncCooldownUntil,
+        lastRealtimeEventId,
         heartbeatLastSuccess,
         lastVacuumDate,
         encryptionKeyWrapped,
@@ -3573,6 +3604,7 @@ class SecurityConfigData extends DataClass
           other.syncCursor == this.syncCursor &&
           other.lastSyncAttemptTime == this.lastSyncAttemptTime &&
           other.syncCooldownUntil == this.syncCooldownUntil &&
+          other.lastRealtimeEventId == this.lastRealtimeEventId &&
           other.heartbeatLastSuccess == this.heartbeatLastSuccess &&
           other.lastVacuumDate == this.lastVacuumDate &&
           other.encryptionKeyWrapped == this.encryptionKeyWrapped &&
@@ -3604,6 +3636,7 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
   final Value<String?> syncCursor;
   final Value<DateTime?> lastSyncAttemptTime;
   final Value<DateTime?> syncCooldownUntil;
+  final Value<int> lastRealtimeEventId;
   final Value<DateTime?> heartbeatLastSuccess;
   final Value<DateTime?> lastVacuumDate;
   final Value<String?> encryptionKeyWrapped;
@@ -3631,6 +3664,7 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
     this.syncCursor = const Value.absent(),
     this.lastSyncAttemptTime = const Value.absent(),
     this.syncCooldownUntil = const Value.absent(),
+    this.lastRealtimeEventId = const Value.absent(),
     this.heartbeatLastSuccess = const Value.absent(),
     this.lastVacuumDate = const Value.absent(),
     this.encryptionKeyWrapped = const Value.absent(),
@@ -3659,6 +3693,7 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
     this.syncCursor = const Value.absent(),
     this.lastSyncAttemptTime = const Value.absent(),
     this.syncCooldownUntil = const Value.absent(),
+    this.lastRealtimeEventId = const Value.absent(),
     this.heartbeatLastSuccess = const Value.absent(),
     this.lastVacuumDate = const Value.absent(),
     this.encryptionKeyWrapped = const Value.absent(),
@@ -3687,6 +3722,7 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
     Expression<String>? syncCursor,
     Expression<DateTime>? lastSyncAttemptTime,
     Expression<DateTime>? syncCooldownUntil,
+    Expression<int>? lastRealtimeEventId,
     Expression<DateTime>? heartbeatLastSuccess,
     Expression<DateTime>? lastVacuumDate,
     Expression<String>? encryptionKeyWrapped,
@@ -3720,6 +3756,8 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
       if (lastSyncAttemptTime != null)
         'last_sync_attempt_time': lastSyncAttemptTime,
       if (syncCooldownUntil != null) 'sync_cooldown_until': syncCooldownUntil,
+      if (lastRealtimeEventId != null)
+        'last_realtime_event_id': lastRealtimeEventId,
       if (heartbeatLastSuccess != null)
         'heartbeat_last_success': heartbeatLastSuccess,
       if (lastVacuumDate != null) 'last_vacuum_date': lastVacuumDate,
@@ -3759,6 +3797,7 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
       Value<String?>? syncCursor,
       Value<DateTime?>? lastSyncAttemptTime,
       Value<DateTime?>? syncCooldownUntil,
+      Value<int>? lastRealtimeEventId,
       Value<DateTime?>? heartbeatLastSuccess,
       Value<DateTime?>? lastVacuumDate,
       Value<String?>? encryptionKeyWrapped,
@@ -3787,6 +3826,7 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
       syncCursor: syncCursor ?? this.syncCursor,
       lastSyncAttemptTime: lastSyncAttemptTime ?? this.lastSyncAttemptTime,
       syncCooldownUntil: syncCooldownUntil ?? this.syncCooldownUntil,
+      lastRealtimeEventId: lastRealtimeEventId ?? this.lastRealtimeEventId,
       heartbeatLastSuccess: heartbeatLastSuccess ?? this.heartbeatLastSuccess,
       lastVacuumDate: lastVacuumDate ?? this.lastVacuumDate,
       encryptionKeyWrapped: encryptionKeyWrapped ?? this.encryptionKeyWrapped,
@@ -3853,6 +3893,9 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
     if (syncCooldownUntil.present) {
       map['sync_cooldown_until'] = Variable<DateTime>(syncCooldownUntil.value);
     }
+    if (lastRealtimeEventId.present) {
+      map['last_realtime_event_id'] = Variable<int>(lastRealtimeEventId.value);
+    }
     if (heartbeatLastSuccess.present) {
       map['heartbeat_last_success'] =
           Variable<DateTime>(heartbeatLastSuccess.value);
@@ -3916,6 +3959,7 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
           ..write('syncCursor: $syncCursor, ')
           ..write('lastSyncAttemptTime: $lastSyncAttemptTime, ')
           ..write('syncCooldownUntil: $syncCooldownUntil, ')
+          ..write('lastRealtimeEventId: $lastRealtimeEventId, ')
           ..write('heartbeatLastSuccess: $heartbeatLastSuccess, ')
           ..write('lastVacuumDate: $lastVacuumDate, ')
           ..write('encryptionKeyWrapped: $encryptionKeyWrapped, ')
@@ -4587,13 +4631,20 @@ class $VersionHashesTable extends VersionHashes
   late final GeneratedColumn<String> hash = GeneratedColumn<String>(
       'hash', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _snapshotJsonMeta =
+      const VerificationMeta('snapshotJson');
+  @override
+  late final GeneratedColumn<String> snapshotJson = GeneratedColumn<String>(
+      'snapshot_json', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _setAtMeta = const VerificationMeta('setAt');
   @override
   late final GeneratedColumn<DateTime> setAt = GeneratedColumn<DateTime>(
       'set_at', aliasedName, false,
       type: DriftSqlType.dateTime, requiredDuringInsert: true);
   @override
-  List<GeneratedColumn> get $columns => [id, table, recordLocalId, hash, setAt];
+  List<GeneratedColumn> get $columns =>
+      [id, table, recordLocalId, hash, snapshotJson, setAt];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -4627,6 +4678,12 @@ class $VersionHashesTable extends VersionHashes
     } else if (isInserting) {
       context.missing(_hashMeta);
     }
+    if (data.containsKey('snapshot_json')) {
+      context.handle(
+          _snapshotJsonMeta,
+          snapshotJson.isAcceptableOrUnknown(
+              data['snapshot_json']!, _snapshotJsonMeta));
+    }
     if (data.containsKey('set_at')) {
       context.handle(
           _setAtMeta, setAt.isAcceptableOrUnknown(data['set_at']!, _setAtMeta));
@@ -4650,6 +4707,8 @@ class $VersionHashesTable extends VersionHashes
           .read(DriftSqlType.int, data['${effectivePrefix}record_local_id'])!,
       hash: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}hash'])!,
+      snapshotJson: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}snapshot_json']),
       setAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}set_at'])!,
     );
@@ -4666,12 +4725,14 @@ class VersionHashe extends DataClass implements Insertable<VersionHashe> {
   final String table;
   final int recordLocalId;
   final String hash;
+  final String? snapshotJson;
   final DateTime setAt;
   const VersionHashe(
       {required this.id,
       required this.table,
       required this.recordLocalId,
       required this.hash,
+      this.snapshotJson,
       required this.setAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -4680,6 +4741,9 @@ class VersionHashe extends DataClass implements Insertable<VersionHashe> {
     map['table_name'] = Variable<String>(table);
     map['record_local_id'] = Variable<int>(recordLocalId);
     map['hash'] = Variable<String>(hash);
+    if (!nullToAbsent || snapshotJson != null) {
+      map['snapshot_json'] = Variable<String>(snapshotJson);
+    }
     map['set_at'] = Variable<DateTime>(setAt);
     return map;
   }
@@ -4690,6 +4754,9 @@ class VersionHashe extends DataClass implements Insertable<VersionHashe> {
       table: Value(table),
       recordLocalId: Value(recordLocalId),
       hash: Value(hash),
+      snapshotJson: snapshotJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(snapshotJson),
       setAt: Value(setAt),
     );
   }
@@ -4702,6 +4769,7 @@ class VersionHashe extends DataClass implements Insertable<VersionHashe> {
       table: serializer.fromJson<String>(json['table']),
       recordLocalId: serializer.fromJson<int>(json['recordLocalId']),
       hash: serializer.fromJson<String>(json['hash']),
+      snapshotJson: serializer.fromJson<String?>(json['snapshotJson']),
       setAt: serializer.fromJson<DateTime>(json['setAt']),
     );
   }
@@ -4713,6 +4781,7 @@ class VersionHashe extends DataClass implements Insertable<VersionHashe> {
       'table': serializer.toJson<String>(table),
       'recordLocalId': serializer.toJson<int>(recordLocalId),
       'hash': serializer.toJson<String>(hash),
+      'snapshotJson': serializer.toJson<String?>(snapshotJson),
       'setAt': serializer.toJson<DateTime>(setAt),
     };
   }
@@ -4722,12 +4791,15 @@ class VersionHashe extends DataClass implements Insertable<VersionHashe> {
           String? table,
           int? recordLocalId,
           String? hash,
+          Value<String?> snapshotJson = const Value.absent(),
           DateTime? setAt}) =>
       VersionHashe(
         id: id ?? this.id,
         table: table ?? this.table,
         recordLocalId: recordLocalId ?? this.recordLocalId,
         hash: hash ?? this.hash,
+        snapshotJson:
+            snapshotJson.present ? snapshotJson.value : this.snapshotJson,
         setAt: setAt ?? this.setAt,
       );
   VersionHashe copyWithCompanion(VersionHashesCompanion data) {
@@ -4738,6 +4810,9 @@ class VersionHashe extends DataClass implements Insertable<VersionHashe> {
           ? data.recordLocalId.value
           : this.recordLocalId,
       hash: data.hash.present ? data.hash.value : this.hash,
+      snapshotJson: data.snapshotJson.present
+          ? data.snapshotJson.value
+          : this.snapshotJson,
       setAt: data.setAt.present ? data.setAt.value : this.setAt,
     );
   }
@@ -4749,13 +4824,15 @@ class VersionHashe extends DataClass implements Insertable<VersionHashe> {
           ..write('table: $table, ')
           ..write('recordLocalId: $recordLocalId, ')
           ..write('hash: $hash, ')
+          ..write('snapshotJson: $snapshotJson, ')
           ..write('setAt: $setAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, table, recordLocalId, hash, setAt);
+  int get hashCode =>
+      Object.hash(id, table, recordLocalId, hash, snapshotJson, setAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -4764,6 +4841,7 @@ class VersionHashe extends DataClass implements Insertable<VersionHashe> {
           other.table == this.table &&
           other.recordLocalId == this.recordLocalId &&
           other.hash == this.hash &&
+          other.snapshotJson == this.snapshotJson &&
           other.setAt == this.setAt);
 }
 
@@ -4772,12 +4850,14 @@ class VersionHashesCompanion extends UpdateCompanion<VersionHashe> {
   final Value<String> table;
   final Value<int> recordLocalId;
   final Value<String> hash;
+  final Value<String?> snapshotJson;
   final Value<DateTime> setAt;
   const VersionHashesCompanion({
     this.id = const Value.absent(),
     this.table = const Value.absent(),
     this.recordLocalId = const Value.absent(),
     this.hash = const Value.absent(),
+    this.snapshotJson = const Value.absent(),
     this.setAt = const Value.absent(),
   });
   VersionHashesCompanion.insert({
@@ -4785,6 +4865,7 @@ class VersionHashesCompanion extends UpdateCompanion<VersionHashe> {
     required String table,
     required int recordLocalId,
     required String hash,
+    this.snapshotJson = const Value.absent(),
     required DateTime setAt,
   })  : table = Value(table),
         recordLocalId = Value(recordLocalId),
@@ -4795,6 +4876,7 @@ class VersionHashesCompanion extends UpdateCompanion<VersionHashe> {
     Expression<String>? table,
     Expression<int>? recordLocalId,
     Expression<String>? hash,
+    Expression<String>? snapshotJson,
     Expression<DateTime>? setAt,
   }) {
     return RawValuesInsertable({
@@ -4802,6 +4884,7 @@ class VersionHashesCompanion extends UpdateCompanion<VersionHashe> {
       if (table != null) 'table_name': table,
       if (recordLocalId != null) 'record_local_id': recordLocalId,
       if (hash != null) 'hash': hash,
+      if (snapshotJson != null) 'snapshot_json': snapshotJson,
       if (setAt != null) 'set_at': setAt,
     });
   }
@@ -4811,12 +4894,14 @@ class VersionHashesCompanion extends UpdateCompanion<VersionHashe> {
       Value<String>? table,
       Value<int>? recordLocalId,
       Value<String>? hash,
+      Value<String?>? snapshotJson,
       Value<DateTime>? setAt}) {
     return VersionHashesCompanion(
       id: id ?? this.id,
       table: table ?? this.table,
       recordLocalId: recordLocalId ?? this.recordLocalId,
       hash: hash ?? this.hash,
+      snapshotJson: snapshotJson ?? this.snapshotJson,
       setAt: setAt ?? this.setAt,
     );
   }
@@ -4836,6 +4921,9 @@ class VersionHashesCompanion extends UpdateCompanion<VersionHashe> {
     if (hash.present) {
       map['hash'] = Variable<String>(hash.value);
     }
+    if (snapshotJson.present) {
+      map['snapshot_json'] = Variable<String>(snapshotJson.value);
+    }
     if (setAt.present) {
       map['set_at'] = Variable<DateTime>(setAt.value);
     }
@@ -4849,6 +4937,7 @@ class VersionHashesCompanion extends UpdateCompanion<VersionHashe> {
           ..write('table: $table, ')
           ..write('recordLocalId: $recordLocalId, ')
           ..write('hash: $hash, ')
+          ..write('snapshotJson: $snapshotJson, ')
           ..write('setAt: $setAt')
           ..write(')'))
         .toString();
@@ -4870,8 +4959,69 @@ class $ConflictsTable extends Conflicts
       requiredDuringInsert: false,
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _recordTypeMeta =
+      const VerificationMeta('recordType');
   @override
-  List<GeneratedColumn> get $columns => [id];
+  late final GeneratedColumn<String> recordType = GeneratedColumn<String>(
+      'record_type', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _recordLocalIdMeta =
+      const VerificationMeta('recordLocalId');
+  @override
+  late final GeneratedColumn<int> recordLocalId = GeneratedColumn<int>(
+      'record_local_id', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _conflictingFieldsMeta =
+      const VerificationMeta('conflictingFields');
+  @override
+  late final GeneratedColumn<String> conflictingFields =
+      GeneratedColumn<String>('conflicting_fields', aliasedName, false,
+          type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _resolutionMeta =
+      const VerificationMeta('resolution');
+  @override
+  late final GeneratedColumn<String> resolution = GeneratedColumn<String>(
+      'resolution', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('unresolved'));
+  static const VerificationMeta _notifiedMeta =
+      const VerificationMeta('notified');
+  @override
+  late final GeneratedColumn<bool> notified = GeneratedColumn<bool>(
+      'notified', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("notified" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        recordType,
+        recordLocalId,
+        conflictingFields,
+        resolution,
+        notified,
+        createdAt,
+        updatedAt
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -4885,6 +5035,48 @@ class $ConflictsTable extends Conflicts
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
     }
+    if (data.containsKey('record_type')) {
+      context.handle(
+          _recordTypeMeta,
+          recordType.isAcceptableOrUnknown(
+              data['record_type']!, _recordTypeMeta));
+    } else if (isInserting) {
+      context.missing(_recordTypeMeta);
+    }
+    if (data.containsKey('record_local_id')) {
+      context.handle(
+          _recordLocalIdMeta,
+          recordLocalId.isAcceptableOrUnknown(
+              data['record_local_id']!, _recordLocalIdMeta));
+    } else if (isInserting) {
+      context.missing(_recordLocalIdMeta);
+    }
+    if (data.containsKey('conflicting_fields')) {
+      context.handle(
+          _conflictingFieldsMeta,
+          conflictingFields.isAcceptableOrUnknown(
+              data['conflicting_fields']!, _conflictingFieldsMeta));
+    } else if (isInserting) {
+      context.missing(_conflictingFieldsMeta);
+    }
+    if (data.containsKey('resolution')) {
+      context.handle(
+          _resolutionMeta,
+          resolution.isAcceptableOrUnknown(
+              data['resolution']!, _resolutionMeta));
+    }
+    if (data.containsKey('notified')) {
+      context.handle(_notifiedMeta,
+          notified.isAcceptableOrUnknown(data['notified']!, _notifiedMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
     return context;
   }
 
@@ -4896,6 +5088,20 @@ class $ConflictsTable extends Conflicts
     return Conflict(
       id: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      recordType: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}record_type'])!,
+      recordLocalId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}record_local_id'])!,
+      conflictingFields: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}conflicting_fields'])!,
+      resolution: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}resolution'])!,
+      notified: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}notified'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
     );
   }
 
@@ -4907,17 +5113,46 @@ class $ConflictsTable extends Conflicts
 
 class Conflict extends DataClass implements Insertable<Conflict> {
   final int id;
-  const Conflict({required this.id});
+  final String recordType;
+  final int recordLocalId;
+  final String conflictingFields;
+  final String resolution;
+  final bool notified;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const Conflict(
+      {required this.id,
+      required this.recordType,
+      required this.recordLocalId,
+      required this.conflictingFields,
+      required this.resolution,
+      required this.notified,
+      required this.createdAt,
+      required this.updatedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
+    map['record_type'] = Variable<String>(recordType);
+    map['record_local_id'] = Variable<int>(recordLocalId);
+    map['conflicting_fields'] = Variable<String>(conflictingFields);
+    map['resolution'] = Variable<String>(resolution);
+    map['notified'] = Variable<bool>(notified);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
 
   ConflictsCompanion toCompanion(bool nullToAbsent) {
     return ConflictsCompanion(
       id: Value(id),
+      recordType: Value(recordType),
+      recordLocalId: Value(recordLocalId),
+      conflictingFields: Value(conflictingFields),
+      resolution: Value(resolution),
+      notified: Value(notified),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
     );
   }
 
@@ -4926,6 +5161,13 @@ class Conflict extends DataClass implements Insertable<Conflict> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return Conflict(
       id: serializer.fromJson<int>(json['id']),
+      recordType: serializer.fromJson<String>(json['recordType']),
+      recordLocalId: serializer.fromJson<int>(json['recordLocalId']),
+      conflictingFields: serializer.fromJson<String>(json['conflictingFields']),
+      resolution: serializer.fromJson<String>(json['resolution']),
+      notified: serializer.fromJson<bool>(json['notified']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
   @override
@@ -4933,52 +5175,157 @@ class Conflict extends DataClass implements Insertable<Conflict> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
+      'recordType': serializer.toJson<String>(recordType),
+      'recordLocalId': serializer.toJson<int>(recordLocalId),
+      'conflictingFields': serializer.toJson<String>(conflictingFields),
+      'resolution': serializer.toJson<String>(resolution),
+      'notified': serializer.toJson<bool>(notified),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
 
-  Conflict copyWith({int? id}) => Conflict(
+  Conflict copyWith(
+          {int? id,
+          String? recordType,
+          int? recordLocalId,
+          String? conflictingFields,
+          String? resolution,
+          bool? notified,
+          DateTime? createdAt,
+          DateTime? updatedAt}) =>
+      Conflict(
         id: id ?? this.id,
+        recordType: recordType ?? this.recordType,
+        recordLocalId: recordLocalId ?? this.recordLocalId,
+        conflictingFields: conflictingFields ?? this.conflictingFields,
+        resolution: resolution ?? this.resolution,
+        notified: notified ?? this.notified,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
       );
   Conflict copyWithCompanion(ConflictsCompanion data) {
     return Conflict(
       id: data.id.present ? data.id.value : this.id,
+      recordType:
+          data.recordType.present ? data.recordType.value : this.recordType,
+      recordLocalId: data.recordLocalId.present
+          ? data.recordLocalId.value
+          : this.recordLocalId,
+      conflictingFields: data.conflictingFields.present
+          ? data.conflictingFields.value
+          : this.conflictingFields,
+      resolution:
+          data.resolution.present ? data.resolution.value : this.resolution,
+      notified: data.notified.present ? data.notified.value : this.notified,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
 
   @override
   String toString() {
     return (StringBuffer('Conflict(')
-          ..write('id: $id')
+          ..write('id: $id, ')
+          ..write('recordType: $recordType, ')
+          ..write('recordLocalId: $recordLocalId, ')
+          ..write('conflictingFields: $conflictingFields, ')
+          ..write('resolution: $resolution, ')
+          ..write('notified: $notified, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => Object.hash(id, recordType, recordLocalId,
+      conflictingFields, resolution, notified, createdAt, updatedAt);
   @override
   bool operator ==(Object other) =>
-      identical(this, other) || (other is Conflict && other.id == this.id);
+      identical(this, other) ||
+      (other is Conflict &&
+          other.id == this.id &&
+          other.recordType == this.recordType &&
+          other.recordLocalId == this.recordLocalId &&
+          other.conflictingFields == this.conflictingFields &&
+          other.resolution == this.resolution &&
+          other.notified == this.notified &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
 }
 
 class ConflictsCompanion extends UpdateCompanion<Conflict> {
   final Value<int> id;
+  final Value<String> recordType;
+  final Value<int> recordLocalId;
+  final Value<String> conflictingFields;
+  final Value<String> resolution;
+  final Value<bool> notified;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
   const ConflictsCompanion({
     this.id = const Value.absent(),
+    this.recordType = const Value.absent(),
+    this.recordLocalId = const Value.absent(),
+    this.conflictingFields = const Value.absent(),
+    this.resolution = const Value.absent(),
+    this.notified = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
   });
   ConflictsCompanion.insert({
     this.id = const Value.absent(),
-  });
+    required String recordType,
+    required int recordLocalId,
+    required String conflictingFields,
+    this.resolution = const Value.absent(),
+    this.notified = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  })  : recordType = Value(recordType),
+        recordLocalId = Value(recordLocalId),
+        conflictingFields = Value(conflictingFields);
   static Insertable<Conflict> custom({
     Expression<int>? id,
+    Expression<String>? recordType,
+    Expression<int>? recordLocalId,
+    Expression<String>? conflictingFields,
+    Expression<String>? resolution,
+    Expression<bool>? notified,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
+      if (recordType != null) 'record_type': recordType,
+      if (recordLocalId != null) 'record_local_id': recordLocalId,
+      if (conflictingFields != null) 'conflicting_fields': conflictingFields,
+      if (resolution != null) 'resolution': resolution,
+      if (notified != null) 'notified': notified,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
     });
   }
 
-  ConflictsCompanion copyWith({Value<int>? id}) {
+  ConflictsCompanion copyWith(
+      {Value<int>? id,
+      Value<String>? recordType,
+      Value<int>? recordLocalId,
+      Value<String>? conflictingFields,
+      Value<String>? resolution,
+      Value<bool>? notified,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt}) {
     return ConflictsCompanion(
       id: id ?? this.id,
+      recordType: recordType ?? this.recordType,
+      recordLocalId: recordLocalId ?? this.recordLocalId,
+      conflictingFields: conflictingFields ?? this.conflictingFields,
+      resolution: resolution ?? this.resolution,
+      notified: notified ?? this.notified,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 
@@ -4988,13 +5335,41 @@ class ConflictsCompanion extends UpdateCompanion<Conflict> {
     if (id.present) {
       map['id'] = Variable<int>(id.value);
     }
+    if (recordType.present) {
+      map['record_type'] = Variable<String>(recordType.value);
+    }
+    if (recordLocalId.present) {
+      map['record_local_id'] = Variable<int>(recordLocalId.value);
+    }
+    if (conflictingFields.present) {
+      map['conflicting_fields'] = Variable<String>(conflictingFields.value);
+    }
+    if (resolution.present) {
+      map['resolution'] = Variable<String>(resolution.value);
+    }
+    if (notified.present) {
+      map['notified'] = Variable<bool>(notified.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
     return map;
   }
 
   @override
   String toString() {
     return (StringBuffer('ConflictsCompanion(')
-          ..write('id: $id')
+          ..write('id: $id, ')
+          ..write('recordType: $recordType, ')
+          ..write('recordLocalId: $recordLocalId, ')
+          ..write('conflictingFields: $conflictingFields, ')
+          ..write('resolution: $resolution, ')
+          ..write('notified: $notified, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
@@ -7580,6 +7955,7 @@ typedef $$SecurityConfigTableCreateCompanionBuilder = SecurityConfigCompanion
   Value<String?> syncCursor,
   Value<DateTime?> lastSyncAttemptTime,
   Value<DateTime?> syncCooldownUntil,
+  Value<int> lastRealtimeEventId,
   Value<DateTime?> heartbeatLastSuccess,
   Value<DateTime?> lastVacuumDate,
   Value<String?> encryptionKeyWrapped,
@@ -7609,6 +7985,7 @@ typedef $$SecurityConfigTableUpdateCompanionBuilder = SecurityConfigCompanion
   Value<String?> syncCursor,
   Value<DateTime?> lastSyncAttemptTime,
   Value<DateTime?> syncCooldownUntil,
+  Value<int> lastRealtimeEventId,
   Value<DateTime?> heartbeatLastSuccess,
   Value<DateTime?> lastVacuumDate,
   Value<String?> encryptionKeyWrapped,
@@ -7682,6 +8059,10 @@ class $$SecurityConfigTableFilterComposer
 
   ColumnFilters<DateTime> get syncCooldownUntil => $composableBuilder(
       column: $table.syncCooldownUntil,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get lastRealtimeEventId => $composableBuilder(
+      column: $table.lastRealtimeEventId,
       builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get heartbeatLastSuccess => $composableBuilder(
@@ -7797,6 +8178,10 @@ class $$SecurityConfigTableOrderingComposer
       column: $table.syncCooldownUntil,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get lastRealtimeEventId => $composableBuilder(
+      column: $table.lastRealtimeEventId,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get heartbeatLastSuccess => $composableBuilder(
       column: $table.heartbeatLastSuccess,
       builder: (column) => ColumnOrderings(column));
@@ -7900,6 +8285,9 @@ class $$SecurityConfigTableAnnotationComposer
   GeneratedColumn<DateTime> get syncCooldownUntil => $composableBuilder(
       column: $table.syncCooldownUntil, builder: (column) => column);
 
+  GeneratedColumn<int> get lastRealtimeEventId => $composableBuilder(
+      column: $table.lastRealtimeEventId, builder: (column) => column);
+
   GeneratedColumn<DateTime> get heartbeatLastSuccess => $composableBuilder(
       column: $table.heartbeatLastSuccess, builder: (column) => column);
 
@@ -7980,6 +8368,7 @@ class $$SecurityConfigTableTableManager extends RootTableManager<
             Value<String?> syncCursor = const Value.absent(),
             Value<DateTime?> lastSyncAttemptTime = const Value.absent(),
             Value<DateTime?> syncCooldownUntil = const Value.absent(),
+            Value<int> lastRealtimeEventId = const Value.absent(),
             Value<DateTime?> heartbeatLastSuccess = const Value.absent(),
             Value<DateTime?> lastVacuumDate = const Value.absent(),
             Value<String?> encryptionKeyWrapped = const Value.absent(),
@@ -8008,6 +8397,7 @@ class $$SecurityConfigTableTableManager extends RootTableManager<
             syncCursor: syncCursor,
             lastSyncAttemptTime: lastSyncAttemptTime,
             syncCooldownUntil: syncCooldownUntil,
+            lastRealtimeEventId: lastRealtimeEventId,
             heartbeatLastSuccess: heartbeatLastSuccess,
             lastVacuumDate: lastVacuumDate,
             encryptionKeyWrapped: encryptionKeyWrapped,
@@ -8036,6 +8426,7 @@ class $$SecurityConfigTableTableManager extends RootTableManager<
             Value<String?> syncCursor = const Value.absent(),
             Value<DateTime?> lastSyncAttemptTime = const Value.absent(),
             Value<DateTime?> syncCooldownUntil = const Value.absent(),
+            Value<int> lastRealtimeEventId = const Value.absent(),
             Value<DateTime?> heartbeatLastSuccess = const Value.absent(),
             Value<DateTime?> lastVacuumDate = const Value.absent(),
             Value<String?> encryptionKeyWrapped = const Value.absent(),
@@ -8064,6 +8455,7 @@ class $$SecurityConfigTableTableManager extends RootTableManager<
             syncCursor: syncCursor,
             lastSyncAttemptTime: lastSyncAttemptTime,
             syncCooldownUntil: syncCooldownUntil,
+            lastRealtimeEventId: lastRealtimeEventId,
             heartbeatLastSuccess: heartbeatLastSuccess,
             lastVacuumDate: lastVacuumDate,
             encryptionKeyWrapped: encryptionKeyWrapped,
@@ -8443,6 +8835,7 @@ typedef $$VersionHashesTableCreateCompanionBuilder = VersionHashesCompanion
   required String table,
   required int recordLocalId,
   required String hash,
+  Value<String?> snapshotJson,
   required DateTime setAt,
 });
 typedef $$VersionHashesTableUpdateCompanionBuilder = VersionHashesCompanion
@@ -8451,6 +8844,7 @@ typedef $$VersionHashesTableUpdateCompanionBuilder = VersionHashesCompanion
   Value<String> table,
   Value<int> recordLocalId,
   Value<String> hash,
+  Value<String?> snapshotJson,
   Value<DateTime> setAt,
 });
 
@@ -8474,6 +8868,9 @@ class $$VersionHashesTableFilterComposer
 
   ColumnFilters<String> get hash => $composableBuilder(
       column: $table.hash, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get snapshotJson => $composableBuilder(
+      column: $table.snapshotJson, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get setAt => $composableBuilder(
       column: $table.setAt, builder: (column) => ColumnFilters(column));
@@ -8501,6 +8898,10 @@ class $$VersionHashesTableOrderingComposer
   ColumnOrderings<String> get hash => $composableBuilder(
       column: $table.hash, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get snapshotJson => $composableBuilder(
+      column: $table.snapshotJson,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get setAt => $composableBuilder(
       column: $table.setAt, builder: (column) => ColumnOrderings(column));
 }
@@ -8525,6 +8926,9 @@ class $$VersionHashesTableAnnotationComposer
 
   GeneratedColumn<String> get hash =>
       $composableBuilder(column: $table.hash, builder: (column) => column);
+
+  GeneratedColumn<String> get snapshotJson => $composableBuilder(
+      column: $table.snapshotJson, builder: (column) => column);
 
   GeneratedColumn<DateTime> get setAt =>
       $composableBuilder(column: $table.setAt, builder: (column) => column);
@@ -8560,6 +8964,7 @@ class $$VersionHashesTableTableManager extends RootTableManager<
             Value<String> table = const Value.absent(),
             Value<int> recordLocalId = const Value.absent(),
             Value<String> hash = const Value.absent(),
+            Value<String?> snapshotJson = const Value.absent(),
             Value<DateTime> setAt = const Value.absent(),
           }) =>
               VersionHashesCompanion(
@@ -8567,6 +8972,7 @@ class $$VersionHashesTableTableManager extends RootTableManager<
             table: table,
             recordLocalId: recordLocalId,
             hash: hash,
+            snapshotJson: snapshotJson,
             setAt: setAt,
           ),
           createCompanionCallback: ({
@@ -8574,6 +8980,7 @@ class $$VersionHashesTableTableManager extends RootTableManager<
             required String table,
             required int recordLocalId,
             required String hash,
+            Value<String?> snapshotJson = const Value.absent(),
             required DateTime setAt,
           }) =>
               VersionHashesCompanion.insert(
@@ -8581,6 +8988,7 @@ class $$VersionHashesTableTableManager extends RootTableManager<
             table: table,
             recordLocalId: recordLocalId,
             hash: hash,
+            snapshotJson: snapshotJson,
             setAt: setAt,
           ),
           withReferenceMapper: (p0) => p0
@@ -8607,9 +9015,23 @@ typedef $$VersionHashesTableProcessedTableManager = ProcessedTableManager<
     PrefetchHooks Function()>;
 typedef $$ConflictsTableCreateCompanionBuilder = ConflictsCompanion Function({
   Value<int> id,
+  required String recordType,
+  required int recordLocalId,
+  required String conflictingFields,
+  Value<String> resolution,
+  Value<bool> notified,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
 });
 typedef $$ConflictsTableUpdateCompanionBuilder = ConflictsCompanion Function({
   Value<int> id,
+  Value<String> recordType,
+  Value<int> recordLocalId,
+  Value<String> conflictingFields,
+  Value<String> resolution,
+  Value<bool> notified,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
 });
 
 class $$ConflictsTableFilterComposer
@@ -8623,6 +9045,28 @@ class $$ConflictsTableFilterComposer
   });
   ColumnFilters<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get recordType => $composableBuilder(
+      column: $table.recordType, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get recordLocalId => $composableBuilder(
+      column: $table.recordLocalId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get conflictingFields => $composableBuilder(
+      column: $table.conflictingFields,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get resolution => $composableBuilder(
+      column: $table.resolution, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get notified => $composableBuilder(
+      column: $table.notified, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
 }
 
 class $$ConflictsTableOrderingComposer
@@ -8636,6 +9080,29 @@ class $$ConflictsTableOrderingComposer
   });
   ColumnOrderings<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get recordType => $composableBuilder(
+      column: $table.recordType, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get recordLocalId => $composableBuilder(
+      column: $table.recordLocalId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get conflictingFields => $composableBuilder(
+      column: $table.conflictingFields,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get resolution => $composableBuilder(
+      column: $table.resolution, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get notified => $composableBuilder(
+      column: $table.notified, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
 }
 
 class $$ConflictsTableAnnotationComposer
@@ -8649,6 +9116,27 @@ class $$ConflictsTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get recordType => $composableBuilder(
+      column: $table.recordType, builder: (column) => column);
+
+  GeneratedColumn<int> get recordLocalId => $composableBuilder(
+      column: $table.recordLocalId, builder: (column) => column);
+
+  GeneratedColumn<String> get conflictingFields => $composableBuilder(
+      column: $table.conflictingFields, builder: (column) => column);
+
+  GeneratedColumn<String> get resolution => $composableBuilder(
+      column: $table.resolution, builder: (column) => column);
+
+  GeneratedColumn<bool> get notified =>
+      $composableBuilder(column: $table.notified, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 }
 
 class $$ConflictsTableTableManager extends RootTableManager<
@@ -8675,15 +9163,43 @@ class $$ConflictsTableTableManager extends RootTableManager<
               $$ConflictsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            Value<String> recordType = const Value.absent(),
+            Value<int> recordLocalId = const Value.absent(),
+            Value<String> conflictingFields = const Value.absent(),
+            Value<String> resolution = const Value.absent(),
+            Value<bool> notified = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
           }) =>
               ConflictsCompanion(
             id: id,
+            recordType: recordType,
+            recordLocalId: recordLocalId,
+            conflictingFields: conflictingFields,
+            resolution: resolution,
+            notified: notified,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            required String recordType,
+            required int recordLocalId,
+            required String conflictingFields,
+            Value<String> resolution = const Value.absent(),
+            Value<bool> notified = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
           }) =>
               ConflictsCompanion.insert(
             id: id,
+            recordType: recordType,
+            recordLocalId: recordLocalId,
+            conflictingFields: conflictingFields,
+            resolution: resolution,
+            notified: notified,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

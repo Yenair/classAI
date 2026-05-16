@@ -34,8 +34,6 @@ After all files, output the CLI commands:
 flutter pub get
 flutter analyze --no-fatal-infos
 flutter test
-flutter build apk --debug
-flutter build windows --debug
 git add .
 git commit -m "Phase X: description"
 git push

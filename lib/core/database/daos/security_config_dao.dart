@@ -24,6 +24,7 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
     String? syncCursor,
     DateTime? lastSyncAttemptTime,
     DateTime? syncCooldownUntil,
+    int? lastRealtimeEventId,
     DateTime? heartbeatLastSuccess,
     DateTime? lastVacuumDate,
     String? encryptionKeyWrapped,
@@ -71,6 +72,9 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
             : const Value.absent(),
         syncCooldownUntil: syncCooldownUntil != null
             ? Value(syncCooldownUntil)
+            : const Value.absent(),
+        lastRealtimeEventId: lastRealtimeEventId != null
+            ? Value(lastRealtimeEventId)
             : const Value.absent(),
         heartbeatLastSuccess: heartbeatLastSuccess != null
             ? Value(heartbeatLastSuccess)

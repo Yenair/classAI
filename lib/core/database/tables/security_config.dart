@@ -19,6 +19,7 @@ class SecurityConfig extends Table {
   TextColumn get syncCursor => text().nullable()();
   DateTimeColumn get lastSyncAttemptTime => dateTime().nullable()();
   DateTimeColumn get syncCooldownUntil => dateTime().nullable()();
+  IntColumn get lastRealtimeEventId => integer().withDefault(const Constant(0))();
 
   // Security
   DateTimeColumn get heartbeatLastSuccess => dateTime().nullable()();

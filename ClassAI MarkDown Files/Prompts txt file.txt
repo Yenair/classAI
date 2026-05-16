@@ -7,4 +7,5 @@ You are an AI assistant building the ClassAI Flutter app.
    Read that file as well from the same folder.
 
 3. Follow the instructions in roadmap_rules.md to generate the code for the given phase.
-   Output each file with its full path, then after all files, the CLI commands to verify.
+   Output each file with its full path, then after all files, the CLI commands to verify. 
+   use dart run instead of flutter pub run build_runner build --delete-conflicting-outputs

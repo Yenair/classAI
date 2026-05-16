@@ -53,12 +53,12 @@ class AppDatabase extends _$AppDatabase {
   SecurityConfigDao get securityConfigDao => SecurityConfigDao(this);
   SyncQueueDao get syncQueueDao => SyncQueueDao(this);
   PaymentEventsDao get paymentEventsDao => PaymentEventsDao(this);
-  
+
   AppDatabase() : super(_openConnection());
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   static QueryExecutor _openConnection() {
     return LazyDatabase(() async {
@@ -103,7 +103,35 @@ class AppDatabase extends _$AppDatabase {
           await m.createAll();
         },
         onUpgrade: (m, from, to) async {
-          // Future migrations go here
+          if (from < 2) {
+            await customStatement(
+              'ALTER TABLE security_config ADD COLUMN last_realtime_event_id INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              'ALTER TABLE version_hashes ADD COLUMN snapshot_json TEXT NULL',
+            );
+            await customStatement(
+              "ALTER TABLE conflicts ADD COLUMN record_type TEXT NOT NULL DEFAULT ''",
+            );
+            await customStatement(
+              'ALTER TABLE conflicts ADD COLUMN record_local_id INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              "ALTER TABLE conflicts ADD COLUMN conflicting_fields TEXT NOT NULL DEFAULT '[]'",
+            );
+            await customStatement(
+              "ALTER TABLE conflicts ADD COLUMN resolution TEXT NOT NULL DEFAULT 'unresolved'",
+            );
+            await customStatement(
+              'ALTER TABLE conflicts ADD COLUMN notified INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              "ALTER TABLE conflicts ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+            );
+            await customStatement(
+              "ALTER TABLE conflicts ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+            );
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys=ON');

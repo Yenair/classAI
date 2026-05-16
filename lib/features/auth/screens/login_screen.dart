@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
+import 'package:classai/features/auth/screens/forgot_password_dialog.dart';
+import 'package:classai/features/auth/screens/admin_recovery_screen.dart';
+import 'package:classai/features/auth/screens/teacher_recovery_dialog.dart';
+import 'package:classai/features/auth/screens/activation_screen.dart';
 
 /// Material Design login screen with email/password fields,
 /// forgot password links, account activation, error states, and loading.
@@ -256,7 +260,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   TextButton(
                     onPressed: _isLoggingIn
                         ? null
-                        : () => _showForgotPasswordDialog(),
+                        : () => _showForgotPasswordFlow(),
                     child: const Text('Forgot Password?'),
                   ),
 
@@ -264,7 +268,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   TextButton(
                     onPressed: _isLoggingIn
                         ? null
-                        : () => _showActivateAccountDialog(),
+                        : () => _showActivateAccountFlow(),
                     child: const Text('Activate Account'),
                   ),
                 ],
@@ -276,51 +280,35 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  void _showForgotPasswordDialog() {
-    // TODO: Determine admin vs teacher from email or context.
-    // For now, show teacher recovery guidance by default.
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Teacher Recovery'),
-        content: const Text(
-          'Contact your school administrator to generate a recovery code.',
+  /// Role-branching forgot password flow.
+  ///
+  /// Shows a dialog asking "Admin or Teacher?" then navigates to the
+  /// appropriate recovery flow.
+  Future<void> _showForgotPasswordFlow() async {
+    final role = await ForgotPasswordDialog.show(context);
+    if (!mounted || role == null) return;
+
+    if (role == 'admin') {
+      // Navigate to admin recovery screen (full-screen, not a dialog)
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => const AdminRecoveryScreen(),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-        ],
-      ),
-    );
+      );
+    } else {
+      // Show teacher recovery dialog
+      await showDialog(
+        context: context,
+        builder: (_) => const TeacherRecoveryDialog(),
+      );
+    }
   }
 
-  void _showActivateAccountDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Activate Account'),
-        content: const Text(
-          'Enter your activation code to set up your account. '
-          'If you are the first admin, use the code provided by ClassAI support.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              // TODO: Navigate to activation screen
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Activation screen coming soon')),
-              );
-            },
-            child: const Text('Continue'),
-          ),
-        ],
+  /// Navigate to the activation screen.
+  Future<void> _showActivateAccountFlow() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const ActivationScreen(),
       ),
     );
   }
