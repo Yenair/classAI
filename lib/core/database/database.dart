@@ -24,6 +24,7 @@ import 'tables/teacher_devices.dart';
 import 'tables/scheme_generation_queue.dart';
 import 'tables/pdf_cache.dart';
 import 'tables/teacher_subjects.dart';
+import 'tables/terms.dart';
 
 import 'daos/security_config_dao.dart';
 import 'daos/sync_queue_dao.dart';
@@ -31,6 +32,15 @@ import 'daos/payment_events_dao.dart';
 import 'daos/vault_items_dao.dart';
 import 'daos/pdf_cache_dao.dart';
 import 'daos/teacher_subjects_dao.dart';
+import 'daos/terms_dao.dart';
+import 'daos/teacher_devices_dao.dart';
+import 'daos/subjects_dao.dart';
+import 'daos/pending_recovery_requests_dao.dart';
+import 'daos/schools_dao.dart';
+import 'daos/teachers_dao.dart';
+import 'daos/lessons_dao.dart';
+import 'daos/exams_dao.dart';
+import 'daos/progress_logs_dao.dart';
 
 part 'database.g.dart'; // generated
 
@@ -55,6 +65,7 @@ part 'database.g.dart'; // generated
   SchemeGenerationQueue,
   PdfCache,
   TeacherSubjects,
+  Terms,
 ])
 class AppDatabase extends _$AppDatabase {
   SecurityConfigDao get securityConfigDao => SecurityConfigDao(this);
@@ -63,12 +74,21 @@ class AppDatabase extends _$AppDatabase {
   VaultItemsDao get vaultItemsDao => VaultItemsDao(this);
   PdfCacheDao get pdfCacheDao => PdfCacheDao(this);
   TeacherSubjectsDao get teacherSubjectsDao => TeacherSubjectsDao(this);
+  TeacherDevicesDao get teacherDevicesDao => TeacherDevicesDao(this);
+  SubjectsDao get subjectsDao => SubjectsDao(this);
+  PendingRecoveryRequestsDao get pendingRecoveryRequestsDao => PendingRecoveryRequestsDao(this);
+  SchoolsDao get schoolsDao => SchoolsDao(this);
+  TeachersDao get teachersDao => TeachersDao(this);
+  LessonsDao get lessonsDao => LessonsDao(this);
+  ExamsDao get examsDao => ExamsDao(this);
+  ProgressLogsDao get progressLogsDao => ProgressLogsDao(this);
+  TermsDao get termsDao => TermsDao(this);
 
   AppDatabase() : super(_openConnection());
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 8;
 
   static QueryExecutor _openConnection() {
     return LazyDatabase(() async {
@@ -227,6 +247,33 @@ class AppDatabase extends _$AppDatabase {
                 id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
                 teacher_local_id INTEGER NOT NULL REFERENCES teachers(local_id),
                 subject_id INTEGER NOT NULL REFERENCES subjects(id)
+              )
+            ''');
+          }
+          if (from < 7) {
+            // Add expiry_date to schools table for subscription expiry checks
+            await customStatement(
+              'ALTER TABLE schools ADD COLUMN expiry_date INTEGER',
+            );
+            // Add content_hash to lessons table for PDF caching
+            await customStatement(
+              'ALTER TABLE lessons ADD COLUMN content_hash TEXT',
+            );
+          }
+          if (from < 8) {
+            // Create terms table for NERDC trimester management
+            await customStatement('''
+              CREATE TABLE IF NOT EXISTS terms (
+                id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                start_date TEXT NOT NULL,
+                end_date TEXT NOT NULL,
+                academic_year TEXT NOT NULL,
+                term_number INTEGER NOT NULL,
+                is_current INTEGER NOT NULL DEFAULT 0,
+                school_local_id INTEGER NOT NULL REFERENCES schools(local_id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
               )
             ''');
           }

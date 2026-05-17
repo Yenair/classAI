@@ -1,7 +1,12 @@
 // lib/features/vault/screens/vault_publisher_screen.dart
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
+import 'package:classai/core/utils/encryption_utils.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
 /// Screen for teachers to publish new vault items.
@@ -30,6 +35,11 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
   bool _submitting = false;
   bool _previewing = false;
 
+  // Attachment state
+  XFile? _pickedImage;
+  Uint8List? _compressedImageBytes;
+  bool _pickingImage = false;
+
   @override
   void dispose() {
     _titleCtrl.dispose();
@@ -42,6 +52,51 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
     super.dispose();
   }
 
+  /// Pick an image from the gallery and compress it.
+  Future<void> _pickImage() async {
+    setState(() => _pickingImage = true);
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+      );
+      if (picked != null) {
+        final bytes = await picked.readAsBytes();
+        final compressed = await FlutterImageCompress.compressWithList(
+          bytes,
+          quality: 75,
+        );
+        setState(() {
+          _pickedImage = picked;
+          _compressedImageBytes = Uint8List.fromList(compressed);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to pick image: $e')),
+        );
+      }
+    } finally {
+      setState(() => _pickingImage = false);
+    }
+  }
+
+  /// Delete the picked image attachment.
+  void _removeImage() {
+    setState(() {
+      _pickedImage = null;
+      _compressedImageBytes = null;
+    });
+  }
+
+  /// Encode compressed image bytes as a base64 data-URI for storage.
+  String? _imageAsDataUri() {
+    if (_compressedImageBytes == null) return null;
+    final b64 = base64Encode(_compressedImageBytes!);
+    return 'data:image/jpeg;base64,$b64';
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -50,6 +105,7 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
     try {
       final authData = ref.read(authProvider);
       final teacher = authData.currentTeacher;
+      final school = authData.currentSchool;
       final db = ref.read(databaseProvider);
 
       if (teacher == null) {
@@ -61,20 +117,46 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
         return;
       }
 
-      await db.vaultItemsDao.insert(
+      // Encrypt content with school master key if available
+      String contentToStore = _contentCtrl.text.trim();
+      if (school?.schoolMasterKeyWrapped != null &&
+          school!.schoolMasterKeyWrapped!.isNotEmpty) {
+        try {
+          final keyBytes = base64Decode(school.schoolMasterKeyWrapped!);
+          contentToStore = await EncryptionUtils.encryptAesGcm(
+            keyBytes,
+            contentToStore,
+          );
+        } catch (_) {
+          // If encryption fails, store in plaintext (will be encrypted on sync)
+        }
+      }
+
+      final itemLocalId = await db.vaultItemsDao.insert(
         title: _titleCtrl.text.trim(),
         description: _descriptionCtrl.text.trim(),
         subject: _subjectCtrl.text.trim(),
         classLevel: _classLevelCtrl.text.trim(),
         curriculum: _curriculumCtrl.text.trim(),
-        content: _contentCtrl.text.trim(),
+        content: contentToStore,
         authorTeacherId: teacher.serverId ?? teacher.email,
         authorName: teacher.teacherName,
         creditCost: _creditCost,
         needsApproval: true,
         thumbnailUrl: _thumbnailUrlCtrl.text.trim().isNotEmpty
             ? _thumbnailUrlCtrl.text.trim()
-            : null,
+            : _imageAsDataUri(),
+      );
+
+      // Queue sync entry so this item gets pushed to the server
+      await db.syncQueueDao.insertEntry(
+        queueTable: 'vault_items',
+        recordLocalId: itemLocalId,
+        operation: 'INSERT',
+        payload: {
+          'title': _titleCtrl.text.trim(),
+          'encrypted': school?.schoolMasterKeyWrapped != null,
+        },
       );
 
       if (mounted) {
@@ -220,6 +302,44 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
             ),
             const SizedBox(height: 16),
             Text(
+              'Attachment',
+              style: textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            if (_pickedImage != null)
+              Row(
+                children: [
+                  Icon(Icons.image, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _pickedImage!.name,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: _removeImage,
+                    tooltip: 'Remove image',
+                  ),
+                ],
+              )
+            else
+              OutlinedButton.icon(
+                onPressed: _pickingImage ? null : _pickImage,
+                icon: _pickingImage
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.attach_file),
+                label: Text(_pickingImage ? 'Picking…' : 'Attach Image'),
+              ),
+            const SizedBox(height: 16),
+            Text(
               'Credit Cost',
               style: textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
@@ -291,17 +411,27 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
               color: theme.colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: _thumbnailUrlCtrl.text.isNotEmpty
+            child: _compressedImageBytes != null
                 ? ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: Image.network(
-                      _thumbnailUrlCtrl.text,
+                    child: Image.memory(
+                      _compressedImageBytes!,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => const Icon(Icons.image,
                           size: 64),
                     ),
                   )
-                : const Icon(Icons.image, size: 64),
+                : _thumbnailUrlCtrl.text.isNotEmpty
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.network(
+                          _thumbnailUrlCtrl.text,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => const Icon(Icons.image,
+                              size: 64),
+                        ),
+                      )
+                    : const Icon(Icons.image, size: 64),
           ),
           const SizedBox(height: 16),
           Text(

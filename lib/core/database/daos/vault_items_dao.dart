@@ -82,12 +82,12 @@ class VaultItemsDao extends DatabaseAccessor<AppDatabase>
   }
 
   /// Approve a vault item.
-  Future<void> approve(int id, {String tier = 'free'}) async {
+  Future<void> approve(int id, {String tier = 'free', DateTime? approvedAt}) async {
     await (update(vaultItems)..where((t) => t.id.equals(id))).write(
       VaultItemsCompanion(
         approvalStatus: const Value('approved'),
         minTier: Value(tier),
-        updatedAt: Value(DateTime.now()),
+        updatedAt: Value(approvedAt ?? DateTime.now()),
       ),
     );
   }

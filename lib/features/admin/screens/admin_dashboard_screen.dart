@@ -82,9 +82,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                       teachers: dashboardData.teachers,
                       authData: authData,
                     ),
-                    _VaultApprovalTab(),
+                    _VaultApprovalTab(authData: authData),
                     _SyncHealthTab(
                       teachers: dashboardData.teachers,
+                      dashboardData: dashboardData,
                     ),
                   ],
                 ),
@@ -125,7 +126,8 @@ class _TeacherManagementTab extends ConsumerWidget {
             title: Text(teacher.teacherName),
             subtitle: Text(
               '${teacher.email} • ${teacher.role}'
-              '${teacher.deviceCount > 0 ? ' • ${teacher.deviceCount} device(s)' : ''}',
+              '${teacher.deviceCount > 0 ? ' • ${teacher.deviceCount} device(s)' : ''}'
+              ' • Last sync: ${teacher.formattedLastSync}',
               style: theme.textTheme.bodySmall,
             ),
             trailing: const Icon(Icons.chevron_right),
@@ -157,9 +159,33 @@ class _TeacherManagementTab extends ConsumerWidget {
 // ---------------------------------------------------------------------------
 
 class _VaultApprovalTab extends ConsumerWidget {
+  final AuthStateData authData;
+
+  const _VaultApprovalTab({required this.authData});
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+
+    // Tier gate: Standard+ required for vault approval queue visibility
+    final tier = authData.currentSchool?.subscriptionTier ?? 'free';
+    final approvedTiers = ['standard', 'elite'];
+    if (!approvedTiers.contains(tier.toLowerCase())) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.lock_outline, size: 64, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              'Vault approval queue requires a Standard or Elite subscription.',
+              style: theme.textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
 
     return FutureBuilder(
       future: ref.read(databaseProvider).vaultItemsDao.getPendingApproval(),
@@ -308,8 +334,9 @@ class _RejectionDialog extends StatelessWidget {
 
 class _SyncHealthTab extends StatelessWidget {
   final List<TeacherAdminData> teachers;
+  final AdminDashboardData dashboardData;
 
-  const _SyncHealthTab({required this.teachers});
+  const _SyncHealthTab({required this.teachers, required this.dashboardData});
 
   @override
   Widget build(BuildContext context) {
@@ -355,6 +382,17 @@ class _SyncHealthTab extends StatelessWidget {
                   count: teachers.where((t) => t.statusColor == 'gray').length,
                   color: Colors.grey,
                 ),
+                const Divider(height: 24),
+                _SyncStatRow(
+                  label: 'Pending sync entries',
+                  count: dashboardData.teachers.isNotEmpty ? dashboardData.teachers.first.pendingSyncCount : 0,
+                  color: Colors.orange,
+                ),
+                _SyncStatRow(
+                  label: 'Unresolved conflicts',
+                  count: dashboardData.teachers.isNotEmpty ? dashboardData.teachers.first.conflictCount : 0,
+                  color: Colors.red,
+                ),
               ],
             ),
           ),
@@ -366,9 +404,22 @@ class _SyncHealthTab extends StatelessWidget {
                 leading: _StatusDot(
                     color: _statusColor(teacher.statusColor)),
                 title: Text(teacher.teacherName),
-                subtitle: Text(
-                  'Last sync: ${teacher.lastSyncTime != null ? _formatTime(teacher.lastSyncTime!) : "Never"}',
-                  style: theme.textTheme.bodySmall,
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Last sync: ${teacher.lastSyncTime != null ? _formatTime(teacher.lastSyncTime!) : "Never"}',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    Text(
+                      'Devices: ${teacher.deviceCount} • '
+                      'Pending: ${teacher.pendingSyncCount} • '
+                      'Conflicts: ${teacher.conflictCount}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             )),

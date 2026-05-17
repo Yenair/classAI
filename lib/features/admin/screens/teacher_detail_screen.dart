@@ -25,6 +25,16 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
   String? _generatedCode;
   DateTime? _codeExpiry;
 
+  // Device list state
+  List<TeacherDevice> _devices = [];
+  bool _devicesLoading = false;
+
+  // Subject assignment state
+  List<Subject> _allSubjects = [];
+  Set<int> _assignedSubjectIds = {};
+  bool _subjectsLoading = false;
+  bool _savingSubjects = false;
+
   @override
   void initState() {
     super.initState();
@@ -40,9 +50,76 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
           .get();
       if (results.isNotEmpty) {
         setState(() => _teacher = results.first);
+        // Load devices and subjects once teacher is loaded
+        _loadDevices();
+        _loadSubjects();
       }
     } finally {
       setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadDevices() async {
+    setState(() => _devicesLoading = true);
+    try {
+      final devices = await ref
+          .read(databaseProvider)
+          .teacherDevicesDao
+          .getByTeacher(widget.teacherLocalId);
+      setState(() => _devices = devices);
+    } catch (_) {
+      // Devices table may be empty, that's fine
+    } finally {
+      setState(() => _devicesLoading = false);
+    }
+  }
+
+  Future<void> _loadSubjects() async {
+    setState(() => _subjectsLoading = true);
+    try {
+      final allSubjects = await ref
+          .read(databaseProvider)
+          .subjectsDao
+          .getAll();
+      final assignedIds = await ref
+          .read(databaseProvider)
+          .teacherSubjectsDao
+          .getSubjectIdsForTeacher(widget.teacherLocalId);
+      setState(() {
+        _allSubjects = allSubjects;
+        _assignedSubjectIds = assignedIds.toSet();
+      });
+    } catch (_) {
+      // Subjects table may be empty
+    } finally {
+      setState(() => _subjectsLoading = false);
+    }
+  }
+
+  Future<void> _saveSubjectAssignments() async {
+    setState(() => _savingSubjects = true);
+    try {
+      final db = ref.read(databaseProvider);
+      await db.teacherSubjectsDao.deleteAllForTeacher(widget.teacherLocalId);
+      for (final subjectId in _assignedSubjectIds) {
+        await db.teacherSubjectsDao.insert(
+          teacherId: widget.teacherLocalId,
+          subjectId: subjectId,
+        );
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Subject assignments saved')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save subjects: $e')),
+        );
+      }
+    } finally {
+      setState(() => _savingSubjects = false);
     }
   }
 
@@ -60,10 +137,18 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
       final currentTeacher = ref.read(authProvider).currentTeacher;
 
       if (currentTeacher?.serverId == null) {
+        // Offline: queue the recovery request for later sync
+        final db = ref.read(databaseProvider);
+        await db.pendingRecoveryRequestsDao.queueRequest(
+          teacherLocalId: widget.teacherLocalId,
+          requestedByAdminId: currentTeacher?.serverId ?? 'offline-admin',
+        );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('You must be online to generate recovery codes.'),
+              content: Text(
+                'Request queued. It will be processed when the device comes online.',
+              ),
             ),
           );
         }
@@ -80,10 +165,29 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
         _codeExpiry = DateTime.now().add(const Duration(hours: 24));
       });
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to generate code: $e')),
+      // If the server call fails, queue it for later
+      try {
+        final db = ref.read(databaseProvider);
+        final currentTeacher = ref.read(authProvider).currentTeacher;
+        await db.pendingRecoveryRequestsDao.queueRequest(
+          teacherLocalId: widget.teacherLocalId,
+          requestedByAdminId: currentTeacher?.serverId ?? 'offline-admin',
         );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Server unreachable. Recovery request queued for sync: $e',
+              ),
+            ),
+          );
+        }
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to generate code: $e')),
+          );
+        }
       }
     } finally {
       setState(() => _generatingCode = false);
@@ -334,6 +438,73 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
           ),
           const SizedBox(height: 16),
 
+          // Device List section
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Devices (${_devices.length})',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (_devicesLoading)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else if (_devices.isEmpty)
+                    Text(
+                      'No devices registered.',
+                      style: theme.textTheme.bodySmall,
+                    )
+                  else
+                    ..._devices.map((device) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            children: [
+                              Icon(
+                                device.isActive
+                                    ? Icons.phone_android
+                                    : Icons.phone_disabled,
+                                size: 20,
+                                color: device.isActive
+                                    ? Colors.green
+                                    : Colors.grey,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      device.deviceName,
+                                      style: theme.textTheme.bodyMedium?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text(
+                                      '${device.platform} • ${device.lastActive ?? "Never"}',
+                                      style: theme.textTheme.bodySmall,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        )),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
           // Actions
           Card(
             child: Padding(
@@ -372,9 +543,9 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
               ),
             ),
           ),
-
-          // Subject Assignment (placeholder for future)
           const SizedBox(height: 16),
+
+          // Subject Assignment with real multi-select
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -388,10 +559,54 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    'Subject assignment will be available in a future update.',
-                    style: theme.textTheme.bodySmall,
-                  ),
+                  if (_subjectsLoading)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else if (_allSubjects.isEmpty)
+                    Text(
+                      'No subjects available. Sync with server to load subjects.',
+                      style: theme.textTheme.bodySmall,
+                    )
+                  else
+                    ..._allSubjects.map((subject) => CheckboxListTile(
+                          title: Text(subject.name),
+                          subtitle: subject.alias != null && subject.alias!.isNotEmpty
+                              ? Text(subject.alias!, style: theme.textTheme.bodySmall)
+                              : null,
+                          value: _assignedSubjectIds.contains(subject.id),
+                          onChanged: (checked) {
+                            setState(() {
+                              if (checked == true) {
+                                _assignedSubjectIds.add(subject.id);
+                              } else {
+                                _assignedSubjectIds.remove(subject.id);
+                              }
+                            });
+                          },
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                        )),
+                  if (_allSubjects.isNotEmpty)
+                    const SizedBox(height: 12),
+                  if (_allSubjects.isNotEmpty)
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: _savingSubjects ? null : _saveSubjectAssignments,
+                        icon: _savingSubjects
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.save),
+                        label: Text(_savingSubjects ? 'Saving...' : 'Save Assignments'),
+                      ),
+                    ),
                 ],
               ),
             ),

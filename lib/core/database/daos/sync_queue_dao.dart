@@ -56,4 +56,18 @@ class SyncQueueDao extends DatabaseAccessor<AppDatabase>
   Future<void> deleteById(int id) async {
     await (delete(syncQueue)..where((t) => t.id.equals(id))).go();
   }
+
+  /// Count all pending (un-synced) entries in the queue.
+  Future<int> pendingCount() async {
+    final rows = await (select(syncQueue)).get();
+    return rows.length;
+  }
+
+  /// Count pending entries for a specific table (e.g. teacher scope).
+  Future<int> pendingCountForTable(String tableName) async {
+    final rows = await (select(syncQueue)
+          ..where((t) => t.queueTable.equals(tableName)))
+        .get();
+    return rows.length;
+  }
 }

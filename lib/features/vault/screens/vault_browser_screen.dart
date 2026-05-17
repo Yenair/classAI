@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/main.dart' show databaseProvider;
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
+import 'package:classai/features/vault/screens/vault_item_detail_screen.dart';
 
 /// Vault browser screen showing approved items in a searchable grid.
 ///
@@ -52,78 +53,12 @@ class _VaultBrowserScreenState extends ConsumerState<VaultBrowserScreen> {
     }
   }
 
-  Future<void> _acquireItem(VaultItem item) async {
-    final creditData = ref.read(creditStateProvider);
-    if (creditData.currentCredits < item.creditCost) {
-      if (!mounted) return;
-      final result = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Insufficient Credits'),
-          content: Text(
-            'This item costs ${item.creditCost} credits, but you only have '
-            '${creditData.currentCredits}. Would you like to purchase more credits?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(ctx).pop(true);
-              },
-              child: const Text('Get Credits'),
-            ),
-          ],
-        ),
-      );
-      if (result == true && mounted) {
-        context.push('/payment');
-      }
-      return;
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Acquire "${item.title}"'),
-        content: Text(
-          'This will cost ${item.creditCost} credit(s). '
-          'Do you want to proceed?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Acquire'),
-          ),
-        ],
+  void _openDetail(VaultItem item) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => VaultItemDetailScreen(item: item),
       ),
     );
-
-    if (confirmed == true && mounted) {
-      try {
-        final dao = ref.read(databaseProvider).vaultItemsDao;
-        final batchId = DateTime.now().millisecondsSinceEpoch.toString();
-        await dao.markAcquired(item.id, creditSpentBatchId: batchId);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('"${item.title}" acquired!')),
-          );
-          await ref.read(creditStateProvider.notifier).refresh();
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to acquire item: $e')),
-          );
-        }
-      }
-    }
   }
 
   @override
@@ -229,7 +164,7 @@ class _VaultBrowserScreenState extends ConsumerState<VaultBrowserScreen> {
                               final item = _items[index];
                               return _VaultItemCard(
                                 item: item,
-                                onTap: () => _acquireItem(item),
+                                onTap: () => _openDetail(item),
                               );
                             },
                           ),
@@ -362,6 +297,22 @@ class _VaultItemCard extends StatelessWidget {
 
   const _VaultItemCard({required this.item, required this.onTap});
 
+  /// Color per subscription tier
+  Color _tierColor(String tier) {
+    switch (tier.toLowerCase()) {
+      case 'free':
+        return Colors.grey;
+      case 'basic':
+        return Colors.blue;
+      case 'standard':
+        return Colors.amber;
+      case 'elite':
+        return Colors.purple;
+      default:
+        return Colors.grey;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -407,6 +358,17 @@ class _VaultItemCard extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
+              const SizedBox(height: 2),
+              // Author
+              Text(
+                'By ${item.authorName}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontSize: 11,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
               const SizedBox(height: 4),
               // Metadata
               Text(
@@ -416,6 +378,26 @@ class _VaultItemCard extends StatelessWidget {
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              // Tier badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _tierColor(item.minTier).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: _tierColor(item.minTier).withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Text(
+                  item.minTier.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: _tierColor(item.minTier),
+                  ),
+                ),
               ),
               const Spacer(),
               // Credit cost

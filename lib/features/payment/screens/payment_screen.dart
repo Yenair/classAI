@@ -1,12 +1,16 @@
 // lib/features/payment/screens/payment_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:classai/core/services/payment_service.dart';
+import 'package:classai/features/auth/providers/auth_provider.dart';
+import 'package:classai/main.dart' show databaseProvider;
 
 /// Payment screen that shows plan selection options.
 ///
-/// In production, selecting a plan calls [PaymentService.initializePayment]
-/// and opens the returned Paystack checkout URL in a WebView or external
-/// browser. For now, this demonstrates the plan selection UI and flows.
+/// Selecting a plan calls [PaymentService.initializePayment]
+/// and opens the returned Paystack checkout URL in a browser/WebView.
 class PaymentScreen extends ConsumerWidget {
   const PaymentScreen({super.key});
 
@@ -40,7 +44,7 @@ class PaymentScreen extends ConsumerWidget {
             tier: 'basic',
             color: Colors.blue,
             features: ['50 credits per month', 'Access to basic vault items'],
-            onSelect: () => _showPaymentConfirmation(context, 'basic', 5000),
+            onSelect: () => _initializePayment(context, ref, 'basic', 5000),
           ),
           const SizedBox(height: 16),
           _PlanCard(
@@ -55,7 +59,7 @@ class PaymentScreen extends ConsumerWidget {
               'Vault publishing',
             ],
             isPopular: true,
-            onSelect: () => _showPaymentConfirmation(context, 'standard', 10000),
+            onSelect: () => _initializePayment(context, ref, 'standard', 10000),
           ),
           const SizedBox(height: 16),
           _PlanCard(
@@ -69,46 +73,60 @@ class PaymentScreen extends ConsumerWidget {
               'Full vault access',
               'Priority support',
             ],
-            onSelect: () => _showPaymentConfirmation(context, 'elite', 25000),
+            onSelect: () => _initializePayment(context, ref, 'elite', 25000),
           ),
         ],
       ),
     );
   }
 
-  void _showPaymentConfirmation(
-      BuildContext context, String plan, int amountNaira) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Confirm Upgrade'),
-        content: Text(
-          'You are about to purchase the $plan plan for '
-          '₦${amountNaira.toStringAsFixed(0)}/month. '
-          'Proceed to payment?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Payment flow started for $plan plan. '
-                    'In production, the Paystack checkout page opens here.',
-                  ),
-                ),
-              );
-            },
-            child: const Text('Proceed'),
-          ),
-        ],
-      ),
-    );
+  Future<void> _initializePayment(
+      BuildContext context, WidgetRef ref, String plan, int amountNaira) async {
+    final authData = ref.read(authProvider);
+    final teacher = authData.currentTeacher;
+    final school = authData.currentSchool;
+
+    if (teacher == null || school == null) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You must be logged in to purchase.')),
+      );
+      return;
+    }
+
+    try {
+      final db = ref.read(databaseProvider);
+      // Create a minimal Dio client for the payment API call
+      final dio = Dio(BaseOptions(
+        baseUrl: '', // base URL set in the Supabase Edge Function path
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 30),
+      ));
+      final paymentService = PaymentService(db, dio);
+
+      final checkoutUrl = await paymentService.initializePayment(
+        email: teacher.email,
+        amountNaira: amountNaira,
+        plan: plan,
+        schoolId: school.serverId ?? school.localId.toString(),
+      );
+
+      if (!context.mounted) return;
+
+      // Open the Paystack checkout URL in browser or WebView
+      final uri = Uri.parse(checkoutUrl);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        // Fallback: try in-app WebView
+        await launchUrl(uri, mode: LaunchMode.platformDefault);
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Payment initialization failed: $e')),
+      );
+    }
   }
 }
 

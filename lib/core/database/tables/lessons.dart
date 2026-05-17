@@ -10,6 +10,7 @@ class Lessons extends Table {
   TextColumn get bloomsVerbs => text()();
   TextColumn get curriculum => text()();
   TextColumn get content => text()(); // encrypted JSON
+  TextColumn get contentHash => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 }

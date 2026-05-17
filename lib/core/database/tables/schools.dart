@@ -15,6 +15,7 @@ class Schools extends Table {
   BoolColumn get adminRecoveryEmailVerified => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get expiryDate => dateTime().nullable()();
   IntColumn get updateCounter => integer().withDefault(const Constant(0))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   TextColumn get lastModifiedBy => text().nullable()(); // teacher_id for sync

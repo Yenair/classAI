@@ -1,10 +1,15 @@
 import 'package:drift/drift.dart';
+import 'teachers.dart';
 
-/// Tracks teacher password recovery attempts for rate limiting.
-/// Enforces 3 attempts per hour per email address.
+/// Tracks admin-generated recovery code requests that are queued for
+/// processing when the device comes online.
 class PendingRecoveryRequests extends Table {
   IntColumn get id => integer().autoIncrement()();
-  TextColumn get email => text()();
-  DateTimeColumn get attemptedAt => dateTime()();
+  IntColumn get teacherLocalId => integer().references(Teachers, #localId)();
+  TextColumn get requestedByAdminId => text()(); // server ID of requesting admin
+  BoolColumn get fulfilled => boolean().withDefault(const Constant(false))();
+  TextColumn get generatedCode => text().nullable()(); // 16-char code, set when processed
+  DateTimeColumn get codeExpiry => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get processedAt => dateTime().nullable()();
 }
-

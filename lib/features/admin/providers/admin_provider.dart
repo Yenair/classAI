@@ -14,6 +14,9 @@ class TeacherAdminData {
   final DateTime? lastSyncTime;
   final int deviceCount;
   final bool isActive;
+  final int pendingSyncCount;
+  final int conflictCount;
+  final String? schoolSubscriptionTier;
 
   const TeacherAdminData({
     required this.localId,
@@ -24,6 +27,9 @@ class TeacherAdminData {
     this.lastSyncTime,
     this.deviceCount = 0,
     this.isActive = true,
+    this.pendingSyncCount = 0,
+    this.conflictCount = 0,
+    this.schoolSubscriptionTier,
   });
 
   /// Status indicator color:
@@ -38,6 +44,17 @@ class TeacherAdminData {
     if (diff.inHours < 24) return 'yellow';
     if (diff.inDays < 7) return 'red';
     return 'gray';
+  }
+
+  /// Formatted relative timestamp string for display.
+  String get formattedLastSync {
+    if (lastSyncTime == null) return 'Never';
+    final diff = DateTime.now().difference(lastSyncTime!);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${diff.inDays} days ago';
   }
 }
 
@@ -73,19 +90,34 @@ class AdminDashboardNotifier extends Notifier<AdminDashboardData> {
       final teachers = await _db.select(_db.teachers).get();
       final pendingItems = await _db.vaultItemsDao.getPendingApproval();
 
+      // Build teacher data with real device counts, sync counts, conflicts
+      final teacherDataList = <TeacherAdminData>[];
+      final totalPendingCount = await _db.syncQueueDao.pendingCount();
+      final conflictRows = await (_db.select(_db.conflicts)
+            ..where((t) => t.resolution.equals('unresolved')))
+          .get();
+      final totalConflictCount = conflictRows.length;
+
+      for (final t in teachers.where((t) => !t.isDeleted)) {
+        final deviceCount =
+            await _db.teacherDevicesDao.countActiveByTeacher(t.localId);
+
+        teacherDataList.add(TeacherAdminData(
+          localId: t.localId,
+          serverId: t.serverId,
+          email: t.email,
+          teacherName: t.teacherName,
+          role: t.role,
+          lastSyncTime: t.updatedAt,
+          isActive: t.isActive,
+          deviceCount: deviceCount,
+          pendingSyncCount: totalPendingCount,
+          conflictCount: totalConflictCount,
+        ));
+      }
+
       state = AdminDashboardData(
-        teachers: teachers
-            .where((t) => !t.isDeleted)
-            .map((t) => TeacherAdminData(
-                  localId: t.localId,
-                  serverId: t.serverId,
-                  email: t.email,
-                  teacherName: t.teacherName,
-                  role: t.role,
-                  lastSyncTime: t.updatedAt,
-                  isActive: t.isActive,
-                ))
-            .toList(),
+        teachers: teacherDataList,
         pendingVaultApprovals: pendingItems.length,
       );
     } catch (e) {

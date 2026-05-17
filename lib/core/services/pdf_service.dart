@@ -5,6 +5,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
 import '../database/database.dart';
+import 'low_storage_service.dart';
 
 class PdfCacheKey {
   final String contentHash;
@@ -43,15 +44,30 @@ class PdfService {
 
     // Watermark required if tier is Free, OR if subscription expired
     final tier = school.subscriptionTier;
-    _cachedWatermarkRequired = tier == 'free';
+    final expired = school.expiryDate != null &&
+        school.expiryDate!.isBefore(DateTime.now());
+    _cachedWatermarkRequired = tier == 'free' || expired;
     _lastWatermarkCheck = DateTime.now();
     return _cachedWatermarkRequired!;
   }
 
   /// Generate a PDF for a lesson. Uses isolate to avoid UI blocking.
+  /// Checks available disk space before generation; throws [Exception]
+  /// if critical (< 100 MB).
   Future<Uint8List> generateLessonPdf(Lesson lesson, School school) async {
+    // Check disk space before generating
+    final storageService = LowStorageService();
+    final canGenerate = await storageService.canGeneratePdf();
+    if (!canGenerate) {
+      throw Exception(
+        'Cannot generate PDF: critically low disk space. '
+        'Please free up at least 100 MB.',
+      );
+    }
+
     final applyWatermark = await shouldApplyWatermark(school);
-    final contentHash =
+    // Compute contentHash from stored field, falling back to sha256 of content
+    final contentHash = lesson.contentHash ??
         sha256.convert(utf8.encode(lesson.content)).toString();
 
     final cacheKey = PdfCacheKey(
@@ -69,6 +85,8 @@ class PdfService {
     if (cached != null) return cached;
 
     // Generate in isolate
+    // lesson.topic is used as the PDF title — the schema uses `topic`
+    // to represent the lesson title, not a separate `title` column.
     final params = _PdfParams(
       lessonTitle: lesson.topic,
       lessonContent: lesson.content,

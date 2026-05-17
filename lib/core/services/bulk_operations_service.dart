@@ -3,13 +3,11 @@ import 'auth_service.dart';
 
 /// Service for bulk administrative operations.
 ///
-/// Requires an [AuthService] for operations that interact with the server
-/// (e.g., recovery code generation), and [AppDatabase] for local operations.
+/// Depends only on [AppDatabase] for local operations.
 class BulkOperationsService {
   final AppDatabase _db;
-  final AuthService _authService;
 
-  BulkOperationsService(this._db, this._authService);
+  BulkOperationsService(this._db);
 
   /// Assign one subject to multiple teachers.
   Future<void> bulkAssignSubject({
@@ -31,13 +29,14 @@ class BulkOperationsService {
   Future<Map<int, String>> bulkGenerateRecoveryCodes({
     required int adminId,
     required List<int> teacherIds,
+    required AuthService authService,
   }) async {
     final results = <int, String>{};
     for (final teacherId in teacherIds) {
       try {
-        final code = await _authService.generateTeacherRecoveryCode(
-          teacherId.toString(),
+        final code = await authService.generateTeacherRecoveryCode(
           adminId.toString(),
+          teacherId.toString(),
         );
         results[teacherId] = code;
       } catch (e) {
@@ -56,7 +55,7 @@ class BulkOperationsService {
     await _db.transaction(() async {
       for (final id in vaultItemIds) {
         if (approved) {
-          await _db.vaultItemsDao.approve(id);
+          await _db.vaultItemsDao.approve(id, approvedAt: DateTime.now());
         } else {
           await _db.vaultItemsDao.reject(id, rejectionReason ?? 'Rejected');
         }

@@ -78,6 +78,14 @@ abstract class AuthService {
     String recoveryCode,
     String newPassword,
   );
+
+  /// Send an SMS OTP to a phone number for passwordless login fallback.
+  /// Uses Termii (primary) or BulkSMS Nigeria (fallback).
+  Future<void> sendSmsOtp(String phoneNumber);
+
+  /// Verify an OTP code sent via SMS.
+  /// Returns true if the code is valid.
+  Future<bool> verifySmsOtp(String phoneNumber, String code);
 }
 
 /// Real implementation of [AuthService] backed by Supabase.
@@ -385,6 +393,64 @@ class SupabaseAuthService implements AuthService {
       throw AuthException(
         code: AuthErrorCode.networkError,
         message: 'Password recovery failed. Please try again.',
+        originalError: e,
+      );
+    }
+  }
+
+  @override
+  Future<void> sendSmsOtp(String phoneNumber) async {
+    final client = supabase_pkg.Supabase.instance.client;
+    try {
+      final response = await client.functions.invoke(
+        'send-sms-otp',
+        body: {'phone_number': phoneNumber},
+      );
+      final data = response.data as Map<String, dynamic>;
+      final errorResponse = data['error'] as String?;
+      if (errorResponse != null) {
+        throw AuthException(
+          code: AuthErrorCode.networkError,
+          message: errorResponse,
+        );
+      }
+    } on AuthException {
+      rethrow;
+    } catch (e) {
+      throw AuthException(
+        code: AuthErrorCode.networkError,
+        message: 'Failed to send SMS OTP. Please try again.',
+        originalError: e,
+      );
+    }
+  }
+
+  @override
+  Future<bool> verifySmsOtp(String phoneNumber, String code) async {
+    final client = supabase_pkg.Supabase.instance.client;
+    try {
+      final response = await client.functions.invoke(
+        'verify-sms-otp',
+        body: {
+          'phone_number': phoneNumber,
+          'code': code,
+        },
+      );
+      final data = response.data as Map<String, dynamic>;
+      final errorResponse = data['error'] as String?;
+      if (errorResponse != null) {
+        throw AuthException(
+          code: AuthErrorCode.invalidOtp,
+          message: errorResponse,
+        );
+      }
+      return data['verified'] as bool? ?? false;
+    } on AuthException {
+      rethrow;
+    } catch (e) {
+      throw AuthException(
+        code: AuthErrorCode.networkError,
+        message: 'OTP verification failed. Please try again.',
         originalError: e,
       );
     }
