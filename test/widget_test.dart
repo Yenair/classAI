@@ -1,15 +1,12 @@
 import 'package:classai/main.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('status screen renders', (WidgetTester tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: DatabaseStatusScreen(),
-      ),
-    );
+  testWidgets('ClassAiApp shows loading screen initially', (tester) async {
+    // The database future requires native plugins unavailable in test,
+    // so the loading state will be shown immediately.
+    await tester.pumpWidget(const ClassAiApp());
 
-    expect(find.text('Database OK'), findsOneWidget);
+    expect(find.text('Starting ClassAI...'), findsOneWidget);
   });
 }

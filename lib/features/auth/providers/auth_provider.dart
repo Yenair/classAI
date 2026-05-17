@@ -406,7 +406,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
   }
 
   /// Generate a teacher recovery code (admin only).
-  // TODO(phase-07): Add recovery code generation UI; this method is scaffolding until Phase 7.
+  /// The returned 16-character alphanumeric code expires after 24 hours.
+  /// This is called by the [TeacherDetailScreen] in the admin dashboard.
   Future<String> generateTeacherRecoveryCode(
     String teacherId,
     String adminId,

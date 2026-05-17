@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 
 /// The type of deep link action parsed from a `classai://` URI.
 enum DeepLinkType {

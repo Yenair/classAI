@@ -36,3 +36,5 @@ For each gap found, output ONLY:
 - What the spec requires
 
 Do NOT generate any code. Do NOT rewrite files. Output a bullet list of gaps only. If no gaps, say "No gaps found."
+
+

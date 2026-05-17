@@ -3,13 +3,13 @@ import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/database/database.dart';
 import 'core/services/deep_link_service.dart';
 import 'core/theme/app_theme.dart';
-import 'features/auth/screens/activation_screen.dart';
-import 'features/auth/screens/admin_recovery_screen.dart';
 import 'features/auth/screens/teacher_recovery_dialog.dart';
+import 'router/app_router.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
   throw UnimplementedError(
@@ -28,17 +28,16 @@ void main() async {
   runApp(const ClassAiApp());
 }
 
+/// Root application widget.
+///
+/// Delegates to [DatabaseBootstrapper] to initialise the database before
+/// the GoRouter-based app is mounted.
 class ClassAiApp extends StatelessWidget {
   const ClassAiApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'ClassAI',
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
-      home: const DatabaseBootstrapper(),
-    );
+    return const DatabaseBootstrapper();
   }
 }
 
@@ -64,15 +63,20 @@ class _DatabaseBootstrapperState extends State<DatabaseBootstrapper> {
       future: _databaseFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(
-            body: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Starting ClassAI...'),
-                ],
+          return MaterialApp(
+            title: 'ClassAI',
+            theme: AppTheme.light(),
+            darkTheme: AppTheme.dark(),
+            home: const Scaffold(
+              body: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Starting ClassAI...'),
+                  ],
+                ),
               ),
             ),
           );
@@ -80,28 +84,39 @@ class _DatabaseBootstrapperState extends State<DatabaseBootstrapper> {
 
         if (snapshot.hasError) {
           final errorText = snapshot.error.toString();
-          return Scaffold(
-            appBar: AppBar(title: const Text('ClassAI')),
-            body: Padding(
-              padding: const EdgeInsets.all(24),
-              child: SelectableText(
-                'Failed to initialize the database.\n\n$errorText',
+          return MaterialApp(
+            title: 'ClassAI',
+            theme: AppTheme.light(),
+            darkTheme: AppTheme.dark(),
+            home: Scaffold(
+              appBar: AppBar(title: const Text('ClassAI')),
+              body: Padding(
+                padding: const EdgeInsets.all(24),
+                child: SelectableText(
+                  'Failed to initialize the database.\n\n$errorText',
+                ),
               ),
             ),
           );
         }
 
         if (snapshot.data == null) {
-          return const Scaffold(
-            body: Center(child: Text('Unexpected error: no data')),
+          return MaterialApp(
+            title: 'ClassAI',
+            theme: AppTheme.light(),
+            darkTheme: AppTheme.dark(),
+            home: const Scaffold(
+              body: Center(child: Text('Unexpected error: no data')),
+            ),
           );
         }
+
         final db = snapshot.data!;
         return ProviderScope(
           overrides: [
             databaseProvider.overrideWithValue(db),
           ],
-          child: const DatabaseStatusScreen(),
+          child: const ClassAiRouterApp(),
         );
       },
     );
@@ -110,16 +125,17 @@ class _DatabaseBootstrapperState extends State<DatabaseBootstrapper> {
 
 /// Root screen shown after database initialisation.
 ///
-/// Listens for `classai://` deep links at runtime and routes them to the
-/// appropriate screens (activation, teacher recovery, admin recovery).
-class DatabaseStatusScreen extends StatefulWidget {
-  const DatabaseStatusScreen({super.key});
+/// Wraps [MaterialApp.router] with [appRouter] for full GoRouter-based
+/// navigation. Listens for `classai://` deep links at runtime and routes
+/// them to the appropriate screens using GoRouter.
+class ClassAiRouterApp extends StatefulWidget {
+  const ClassAiRouterApp({super.key});
 
   @override
-  State<DatabaseStatusScreen> createState() => _DatabaseStatusScreenState();
+  State<ClassAiRouterApp> createState() => _ClassAiRouterAppState();
 }
 
-class _DatabaseStatusScreenState extends State<DatabaseStatusScreen> {
+class _ClassAiRouterAppState extends State<ClassAiRouterApp> {
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSubscription;
 
@@ -163,19 +179,11 @@ class _DatabaseStatusScreenState extends State<DatabaseStatusScreen> {
         break;
 
       case DeepLinkType.activate:
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => ActivationScreen(initialCode: parsed.code),
-          ),
-        );
+        GoRouter.of(context).go('/activation', extra: parsed.code);
         break;
 
       case DeepLinkType.adminRecovery:
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => const AdminRecoveryScreen(),
-          ),
-        );
+        GoRouter.of(context).go('/admin-recovery');
         break;
     }
   }
@@ -188,9 +196,11 @@ class _DatabaseStatusScreenState extends State<DatabaseStatusScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('ClassAI')),
-      body: const Center(child: Text('Database OK')),
+    return MaterialApp.router(
+      title: 'ClassAI',
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      routerConfig: appRouter,
     );
   }
 }

@@ -9,8 +9,6 @@ import 'package:classai/core/services/emergency_flush_service.dart';
 import 'package:classai/core/services/security_service.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/auth/screens/login_screen.dart';
-import 'package:classai/features/auth/screens/admin_recovery_screen.dart';
-import 'package:classai/features/auth/screens/activation_screen.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
 // ---------------------------------------------------------------------------

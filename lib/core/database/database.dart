@@ -22,10 +22,15 @@ import 'tables/recovery_codes.dart';
 import 'tables/pending_recovery_requests.dart';
 import 'tables/teacher_devices.dart';
 import 'tables/scheme_generation_queue.dart';
+import 'tables/pdf_cache.dart';
+import 'tables/teacher_subjects.dart';
 
 import 'daos/security_config_dao.dart';
 import 'daos/sync_queue_dao.dart';
 import 'daos/payment_events_dao.dart';
+import 'daos/vault_items_dao.dart';
+import 'daos/pdf_cache_dao.dart';
+import 'daos/teacher_subjects_dao.dart';
 
 part 'database.g.dart'; // generated
 
@@ -48,17 +53,22 @@ part 'database.g.dart'; // generated
   PendingRecoveryRequests,
   TeacherDevices,
   SchemeGenerationQueue,
+  PdfCache,
+  TeacherSubjects,
 ])
 class AppDatabase extends _$AppDatabase {
   SecurityConfigDao get securityConfigDao => SecurityConfigDao(this);
   SyncQueueDao get syncQueueDao => SyncQueueDao(this);
   PaymentEventsDao get paymentEventsDao => PaymentEventsDao(this);
+  VaultItemsDao get vaultItemsDao => VaultItemsDao(this);
+  PdfCacheDao get pdfCacheDao => PdfCacheDao(this);
+  TeacherSubjectsDao get teacherSubjectsDao => TeacherSubjectsDao(this);
 
   AppDatabase() : super(_openConnection());
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 6;
 
   static QueryExecutor _openConnection() {
     return LazyDatabase(() async {
@@ -199,6 +209,26 @@ class AppDatabase extends _$AppDatabase {
             await customStatement(
               'ALTER TABLE pending_recovery_requests ADD COLUMN attempted_at TEXT NOT NULL DEFAULT \'1970-01-01T00:00:00.000\'',
             );
+          }
+          if (from < 5) {
+            // Add PDF cache table
+            await customStatement('''
+              CREATE TABLE IF NOT EXISTS pdf_cache (
+                cache_key TEXT NOT NULL PRIMARY KEY,
+                pdf_data BLOB NOT NULL,
+                cached_at TEXT NOT NULL
+              )
+            ''');
+          }
+          if (from < 6) {
+            // Create teacher_subjects join table for teacher-subject assignments
+            await customStatement('''
+              CREATE TABLE IF NOT EXISTS teacher_subjects (
+                id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                teacher_local_id INTEGER NOT NULL REFERENCES teachers(local_id),
+                subject_id INTEGER NOT NULL REFERENCES subjects(id)
+              )
+            ''');
           }
         },
         beforeOpen: (details) async {

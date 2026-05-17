@@ -3175,8 +3175,176 @@ class $VaultItemsTable extends VaultItems
       requiredDuringInsert: false,
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _serverIdMeta =
+      const VerificationMeta('serverId');
   @override
-  List<GeneratedColumn> get $columns => [id];
+  late final GeneratedColumn<String> serverId = GeneratedColumn<String>(
+      'server_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+      'title', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _descriptionMeta =
+      const VerificationMeta('description');
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+      'description', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _subjectMeta =
+      const VerificationMeta('subject');
+  @override
+  late final GeneratedColumn<String> subject = GeneratedColumn<String>(
+      'subject', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _classLevelMeta =
+      const VerificationMeta('classLevel');
+  @override
+  late final GeneratedColumn<String> classLevel = GeneratedColumn<String>(
+      'class_level', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _curriculumMeta =
+      const VerificationMeta('curriculum');
+  @override
+  late final GeneratedColumn<String> curriculum = GeneratedColumn<String>(
+      'curriculum', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _contentMeta =
+      const VerificationMeta('content');
+  @override
+  late final GeneratedColumn<String> content = GeneratedColumn<String>(
+      'content', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _authorTeacherIdMeta =
+      const VerificationMeta('authorTeacherId');
+  @override
+  late final GeneratedColumn<String> authorTeacherId = GeneratedColumn<String>(
+      'author_teacher_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _authorNameMeta =
+      const VerificationMeta('authorName');
+  @override
+  late final GeneratedColumn<String> authorName = GeneratedColumn<String>(
+      'author_name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _minTierMeta =
+      const VerificationMeta('minTier');
+  @override
+  late final GeneratedColumn<String> minTier = GeneratedColumn<String>(
+      'min_tier', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('free'));
+  static const VerificationMeta _creditCostMeta =
+      const VerificationMeta('creditCost');
+  @override
+  late final GeneratedColumn<int> creditCost = GeneratedColumn<int>(
+      'credit_cost', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _needsApprovalMeta =
+      const VerificationMeta('needsApproval');
+  @override
+  late final GeneratedColumn<bool> needsApproval = GeneratedColumn<bool>(
+      'needs_approval', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("needs_approval" IN (0, 1))'),
+      defaultValue: const Constant(true));
+  static const VerificationMeta _approvalStatusMeta =
+      const VerificationMeta('approvalStatus');
+  @override
+  late final GeneratedColumn<String> approvalStatus = GeneratedColumn<String>(
+      'approval_status', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('pending'));
+  static const VerificationMeta _rejectionReasonMeta =
+      const VerificationMeta('rejectionReason');
+  @override
+  late final GeneratedColumn<String> rejectionReason = GeneratedColumn<String>(
+      'rejection_reason', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _thumbnailUrlMeta =
+      const VerificationMeta('thumbnailUrl');
+  @override
+  late final GeneratedColumn<String> thumbnailUrl = GeneratedColumn<String>(
+      'thumbnail_url', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updateCounterMeta =
+      const VerificationMeta('updateCounter');
+  @override
+  late final GeneratedColumn<int> updateCounter = GeneratedColumn<int>(
+      'update_counter', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _isDeletedMeta =
+      const VerificationMeta('isDeleted');
+  @override
+  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
+      'is_deleted', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_deleted" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _acquisitionDateMeta =
+      const VerificationMeta('acquisitionDate');
+  @override
+  late final GeneratedColumn<DateTime> acquisitionDate =
+      GeneratedColumn<DateTime>('acquisition_date', aliasedName, true,
+          type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _creditSpentBatchIdMeta =
+      const VerificationMeta('creditSpentBatchId');
+  @override
+  late final GeneratedColumn<String> creditSpentBatchId =
+      GeneratedColumn<String>('credit_spent_batch_id', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        serverId,
+        title,
+        description,
+        subject,
+        classLevel,
+        curriculum,
+        content,
+        authorTeacherId,
+        authorName,
+        minTier,
+        creditCost,
+        needsApproval,
+        approvalStatus,
+        rejectionReason,
+        thumbnailUrl,
+        createdAt,
+        updatedAt,
+        updateCounter,
+        isDeleted,
+        acquisitionDate,
+        creditSpentBatchId
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -3190,6 +3358,132 @@ class $VaultItemsTable extends VaultItems
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
     }
+    if (data.containsKey('server_id')) {
+      context.handle(_serverIdMeta,
+          serverId.isAcceptableOrUnknown(data['server_id']!, _serverIdMeta));
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+          _titleMeta, title.isAcceptableOrUnknown(data['title']!, _titleMeta));
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+          _descriptionMeta,
+          description.isAcceptableOrUnknown(
+              data['description']!, _descriptionMeta));
+    } else if (isInserting) {
+      context.missing(_descriptionMeta);
+    }
+    if (data.containsKey('subject')) {
+      context.handle(_subjectMeta,
+          subject.isAcceptableOrUnknown(data['subject']!, _subjectMeta));
+    } else if (isInserting) {
+      context.missing(_subjectMeta);
+    }
+    if (data.containsKey('class_level')) {
+      context.handle(
+          _classLevelMeta,
+          classLevel.isAcceptableOrUnknown(
+              data['class_level']!, _classLevelMeta));
+    } else if (isInserting) {
+      context.missing(_classLevelMeta);
+    }
+    if (data.containsKey('curriculum')) {
+      context.handle(
+          _curriculumMeta,
+          curriculum.isAcceptableOrUnknown(
+              data['curriculum']!, _curriculumMeta));
+    } else if (isInserting) {
+      context.missing(_curriculumMeta);
+    }
+    if (data.containsKey('content')) {
+      context.handle(_contentMeta,
+          content.isAcceptableOrUnknown(data['content']!, _contentMeta));
+    } else if (isInserting) {
+      context.missing(_contentMeta);
+    }
+    if (data.containsKey('author_teacher_id')) {
+      context.handle(
+          _authorTeacherIdMeta,
+          authorTeacherId.isAcceptableOrUnknown(
+              data['author_teacher_id']!, _authorTeacherIdMeta));
+    } else if (isInserting) {
+      context.missing(_authorTeacherIdMeta);
+    }
+    if (data.containsKey('author_name')) {
+      context.handle(
+          _authorNameMeta,
+          authorName.isAcceptableOrUnknown(
+              data['author_name']!, _authorNameMeta));
+    } else if (isInserting) {
+      context.missing(_authorNameMeta);
+    }
+    if (data.containsKey('min_tier')) {
+      context.handle(_minTierMeta,
+          minTier.isAcceptableOrUnknown(data['min_tier']!, _minTierMeta));
+    }
+    if (data.containsKey('credit_cost')) {
+      context.handle(
+          _creditCostMeta,
+          creditCost.isAcceptableOrUnknown(
+              data['credit_cost']!, _creditCostMeta));
+    }
+    if (data.containsKey('needs_approval')) {
+      context.handle(
+          _needsApprovalMeta,
+          needsApproval.isAcceptableOrUnknown(
+              data['needs_approval']!, _needsApprovalMeta));
+    }
+    if (data.containsKey('approval_status')) {
+      context.handle(
+          _approvalStatusMeta,
+          approvalStatus.isAcceptableOrUnknown(
+              data['approval_status']!, _approvalStatusMeta));
+    }
+    if (data.containsKey('rejection_reason')) {
+      context.handle(
+          _rejectionReasonMeta,
+          rejectionReason.isAcceptableOrUnknown(
+              data['rejection_reason']!, _rejectionReasonMeta));
+    }
+    if (data.containsKey('thumbnail_url')) {
+      context.handle(
+          _thumbnailUrlMeta,
+          thumbnailUrl.isAcceptableOrUnknown(
+              data['thumbnail_url']!, _thumbnailUrlMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    if (data.containsKey('update_counter')) {
+      context.handle(
+          _updateCounterMeta,
+          updateCounter.isAcceptableOrUnknown(
+              data['update_counter']!, _updateCounterMeta));
+    }
+    if (data.containsKey('is_deleted')) {
+      context.handle(_isDeletedMeta,
+          isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta));
+    }
+    if (data.containsKey('acquisition_date')) {
+      context.handle(
+          _acquisitionDateMeta,
+          acquisitionDate.isAcceptableOrUnknown(
+              data['acquisition_date']!, _acquisitionDateMeta));
+    }
+    if (data.containsKey('credit_spent_batch_id')) {
+      context.handle(
+          _creditSpentBatchIdMeta,
+          creditSpentBatchId.isAcceptableOrUnknown(
+              data['credit_spent_batch_id']!, _creditSpentBatchIdMeta));
+    }
     return context;
   }
 
@@ -3201,6 +3495,48 @@ class $VaultItemsTable extends VaultItems
     return VaultItem(
       id: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      serverId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}server_id']),
+      title: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}title'])!,
+      description: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}description'])!,
+      subject: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}subject'])!,
+      classLevel: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}class_level'])!,
+      curriculum: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}curriculum'])!,
+      content: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}content'])!,
+      authorTeacherId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}author_teacher_id'])!,
+      authorName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}author_name'])!,
+      minTier: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}min_tier'])!,
+      creditCost: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}credit_cost'])!,
+      needsApproval: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}needs_approval'])!,
+      approvalStatus: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}approval_status'])!,
+      rejectionReason: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}rejection_reason']),
+      thumbnailUrl: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}thumbnail_url']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      updateCounter: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}update_counter'])!,
+      isDeleted: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_deleted'])!,
+      acquisitionDate: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime, data['${effectivePrefix}acquisition_date']),
+      creditSpentBatchId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}credit_spent_batch_id']),
     );
   }
 
@@ -3212,17 +3548,122 @@ class $VaultItemsTable extends VaultItems
 
 class VaultItem extends DataClass implements Insertable<VaultItem> {
   final int id;
-  const VaultItem({required this.id});
+  final String? serverId;
+  final String title;
+  final String description;
+  final String subject;
+  final String classLevel;
+  final String curriculum;
+  final String content;
+  final String authorTeacherId;
+  final String authorName;
+  final String minTier;
+  final int creditCost;
+  final bool needsApproval;
+  final String approvalStatus;
+  final String? rejectionReason;
+  final String? thumbnailUrl;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int updateCounter;
+  final bool isDeleted;
+  final DateTime? acquisitionDate;
+  final String? creditSpentBatchId;
+  const VaultItem(
+      {required this.id,
+      this.serverId,
+      required this.title,
+      required this.description,
+      required this.subject,
+      required this.classLevel,
+      required this.curriculum,
+      required this.content,
+      required this.authorTeacherId,
+      required this.authorName,
+      required this.minTier,
+      required this.creditCost,
+      required this.needsApproval,
+      required this.approvalStatus,
+      this.rejectionReason,
+      this.thumbnailUrl,
+      required this.createdAt,
+      required this.updatedAt,
+      required this.updateCounter,
+      required this.isDeleted,
+      this.acquisitionDate,
+      this.creditSpentBatchId});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
+    if (!nullToAbsent || serverId != null) {
+      map['server_id'] = Variable<String>(serverId);
+    }
+    map['title'] = Variable<String>(title);
+    map['description'] = Variable<String>(description);
+    map['subject'] = Variable<String>(subject);
+    map['class_level'] = Variable<String>(classLevel);
+    map['curriculum'] = Variable<String>(curriculum);
+    map['content'] = Variable<String>(content);
+    map['author_teacher_id'] = Variable<String>(authorTeacherId);
+    map['author_name'] = Variable<String>(authorName);
+    map['min_tier'] = Variable<String>(minTier);
+    map['credit_cost'] = Variable<int>(creditCost);
+    map['needs_approval'] = Variable<bool>(needsApproval);
+    map['approval_status'] = Variable<String>(approvalStatus);
+    if (!nullToAbsent || rejectionReason != null) {
+      map['rejection_reason'] = Variable<String>(rejectionReason);
+    }
+    if (!nullToAbsent || thumbnailUrl != null) {
+      map['thumbnail_url'] = Variable<String>(thumbnailUrl);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['update_counter'] = Variable<int>(updateCounter);
+    map['is_deleted'] = Variable<bool>(isDeleted);
+    if (!nullToAbsent || acquisitionDate != null) {
+      map['acquisition_date'] = Variable<DateTime>(acquisitionDate);
+    }
+    if (!nullToAbsent || creditSpentBatchId != null) {
+      map['credit_spent_batch_id'] = Variable<String>(creditSpentBatchId);
+    }
     return map;
   }
 
   VaultItemsCompanion toCompanion(bool nullToAbsent) {
     return VaultItemsCompanion(
       id: Value(id),
+      serverId: serverId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(serverId),
+      title: Value(title),
+      description: Value(description),
+      subject: Value(subject),
+      classLevel: Value(classLevel),
+      curriculum: Value(curriculum),
+      content: Value(content),
+      authorTeacherId: Value(authorTeacherId),
+      authorName: Value(authorName),
+      minTier: Value(minTier),
+      creditCost: Value(creditCost),
+      needsApproval: Value(needsApproval),
+      approvalStatus: Value(approvalStatus),
+      rejectionReason: rejectionReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(rejectionReason),
+      thumbnailUrl: thumbnailUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(thumbnailUrl),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      updateCounter: Value(updateCounter),
+      isDeleted: Value(isDeleted),
+      acquisitionDate: acquisitionDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(acquisitionDate),
+      creditSpentBatchId: creditSpentBatchId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(creditSpentBatchId),
     );
   }
 
@@ -3231,6 +3672,28 @@ class VaultItem extends DataClass implements Insertable<VaultItem> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return VaultItem(
       id: serializer.fromJson<int>(json['id']),
+      serverId: serializer.fromJson<String?>(json['serverId']),
+      title: serializer.fromJson<String>(json['title']),
+      description: serializer.fromJson<String>(json['description']),
+      subject: serializer.fromJson<String>(json['subject']),
+      classLevel: serializer.fromJson<String>(json['classLevel']),
+      curriculum: serializer.fromJson<String>(json['curriculum']),
+      content: serializer.fromJson<String>(json['content']),
+      authorTeacherId: serializer.fromJson<String>(json['authorTeacherId']),
+      authorName: serializer.fromJson<String>(json['authorName']),
+      minTier: serializer.fromJson<String>(json['minTier']),
+      creditCost: serializer.fromJson<int>(json['creditCost']),
+      needsApproval: serializer.fromJson<bool>(json['needsApproval']),
+      approvalStatus: serializer.fromJson<String>(json['approvalStatus']),
+      rejectionReason: serializer.fromJson<String?>(json['rejectionReason']),
+      thumbnailUrl: serializer.fromJson<String?>(json['thumbnailUrl']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      updateCounter: serializer.fromJson<int>(json['updateCounter']),
+      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      acquisitionDate: serializer.fromJson<DateTime?>(json['acquisitionDate']),
+      creditSpentBatchId:
+          serializer.fromJson<String?>(json['creditSpentBatchId']),
     );
   }
   @override
@@ -3238,52 +3701,389 @@ class VaultItem extends DataClass implements Insertable<VaultItem> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
+      'serverId': serializer.toJson<String?>(serverId),
+      'title': serializer.toJson<String>(title),
+      'description': serializer.toJson<String>(description),
+      'subject': serializer.toJson<String>(subject),
+      'classLevel': serializer.toJson<String>(classLevel),
+      'curriculum': serializer.toJson<String>(curriculum),
+      'content': serializer.toJson<String>(content),
+      'authorTeacherId': serializer.toJson<String>(authorTeacherId),
+      'authorName': serializer.toJson<String>(authorName),
+      'minTier': serializer.toJson<String>(minTier),
+      'creditCost': serializer.toJson<int>(creditCost),
+      'needsApproval': serializer.toJson<bool>(needsApproval),
+      'approvalStatus': serializer.toJson<String>(approvalStatus),
+      'rejectionReason': serializer.toJson<String?>(rejectionReason),
+      'thumbnailUrl': serializer.toJson<String?>(thumbnailUrl),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'updateCounter': serializer.toJson<int>(updateCounter),
+      'isDeleted': serializer.toJson<bool>(isDeleted),
+      'acquisitionDate': serializer.toJson<DateTime?>(acquisitionDate),
+      'creditSpentBatchId': serializer.toJson<String?>(creditSpentBatchId),
     };
   }
 
-  VaultItem copyWith({int? id}) => VaultItem(
+  VaultItem copyWith(
+          {int? id,
+          Value<String?> serverId = const Value.absent(),
+          String? title,
+          String? description,
+          String? subject,
+          String? classLevel,
+          String? curriculum,
+          String? content,
+          String? authorTeacherId,
+          String? authorName,
+          String? minTier,
+          int? creditCost,
+          bool? needsApproval,
+          String? approvalStatus,
+          Value<String?> rejectionReason = const Value.absent(),
+          Value<String?> thumbnailUrl = const Value.absent(),
+          DateTime? createdAt,
+          DateTime? updatedAt,
+          int? updateCounter,
+          bool? isDeleted,
+          Value<DateTime?> acquisitionDate = const Value.absent(),
+          Value<String?> creditSpentBatchId = const Value.absent()}) =>
+      VaultItem(
         id: id ?? this.id,
+        serverId: serverId.present ? serverId.value : this.serverId,
+        title: title ?? this.title,
+        description: description ?? this.description,
+        subject: subject ?? this.subject,
+        classLevel: classLevel ?? this.classLevel,
+        curriculum: curriculum ?? this.curriculum,
+        content: content ?? this.content,
+        authorTeacherId: authorTeacherId ?? this.authorTeacherId,
+        authorName: authorName ?? this.authorName,
+        minTier: minTier ?? this.minTier,
+        creditCost: creditCost ?? this.creditCost,
+        needsApproval: needsApproval ?? this.needsApproval,
+        approvalStatus: approvalStatus ?? this.approvalStatus,
+        rejectionReason: rejectionReason.present
+            ? rejectionReason.value
+            : this.rejectionReason,
+        thumbnailUrl:
+            thumbnailUrl.present ? thumbnailUrl.value : this.thumbnailUrl,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        updateCounter: updateCounter ?? this.updateCounter,
+        isDeleted: isDeleted ?? this.isDeleted,
+        acquisitionDate: acquisitionDate.present
+            ? acquisitionDate.value
+            : this.acquisitionDate,
+        creditSpentBatchId: creditSpentBatchId.present
+            ? creditSpentBatchId.value
+            : this.creditSpentBatchId,
       );
   VaultItem copyWithCompanion(VaultItemsCompanion data) {
     return VaultItem(
       id: data.id.present ? data.id.value : this.id,
+      serverId: data.serverId.present ? data.serverId.value : this.serverId,
+      title: data.title.present ? data.title.value : this.title,
+      description:
+          data.description.present ? data.description.value : this.description,
+      subject: data.subject.present ? data.subject.value : this.subject,
+      classLevel:
+          data.classLevel.present ? data.classLevel.value : this.classLevel,
+      curriculum:
+          data.curriculum.present ? data.curriculum.value : this.curriculum,
+      content: data.content.present ? data.content.value : this.content,
+      authorTeacherId: data.authorTeacherId.present
+          ? data.authorTeacherId.value
+          : this.authorTeacherId,
+      authorName:
+          data.authorName.present ? data.authorName.value : this.authorName,
+      minTier: data.minTier.present ? data.minTier.value : this.minTier,
+      creditCost:
+          data.creditCost.present ? data.creditCost.value : this.creditCost,
+      needsApproval: data.needsApproval.present
+          ? data.needsApproval.value
+          : this.needsApproval,
+      approvalStatus: data.approvalStatus.present
+          ? data.approvalStatus.value
+          : this.approvalStatus,
+      rejectionReason: data.rejectionReason.present
+          ? data.rejectionReason.value
+          : this.rejectionReason,
+      thumbnailUrl: data.thumbnailUrl.present
+          ? data.thumbnailUrl.value
+          : this.thumbnailUrl,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      updateCounter: data.updateCounter.present
+          ? data.updateCounter.value
+          : this.updateCounter,
+      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      acquisitionDate: data.acquisitionDate.present
+          ? data.acquisitionDate.value
+          : this.acquisitionDate,
+      creditSpentBatchId: data.creditSpentBatchId.present
+          ? data.creditSpentBatchId.value
+          : this.creditSpentBatchId,
     );
   }
 
   @override
   String toString() {
     return (StringBuffer('VaultItem(')
-          ..write('id: $id')
+          ..write('id: $id, ')
+          ..write('serverId: $serverId, ')
+          ..write('title: $title, ')
+          ..write('description: $description, ')
+          ..write('subject: $subject, ')
+          ..write('classLevel: $classLevel, ')
+          ..write('curriculum: $curriculum, ')
+          ..write('content: $content, ')
+          ..write('authorTeacherId: $authorTeacherId, ')
+          ..write('authorName: $authorName, ')
+          ..write('minTier: $minTier, ')
+          ..write('creditCost: $creditCost, ')
+          ..write('needsApproval: $needsApproval, ')
+          ..write('approvalStatus: $approvalStatus, ')
+          ..write('rejectionReason: $rejectionReason, ')
+          ..write('thumbnailUrl: $thumbnailUrl, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('updateCounter: $updateCounter, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('acquisitionDate: $acquisitionDate, ')
+          ..write('creditSpentBatchId: $creditSpentBatchId')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => Object.hashAll([
+        id,
+        serverId,
+        title,
+        description,
+        subject,
+        classLevel,
+        curriculum,
+        content,
+        authorTeacherId,
+        authorName,
+        minTier,
+        creditCost,
+        needsApproval,
+        approvalStatus,
+        rejectionReason,
+        thumbnailUrl,
+        createdAt,
+        updatedAt,
+        updateCounter,
+        isDeleted,
+        acquisitionDate,
+        creditSpentBatchId
+      ]);
   @override
   bool operator ==(Object other) =>
-      identical(this, other) || (other is VaultItem && other.id == this.id);
+      identical(this, other) ||
+      (other is VaultItem &&
+          other.id == this.id &&
+          other.serverId == this.serverId &&
+          other.title == this.title &&
+          other.description == this.description &&
+          other.subject == this.subject &&
+          other.classLevel == this.classLevel &&
+          other.curriculum == this.curriculum &&
+          other.content == this.content &&
+          other.authorTeacherId == this.authorTeacherId &&
+          other.authorName == this.authorName &&
+          other.minTier == this.minTier &&
+          other.creditCost == this.creditCost &&
+          other.needsApproval == this.needsApproval &&
+          other.approvalStatus == this.approvalStatus &&
+          other.rejectionReason == this.rejectionReason &&
+          other.thumbnailUrl == this.thumbnailUrl &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.updateCounter == this.updateCounter &&
+          other.isDeleted == this.isDeleted &&
+          other.acquisitionDate == this.acquisitionDate &&
+          other.creditSpentBatchId == this.creditSpentBatchId);
 }
 
 class VaultItemsCompanion extends UpdateCompanion<VaultItem> {
   final Value<int> id;
+  final Value<String?> serverId;
+  final Value<String> title;
+  final Value<String> description;
+  final Value<String> subject;
+  final Value<String> classLevel;
+  final Value<String> curriculum;
+  final Value<String> content;
+  final Value<String> authorTeacherId;
+  final Value<String> authorName;
+  final Value<String> minTier;
+  final Value<int> creditCost;
+  final Value<bool> needsApproval;
+  final Value<String> approvalStatus;
+  final Value<String?> rejectionReason;
+  final Value<String?> thumbnailUrl;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> updateCounter;
+  final Value<bool> isDeleted;
+  final Value<DateTime?> acquisitionDate;
+  final Value<String?> creditSpentBatchId;
   const VaultItemsCompanion({
     this.id = const Value.absent(),
+    this.serverId = const Value.absent(),
+    this.title = const Value.absent(),
+    this.description = const Value.absent(),
+    this.subject = const Value.absent(),
+    this.classLevel = const Value.absent(),
+    this.curriculum = const Value.absent(),
+    this.content = const Value.absent(),
+    this.authorTeacherId = const Value.absent(),
+    this.authorName = const Value.absent(),
+    this.minTier = const Value.absent(),
+    this.creditCost = const Value.absent(),
+    this.needsApproval = const Value.absent(),
+    this.approvalStatus = const Value.absent(),
+    this.rejectionReason = const Value.absent(),
+    this.thumbnailUrl = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.updateCounter = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.acquisitionDate = const Value.absent(),
+    this.creditSpentBatchId = const Value.absent(),
   });
   VaultItemsCompanion.insert({
     this.id = const Value.absent(),
-  });
+    this.serverId = const Value.absent(),
+    required String title,
+    required String description,
+    required String subject,
+    required String classLevel,
+    required String curriculum,
+    required String content,
+    required String authorTeacherId,
+    required String authorName,
+    this.minTier = const Value.absent(),
+    this.creditCost = const Value.absent(),
+    this.needsApproval = const Value.absent(),
+    this.approvalStatus = const Value.absent(),
+    this.rejectionReason = const Value.absent(),
+    this.thumbnailUrl = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.updateCounter = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.acquisitionDate = const Value.absent(),
+    this.creditSpentBatchId = const Value.absent(),
+  })  : title = Value(title),
+        description = Value(description),
+        subject = Value(subject),
+        classLevel = Value(classLevel),
+        curriculum = Value(curriculum),
+        content = Value(content),
+        authorTeacherId = Value(authorTeacherId),
+        authorName = Value(authorName);
   static Insertable<VaultItem> custom({
     Expression<int>? id,
+    Expression<String>? serverId,
+    Expression<String>? title,
+    Expression<String>? description,
+    Expression<String>? subject,
+    Expression<String>? classLevel,
+    Expression<String>? curriculum,
+    Expression<String>? content,
+    Expression<String>? authorTeacherId,
+    Expression<String>? authorName,
+    Expression<String>? minTier,
+    Expression<int>? creditCost,
+    Expression<bool>? needsApproval,
+    Expression<String>? approvalStatus,
+    Expression<String>? rejectionReason,
+    Expression<String>? thumbnailUrl,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? updateCounter,
+    Expression<bool>? isDeleted,
+    Expression<DateTime>? acquisitionDate,
+    Expression<String>? creditSpentBatchId,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
+      if (serverId != null) 'server_id': serverId,
+      if (title != null) 'title': title,
+      if (description != null) 'description': description,
+      if (subject != null) 'subject': subject,
+      if (classLevel != null) 'class_level': classLevel,
+      if (curriculum != null) 'curriculum': curriculum,
+      if (content != null) 'content': content,
+      if (authorTeacherId != null) 'author_teacher_id': authorTeacherId,
+      if (authorName != null) 'author_name': authorName,
+      if (minTier != null) 'min_tier': minTier,
+      if (creditCost != null) 'credit_cost': creditCost,
+      if (needsApproval != null) 'needs_approval': needsApproval,
+      if (approvalStatus != null) 'approval_status': approvalStatus,
+      if (rejectionReason != null) 'rejection_reason': rejectionReason,
+      if (thumbnailUrl != null) 'thumbnail_url': thumbnailUrl,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (updateCounter != null) 'update_counter': updateCounter,
+      if (isDeleted != null) 'is_deleted': isDeleted,
+      if (acquisitionDate != null) 'acquisition_date': acquisitionDate,
+      if (creditSpentBatchId != null)
+        'credit_spent_batch_id': creditSpentBatchId,
     });
   }
 
-  VaultItemsCompanion copyWith({Value<int>? id}) {
+  VaultItemsCompanion copyWith(
+      {Value<int>? id,
+      Value<String?>? serverId,
+      Value<String>? title,
+      Value<String>? description,
+      Value<String>? subject,
+      Value<String>? classLevel,
+      Value<String>? curriculum,
+      Value<String>? content,
+      Value<String>? authorTeacherId,
+      Value<String>? authorName,
+      Value<String>? minTier,
+      Value<int>? creditCost,
+      Value<bool>? needsApproval,
+      Value<String>? approvalStatus,
+      Value<String?>? rejectionReason,
+      Value<String?>? thumbnailUrl,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<int>? updateCounter,
+      Value<bool>? isDeleted,
+      Value<DateTime?>? acquisitionDate,
+      Value<String?>? creditSpentBatchId}) {
     return VaultItemsCompanion(
       id: id ?? this.id,
+      serverId: serverId ?? this.serverId,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      subject: subject ?? this.subject,
+      classLevel: classLevel ?? this.classLevel,
+      curriculum: curriculum ?? this.curriculum,
+      content: content ?? this.content,
+      authorTeacherId: authorTeacherId ?? this.authorTeacherId,
+      authorName: authorName ?? this.authorName,
+      minTier: minTier ?? this.minTier,
+      creditCost: creditCost ?? this.creditCost,
+      needsApproval: needsApproval ?? this.needsApproval,
+      approvalStatus: approvalStatus ?? this.approvalStatus,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
+      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      updateCounter: updateCounter ?? this.updateCounter,
+      isDeleted: isDeleted ?? this.isDeleted,
+      acquisitionDate: acquisitionDate ?? this.acquisitionDate,
+      creditSpentBatchId: creditSpentBatchId ?? this.creditSpentBatchId,
     );
   }
 
@@ -3293,13 +4093,97 @@ class VaultItemsCompanion extends UpdateCompanion<VaultItem> {
     if (id.present) {
       map['id'] = Variable<int>(id.value);
     }
+    if (serverId.present) {
+      map['server_id'] = Variable<String>(serverId.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (subject.present) {
+      map['subject'] = Variable<String>(subject.value);
+    }
+    if (classLevel.present) {
+      map['class_level'] = Variable<String>(classLevel.value);
+    }
+    if (curriculum.present) {
+      map['curriculum'] = Variable<String>(curriculum.value);
+    }
+    if (content.present) {
+      map['content'] = Variable<String>(content.value);
+    }
+    if (authorTeacherId.present) {
+      map['author_teacher_id'] = Variable<String>(authorTeacherId.value);
+    }
+    if (authorName.present) {
+      map['author_name'] = Variable<String>(authorName.value);
+    }
+    if (minTier.present) {
+      map['min_tier'] = Variable<String>(minTier.value);
+    }
+    if (creditCost.present) {
+      map['credit_cost'] = Variable<int>(creditCost.value);
+    }
+    if (needsApproval.present) {
+      map['needs_approval'] = Variable<bool>(needsApproval.value);
+    }
+    if (approvalStatus.present) {
+      map['approval_status'] = Variable<String>(approvalStatus.value);
+    }
+    if (rejectionReason.present) {
+      map['rejection_reason'] = Variable<String>(rejectionReason.value);
+    }
+    if (thumbnailUrl.present) {
+      map['thumbnail_url'] = Variable<String>(thumbnailUrl.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (updateCounter.present) {
+      map['update_counter'] = Variable<int>(updateCounter.value);
+    }
+    if (isDeleted.present) {
+      map['is_deleted'] = Variable<bool>(isDeleted.value);
+    }
+    if (acquisitionDate.present) {
+      map['acquisition_date'] = Variable<DateTime>(acquisitionDate.value);
+    }
+    if (creditSpentBatchId.present) {
+      map['credit_spent_batch_id'] = Variable<String>(creditSpentBatchId.value);
+    }
     return map;
   }
 
   @override
   String toString() {
     return (StringBuffer('VaultItemsCompanion(')
-          ..write('id: $id')
+          ..write('id: $id, ')
+          ..write('serverId: $serverId, ')
+          ..write('title: $title, ')
+          ..write('description: $description, ')
+          ..write('subject: $subject, ')
+          ..write('classLevel: $classLevel, ')
+          ..write('curriculum: $curriculum, ')
+          ..write('content: $content, ')
+          ..write('authorTeacherId: $authorTeacherId, ')
+          ..write('authorName: $authorName, ')
+          ..write('minTier: $minTier, ')
+          ..write('creditCost: $creditCost, ')
+          ..write('needsApproval: $needsApproval, ')
+          ..write('approvalStatus: $approvalStatus, ')
+          ..write('rejectionReason: $rejectionReason, ')
+          ..write('thumbnailUrl: $thumbnailUrl, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('updateCounter: $updateCounter, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('acquisitionDate: $acquisitionDate, ')
+          ..write('creditSpentBatchId: $creditSpentBatchId')
           ..write(')'))
         .toString();
   }
@@ -5691,6 +6575,18 @@ class $ConflictsTable extends Conflicts
   late final GeneratedColumn<String> conflictingFields =
       GeneratedColumn<String>('conflicting_fields', aliasedName, false,
           type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _localValueMeta =
+      const VerificationMeta('localValue');
+  @override
+  late final GeneratedColumn<String> localValue = GeneratedColumn<String>(
+      'local_value', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _remoteValueMeta =
+      const VerificationMeta('remoteValue');
+  @override
+  late final GeneratedColumn<String> remoteValue = GeneratedColumn<String>(
+      'remote_value', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _resolutionMeta =
       const VerificationMeta('resolution');
   @override
@@ -5731,6 +6627,8 @@ class $ConflictsTable extends Conflicts
         recordType,
         recordLocalId,
         conflictingFields,
+        localValue,
+        remoteValue,
         resolution,
         notified,
         createdAt,
@@ -5773,6 +6671,18 @@ class $ConflictsTable extends Conflicts
     } else if (isInserting) {
       context.missing(_conflictingFieldsMeta);
     }
+    if (data.containsKey('local_value')) {
+      context.handle(
+          _localValueMeta,
+          localValue.isAcceptableOrUnknown(
+              data['local_value']!, _localValueMeta));
+    }
+    if (data.containsKey('remote_value')) {
+      context.handle(
+          _remoteValueMeta,
+          remoteValue.isAcceptableOrUnknown(
+              data['remote_value']!, _remoteValueMeta));
+    }
     if (data.containsKey('resolution')) {
       context.handle(
           _resolutionMeta,
@@ -5808,6 +6718,10 @@ class $ConflictsTable extends Conflicts
           .read(DriftSqlType.int, data['${effectivePrefix}record_local_id'])!,
       conflictingFields: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}conflicting_fields'])!,
+      localValue: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}local_value']),
+      remoteValue: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}remote_value']),
       resolution: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}resolution'])!,
       notified: attachedDatabase.typeMapping
@@ -5830,6 +6744,8 @@ class Conflict extends DataClass implements Insertable<Conflict> {
   final String recordType;
   final int recordLocalId;
   final String conflictingFields;
+  final String? localValue;
+  final String? remoteValue;
   final String resolution;
   final bool notified;
   final DateTime createdAt;
@@ -5839,6 +6755,8 @@ class Conflict extends DataClass implements Insertable<Conflict> {
       required this.recordType,
       required this.recordLocalId,
       required this.conflictingFields,
+      this.localValue,
+      this.remoteValue,
       required this.resolution,
       required this.notified,
       required this.createdAt,
@@ -5850,6 +6768,12 @@ class Conflict extends DataClass implements Insertable<Conflict> {
     map['record_type'] = Variable<String>(recordType);
     map['record_local_id'] = Variable<int>(recordLocalId);
     map['conflicting_fields'] = Variable<String>(conflictingFields);
+    if (!nullToAbsent || localValue != null) {
+      map['local_value'] = Variable<String>(localValue);
+    }
+    if (!nullToAbsent || remoteValue != null) {
+      map['remote_value'] = Variable<String>(remoteValue);
+    }
     map['resolution'] = Variable<String>(resolution);
     map['notified'] = Variable<bool>(notified);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -5863,6 +6787,12 @@ class Conflict extends DataClass implements Insertable<Conflict> {
       recordType: Value(recordType),
       recordLocalId: Value(recordLocalId),
       conflictingFields: Value(conflictingFields),
+      localValue: localValue == null && nullToAbsent
+          ? const Value.absent()
+          : Value(localValue),
+      remoteValue: remoteValue == null && nullToAbsent
+          ? const Value.absent()
+          : Value(remoteValue),
       resolution: Value(resolution),
       notified: Value(notified),
       createdAt: Value(createdAt),
@@ -5878,6 +6808,8 @@ class Conflict extends DataClass implements Insertable<Conflict> {
       recordType: serializer.fromJson<String>(json['recordType']),
       recordLocalId: serializer.fromJson<int>(json['recordLocalId']),
       conflictingFields: serializer.fromJson<String>(json['conflictingFields']),
+      localValue: serializer.fromJson<String?>(json['localValue']),
+      remoteValue: serializer.fromJson<String?>(json['remoteValue']),
       resolution: serializer.fromJson<String>(json['resolution']),
       notified: serializer.fromJson<bool>(json['notified']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -5892,6 +6824,8 @@ class Conflict extends DataClass implements Insertable<Conflict> {
       'recordType': serializer.toJson<String>(recordType),
       'recordLocalId': serializer.toJson<int>(recordLocalId),
       'conflictingFields': serializer.toJson<String>(conflictingFields),
+      'localValue': serializer.toJson<String?>(localValue),
+      'remoteValue': serializer.toJson<String?>(remoteValue),
       'resolution': serializer.toJson<String>(resolution),
       'notified': serializer.toJson<bool>(notified),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -5904,6 +6838,8 @@ class Conflict extends DataClass implements Insertable<Conflict> {
           String? recordType,
           int? recordLocalId,
           String? conflictingFields,
+          Value<String?> localValue = const Value.absent(),
+          Value<String?> remoteValue = const Value.absent(),
           String? resolution,
           bool? notified,
           DateTime? createdAt,
@@ -5913,6 +6849,8 @@ class Conflict extends DataClass implements Insertable<Conflict> {
         recordType: recordType ?? this.recordType,
         recordLocalId: recordLocalId ?? this.recordLocalId,
         conflictingFields: conflictingFields ?? this.conflictingFields,
+        localValue: localValue.present ? localValue.value : this.localValue,
+        remoteValue: remoteValue.present ? remoteValue.value : this.remoteValue,
         resolution: resolution ?? this.resolution,
         notified: notified ?? this.notified,
         createdAt: createdAt ?? this.createdAt,
@@ -5929,6 +6867,10 @@ class Conflict extends DataClass implements Insertable<Conflict> {
       conflictingFields: data.conflictingFields.present
           ? data.conflictingFields.value
           : this.conflictingFields,
+      localValue:
+          data.localValue.present ? data.localValue.value : this.localValue,
+      remoteValue:
+          data.remoteValue.present ? data.remoteValue.value : this.remoteValue,
       resolution:
           data.resolution.present ? data.resolution.value : this.resolution,
       notified: data.notified.present ? data.notified.value : this.notified,
@@ -5944,6 +6886,8 @@ class Conflict extends DataClass implements Insertable<Conflict> {
           ..write('recordType: $recordType, ')
           ..write('recordLocalId: $recordLocalId, ')
           ..write('conflictingFields: $conflictingFields, ')
+          ..write('localValue: $localValue, ')
+          ..write('remoteValue: $remoteValue, ')
           ..write('resolution: $resolution, ')
           ..write('notified: $notified, ')
           ..write('createdAt: $createdAt, ')
@@ -5953,8 +6897,17 @@ class Conflict extends DataClass implements Insertable<Conflict> {
   }
 
   @override
-  int get hashCode => Object.hash(id, recordType, recordLocalId,
-      conflictingFields, resolution, notified, createdAt, updatedAt);
+  int get hashCode => Object.hash(
+      id,
+      recordType,
+      recordLocalId,
+      conflictingFields,
+      localValue,
+      remoteValue,
+      resolution,
+      notified,
+      createdAt,
+      updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -5963,6 +6916,8 @@ class Conflict extends DataClass implements Insertable<Conflict> {
           other.recordType == this.recordType &&
           other.recordLocalId == this.recordLocalId &&
           other.conflictingFields == this.conflictingFields &&
+          other.localValue == this.localValue &&
+          other.remoteValue == this.remoteValue &&
           other.resolution == this.resolution &&
           other.notified == this.notified &&
           other.createdAt == this.createdAt &&
@@ -5974,6 +6929,8 @@ class ConflictsCompanion extends UpdateCompanion<Conflict> {
   final Value<String> recordType;
   final Value<int> recordLocalId;
   final Value<String> conflictingFields;
+  final Value<String?> localValue;
+  final Value<String?> remoteValue;
   final Value<String> resolution;
   final Value<bool> notified;
   final Value<DateTime> createdAt;
@@ -5983,6 +6940,8 @@ class ConflictsCompanion extends UpdateCompanion<Conflict> {
     this.recordType = const Value.absent(),
     this.recordLocalId = const Value.absent(),
     this.conflictingFields = const Value.absent(),
+    this.localValue = const Value.absent(),
+    this.remoteValue = const Value.absent(),
     this.resolution = const Value.absent(),
     this.notified = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -5993,6 +6952,8 @@ class ConflictsCompanion extends UpdateCompanion<Conflict> {
     required String recordType,
     required int recordLocalId,
     required String conflictingFields,
+    this.localValue = const Value.absent(),
+    this.remoteValue = const Value.absent(),
     this.resolution = const Value.absent(),
     this.notified = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -6005,6 +6966,8 @@ class ConflictsCompanion extends UpdateCompanion<Conflict> {
     Expression<String>? recordType,
     Expression<int>? recordLocalId,
     Expression<String>? conflictingFields,
+    Expression<String>? localValue,
+    Expression<String>? remoteValue,
     Expression<String>? resolution,
     Expression<bool>? notified,
     Expression<DateTime>? createdAt,
@@ -6015,6 +6978,8 @@ class ConflictsCompanion extends UpdateCompanion<Conflict> {
       if (recordType != null) 'record_type': recordType,
       if (recordLocalId != null) 'record_local_id': recordLocalId,
       if (conflictingFields != null) 'conflicting_fields': conflictingFields,
+      if (localValue != null) 'local_value': localValue,
+      if (remoteValue != null) 'remote_value': remoteValue,
       if (resolution != null) 'resolution': resolution,
       if (notified != null) 'notified': notified,
       if (createdAt != null) 'created_at': createdAt,
@@ -6027,6 +6992,8 @@ class ConflictsCompanion extends UpdateCompanion<Conflict> {
       Value<String>? recordType,
       Value<int>? recordLocalId,
       Value<String>? conflictingFields,
+      Value<String?>? localValue,
+      Value<String?>? remoteValue,
       Value<String>? resolution,
       Value<bool>? notified,
       Value<DateTime>? createdAt,
@@ -6036,6 +7003,8 @@ class ConflictsCompanion extends UpdateCompanion<Conflict> {
       recordType: recordType ?? this.recordType,
       recordLocalId: recordLocalId ?? this.recordLocalId,
       conflictingFields: conflictingFields ?? this.conflictingFields,
+      localValue: localValue ?? this.localValue,
+      remoteValue: remoteValue ?? this.remoteValue,
       resolution: resolution ?? this.resolution,
       notified: notified ?? this.notified,
       createdAt: createdAt ?? this.createdAt,
@@ -6057,6 +7026,12 @@ class ConflictsCompanion extends UpdateCompanion<Conflict> {
     }
     if (conflictingFields.present) {
       map['conflicting_fields'] = Variable<String>(conflictingFields.value);
+    }
+    if (localValue.present) {
+      map['local_value'] = Variable<String>(localValue.value);
+    }
+    if (remoteValue.present) {
+      map['remote_value'] = Variable<String>(remoteValue.value);
     }
     if (resolution.present) {
       map['resolution'] = Variable<String>(resolution.value);
@@ -6080,6 +7055,8 @@ class ConflictsCompanion extends UpdateCompanion<Conflict> {
           ..write('recordType: $recordType, ')
           ..write('recordLocalId: $recordLocalId, ')
           ..write('conflictingFields: $conflictingFields, ')
+          ..write('localValue: $localValue, ')
+          ..write('remoteValue: $remoteValue, ')
           ..write('resolution: $resolution, ')
           ..write('notified: $notified, ')
           ..write('createdAt: $createdAt, ')
@@ -6649,8 +7626,19 @@ class $PendingRecoveryRequestsTable extends PendingRecoveryRequests
       requiredDuringInsert: false,
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _emailMeta = const VerificationMeta('email');
   @override
-  List<GeneratedColumn> get $columns => [id];
+  late final GeneratedColumn<String> email = GeneratedColumn<String>(
+      'email', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _attemptedAtMeta =
+      const VerificationMeta('attemptedAt');
+  @override
+  late final GeneratedColumn<DateTime> attemptedAt = GeneratedColumn<DateTime>(
+      'attempted_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [id, email, attemptedAt];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -6665,6 +7653,20 @@ class $PendingRecoveryRequestsTable extends PendingRecoveryRequests
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
     }
+    if (data.containsKey('email')) {
+      context.handle(
+          _emailMeta, email.isAcceptableOrUnknown(data['email']!, _emailMeta));
+    } else if (isInserting) {
+      context.missing(_emailMeta);
+    }
+    if (data.containsKey('attempted_at')) {
+      context.handle(
+          _attemptedAtMeta,
+          attemptedAt.isAcceptableOrUnknown(
+              data['attempted_at']!, _attemptedAtMeta));
+    } else if (isInserting) {
+      context.missing(_attemptedAtMeta);
+    }
     return context;
   }
 
@@ -6676,6 +7678,10 @@ class $PendingRecoveryRequestsTable extends PendingRecoveryRequests
     return PendingRecoveryRequest(
       id: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      email: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}email'])!,
+      attemptedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}attempted_at'])!,
     );
   }
 
@@ -6688,17 +7694,24 @@ class $PendingRecoveryRequestsTable extends PendingRecoveryRequests
 class PendingRecoveryRequest extends DataClass
     implements Insertable<PendingRecoveryRequest> {
   final int id;
-  const PendingRecoveryRequest({required this.id});
+  final String email;
+  final DateTime attemptedAt;
+  const PendingRecoveryRequest(
+      {required this.id, required this.email, required this.attemptedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
+    map['email'] = Variable<String>(email);
+    map['attempted_at'] = Variable<DateTime>(attemptedAt);
     return map;
   }
 
   PendingRecoveryRequestsCompanion toCompanion(bool nullToAbsent) {
     return PendingRecoveryRequestsCompanion(
       id: Value(id),
+      email: Value(email),
+      attemptedAt: Value(attemptedAt),
     );
   }
 
@@ -6707,6 +7720,8 @@ class PendingRecoveryRequest extends DataClass
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return PendingRecoveryRequest(
       id: serializer.fromJson<int>(json['id']),
+      email: serializer.fromJson<String>(json['email']),
+      attemptedAt: serializer.fromJson<DateTime>(json['attemptedAt']),
     );
   }
   @override
@@ -6714,55 +7729,83 @@ class PendingRecoveryRequest extends DataClass
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
+      'email': serializer.toJson<String>(email),
+      'attemptedAt': serializer.toJson<DateTime>(attemptedAt),
     };
   }
 
-  PendingRecoveryRequest copyWith({int? id}) => PendingRecoveryRequest(
+  PendingRecoveryRequest copyWith(
+          {int? id, String? email, DateTime? attemptedAt}) =>
+      PendingRecoveryRequest(
         id: id ?? this.id,
+        email: email ?? this.email,
+        attemptedAt: attemptedAt ?? this.attemptedAt,
       );
   PendingRecoveryRequest copyWithCompanion(
       PendingRecoveryRequestsCompanion data) {
     return PendingRecoveryRequest(
       id: data.id.present ? data.id.value : this.id,
+      email: data.email.present ? data.email.value : this.email,
+      attemptedAt:
+          data.attemptedAt.present ? data.attemptedAt.value : this.attemptedAt,
     );
   }
 
   @override
   String toString() {
     return (StringBuffer('PendingRecoveryRequest(')
-          ..write('id: $id')
+          ..write('id: $id, ')
+          ..write('email: $email, ')
+          ..write('attemptedAt: $attemptedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => Object.hash(id, email, attemptedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is PendingRecoveryRequest && other.id == this.id);
+      (other is PendingRecoveryRequest &&
+          other.id == this.id &&
+          other.email == this.email &&
+          other.attemptedAt == this.attemptedAt);
 }
 
 class PendingRecoveryRequestsCompanion
     extends UpdateCompanion<PendingRecoveryRequest> {
   final Value<int> id;
+  final Value<String> email;
+  final Value<DateTime> attemptedAt;
   const PendingRecoveryRequestsCompanion({
     this.id = const Value.absent(),
+    this.email = const Value.absent(),
+    this.attemptedAt = const Value.absent(),
   });
   PendingRecoveryRequestsCompanion.insert({
     this.id = const Value.absent(),
-  });
+    required String email,
+    required DateTime attemptedAt,
+  })  : email = Value(email),
+        attemptedAt = Value(attemptedAt);
   static Insertable<PendingRecoveryRequest> custom({
     Expression<int>? id,
+    Expression<String>? email,
+    Expression<DateTime>? attemptedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
+      if (email != null) 'email': email,
+      if (attemptedAt != null) 'attempted_at': attemptedAt,
     });
   }
 
-  PendingRecoveryRequestsCompanion copyWith({Value<int>? id}) {
+  PendingRecoveryRequestsCompanion copyWith(
+      {Value<int>? id, Value<String>? email, Value<DateTime>? attemptedAt}) {
     return PendingRecoveryRequestsCompanion(
       id: id ?? this.id,
+      email: email ?? this.email,
+      attemptedAt: attemptedAt ?? this.attemptedAt,
     );
   }
 
@@ -6772,13 +7815,21 @@ class PendingRecoveryRequestsCompanion
     if (id.present) {
       map['id'] = Variable<int>(id.value);
     }
+    if (email.present) {
+      map['email'] = Variable<String>(email.value);
+    }
+    if (attemptedAt.present) {
+      map['attempted_at'] = Variable<DateTime>(attemptedAt.value);
+    }
     return map;
   }
 
   @override
   String toString() {
     return (StringBuffer('PendingRecoveryRequestsCompanion(')
-          ..write('id: $id')
+          ..write('id: $id, ')
+          ..write('email: $email, ')
+          ..write('attemptedAt: $attemptedAt')
           ..write(')'))
         .toString();
   }
@@ -7080,6 +8131,468 @@ class SchemeGenerationQueueCompanion
   }
 }
 
+class $PdfCacheTable extends PdfCache
+    with TableInfo<$PdfCacheTable, PdfCacheData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PdfCacheTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _cacheKeyMeta =
+      const VerificationMeta('cacheKey');
+  @override
+  late final GeneratedColumn<String> cacheKey = GeneratedColumn<String>(
+      'cache_key', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _pdfDataMeta =
+      const VerificationMeta('pdfData');
+  @override
+  late final GeneratedColumn<Uint8List> pdfData = GeneratedColumn<Uint8List>(
+      'pdf_data', aliasedName, false,
+      type: DriftSqlType.blob, requiredDuringInsert: true);
+  static const VerificationMeta _cachedAtMeta =
+      const VerificationMeta('cachedAt');
+  @override
+  late final GeneratedColumn<DateTime> cachedAt = GeneratedColumn<DateTime>(
+      'cached_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [cacheKey, pdfData, cachedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pdf_cache';
+  @override
+  VerificationContext validateIntegrity(Insertable<PdfCacheData> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('cache_key')) {
+      context.handle(_cacheKeyMeta,
+          cacheKey.isAcceptableOrUnknown(data['cache_key']!, _cacheKeyMeta));
+    } else if (isInserting) {
+      context.missing(_cacheKeyMeta);
+    }
+    if (data.containsKey('pdf_data')) {
+      context.handle(_pdfDataMeta,
+          pdfData.isAcceptableOrUnknown(data['pdf_data']!, _pdfDataMeta));
+    } else if (isInserting) {
+      context.missing(_pdfDataMeta);
+    }
+    if (data.containsKey('cached_at')) {
+      context.handle(_cachedAtMeta,
+          cachedAt.isAcceptableOrUnknown(data['cached_at']!, _cachedAtMeta));
+    } else if (isInserting) {
+      context.missing(_cachedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {cacheKey};
+  @override
+  PdfCacheData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PdfCacheData(
+      cacheKey: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}cache_key'])!,
+      pdfData: attachedDatabase.typeMapping
+          .read(DriftSqlType.blob, data['${effectivePrefix}pdf_data'])!,
+      cachedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}cached_at'])!,
+    );
+  }
+
+  @override
+  $PdfCacheTable createAlias(String alias) {
+    return $PdfCacheTable(attachedDatabase, alias);
+  }
+}
+
+class PdfCacheData extends DataClass implements Insertable<PdfCacheData> {
+  final String cacheKey;
+  final Uint8List pdfData;
+  final DateTime cachedAt;
+  const PdfCacheData(
+      {required this.cacheKey, required this.pdfData, required this.cachedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['cache_key'] = Variable<String>(cacheKey);
+    map['pdf_data'] = Variable<Uint8List>(pdfData);
+    map['cached_at'] = Variable<DateTime>(cachedAt);
+    return map;
+  }
+
+  PdfCacheCompanion toCompanion(bool nullToAbsent) {
+    return PdfCacheCompanion(
+      cacheKey: Value(cacheKey),
+      pdfData: Value(pdfData),
+      cachedAt: Value(cachedAt),
+    );
+  }
+
+  factory PdfCacheData.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PdfCacheData(
+      cacheKey: serializer.fromJson<String>(json['cacheKey']),
+      pdfData: serializer.fromJson<Uint8List>(json['pdfData']),
+      cachedAt: serializer.fromJson<DateTime>(json['cachedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'cacheKey': serializer.toJson<String>(cacheKey),
+      'pdfData': serializer.toJson<Uint8List>(pdfData),
+      'cachedAt': serializer.toJson<DateTime>(cachedAt),
+    };
+  }
+
+  PdfCacheData copyWith(
+          {String? cacheKey, Uint8List? pdfData, DateTime? cachedAt}) =>
+      PdfCacheData(
+        cacheKey: cacheKey ?? this.cacheKey,
+        pdfData: pdfData ?? this.pdfData,
+        cachedAt: cachedAt ?? this.cachedAt,
+      );
+  PdfCacheData copyWithCompanion(PdfCacheCompanion data) {
+    return PdfCacheData(
+      cacheKey: data.cacheKey.present ? data.cacheKey.value : this.cacheKey,
+      pdfData: data.pdfData.present ? data.pdfData.value : this.pdfData,
+      cachedAt: data.cachedAt.present ? data.cachedAt.value : this.cachedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PdfCacheData(')
+          ..write('cacheKey: $cacheKey, ')
+          ..write('pdfData: $pdfData, ')
+          ..write('cachedAt: $cachedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(cacheKey, $driftBlobEquality.hash(pdfData), cachedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PdfCacheData &&
+          other.cacheKey == this.cacheKey &&
+          $driftBlobEquality.equals(other.pdfData, this.pdfData) &&
+          other.cachedAt == this.cachedAt);
+}
+
+class PdfCacheCompanion extends UpdateCompanion<PdfCacheData> {
+  final Value<String> cacheKey;
+  final Value<Uint8List> pdfData;
+  final Value<DateTime> cachedAt;
+  final Value<int> rowid;
+  const PdfCacheCompanion({
+    this.cacheKey = const Value.absent(),
+    this.pdfData = const Value.absent(),
+    this.cachedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PdfCacheCompanion.insert({
+    required String cacheKey,
+    required Uint8List pdfData,
+    required DateTime cachedAt,
+    this.rowid = const Value.absent(),
+  })  : cacheKey = Value(cacheKey),
+        pdfData = Value(pdfData),
+        cachedAt = Value(cachedAt);
+  static Insertable<PdfCacheData> custom({
+    Expression<String>? cacheKey,
+    Expression<Uint8List>? pdfData,
+    Expression<DateTime>? cachedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (cacheKey != null) 'cache_key': cacheKey,
+      if (pdfData != null) 'pdf_data': pdfData,
+      if (cachedAt != null) 'cached_at': cachedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PdfCacheCompanion copyWith(
+      {Value<String>? cacheKey,
+      Value<Uint8List>? pdfData,
+      Value<DateTime>? cachedAt,
+      Value<int>? rowid}) {
+    return PdfCacheCompanion(
+      cacheKey: cacheKey ?? this.cacheKey,
+      pdfData: pdfData ?? this.pdfData,
+      cachedAt: cachedAt ?? this.cachedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (cacheKey.present) {
+      map['cache_key'] = Variable<String>(cacheKey.value);
+    }
+    if (pdfData.present) {
+      map['pdf_data'] = Variable<Uint8List>(pdfData.value);
+    }
+    if (cachedAt.present) {
+      map['cached_at'] = Variable<DateTime>(cachedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PdfCacheCompanion(')
+          ..write('cacheKey: $cacheKey, ')
+          ..write('pdfData: $pdfData, ')
+          ..write('cachedAt: $cachedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $TeacherSubjectsTable extends TeacherSubjects
+    with TableInfo<$TeacherSubjectsTable, TeacherSubject> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TeacherSubjectsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _teacherLocalIdMeta =
+      const VerificationMeta('teacherLocalId');
+  @override
+  late final GeneratedColumn<int> teacherLocalId = GeneratedColumn<int>(
+      'teacher_local_id', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: true,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('REFERENCES teachers (local_id)'));
+  static const VerificationMeta _subjectIdMeta =
+      const VerificationMeta('subjectId');
+  @override
+  late final GeneratedColumn<int> subjectId = GeneratedColumn<int>(
+      'subject_id', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: true,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('REFERENCES subjects (id)'));
+  @override
+  List<GeneratedColumn> get $columns => [id, teacherLocalId, subjectId];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'teacher_subjects';
+  @override
+  VerificationContext validateIntegrity(Insertable<TeacherSubject> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('teacher_local_id')) {
+      context.handle(
+          _teacherLocalIdMeta,
+          teacherLocalId.isAcceptableOrUnknown(
+              data['teacher_local_id']!, _teacherLocalIdMeta));
+    } else if (isInserting) {
+      context.missing(_teacherLocalIdMeta);
+    }
+    if (data.containsKey('subject_id')) {
+      context.handle(_subjectIdMeta,
+          subjectId.isAcceptableOrUnknown(data['subject_id']!, _subjectIdMeta));
+    } else if (isInserting) {
+      context.missing(_subjectIdMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  TeacherSubject map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TeacherSubject(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      teacherLocalId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}teacher_local_id'])!,
+      subjectId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}subject_id'])!,
+    );
+  }
+
+  @override
+  $TeacherSubjectsTable createAlias(String alias) {
+    return $TeacherSubjectsTable(attachedDatabase, alias);
+  }
+}
+
+class TeacherSubject extends DataClass implements Insertable<TeacherSubject> {
+  final int id;
+  final int teacherLocalId;
+  final int subjectId;
+  const TeacherSubject(
+      {required this.id,
+      required this.teacherLocalId,
+      required this.subjectId});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['teacher_local_id'] = Variable<int>(teacherLocalId);
+    map['subject_id'] = Variable<int>(subjectId);
+    return map;
+  }
+
+  TeacherSubjectsCompanion toCompanion(bool nullToAbsent) {
+    return TeacherSubjectsCompanion(
+      id: Value(id),
+      teacherLocalId: Value(teacherLocalId),
+      subjectId: Value(subjectId),
+    );
+  }
+
+  factory TeacherSubject.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TeacherSubject(
+      id: serializer.fromJson<int>(json['id']),
+      teacherLocalId: serializer.fromJson<int>(json['teacherLocalId']),
+      subjectId: serializer.fromJson<int>(json['subjectId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'teacherLocalId': serializer.toJson<int>(teacherLocalId),
+      'subjectId': serializer.toJson<int>(subjectId),
+    };
+  }
+
+  TeacherSubject copyWith({int? id, int? teacherLocalId, int? subjectId}) =>
+      TeacherSubject(
+        id: id ?? this.id,
+        teacherLocalId: teacherLocalId ?? this.teacherLocalId,
+        subjectId: subjectId ?? this.subjectId,
+      );
+  TeacherSubject copyWithCompanion(TeacherSubjectsCompanion data) {
+    return TeacherSubject(
+      id: data.id.present ? data.id.value : this.id,
+      teacherLocalId: data.teacherLocalId.present
+          ? data.teacherLocalId.value
+          : this.teacherLocalId,
+      subjectId: data.subjectId.present ? data.subjectId.value : this.subjectId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TeacherSubject(')
+          ..write('id: $id, ')
+          ..write('teacherLocalId: $teacherLocalId, ')
+          ..write('subjectId: $subjectId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, teacherLocalId, subjectId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TeacherSubject &&
+          other.id == this.id &&
+          other.teacherLocalId == this.teacherLocalId &&
+          other.subjectId == this.subjectId);
+}
+
+class TeacherSubjectsCompanion extends UpdateCompanion<TeacherSubject> {
+  final Value<int> id;
+  final Value<int> teacherLocalId;
+  final Value<int> subjectId;
+  const TeacherSubjectsCompanion({
+    this.id = const Value.absent(),
+    this.teacherLocalId = const Value.absent(),
+    this.subjectId = const Value.absent(),
+  });
+  TeacherSubjectsCompanion.insert({
+    this.id = const Value.absent(),
+    required int teacherLocalId,
+    required int subjectId,
+  })  : teacherLocalId = Value(teacherLocalId),
+        subjectId = Value(subjectId);
+  static Insertable<TeacherSubject> custom({
+    Expression<int>? id,
+    Expression<int>? teacherLocalId,
+    Expression<int>? subjectId,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (teacherLocalId != null) 'teacher_local_id': teacherLocalId,
+      if (subjectId != null) 'subject_id': subjectId,
+    });
+  }
+
+  TeacherSubjectsCompanion copyWith(
+      {Value<int>? id, Value<int>? teacherLocalId, Value<int>? subjectId}) {
+    return TeacherSubjectsCompanion(
+      id: id ?? this.id,
+      teacherLocalId: teacherLocalId ?? this.teacherLocalId,
+      subjectId: subjectId ?? this.subjectId,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (teacherLocalId.present) {
+      map['teacher_local_id'] = Variable<int>(teacherLocalId.value);
+    }
+    if (subjectId.present) {
+      map['subject_id'] = Variable<int>(subjectId.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TeacherSubjectsCompanion(')
+          ..write('id: $id, ')
+          ..write('teacherLocalId: $teacherLocalId, ')
+          ..write('subjectId: $subjectId')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -7104,6 +8617,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $TeacherDevicesTable teacherDevices = $TeacherDevicesTable(this);
   late final $SchemeGenerationQueueTable schemeGenerationQueue =
       $SchemeGenerationQueueTable(this);
+  late final $PdfCacheTable pdfCache = $PdfCacheTable(this);
+  late final $TeacherSubjectsTable teacherSubjects =
+      $TeacherSubjectsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -7126,7 +8642,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         recoveryCodes,
         pendingRecoveryRequests,
         teacherDevices,
-        schemeGenerationQueue
+        schemeGenerationQueue,
+        pdfCache,
+        teacherSubjects
       ];
 }
 
@@ -7629,6 +9147,24 @@ final class $$TeachersTableReferences
     return ProcessedTableManager(
         manager.$state.copyWith(prefetchedData: [item]));
   }
+
+  static MultiTypedResultKey<$TeacherSubjectsTable, List<TeacherSubject>>
+      _teacherSubjectsRefsTable(_$AppDatabase db) =>
+          MultiTypedResultKey.fromTable(db.teacherSubjects,
+              aliasName: $_aliasNameGenerator(
+                  db.teachers.localId, db.teacherSubjects.teacherLocalId));
+
+  $$TeacherSubjectsTableProcessedTableManager get teacherSubjectsRefs {
+    final manager = $$TeacherSubjectsTableTableManager(
+            $_db, $_db.teacherSubjects)
+        .filter((f) =>
+            f.teacherLocalId.localId.sqlEquals($_itemColumn<int>('local_id')!));
+
+    final cache =
+        $_typedResult.readTableOrNull(_teacherSubjectsRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
 }
 
 class $$TeachersTableFilterComposer
@@ -7715,6 +9251,27 @@ class $$TeachersTableFilterComposer
                   $removeJoinBuilderFromRootComposer,
             ));
     return composer;
+  }
+
+  Expression<bool> teacherSubjectsRefs(
+      Expression<bool> Function($$TeacherSubjectsTableFilterComposer f) f) {
+    final $$TeacherSubjectsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.localId,
+        referencedTable: $db.teacherSubjects,
+        getReferencedColumn: (t) => t.teacherLocalId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TeacherSubjectsTableFilterComposer(
+              $db: $db,
+              $table: $db.teacherSubjects,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
   }
 }
 
@@ -7885,6 +9442,27 @@ class $$TeachersTableAnnotationComposer
             ));
     return composer;
   }
+
+  Expression<T> teacherSubjectsRefs<T extends Object>(
+      Expression<T> Function($$TeacherSubjectsTableAnnotationComposer a) f) {
+    final $$TeacherSubjectsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.localId,
+        referencedTable: $db.teacherSubjects,
+        getReferencedColumn: (t) => t.teacherLocalId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TeacherSubjectsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.teacherSubjects,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
 }
 
 class $$TeachersTableTableManager extends RootTableManager<
@@ -7898,7 +9476,7 @@ class $$TeachersTableTableManager extends RootTableManager<
     $$TeachersTableUpdateCompanionBuilder,
     (Teacher, $$TeachersTableReferences),
     Teacher,
-    PrefetchHooks Function({bool schoolLocalId})> {
+    PrefetchHooks Function({bool schoolLocalId, bool teacherSubjectsRefs})> {
   $$TeachersTableTableManager(_$AppDatabase db, $TeachersTable table)
       : super(TableManagerState(
           db: db,
@@ -7993,10 +9571,13 @@ class $$TeachersTableTableManager extends RootTableManager<
               .map((e) =>
                   (e.readTable(table), $$TeachersTableReferences(db, table, e)))
               .toList(),
-          prefetchHooksCallback: ({schoolLocalId = false}) {
+          prefetchHooksCallback: (
+              {schoolLocalId = false, teacherSubjectsRefs = false}) {
             return PrefetchHooks(
               db: db,
-              explicitlyWatchedTables: [],
+              explicitlyWatchedTables: [
+                if (teacherSubjectsRefs) db.teacherSubjects
+              ],
               addJoins: <
                   T extends TableManagerState<
                       dynamic,
@@ -8025,7 +9606,21 @@ class $$TeachersTableTableManager extends RootTableManager<
                 return state;
               },
               getPrefetchedDataCallback: (items) async {
-                return [];
+                return [
+                  if (teacherSubjectsRefs)
+                    await $_getPrefetchedData<Teacher, $TeachersTable,
+                            TeacherSubject>(
+                        currentTable: table,
+                        referencedTable: $$TeachersTableReferences
+                            ._teacherSubjectsRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$TeachersTableReferences(db, table, p0)
+                                .teacherSubjectsRefs,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.teacherLocalId == item.localId),
+                        typedResults: items)
+                ];
               },
             );
           },
@@ -8043,13 +9638,35 @@ typedef $$TeachersTableProcessedTableManager = ProcessedTableManager<
     $$TeachersTableUpdateCompanionBuilder,
     (Teacher, $$TeachersTableReferences),
     Teacher,
-    PrefetchHooks Function({bool schoolLocalId})>;
+    PrefetchHooks Function({bool schoolLocalId, bool teacherSubjectsRefs})>;
 typedef $$SubjectsTableCreateCompanionBuilder = SubjectsCompanion Function({
   Value<int> id,
 });
 typedef $$SubjectsTableUpdateCompanionBuilder = SubjectsCompanion Function({
   Value<int> id,
 });
+
+final class $$SubjectsTableReferences
+    extends BaseReferences<_$AppDatabase, $SubjectsTable, Subject> {
+  $$SubjectsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$TeacherSubjectsTable, List<TeacherSubject>>
+      _teacherSubjectsRefsTable(_$AppDatabase db) =>
+          MultiTypedResultKey.fromTable(db.teacherSubjects,
+              aliasName: $_aliasNameGenerator(
+                  db.subjects.id, db.teacherSubjects.subjectId));
+
+  $$TeacherSubjectsTableProcessedTableManager get teacherSubjectsRefs {
+    final manager =
+        $$TeacherSubjectsTableTableManager($_db, $_db.teacherSubjects)
+            .filter((f) => f.subjectId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache =
+        $_typedResult.readTableOrNull(_teacherSubjectsRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+}
 
 class $$SubjectsTableFilterComposer
     extends Composer<_$AppDatabase, $SubjectsTable> {
@@ -8062,6 +9679,27 @@ class $$SubjectsTableFilterComposer
   });
   ColumnFilters<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnFilters(column));
+
+  Expression<bool> teacherSubjectsRefs(
+      Expression<bool> Function($$TeacherSubjectsTableFilterComposer f) f) {
+    final $$TeacherSubjectsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.teacherSubjects,
+        getReferencedColumn: (t) => t.subjectId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TeacherSubjectsTableFilterComposer(
+              $db: $db,
+              $table: $db.teacherSubjects,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
 }
 
 class $$SubjectsTableOrderingComposer
@@ -8088,6 +9726,27 @@ class $$SubjectsTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  Expression<T> teacherSubjectsRefs<T extends Object>(
+      Expression<T> Function($$TeacherSubjectsTableAnnotationComposer a) f) {
+    final $$TeacherSubjectsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.teacherSubjects,
+        getReferencedColumn: (t) => t.subjectId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TeacherSubjectsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.teacherSubjects,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
 }
 
 class $$SubjectsTableTableManager extends RootTableManager<
@@ -8099,9 +9758,9 @@ class $$SubjectsTableTableManager extends RootTableManager<
     $$SubjectsTableAnnotationComposer,
     $$SubjectsTableCreateCompanionBuilder,
     $$SubjectsTableUpdateCompanionBuilder,
-    (Subject, BaseReferences<_$AppDatabase, $SubjectsTable, Subject>),
+    (Subject, $$SubjectsTableReferences),
     Subject,
-    PrefetchHooks Function()> {
+    PrefetchHooks Function({bool teacherSubjectsRefs})> {
   $$SubjectsTableTableManager(_$AppDatabase db, $SubjectsTable table)
       : super(TableManagerState(
           db: db,
@@ -8125,9 +9784,35 @@ class $$SubjectsTableTableManager extends RootTableManager<
             id: id,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) =>
+                  (e.readTable(table), $$SubjectsTableReferences(db, table, e)))
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({teacherSubjectsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [
+                if (teacherSubjectsRefs) db.teacherSubjects
+              ],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (teacherSubjectsRefs)
+                    await $_getPrefetchedData<Subject, $SubjectsTable,
+                            TeacherSubject>(
+                        currentTable: table,
+                        referencedTable: $$SubjectsTableReferences
+                            ._teacherSubjectsRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$SubjectsTableReferences(db, table, p0)
+                                .teacherSubjectsRefs,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.subjectId == item.id),
+                        typedResults: items)
+                ];
+              },
+            );
+          },
         ));
 }
 
@@ -8140,9 +9825,9 @@ typedef $$SubjectsTableProcessedTableManager = ProcessedTableManager<
     $$SubjectsTableAnnotationComposer,
     $$SubjectsTableCreateCompanionBuilder,
     $$SubjectsTableUpdateCompanionBuilder,
-    (Subject, BaseReferences<_$AppDatabase, $SubjectsTable, Subject>),
+    (Subject, $$SubjectsTableReferences),
     Subject,
-    PrefetchHooks Function()>;
+    PrefetchHooks Function({bool teacherSubjectsRefs})>;
 typedef $$LessonsTableCreateCompanionBuilder = LessonsCompanion Function({
   Value<int> id,
   required String subject,
@@ -8826,9 +10511,51 @@ typedef $$ProgressLogsTableProcessedTableManager = ProcessedTableManager<
     PrefetchHooks Function()>;
 typedef $$VaultItemsTableCreateCompanionBuilder = VaultItemsCompanion Function({
   Value<int> id,
+  Value<String?> serverId,
+  required String title,
+  required String description,
+  required String subject,
+  required String classLevel,
+  required String curriculum,
+  required String content,
+  required String authorTeacherId,
+  required String authorName,
+  Value<String> minTier,
+  Value<int> creditCost,
+  Value<bool> needsApproval,
+  Value<String> approvalStatus,
+  Value<String?> rejectionReason,
+  Value<String?> thumbnailUrl,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> updateCounter,
+  Value<bool> isDeleted,
+  Value<DateTime?> acquisitionDate,
+  Value<String?> creditSpentBatchId,
 });
 typedef $$VaultItemsTableUpdateCompanionBuilder = VaultItemsCompanion Function({
   Value<int> id,
+  Value<String?> serverId,
+  Value<String> title,
+  Value<String> description,
+  Value<String> subject,
+  Value<String> classLevel,
+  Value<String> curriculum,
+  Value<String> content,
+  Value<String> authorTeacherId,
+  Value<String> authorName,
+  Value<String> minTier,
+  Value<int> creditCost,
+  Value<bool> needsApproval,
+  Value<String> approvalStatus,
+  Value<String?> rejectionReason,
+  Value<String?> thumbnailUrl,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> updateCounter,
+  Value<bool> isDeleted,
+  Value<DateTime?> acquisitionDate,
+  Value<String?> creditSpentBatchId,
 });
 
 class $$VaultItemsTableFilterComposer
@@ -8842,6 +10569,74 @@ class $$VaultItemsTableFilterComposer
   });
   ColumnFilters<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get serverId => $composableBuilder(
+      column: $table.serverId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get title => $composableBuilder(
+      column: $table.title, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get description => $composableBuilder(
+      column: $table.description, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get subject => $composableBuilder(
+      column: $table.subject, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get classLevel => $composableBuilder(
+      column: $table.classLevel, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get curriculum => $composableBuilder(
+      column: $table.curriculum, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get content => $composableBuilder(
+      column: $table.content, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get authorTeacherId => $composableBuilder(
+      column: $table.authorTeacherId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get authorName => $composableBuilder(
+      column: $table.authorName, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get minTier => $composableBuilder(
+      column: $table.minTier, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get creditCost => $composableBuilder(
+      column: $table.creditCost, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get needsApproval => $composableBuilder(
+      column: $table.needsApproval, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get approvalStatus => $composableBuilder(
+      column: $table.approvalStatus,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get rejectionReason => $composableBuilder(
+      column: $table.rejectionReason,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get thumbnailUrl => $composableBuilder(
+      column: $table.thumbnailUrl, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get updateCounter => $composableBuilder(
+      column: $table.updateCounter, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isDeleted => $composableBuilder(
+      column: $table.isDeleted, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get acquisitionDate => $composableBuilder(
+      column: $table.acquisitionDate,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get creditSpentBatchId => $composableBuilder(
+      column: $table.creditSpentBatchId,
+      builder: (column) => ColumnFilters(column));
 }
 
 class $$VaultItemsTableOrderingComposer
@@ -8855,6 +10650,77 @@ class $$VaultItemsTableOrderingComposer
   });
   ColumnOrderings<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get serverId => $composableBuilder(
+      column: $table.serverId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get title => $composableBuilder(
+      column: $table.title, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get description => $composableBuilder(
+      column: $table.description, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get subject => $composableBuilder(
+      column: $table.subject, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get classLevel => $composableBuilder(
+      column: $table.classLevel, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get curriculum => $composableBuilder(
+      column: $table.curriculum, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get content => $composableBuilder(
+      column: $table.content, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get authorTeacherId => $composableBuilder(
+      column: $table.authorTeacherId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get authorName => $composableBuilder(
+      column: $table.authorName, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get minTier => $composableBuilder(
+      column: $table.minTier, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get creditCost => $composableBuilder(
+      column: $table.creditCost, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get needsApproval => $composableBuilder(
+      column: $table.needsApproval,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get approvalStatus => $composableBuilder(
+      column: $table.approvalStatus,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get rejectionReason => $composableBuilder(
+      column: $table.rejectionReason,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get thumbnailUrl => $composableBuilder(
+      column: $table.thumbnailUrl,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get updateCounter => $composableBuilder(
+      column: $table.updateCounter,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get isDeleted => $composableBuilder(
+      column: $table.isDeleted, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get acquisitionDate => $composableBuilder(
+      column: $table.acquisitionDate,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get creditSpentBatchId => $composableBuilder(
+      column: $table.creditSpentBatchId,
+      builder: (column) => ColumnOrderings(column));
 }
 
 class $$VaultItemsTableAnnotationComposer
@@ -8868,6 +10734,69 @@ class $$VaultItemsTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get serverId =>
+      $composableBuilder(column: $table.serverId, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get description => $composableBuilder(
+      column: $table.description, builder: (column) => column);
+
+  GeneratedColumn<String> get subject =>
+      $composableBuilder(column: $table.subject, builder: (column) => column);
+
+  GeneratedColumn<String> get classLevel => $composableBuilder(
+      column: $table.classLevel, builder: (column) => column);
+
+  GeneratedColumn<String> get curriculum => $composableBuilder(
+      column: $table.curriculum, builder: (column) => column);
+
+  GeneratedColumn<String> get content =>
+      $composableBuilder(column: $table.content, builder: (column) => column);
+
+  GeneratedColumn<String> get authorTeacherId => $composableBuilder(
+      column: $table.authorTeacherId, builder: (column) => column);
+
+  GeneratedColumn<String> get authorName => $composableBuilder(
+      column: $table.authorName, builder: (column) => column);
+
+  GeneratedColumn<String> get minTier =>
+      $composableBuilder(column: $table.minTier, builder: (column) => column);
+
+  GeneratedColumn<int> get creditCost => $composableBuilder(
+      column: $table.creditCost, builder: (column) => column);
+
+  GeneratedColumn<bool> get needsApproval => $composableBuilder(
+      column: $table.needsApproval, builder: (column) => column);
+
+  GeneratedColumn<String> get approvalStatus => $composableBuilder(
+      column: $table.approvalStatus, builder: (column) => column);
+
+  GeneratedColumn<String> get rejectionReason => $composableBuilder(
+      column: $table.rejectionReason, builder: (column) => column);
+
+  GeneratedColumn<String> get thumbnailUrl => $composableBuilder(
+      column: $table.thumbnailUrl, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get updateCounter => $composableBuilder(
+      column: $table.updateCounter, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDeleted =>
+      $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get acquisitionDate => $composableBuilder(
+      column: $table.acquisitionDate, builder: (column) => column);
+
+  GeneratedColumn<String> get creditSpentBatchId => $composableBuilder(
+      column: $table.creditSpentBatchId, builder: (column) => column);
 }
 
 class $$VaultItemsTableTableManager extends RootTableManager<
@@ -8894,15 +10823,99 @@ class $$VaultItemsTableTableManager extends RootTableManager<
               $$VaultItemsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            Value<String?> serverId = const Value.absent(),
+            Value<String> title = const Value.absent(),
+            Value<String> description = const Value.absent(),
+            Value<String> subject = const Value.absent(),
+            Value<String> classLevel = const Value.absent(),
+            Value<String> curriculum = const Value.absent(),
+            Value<String> content = const Value.absent(),
+            Value<String> authorTeacherId = const Value.absent(),
+            Value<String> authorName = const Value.absent(),
+            Value<String> minTier = const Value.absent(),
+            Value<int> creditCost = const Value.absent(),
+            Value<bool> needsApproval = const Value.absent(),
+            Value<String> approvalStatus = const Value.absent(),
+            Value<String?> rejectionReason = const Value.absent(),
+            Value<String?> thumbnailUrl = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> updateCounter = const Value.absent(),
+            Value<bool> isDeleted = const Value.absent(),
+            Value<DateTime?> acquisitionDate = const Value.absent(),
+            Value<String?> creditSpentBatchId = const Value.absent(),
           }) =>
               VaultItemsCompanion(
             id: id,
+            serverId: serverId,
+            title: title,
+            description: description,
+            subject: subject,
+            classLevel: classLevel,
+            curriculum: curriculum,
+            content: content,
+            authorTeacherId: authorTeacherId,
+            authorName: authorName,
+            minTier: minTier,
+            creditCost: creditCost,
+            needsApproval: needsApproval,
+            approvalStatus: approvalStatus,
+            rejectionReason: rejectionReason,
+            thumbnailUrl: thumbnailUrl,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            updateCounter: updateCounter,
+            isDeleted: isDeleted,
+            acquisitionDate: acquisitionDate,
+            creditSpentBatchId: creditSpentBatchId,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            Value<String?> serverId = const Value.absent(),
+            required String title,
+            required String description,
+            required String subject,
+            required String classLevel,
+            required String curriculum,
+            required String content,
+            required String authorTeacherId,
+            required String authorName,
+            Value<String> minTier = const Value.absent(),
+            Value<int> creditCost = const Value.absent(),
+            Value<bool> needsApproval = const Value.absent(),
+            Value<String> approvalStatus = const Value.absent(),
+            Value<String?> rejectionReason = const Value.absent(),
+            Value<String?> thumbnailUrl = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> updateCounter = const Value.absent(),
+            Value<bool> isDeleted = const Value.absent(),
+            Value<DateTime?> acquisitionDate = const Value.absent(),
+            Value<String?> creditSpentBatchId = const Value.absent(),
           }) =>
               VaultItemsCompanion.insert(
             id: id,
+            serverId: serverId,
+            title: title,
+            description: description,
+            subject: subject,
+            classLevel: classLevel,
+            curriculum: curriculum,
+            content: content,
+            authorTeacherId: authorTeacherId,
+            authorName: authorName,
+            minTier: minTier,
+            creditCost: creditCost,
+            needsApproval: needsApproval,
+            approvalStatus: approvalStatus,
+            rejectionReason: rejectionReason,
+            thumbnailUrl: thumbnailUrl,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            updateCounter: updateCounter,
+            isDeleted: isDeleted,
+            acquisitionDate: acquisitionDate,
+            creditSpentBatchId: creditSpentBatchId,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -10002,6 +12015,8 @@ typedef $$ConflictsTableCreateCompanionBuilder = ConflictsCompanion Function({
   required String recordType,
   required int recordLocalId,
   required String conflictingFields,
+  Value<String?> localValue,
+  Value<String?> remoteValue,
   Value<String> resolution,
   Value<bool> notified,
   Value<DateTime> createdAt,
@@ -10012,6 +12027,8 @@ typedef $$ConflictsTableUpdateCompanionBuilder = ConflictsCompanion Function({
   Value<String> recordType,
   Value<int> recordLocalId,
   Value<String> conflictingFields,
+  Value<String?> localValue,
+  Value<String?> remoteValue,
   Value<String> resolution,
   Value<bool> notified,
   Value<DateTime> createdAt,
@@ -10039,6 +12056,12 @@ class $$ConflictsTableFilterComposer
   ColumnFilters<String> get conflictingFields => $composableBuilder(
       column: $table.conflictingFields,
       builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get localValue => $composableBuilder(
+      column: $table.localValue, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get remoteValue => $composableBuilder(
+      column: $table.remoteValue, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get resolution => $composableBuilder(
       column: $table.resolution, builder: (column) => ColumnFilters(column));
@@ -10076,6 +12099,12 @@ class $$ConflictsTableOrderingComposer
       column: $table.conflictingFields,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get localValue => $composableBuilder(
+      column: $table.localValue, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get remoteValue => $composableBuilder(
+      column: $table.remoteValue, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get resolution => $composableBuilder(
       column: $table.resolution, builder: (column) => ColumnOrderings(column));
 
@@ -10109,6 +12138,12 @@ class $$ConflictsTableAnnotationComposer
 
   GeneratedColumn<String> get conflictingFields => $composableBuilder(
       column: $table.conflictingFields, builder: (column) => column);
+
+  GeneratedColumn<String> get localValue => $composableBuilder(
+      column: $table.localValue, builder: (column) => column);
+
+  GeneratedColumn<String> get remoteValue => $composableBuilder(
+      column: $table.remoteValue, builder: (column) => column);
 
   GeneratedColumn<String> get resolution => $composableBuilder(
       column: $table.resolution, builder: (column) => column);
@@ -10150,6 +12185,8 @@ class $$ConflictsTableTableManager extends RootTableManager<
             Value<String> recordType = const Value.absent(),
             Value<int> recordLocalId = const Value.absent(),
             Value<String> conflictingFields = const Value.absent(),
+            Value<String?> localValue = const Value.absent(),
+            Value<String?> remoteValue = const Value.absent(),
             Value<String> resolution = const Value.absent(),
             Value<bool> notified = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
@@ -10160,6 +12197,8 @@ class $$ConflictsTableTableManager extends RootTableManager<
             recordType: recordType,
             recordLocalId: recordLocalId,
             conflictingFields: conflictingFields,
+            localValue: localValue,
+            remoteValue: remoteValue,
             resolution: resolution,
             notified: notified,
             createdAt: createdAt,
@@ -10170,6 +12209,8 @@ class $$ConflictsTableTableManager extends RootTableManager<
             required String recordType,
             required int recordLocalId,
             required String conflictingFields,
+            Value<String?> localValue = const Value.absent(),
+            Value<String?> remoteValue = const Value.absent(),
             Value<String> resolution = const Value.absent(),
             Value<bool> notified = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
@@ -10180,6 +12221,8 @@ class $$ConflictsTableTableManager extends RootTableManager<
             recordType: recordType,
             recordLocalId: recordLocalId,
             conflictingFields: conflictingFields,
+            localValue: localValue,
+            remoteValue: remoteValue,
             resolution: resolution,
             notified: notified,
             createdAt: createdAt,
@@ -10517,10 +12560,14 @@ typedef $$RecoveryCodesTableProcessedTableManager = ProcessedTableManager<
 typedef $$PendingRecoveryRequestsTableCreateCompanionBuilder
     = PendingRecoveryRequestsCompanion Function({
   Value<int> id,
+  required String email,
+  required DateTime attemptedAt,
 });
 typedef $$PendingRecoveryRequestsTableUpdateCompanionBuilder
     = PendingRecoveryRequestsCompanion Function({
   Value<int> id,
+  Value<String> email,
+  Value<DateTime> attemptedAt,
 });
 
 class $$PendingRecoveryRequestsTableFilterComposer
@@ -10534,6 +12581,12 @@ class $$PendingRecoveryRequestsTableFilterComposer
   });
   ColumnFilters<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get email => $composableBuilder(
+      column: $table.email, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get attemptedAt => $composableBuilder(
+      column: $table.attemptedAt, builder: (column) => ColumnFilters(column));
 }
 
 class $$PendingRecoveryRequestsTableOrderingComposer
@@ -10547,6 +12600,12 @@ class $$PendingRecoveryRequestsTableOrderingComposer
   });
   ColumnOrderings<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get email => $composableBuilder(
+      column: $table.email, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get attemptedAt => $composableBuilder(
+      column: $table.attemptedAt, builder: (column) => ColumnOrderings(column));
 }
 
 class $$PendingRecoveryRequestsTableAnnotationComposer
@@ -10560,6 +12619,12 @@ class $$PendingRecoveryRequestsTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get email =>
+      $composableBuilder(column: $table.email, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get attemptedAt => $composableBuilder(
+      column: $table.attemptedAt, builder: (column) => column);
 }
 
 class $$PendingRecoveryRequestsTableTableManager extends RootTableManager<
@@ -10594,15 +12659,23 @@ class $$PendingRecoveryRequestsTableTableManager extends RootTableManager<
                   $db: db, $table: table),
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            Value<String> email = const Value.absent(),
+            Value<DateTime> attemptedAt = const Value.absent(),
           }) =>
               PendingRecoveryRequestsCompanion(
             id: id,
+            email: email,
+            attemptedAt: attemptedAt,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            required String email,
+            required DateTime attemptedAt,
           }) =>
               PendingRecoveryRequestsCompanion.insert(
             id: id,
+            email: email,
+            attemptedAt: attemptedAt,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -10850,6 +12923,459 @@ typedef $$SchemeGenerationQueueTableProcessedTableManager
         ),
         SchemeGenerationQueueData,
         PrefetchHooks Function()>;
+typedef $$PdfCacheTableCreateCompanionBuilder = PdfCacheCompanion Function({
+  required String cacheKey,
+  required Uint8List pdfData,
+  required DateTime cachedAt,
+  Value<int> rowid,
+});
+typedef $$PdfCacheTableUpdateCompanionBuilder = PdfCacheCompanion Function({
+  Value<String> cacheKey,
+  Value<Uint8List> pdfData,
+  Value<DateTime> cachedAt,
+  Value<int> rowid,
+});
+
+class $$PdfCacheTableFilterComposer
+    extends Composer<_$AppDatabase, $PdfCacheTable> {
+  $$PdfCacheTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get cacheKey => $composableBuilder(
+      column: $table.cacheKey, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<Uint8List> get pdfData => $composableBuilder(
+      column: $table.pdfData, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get cachedAt => $composableBuilder(
+      column: $table.cachedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$PdfCacheTableOrderingComposer
+    extends Composer<_$AppDatabase, $PdfCacheTable> {
+  $$PdfCacheTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get cacheKey => $composableBuilder(
+      column: $table.cacheKey, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<Uint8List> get pdfData => $composableBuilder(
+      column: $table.pdfData, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get cachedAt => $composableBuilder(
+      column: $table.cachedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$PdfCacheTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PdfCacheTable> {
+  $$PdfCacheTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get cacheKey =>
+      $composableBuilder(column: $table.cacheKey, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get pdfData =>
+      $composableBuilder(column: $table.pdfData, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get cachedAt =>
+      $composableBuilder(column: $table.cachedAt, builder: (column) => column);
+}
+
+class $$PdfCacheTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $PdfCacheTable,
+    PdfCacheData,
+    $$PdfCacheTableFilterComposer,
+    $$PdfCacheTableOrderingComposer,
+    $$PdfCacheTableAnnotationComposer,
+    $$PdfCacheTableCreateCompanionBuilder,
+    $$PdfCacheTableUpdateCompanionBuilder,
+    (PdfCacheData, BaseReferences<_$AppDatabase, $PdfCacheTable, PdfCacheData>),
+    PdfCacheData,
+    PrefetchHooks Function()> {
+  $$PdfCacheTableTableManager(_$AppDatabase db, $PdfCacheTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PdfCacheTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PdfCacheTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PdfCacheTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> cacheKey = const Value.absent(),
+            Value<Uint8List> pdfData = const Value.absent(),
+            Value<DateTime> cachedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              PdfCacheCompanion(
+            cacheKey: cacheKey,
+            pdfData: pdfData,
+            cachedAt: cachedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String cacheKey,
+            required Uint8List pdfData,
+            required DateTime cachedAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              PdfCacheCompanion.insert(
+            cacheKey: cacheKey,
+            pdfData: pdfData,
+            cachedAt: cachedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$PdfCacheTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $PdfCacheTable,
+    PdfCacheData,
+    $$PdfCacheTableFilterComposer,
+    $$PdfCacheTableOrderingComposer,
+    $$PdfCacheTableAnnotationComposer,
+    $$PdfCacheTableCreateCompanionBuilder,
+    $$PdfCacheTableUpdateCompanionBuilder,
+    (PdfCacheData, BaseReferences<_$AppDatabase, $PdfCacheTable, PdfCacheData>),
+    PdfCacheData,
+    PrefetchHooks Function()>;
+typedef $$TeacherSubjectsTableCreateCompanionBuilder = TeacherSubjectsCompanion
+    Function({
+  Value<int> id,
+  required int teacherLocalId,
+  required int subjectId,
+});
+typedef $$TeacherSubjectsTableUpdateCompanionBuilder = TeacherSubjectsCompanion
+    Function({
+  Value<int> id,
+  Value<int> teacherLocalId,
+  Value<int> subjectId,
+});
+
+final class $$TeacherSubjectsTableReferences extends BaseReferences<
+    _$AppDatabase, $TeacherSubjectsTable, TeacherSubject> {
+  $$TeacherSubjectsTableReferences(
+      super.$_db, super.$_table, super.$_typedResult);
+
+  static $TeachersTable _teacherLocalIdTable(_$AppDatabase db) =>
+      db.teachers.createAlias($_aliasNameGenerator(
+          db.teacherSubjects.teacherLocalId, db.teachers.localId));
+
+  $$TeachersTableProcessedTableManager get teacherLocalId {
+    final $_column = $_itemColumn<int>('teacher_local_id')!;
+
+    final manager = $$TeachersTableTableManager($_db, $_db.teachers)
+        .filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_teacherLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+
+  static $SubjectsTable _subjectIdTable(_$AppDatabase db) =>
+      db.subjects.createAlias(
+          $_aliasNameGenerator(db.teacherSubjects.subjectId, db.subjects.id));
+
+  $$SubjectsTableProcessedTableManager get subjectId {
+    final $_column = $_itemColumn<int>('subject_id')!;
+
+    final manager = $$SubjectsTableTableManager($_db, $_db.subjects)
+        .filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_subjectIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+}
+
+class $$TeacherSubjectsTableFilterComposer
+    extends Composer<_$AppDatabase, $TeacherSubjectsTable> {
+  $$TeacherSubjectsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  $$TeachersTableFilterComposer get teacherLocalId {
+    final $$TeachersTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.teacherLocalId,
+        referencedTable: $db.teachers,
+        getReferencedColumn: (t) => t.localId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TeachersTableFilterComposer(
+              $db: $db,
+              $table: $db.teachers,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  $$SubjectsTableFilterComposer get subjectId {
+    final $$SubjectsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.subjectId,
+        referencedTable: $db.subjects,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$SubjectsTableFilterComposer(
+              $db: $db,
+              $table: $db.subjects,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$TeacherSubjectsTableOrderingComposer
+    extends Composer<_$AppDatabase, $TeacherSubjectsTable> {
+  $$TeacherSubjectsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  $$TeachersTableOrderingComposer get teacherLocalId {
+    final $$TeachersTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.teacherLocalId,
+        referencedTable: $db.teachers,
+        getReferencedColumn: (t) => t.localId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TeachersTableOrderingComposer(
+              $db: $db,
+              $table: $db.teachers,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  $$SubjectsTableOrderingComposer get subjectId {
+    final $$SubjectsTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.subjectId,
+        referencedTable: $db.subjects,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$SubjectsTableOrderingComposer(
+              $db: $db,
+              $table: $db.subjects,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$TeacherSubjectsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TeacherSubjectsTable> {
+  $$TeacherSubjectsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  $$TeachersTableAnnotationComposer get teacherLocalId {
+    final $$TeachersTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.teacherLocalId,
+        referencedTable: $db.teachers,
+        getReferencedColumn: (t) => t.localId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TeachersTableAnnotationComposer(
+              $db: $db,
+              $table: $db.teachers,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  $$SubjectsTableAnnotationComposer get subjectId {
+    final $$SubjectsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.subjectId,
+        referencedTable: $db.subjects,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$SubjectsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.subjects,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$TeacherSubjectsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $TeacherSubjectsTable,
+    TeacherSubject,
+    $$TeacherSubjectsTableFilterComposer,
+    $$TeacherSubjectsTableOrderingComposer,
+    $$TeacherSubjectsTableAnnotationComposer,
+    $$TeacherSubjectsTableCreateCompanionBuilder,
+    $$TeacherSubjectsTableUpdateCompanionBuilder,
+    (TeacherSubject, $$TeacherSubjectsTableReferences),
+    TeacherSubject,
+    PrefetchHooks Function({bool teacherLocalId, bool subjectId})> {
+  $$TeacherSubjectsTableTableManager(
+      _$AppDatabase db, $TeacherSubjectsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TeacherSubjectsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TeacherSubjectsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TeacherSubjectsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<int> teacherLocalId = const Value.absent(),
+            Value<int> subjectId = const Value.absent(),
+          }) =>
+              TeacherSubjectsCompanion(
+            id: id,
+            teacherLocalId: teacherLocalId,
+            subjectId: subjectId,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required int teacherLocalId,
+            required int subjectId,
+          }) =>
+              TeacherSubjectsCompanion.insert(
+            id: id,
+            teacherLocalId: teacherLocalId,
+            subjectId: subjectId,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable(table),
+                    $$TeacherSubjectsTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: ({teacherLocalId = false, subjectId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (teacherLocalId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.teacherLocalId,
+                    referencedTable: $$TeacherSubjectsTableReferences
+                        ._teacherLocalIdTable(db),
+                    referencedColumn: $$TeacherSubjectsTableReferences
+                        ._teacherLocalIdTable(db)
+                        .localId,
+                  ) as T;
+                }
+                if (subjectId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.subjectId,
+                    referencedTable:
+                        $$TeacherSubjectsTableReferences._subjectIdTable(db),
+                    referencedColumn:
+                        $$TeacherSubjectsTableReferences._subjectIdTable(db).id,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$TeacherSubjectsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $TeacherSubjectsTable,
+    TeacherSubject,
+    $$TeacherSubjectsTableFilterComposer,
+    $$TeacherSubjectsTableOrderingComposer,
+    $$TeacherSubjectsTableAnnotationComposer,
+    $$TeacherSubjectsTableCreateCompanionBuilder,
+    $$TeacherSubjectsTableUpdateCompanionBuilder,
+    (TeacherSubject, $$TeacherSubjectsTableReferences),
+    TeacherSubject,
+    PrefetchHooks Function({bool teacherLocalId, bool subjectId})>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -10891,4 +13417,8 @@ class $AppDatabaseManager {
       $$TeacherDevicesTableTableManager(_db, _db.teacherDevices);
   $$SchemeGenerationQueueTableTableManager get schemeGenerationQueue =>
       $$SchemeGenerationQueueTableTableManager(_db, _db.schemeGenerationQueue);
+  $$PdfCacheTableTableManager get pdfCache =>
+      $$PdfCacheTableTableManager(_db, _db.pdfCache);
+  $$TeacherSubjectsTableTableManager get teacherSubjects =>
+      $$TeacherSubjectsTableTableManager(_db, _db.teacherSubjects);
 }
