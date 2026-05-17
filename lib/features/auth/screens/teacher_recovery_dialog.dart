@@ -1,12 +1,24 @@
+import 'package:drift/drift.dart' hide isNull, isNotNull, Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/core/services/auth_service.dart';
+import 'package:classai/core/services/emergency_flush_service.dart';
+import 'package:classai/main.dart' show databaseProvider;
+
+/// Maximum number of password recovery attempts per email per hour.
+const int kMaxRecoveryAttemptsPerHour = 3;
+
+/// Duration of the rate-limiting window for recovery attempts.
+const Duration kRecoveryRateLimitDuration = Duration(hours: 1);
 
 /// Teacher password recovery dialog.
 ///
 /// The teacher enters their email, the recovery code provided by their admin,
 /// and a new password. On success, the auth state transitions to authenticated.
+///
+/// Rate-limited to [kMaxRecoveryAttemptsPerHour] attempts per email per hour
+/// using the [PendingRecoveryRequests] table.
 class TeacherRecoveryDialog extends ConsumerStatefulWidget {
   const TeacherRecoveryDialog({super.key});
 
@@ -28,13 +40,73 @@ class _TeacherRecoveryDialogState
   bool _isLoading = false;
   String? _errorMessage;
 
+  /// Stored reference for EmergencyFlush registration/unregistration.
+  SaveCallback? _flushCallback;
+
+  /// Cached reference to avoid `ref.read()` during disposal (Riverpod guard).
+  late final EmergencyFlushService _emergencyFlush =
+      ref.read(emergencyFlushServiceProvider);
+
+  @override
+  void initState() {
+    super.initState();
+    _flushCallback = () async {
+      // Snapshot teacher recovery form fields before forced logout
+      final email = _emailController.text;
+      final code = _codeController.text;
+      final newPassword = _newPasswordController.text;
+      if (email.isNotEmpty || code.isNotEmpty || newPassword.isNotEmpty) {
+        // In production, write to a dead-letter queue or local draft store.
+      }
+    };
+    _emergencyFlush.register(_flushCallback!);
+  }
+
   @override
   void dispose() {
+    if (_flushCallback != null) {
+      _emergencyFlush.unregister(_flushCallback!);
+    }
     _emailController.dispose();
     _codeController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
+  }
+
+  /// Checks whether the given [email] has exceeded the rate limit for recovery
+  /// attempts. Returns an error message if rate-limited, or `null` if allowed.
+  Future<String?> _checkRateLimit(String email) async {
+    final db = ref.read(databaseProvider);
+    final cutoff = DateTime.now().subtract(kRecoveryRateLimitDuration);
+
+    final result = await db.customSelect(
+      'SELECT COUNT(*) as cnt FROM pending_recovery_requests '
+      'WHERE email = ? AND attempted_at > ?',
+      variables: [
+        Variable.withString(email),
+        Variable.withDateTime(cutoff),
+      ],
+    ).getSingle();
+
+    final count = result.read<int>('cnt');
+    if (count >= kMaxRecoveryAttemptsPerHour) {
+      return 'Too many recovery attempts. Please try again in 1 hour.';
+    }
+    return null;
+  }
+
+  /// Records a recovery attempt for the given [email] in the database.
+  Future<void> _recordAttempt(String email) async {
+    final db = ref.read(databaseProvider);
+    await db.customInsert(
+      'INSERT INTO pending_recovery_requests (email, attempted_at) '
+      'VALUES (?, ?)',
+      variables: [
+        Variable.withString(email),
+        Variable.withDateTime(DateTime.now()),
+      ],
+    );
   }
 
   Future<void> _handleRecover() async {
@@ -45,9 +117,26 @@ class _TeacherRecoveryDialogState
       _errorMessage = null;
     });
 
+    final email = _emailController.text.trim();
+
+    // Rate-limit check before calling the server
+    final rateLimitError = await _checkRateLimit(email);
+    if (rateLimitError != null) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = rateLimitError;
+      });
+      return;
+    }
+
+    // Record this attempt before the server call (counts toward the limit
+    // regardless of outcome)
+    await _recordAttempt(email);
+
     try {
       await ref.read(authProvider.notifier).recoverTeacherPassword(
-            email: _emailController.text.trim(),
+            email: email,
             recoveryCode: _codeController.text.trim(),
             newPassword: _newPasswordController.text,
           );

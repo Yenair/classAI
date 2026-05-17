@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:classai/core/constants/app_constants.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/core/services/auth_service.dart';
+import 'package:classai/core/services/emergency_flush_service.dart';
 
 /// Account activation screen for new admin or teacher accounts.
 ///
@@ -10,7 +12,10 @@ import 'package:classai/core/services/auth_service.dart';
 /// - Recovery email field (required for admin only).
 /// - On success transitions to authenticated state.
 class ActivationScreen extends ConsumerStatefulWidget {
-  const ActivationScreen({super.key});
+  /// Optional activation code pre-filled via deep link.
+  final String? initialCode;
+
+  const ActivationScreen({super.key, this.initialCode});
 
   @override
   ConsumerState<ActivationScreen> createState() => _ActivationScreenState();
@@ -30,8 +35,46 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
   bool _isLoading = false;
   String? _errorMessage;
 
+  /// Cached device ID fetched once via [AppConstants.getDeviceId].
+  String? _cachedDeviceId;
+
+  /// Stored reference for EmergencyFlush registration/unregistration.
+  SaveCallback? _flushCallback;
+
+  /// Cached reference to avoid `ref.read()` during disposal (Riverpod guard).
+  late final EmergencyFlushService _emergencyFlush =
+      ref.read(emergencyFlushServiceProvider);
+
+  @override
+  void initState() {
+    super.initState();
+
+    // If deep link provided an activation code, pre-fill it
+    if (widget.initialCode != null) {
+      _codeController.text = widget.initialCode!;
+    }
+
+    _flushCallback = () async {
+      // Snapshot all activation form fields before forced logout
+      final code = _codeController.text;
+      final email = _emailController.text;
+      final password = _passwordController.text;
+      final recoveryEmail = _recoveryEmailController.text;
+      if (code.isNotEmpty ||
+          email.isNotEmpty ||
+          password.isNotEmpty ||
+          recoveryEmail.isNotEmpty) {
+        // In production, write to a dead-letter queue or local draft store.
+      }
+    };
+    _emergencyFlush.register(_flushCallback!);
+  }
+
   @override
   void dispose() {
+    if (_flushCallback != null) {
+      _emergencyFlush.unregister(_flushCallback!);
+    }
     _codeController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -49,11 +92,14 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
     });
 
     try {
+      // Fetch device ID once and cache it
+      _cachedDeviceId ??= await AppConstants.getDeviceId();
+
       await ref.read(authProvider.notifier).activateAccount(
             code: _codeController.text.trim(),
             email: _emailController.text.trim(),
             password: _passwordController.text,
-            deviceId: 'mock-device-id', // placeholder; real device ID from security config in future
+            deviceId: _cachedDeviceId!,
             isAdmin: _isAdmin,
             recoveryEmail: _isAdmin ? _recoveryEmailController.text.trim() : null,
           );

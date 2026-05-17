@@ -1,25 +1,28 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// In production, this would use Supabase Realtime or a dedicated events table.
-// For now, it returns a stub list.
+// Placeholder Edge Function for realtime event replay.
+//
+// In production, wire this to a dedicated `realtime_events` table or
+// Supabase Realtime broadcast. For now, it acknowledges the event
+// and returns a no-op success response.
+//
+// Expected request body: { event: { ... } }
 
 serve(async (req) => {
   try {
-    const url = new URL(req.url);
-    const sinceEventId = url.searchParams.get("since_event_id");
-    const schoolId = url.searchParams.get("school_id");
+    const body = await req.json();
 
-    // Placeholder: query a future realtime_events table
-    // For now, return empty array (no realtime events)
+    // Log the event for debugging / observability
+    console.log("sync-realtime-events received:", JSON.stringify(body));
+
     return new Response(
-      JSON.stringify({
-        events: [],
-        latest_event_id: sinceEventId || "0",
-      }),
+      JSON.stringify({ ok: true }),
       { headers: { "Content-Type": "application/json" } }
     );
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+    return new Response(
+      JSON.stringify({ error: err.message }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
   }
 });

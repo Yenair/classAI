@@ -31,7 +31,6 @@ For each phase, follow the “Agent Playbook” order. For every file:
 After all files, output the CLI commands:
 
 ```bash
-flutter pub get
 flutter analyze --no-fatal-infos
 flutter test
 git add .

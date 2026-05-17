@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
-import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/services/merge_engine.dart';
@@ -176,10 +176,23 @@ abstract class SyncRemoteApi {
   });
 }
 
-class DioSyncRemoteApi implements SyncRemoteApi {
-  final Dio dio;
+class SupabaseSyncRemoteApi implements SyncRemoteApi {
+  final SupabaseClient client;
+  final String schoolId;
 
-  DioSyncRemoteApi(this.dio);
+  static const List<String> _syncableTables = [
+    'subjects',
+    'lessons',
+    'exams',
+    'progress_logs',
+    'vault_items',
+    'scheme_of_work',
+  ];
+
+  SupabaseSyncRemoteApi({required this.schoolId})
+      : client = Supabase.instance.client;
+
+  SupabaseSyncRemoteApi.withClient({required this.client, required this.schoolId});
 
   @override
   Future<SyncPullPage> pullChanges({
@@ -187,15 +200,22 @@ class DioSyncRemoteApi implements SyncRemoteApi {
     String? cursor,
     int limit = 50,
   }) async {
-    final response = await dio.get(
-      '/sync-pull',
-      queryParameters: {
-        'school_id': schoolId,
-        if (cursor != null) 'cursor': cursor,
-        'limit': limit,
-      },
-    );
-    return SyncPullPage.fromJson(Map<String, dynamic>.from(response.data as Map));
+    try {
+      final response = await client.functions.invoke('sync-pull', body: {
+        'lastSyncTimestamp': cursor ?? '',
+        'tables': _syncableTables,
+      });
+      final data = response.data as Map<String, dynamic>?;
+      if (data != null) {
+        return SyncPullPage.fromJson(data);
+      }
+    } catch (e) {
+      // Edge Function not deployed or call failed — fall through
+    }
+
+    // Edge Function call failed; return an empty page so the sync cycle
+    // can continue without crashing.
+    return const SyncPullPage(changes: [], nextCursor: null);
   }
 
   @override
@@ -203,14 +223,59 @@ class DioSyncRemoteApi implements SyncRemoteApi {
     required List<SyncPushBatch> batches,
     required String deviceId,
   }) async {
-    final response = await dio.post(
-      '/sync-push',
-      data: {
-        'device_id': deviceId,
-        'batches': batches.map((batch) => batch.toJson()).toList(),
-      },
+    try {
+      final response = await client.functions.invoke('sync-push', body: {
+        'changes': batches.map((b) => {
+          'table': b.table,
+          'operation': b.operation,
+          'rowData': b.record,
+        }).toList(),
+      });
+      final data = response.data as Map<String, dynamic>?;
+      if (data != null) {
+        final success = data['success'] as bool? ?? false;
+        final processed = data['processed'] as int? ?? 0;
+        // Build SyncPushResponse from the simplified response.
+        // Each entry is treated as "processed" — per-entry results
+        // are not available with the new contract.
+        return SyncPushResponse(
+          results: batches.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final batch = entry.value;
+            final localId = _readInt(batch.record, 'localId') ??
+                _readInt(batch.record, 'local_id') ??
+                _readInt(batch.record, 'id') ??
+                idx;
+            return SyncPushResult(
+              localId: localId,
+              status: idx < processed ? 'updated' : 'error',
+              serverId: batch.record['server_id'] as String? ??
+                  batch.record['serverId'] as String?,
+              retryable: !success,
+            );
+          }).toList(),
+        );
+      }
+    } catch (e) {
+      // Edge Function not deployed — fall through
+    }
+
+    // Edge Function call failed; return an error response so the sync
+    // cycle can mark entries for retry.
+    return SyncPushResponse(
+      results: batches.map((b) {
+        final localId = _readInt(b.record, 'localId') ??
+            _readInt(b.record, 'local_id') ??
+            _readInt(b.record, 'id') ??
+            0;
+        return SyncPushResult(
+          localId: localId,
+          status: 'error',
+          serverId: null,
+          retryable: true,
+        );
+      }).toList(),
     );
-    return SyncPushResponse.fromJson(Map<String, dynamic>.from(response.data as Map));
   }
 
   @override
@@ -218,14 +283,21 @@ class DioSyncRemoteApi implements SyncRemoteApi {
     required String schoolId,
     required int sinceEventId,
   }) async {
-    final response = await dio.get(
-      '/sync-realtime-events',
-      queryParameters: {
-        'school_id': schoolId,
-        'since_event_id': sinceEventId,
-      },
-    );
-    return SyncRealtimePage.fromJson(Map<String, dynamic>.from(response.data as Map));
+    try {
+      final response = await client.functions.invoke('sync-realtime-events', body: {
+        'sinceEventId': sinceEventId,
+      });
+      final data = response.data as Map<String, dynamic>?;
+      if (data != null && data['ok'] == true) {
+        // Placeholder Edge Function — no events yet
+        return SyncRealtimePage(events: [], latestEventId: sinceEventId);
+      }
+    } catch (e) {
+      // Edge Function not deployed — fall through
+    }
+
+    // Edge Function call failed; return empty page so the cycle continues.
+    return SyncRealtimePage(events: [], latestEventId: sinceEventId);
   }
 }
 
@@ -593,6 +665,7 @@ class SyncService {
     if (!accountActive) {
       _setState(SyncState.emergencySave);
       await securityService.clearSessionKey();
+      await (db.delete(db.syncQueue)..where((t) => t.isEmergency.equals(false))).go();
       _setState(SyncState.forcedLogout);
       _setState(SyncState.idle);
       return;

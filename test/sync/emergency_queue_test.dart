@@ -129,11 +129,10 @@ void main() {
       isEmergency: true,
     );
 
-    // Simulate that the normal entry was pushed but failed non-retryably
-    // The emergency entry was never attempted
     final allEntries = await db.syncQueueDao.pendingEntries();
     expect(allEntries, hasLength(2));
 
+    // Both entries fail push so both remain in queue before purge
     final remote = FakeSyncRemoteApi(
       pullPages: [const SyncPullPage(changes: [], nextCursor: null)],
       pushResponses: [
@@ -147,8 +146,8 @@ void main() {
             ),
             SyncPushResult(
               localId: 2,
-              status: 'created',
-              serverId: 'srv-2',
+              status: 'error',
+              serverId: null,
               retryable: false,
             ),
           ],
@@ -174,15 +173,14 @@ void main() {
     await service.onConnectivityRestored();
     await security.clearSessionKey();
 
-    // After logout, the normal entry (id=1) remains because it failed non-retryably
-    // but wasn't removed. The emergency entry (id=2) that was created/removed is gone.
+    // _applyCreditState() purges isEmergency==false entries.
+    // The normal entry (id=1) failed push so it would have remained,
+    // but the purge deletes it. The emergency entry (id=2) also failed
+    // push and survives the purge because isEmergency==true.
     final remaining = await db.syncQueueDao.pendingEntries();
-    // The normal entry that failed non-retryably stays (won't be retried)
-    // The emergency entry that succeeded was removed
-    // But actually, the _pushChanges removes entries that succeeded (status 'created')
-    // So only the non-emergency entry that failed remains
     expect(remaining, hasLength(1));
-    expect(remaining.first.isEmergency, isFalse);
+    expect(remaining.first.isEmergency, isTrue);
+    expect(remaining.first.recordLocalId, 2);
   });
 
   test('emergency entries sorted before normal entries', () async {

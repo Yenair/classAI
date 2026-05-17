@@ -1880,8 +1880,82 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
       requiredDuringInsert: false,
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _subjectMeta =
+      const VerificationMeta('subject');
   @override
-  List<GeneratedColumn> get $columns => [id];
+  late final GeneratedColumn<String> subject = GeneratedColumn<String>(
+      'subject', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _classLevelMeta =
+      const VerificationMeta('classLevel');
+  @override
+  late final GeneratedColumn<String> classLevel = GeneratedColumn<String>(
+      'class_level', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _weekMeta = const VerificationMeta('week');
+  @override
+  late final GeneratedColumn<int> week = GeneratedColumn<int>(
+      'week', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _topicMeta = const VerificationMeta('topic');
+  @override
+  late final GeneratedColumn<String> topic = GeneratedColumn<String>(
+      'topic', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _difficultyMeta =
+      const VerificationMeta('difficulty');
+  @override
+  late final GeneratedColumn<String> difficulty = GeneratedColumn<String>(
+      'difficulty', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _bloomsVerbsMeta =
+      const VerificationMeta('bloomsVerbs');
+  @override
+  late final GeneratedColumn<String> bloomsVerbs = GeneratedColumn<String>(
+      'blooms_verbs', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _curriculumMeta =
+      const VerificationMeta('curriculum');
+  @override
+  late final GeneratedColumn<String> curriculum = GeneratedColumn<String>(
+      'curriculum', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _contentMeta =
+      const VerificationMeta('content');
+  @override
+  late final GeneratedColumn<String> content = GeneratedColumn<String>(
+      'content', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        subject,
+        classLevel,
+        week,
+        topic,
+        difficulty,
+        bloomsVerbs,
+        curriculum,
+        content,
+        createdAt,
+        updatedAt
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -1895,6 +1969,70 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
     }
+    if (data.containsKey('subject')) {
+      context.handle(_subjectMeta,
+          subject.isAcceptableOrUnknown(data['subject']!, _subjectMeta));
+    } else if (isInserting) {
+      context.missing(_subjectMeta);
+    }
+    if (data.containsKey('class_level')) {
+      context.handle(
+          _classLevelMeta,
+          classLevel.isAcceptableOrUnknown(
+              data['class_level']!, _classLevelMeta));
+    } else if (isInserting) {
+      context.missing(_classLevelMeta);
+    }
+    if (data.containsKey('week')) {
+      context.handle(
+          _weekMeta, week.isAcceptableOrUnknown(data['week']!, _weekMeta));
+    } else if (isInserting) {
+      context.missing(_weekMeta);
+    }
+    if (data.containsKey('topic')) {
+      context.handle(
+          _topicMeta, topic.isAcceptableOrUnknown(data['topic']!, _topicMeta));
+    } else if (isInserting) {
+      context.missing(_topicMeta);
+    }
+    if (data.containsKey('difficulty')) {
+      context.handle(
+          _difficultyMeta,
+          difficulty.isAcceptableOrUnknown(
+              data['difficulty']!, _difficultyMeta));
+    } else if (isInserting) {
+      context.missing(_difficultyMeta);
+    }
+    if (data.containsKey('blooms_verbs')) {
+      context.handle(
+          _bloomsVerbsMeta,
+          bloomsVerbs.isAcceptableOrUnknown(
+              data['blooms_verbs']!, _bloomsVerbsMeta));
+    } else if (isInserting) {
+      context.missing(_bloomsVerbsMeta);
+    }
+    if (data.containsKey('curriculum')) {
+      context.handle(
+          _curriculumMeta,
+          curriculum.isAcceptableOrUnknown(
+              data['curriculum']!, _curriculumMeta));
+    } else if (isInserting) {
+      context.missing(_curriculumMeta);
+    }
+    if (data.containsKey('content')) {
+      context.handle(_contentMeta,
+          content.isAcceptableOrUnknown(data['content']!, _contentMeta));
+    } else if (isInserting) {
+      context.missing(_contentMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
     return context;
   }
 
@@ -1906,6 +2044,26 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
     return Lesson(
       id: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      subject: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}subject'])!,
+      classLevel: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}class_level'])!,
+      week: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}week'])!,
+      topic: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}topic'])!,
+      difficulty: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}difficulty'])!,
+      bloomsVerbs: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}blooms_verbs'])!,
+      curriculum: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}curriculum'])!,
+      content: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}content'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
     );
   }
 
@@ -1917,17 +2075,58 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
 
 class Lesson extends DataClass implements Insertable<Lesson> {
   final int id;
-  const Lesson({required this.id});
+  final String subject;
+  final String classLevel;
+  final int week;
+  final String topic;
+  final String difficulty;
+  final String bloomsVerbs;
+  final String curriculum;
+  final String content;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const Lesson(
+      {required this.id,
+      required this.subject,
+      required this.classLevel,
+      required this.week,
+      required this.topic,
+      required this.difficulty,
+      required this.bloomsVerbs,
+      required this.curriculum,
+      required this.content,
+      required this.createdAt,
+      required this.updatedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
+    map['subject'] = Variable<String>(subject);
+    map['class_level'] = Variable<String>(classLevel);
+    map['week'] = Variable<int>(week);
+    map['topic'] = Variable<String>(topic);
+    map['difficulty'] = Variable<String>(difficulty);
+    map['blooms_verbs'] = Variable<String>(bloomsVerbs);
+    map['curriculum'] = Variable<String>(curriculum);
+    map['content'] = Variable<String>(content);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
 
   LessonsCompanion toCompanion(bool nullToAbsent) {
     return LessonsCompanion(
       id: Value(id),
+      subject: Value(subject),
+      classLevel: Value(classLevel),
+      week: Value(week),
+      topic: Value(topic),
+      difficulty: Value(difficulty),
+      bloomsVerbs: Value(bloomsVerbs),
+      curriculum: Value(curriculum),
+      content: Value(content),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
     );
   }
 
@@ -1936,6 +2135,16 @@ class Lesson extends DataClass implements Insertable<Lesson> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return Lesson(
       id: serializer.fromJson<int>(json['id']),
+      subject: serializer.fromJson<String>(json['subject']),
+      classLevel: serializer.fromJson<String>(json['classLevel']),
+      week: serializer.fromJson<int>(json['week']),
+      topic: serializer.fromJson<String>(json['topic']),
+      difficulty: serializer.fromJson<String>(json['difficulty']),
+      bloomsVerbs: serializer.fromJson<String>(json['bloomsVerbs']),
+      curriculum: serializer.fromJson<String>(json['curriculum']),
+      content: serializer.fromJson<String>(json['content']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
   @override
@@ -1943,52 +2152,199 @@ class Lesson extends DataClass implements Insertable<Lesson> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
+      'subject': serializer.toJson<String>(subject),
+      'classLevel': serializer.toJson<String>(classLevel),
+      'week': serializer.toJson<int>(week),
+      'topic': serializer.toJson<String>(topic),
+      'difficulty': serializer.toJson<String>(difficulty),
+      'bloomsVerbs': serializer.toJson<String>(bloomsVerbs),
+      'curriculum': serializer.toJson<String>(curriculum),
+      'content': serializer.toJson<String>(content),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
 
-  Lesson copyWith({int? id}) => Lesson(
+  Lesson copyWith(
+          {int? id,
+          String? subject,
+          String? classLevel,
+          int? week,
+          String? topic,
+          String? difficulty,
+          String? bloomsVerbs,
+          String? curriculum,
+          String? content,
+          DateTime? createdAt,
+          DateTime? updatedAt}) =>
+      Lesson(
         id: id ?? this.id,
+        subject: subject ?? this.subject,
+        classLevel: classLevel ?? this.classLevel,
+        week: week ?? this.week,
+        topic: topic ?? this.topic,
+        difficulty: difficulty ?? this.difficulty,
+        bloomsVerbs: bloomsVerbs ?? this.bloomsVerbs,
+        curriculum: curriculum ?? this.curriculum,
+        content: content ?? this.content,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
       );
   Lesson copyWithCompanion(LessonsCompanion data) {
     return Lesson(
       id: data.id.present ? data.id.value : this.id,
+      subject: data.subject.present ? data.subject.value : this.subject,
+      classLevel:
+          data.classLevel.present ? data.classLevel.value : this.classLevel,
+      week: data.week.present ? data.week.value : this.week,
+      topic: data.topic.present ? data.topic.value : this.topic,
+      difficulty:
+          data.difficulty.present ? data.difficulty.value : this.difficulty,
+      bloomsVerbs:
+          data.bloomsVerbs.present ? data.bloomsVerbs.value : this.bloomsVerbs,
+      curriculum:
+          data.curriculum.present ? data.curriculum.value : this.curriculum,
+      content: data.content.present ? data.content.value : this.content,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
 
   @override
   String toString() {
     return (StringBuffer('Lesson(')
-          ..write('id: $id')
+          ..write('id: $id, ')
+          ..write('subject: $subject, ')
+          ..write('classLevel: $classLevel, ')
+          ..write('week: $week, ')
+          ..write('topic: $topic, ')
+          ..write('difficulty: $difficulty, ')
+          ..write('bloomsVerbs: $bloomsVerbs, ')
+          ..write('curriculum: $curriculum, ')
+          ..write('content: $content, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => Object.hash(id, subject, classLevel, week, topic,
+      difficulty, bloomsVerbs, curriculum, content, createdAt, updatedAt);
   @override
   bool operator ==(Object other) =>
-      identical(this, other) || (other is Lesson && other.id == this.id);
+      identical(this, other) ||
+      (other is Lesson &&
+          other.id == this.id &&
+          other.subject == this.subject &&
+          other.classLevel == this.classLevel &&
+          other.week == this.week &&
+          other.topic == this.topic &&
+          other.difficulty == this.difficulty &&
+          other.bloomsVerbs == this.bloomsVerbs &&
+          other.curriculum == this.curriculum &&
+          other.content == this.content &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
 }
 
 class LessonsCompanion extends UpdateCompanion<Lesson> {
   final Value<int> id;
+  final Value<String> subject;
+  final Value<String> classLevel;
+  final Value<int> week;
+  final Value<String> topic;
+  final Value<String> difficulty;
+  final Value<String> bloomsVerbs;
+  final Value<String> curriculum;
+  final Value<String> content;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
   const LessonsCompanion({
     this.id = const Value.absent(),
+    this.subject = const Value.absent(),
+    this.classLevel = const Value.absent(),
+    this.week = const Value.absent(),
+    this.topic = const Value.absent(),
+    this.difficulty = const Value.absent(),
+    this.bloomsVerbs = const Value.absent(),
+    this.curriculum = const Value.absent(),
+    this.content = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
   });
   LessonsCompanion.insert({
     this.id = const Value.absent(),
-  });
+    required String subject,
+    required String classLevel,
+    required int week,
+    required String topic,
+    required String difficulty,
+    required String bloomsVerbs,
+    required String curriculum,
+    required String content,
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  })  : subject = Value(subject),
+        classLevel = Value(classLevel),
+        week = Value(week),
+        topic = Value(topic),
+        difficulty = Value(difficulty),
+        bloomsVerbs = Value(bloomsVerbs),
+        curriculum = Value(curriculum),
+        content = Value(content);
   static Insertable<Lesson> custom({
     Expression<int>? id,
+    Expression<String>? subject,
+    Expression<String>? classLevel,
+    Expression<int>? week,
+    Expression<String>? topic,
+    Expression<String>? difficulty,
+    Expression<String>? bloomsVerbs,
+    Expression<String>? curriculum,
+    Expression<String>? content,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
+      if (subject != null) 'subject': subject,
+      if (classLevel != null) 'class_level': classLevel,
+      if (week != null) 'week': week,
+      if (topic != null) 'topic': topic,
+      if (difficulty != null) 'difficulty': difficulty,
+      if (bloomsVerbs != null) 'blooms_verbs': bloomsVerbs,
+      if (curriculum != null) 'curriculum': curriculum,
+      if (content != null) 'content': content,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
     });
   }
 
-  LessonsCompanion copyWith({Value<int>? id}) {
+  LessonsCompanion copyWith(
+      {Value<int>? id,
+      Value<String>? subject,
+      Value<String>? classLevel,
+      Value<int>? week,
+      Value<String>? topic,
+      Value<String>? difficulty,
+      Value<String>? bloomsVerbs,
+      Value<String>? curriculum,
+      Value<String>? content,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt}) {
     return LessonsCompanion(
       id: id ?? this.id,
+      subject: subject ?? this.subject,
+      classLevel: classLevel ?? this.classLevel,
+      week: week ?? this.week,
+      topic: topic ?? this.topic,
+      difficulty: difficulty ?? this.difficulty,
+      bloomsVerbs: bloomsVerbs ?? this.bloomsVerbs,
+      curriculum: curriculum ?? this.curriculum,
+      content: content ?? this.content,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 
@@ -1998,13 +2354,53 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     if (id.present) {
       map['id'] = Variable<int>(id.value);
     }
+    if (subject.present) {
+      map['subject'] = Variable<String>(subject.value);
+    }
+    if (classLevel.present) {
+      map['class_level'] = Variable<String>(classLevel.value);
+    }
+    if (week.present) {
+      map['week'] = Variable<int>(week.value);
+    }
+    if (topic.present) {
+      map['topic'] = Variable<String>(topic.value);
+    }
+    if (difficulty.present) {
+      map['difficulty'] = Variable<String>(difficulty.value);
+    }
+    if (bloomsVerbs.present) {
+      map['blooms_verbs'] = Variable<String>(bloomsVerbs.value);
+    }
+    if (curriculum.present) {
+      map['curriculum'] = Variable<String>(curriculum.value);
+    }
+    if (content.present) {
+      map['content'] = Variable<String>(content.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
     return map;
   }
 
   @override
   String toString() {
     return (StringBuffer('LessonsCompanion(')
-          ..write('id: $id')
+          ..write('id: $id, ')
+          ..write('subject: $subject, ')
+          ..write('classLevel: $classLevel, ')
+          ..write('week: $week, ')
+          ..write('topic: $topic, ')
+          ..write('difficulty: $difficulty, ')
+          ..write('bloomsVerbs: $bloomsVerbs, ')
+          ..write('curriculum: $curriculum, ')
+          ..write('content: $content, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
@@ -2171,8 +2567,69 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
       requiredDuringInsert: false,
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _subjectMeta =
+      const VerificationMeta('subject');
   @override
-  List<GeneratedColumn> get $columns => [id];
+  late final GeneratedColumn<String> subject = GeneratedColumn<String>(
+      'subject', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _classLevelMeta =
+      const VerificationMeta('classLevel');
+  @override
+  late final GeneratedColumn<String> classLevel = GeneratedColumn<String>(
+      'class_level', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _topicMeta = const VerificationMeta('topic');
+  @override
+  late final GeneratedColumn<String> topic = GeneratedColumn<String>(
+      'topic', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _difficultyMeta =
+      const VerificationMeta('difficulty');
+  @override
+  late final GeneratedColumn<String> difficulty = GeneratedColumn<String>(
+      'difficulty', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _curriculumMeta =
+      const VerificationMeta('curriculum');
+  @override
+  late final GeneratedColumn<String> curriculum = GeneratedColumn<String>(
+      'curriculum', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _contentMeta =
+      const VerificationMeta('content');
+  @override
+  late final GeneratedColumn<String> content = GeneratedColumn<String>(
+      'content', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        subject,
+        classLevel,
+        topic,
+        difficulty,
+        curriculum,
+        content,
+        createdAt,
+        updatedAt
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -2186,6 +2643,56 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
     }
+    if (data.containsKey('subject')) {
+      context.handle(_subjectMeta,
+          subject.isAcceptableOrUnknown(data['subject']!, _subjectMeta));
+    } else if (isInserting) {
+      context.missing(_subjectMeta);
+    }
+    if (data.containsKey('class_level')) {
+      context.handle(
+          _classLevelMeta,
+          classLevel.isAcceptableOrUnknown(
+              data['class_level']!, _classLevelMeta));
+    } else if (isInserting) {
+      context.missing(_classLevelMeta);
+    }
+    if (data.containsKey('topic')) {
+      context.handle(
+          _topicMeta, topic.isAcceptableOrUnknown(data['topic']!, _topicMeta));
+    } else if (isInserting) {
+      context.missing(_topicMeta);
+    }
+    if (data.containsKey('difficulty')) {
+      context.handle(
+          _difficultyMeta,
+          difficulty.isAcceptableOrUnknown(
+              data['difficulty']!, _difficultyMeta));
+    } else if (isInserting) {
+      context.missing(_difficultyMeta);
+    }
+    if (data.containsKey('curriculum')) {
+      context.handle(
+          _curriculumMeta,
+          curriculum.isAcceptableOrUnknown(
+              data['curriculum']!, _curriculumMeta));
+    } else if (isInserting) {
+      context.missing(_curriculumMeta);
+    }
+    if (data.containsKey('content')) {
+      context.handle(_contentMeta,
+          content.isAcceptableOrUnknown(data['content']!, _contentMeta));
+    } else if (isInserting) {
+      context.missing(_contentMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
     return context;
   }
 
@@ -2197,6 +2704,22 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
     return Exam(
       id: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      subject: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}subject'])!,
+      classLevel: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}class_level'])!,
+      topic: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}topic'])!,
+      difficulty: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}difficulty'])!,
+      curriculum: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}curriculum'])!,
+      content: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}content'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
     );
   }
 
@@ -2208,17 +2731,50 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
 
 class Exam extends DataClass implements Insertable<Exam> {
   final int id;
-  const Exam({required this.id});
+  final String subject;
+  final String classLevel;
+  final String topic;
+  final String difficulty;
+  final String curriculum;
+  final String content;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const Exam(
+      {required this.id,
+      required this.subject,
+      required this.classLevel,
+      required this.topic,
+      required this.difficulty,
+      required this.curriculum,
+      required this.content,
+      required this.createdAt,
+      required this.updatedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
+    map['subject'] = Variable<String>(subject);
+    map['class_level'] = Variable<String>(classLevel);
+    map['topic'] = Variable<String>(topic);
+    map['difficulty'] = Variable<String>(difficulty);
+    map['curriculum'] = Variable<String>(curriculum);
+    map['content'] = Variable<String>(content);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
 
   ExamsCompanion toCompanion(bool nullToAbsent) {
     return ExamsCompanion(
       id: Value(id),
+      subject: Value(subject),
+      classLevel: Value(classLevel),
+      topic: Value(topic),
+      difficulty: Value(difficulty),
+      curriculum: Value(curriculum),
+      content: Value(content),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
     );
   }
 
@@ -2227,6 +2783,14 @@ class Exam extends DataClass implements Insertable<Exam> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return Exam(
       id: serializer.fromJson<int>(json['id']),
+      subject: serializer.fromJson<String>(json['subject']),
+      classLevel: serializer.fromJson<String>(json['classLevel']),
+      topic: serializer.fromJson<String>(json['topic']),
+      difficulty: serializer.fromJson<String>(json['difficulty']),
+      curriculum: serializer.fromJson<String>(json['curriculum']),
+      content: serializer.fromJson<String>(json['content']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
   @override
@@ -2234,52 +2798,170 @@ class Exam extends DataClass implements Insertable<Exam> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
+      'subject': serializer.toJson<String>(subject),
+      'classLevel': serializer.toJson<String>(classLevel),
+      'topic': serializer.toJson<String>(topic),
+      'difficulty': serializer.toJson<String>(difficulty),
+      'curriculum': serializer.toJson<String>(curriculum),
+      'content': serializer.toJson<String>(content),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
 
-  Exam copyWith({int? id}) => Exam(
+  Exam copyWith(
+          {int? id,
+          String? subject,
+          String? classLevel,
+          String? topic,
+          String? difficulty,
+          String? curriculum,
+          String? content,
+          DateTime? createdAt,
+          DateTime? updatedAt}) =>
+      Exam(
         id: id ?? this.id,
+        subject: subject ?? this.subject,
+        classLevel: classLevel ?? this.classLevel,
+        topic: topic ?? this.topic,
+        difficulty: difficulty ?? this.difficulty,
+        curriculum: curriculum ?? this.curriculum,
+        content: content ?? this.content,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
       );
   Exam copyWithCompanion(ExamsCompanion data) {
     return Exam(
       id: data.id.present ? data.id.value : this.id,
+      subject: data.subject.present ? data.subject.value : this.subject,
+      classLevel:
+          data.classLevel.present ? data.classLevel.value : this.classLevel,
+      topic: data.topic.present ? data.topic.value : this.topic,
+      difficulty:
+          data.difficulty.present ? data.difficulty.value : this.difficulty,
+      curriculum:
+          data.curriculum.present ? data.curriculum.value : this.curriculum,
+      content: data.content.present ? data.content.value : this.content,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
 
   @override
   String toString() {
     return (StringBuffer('Exam(')
-          ..write('id: $id')
+          ..write('id: $id, ')
+          ..write('subject: $subject, ')
+          ..write('classLevel: $classLevel, ')
+          ..write('topic: $topic, ')
+          ..write('difficulty: $difficulty, ')
+          ..write('curriculum: $curriculum, ')
+          ..write('content: $content, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => Object.hash(id, subject, classLevel, topic, difficulty,
+      curriculum, content, createdAt, updatedAt);
   @override
   bool operator ==(Object other) =>
-      identical(this, other) || (other is Exam && other.id == this.id);
+      identical(this, other) ||
+      (other is Exam &&
+          other.id == this.id &&
+          other.subject == this.subject &&
+          other.classLevel == this.classLevel &&
+          other.topic == this.topic &&
+          other.difficulty == this.difficulty &&
+          other.curriculum == this.curriculum &&
+          other.content == this.content &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
 }
 
 class ExamsCompanion extends UpdateCompanion<Exam> {
   final Value<int> id;
+  final Value<String> subject;
+  final Value<String> classLevel;
+  final Value<String> topic;
+  final Value<String> difficulty;
+  final Value<String> curriculum;
+  final Value<String> content;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
   const ExamsCompanion({
     this.id = const Value.absent(),
+    this.subject = const Value.absent(),
+    this.classLevel = const Value.absent(),
+    this.topic = const Value.absent(),
+    this.difficulty = const Value.absent(),
+    this.curriculum = const Value.absent(),
+    this.content = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
   });
   ExamsCompanion.insert({
     this.id = const Value.absent(),
-  });
+    required String subject,
+    required String classLevel,
+    required String topic,
+    required String difficulty,
+    required String curriculum,
+    required String content,
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  })  : subject = Value(subject),
+        classLevel = Value(classLevel),
+        topic = Value(topic),
+        difficulty = Value(difficulty),
+        curriculum = Value(curriculum),
+        content = Value(content);
   static Insertable<Exam> custom({
     Expression<int>? id,
+    Expression<String>? subject,
+    Expression<String>? classLevel,
+    Expression<String>? topic,
+    Expression<String>? difficulty,
+    Expression<String>? curriculum,
+    Expression<String>? content,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
+      if (subject != null) 'subject': subject,
+      if (classLevel != null) 'class_level': classLevel,
+      if (topic != null) 'topic': topic,
+      if (difficulty != null) 'difficulty': difficulty,
+      if (curriculum != null) 'curriculum': curriculum,
+      if (content != null) 'content': content,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
     });
   }
 
-  ExamsCompanion copyWith({Value<int>? id}) {
+  ExamsCompanion copyWith(
+      {Value<int>? id,
+      Value<String>? subject,
+      Value<String>? classLevel,
+      Value<String>? topic,
+      Value<String>? difficulty,
+      Value<String>? curriculum,
+      Value<String>? content,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt}) {
     return ExamsCompanion(
       id: id ?? this.id,
+      subject: subject ?? this.subject,
+      classLevel: classLevel ?? this.classLevel,
+      topic: topic ?? this.topic,
+      difficulty: difficulty ?? this.difficulty,
+      curriculum: curriculum ?? this.curriculum,
+      content: content ?? this.content,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 
@@ -2289,13 +2971,45 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     if (id.present) {
       map['id'] = Variable<int>(id.value);
     }
+    if (subject.present) {
+      map['subject'] = Variable<String>(subject.value);
+    }
+    if (classLevel.present) {
+      map['class_level'] = Variable<String>(classLevel.value);
+    }
+    if (topic.present) {
+      map['topic'] = Variable<String>(topic.value);
+    }
+    if (difficulty.present) {
+      map['difficulty'] = Variable<String>(difficulty.value);
+    }
+    if (curriculum.present) {
+      map['curriculum'] = Variable<String>(curriculum.value);
+    }
+    if (content.present) {
+      map['content'] = Variable<String>(content.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
     return map;
   }
 
   @override
   String toString() {
     return (StringBuffer('ExamsCompanion(')
-          ..write('id: $id')
+          ..write('id: $id, ')
+          ..write('subject: $subject, ')
+          ..write('classLevel: $classLevel, ')
+          ..write('topic: $topic, ')
+          ..write('difficulty: $difficulty, ')
+          ..write('curriculum: $curriculum, ')
+          ..write('content: $content, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
@@ -7431,9 +8145,29 @@ typedef $$SubjectsTableProcessedTableManager = ProcessedTableManager<
     PrefetchHooks Function()>;
 typedef $$LessonsTableCreateCompanionBuilder = LessonsCompanion Function({
   Value<int> id,
+  required String subject,
+  required String classLevel,
+  required int week,
+  required String topic,
+  required String difficulty,
+  required String bloomsVerbs,
+  required String curriculum,
+  required String content,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
 });
 typedef $$LessonsTableUpdateCompanionBuilder = LessonsCompanion Function({
   Value<int> id,
+  Value<String> subject,
+  Value<String> classLevel,
+  Value<int> week,
+  Value<String> topic,
+  Value<String> difficulty,
+  Value<String> bloomsVerbs,
+  Value<String> curriculum,
+  Value<String> content,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
 });
 
 class $$LessonsTableFilterComposer
@@ -7447,6 +8181,36 @@ class $$LessonsTableFilterComposer
   });
   ColumnFilters<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get subject => $composableBuilder(
+      column: $table.subject, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get classLevel => $composableBuilder(
+      column: $table.classLevel, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get week => $composableBuilder(
+      column: $table.week, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get topic => $composableBuilder(
+      column: $table.topic, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get difficulty => $composableBuilder(
+      column: $table.difficulty, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get bloomsVerbs => $composableBuilder(
+      column: $table.bloomsVerbs, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get curriculum => $composableBuilder(
+      column: $table.curriculum, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get content => $composableBuilder(
+      column: $table.content, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
 }
 
 class $$LessonsTableOrderingComposer
@@ -7460,6 +8224,36 @@ class $$LessonsTableOrderingComposer
   });
   ColumnOrderings<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get subject => $composableBuilder(
+      column: $table.subject, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get classLevel => $composableBuilder(
+      column: $table.classLevel, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get week => $composableBuilder(
+      column: $table.week, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get topic => $composableBuilder(
+      column: $table.topic, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get difficulty => $composableBuilder(
+      column: $table.difficulty, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get bloomsVerbs => $composableBuilder(
+      column: $table.bloomsVerbs, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get curriculum => $composableBuilder(
+      column: $table.curriculum, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get content => $composableBuilder(
+      column: $table.content, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
 }
 
 class $$LessonsTableAnnotationComposer
@@ -7473,6 +8267,36 @@ class $$LessonsTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get subject =>
+      $composableBuilder(column: $table.subject, builder: (column) => column);
+
+  GeneratedColumn<String> get classLevel => $composableBuilder(
+      column: $table.classLevel, builder: (column) => column);
+
+  GeneratedColumn<int> get week =>
+      $composableBuilder(column: $table.week, builder: (column) => column);
+
+  GeneratedColumn<String> get topic =>
+      $composableBuilder(column: $table.topic, builder: (column) => column);
+
+  GeneratedColumn<String> get difficulty => $composableBuilder(
+      column: $table.difficulty, builder: (column) => column);
+
+  GeneratedColumn<String> get bloomsVerbs => $composableBuilder(
+      column: $table.bloomsVerbs, builder: (column) => column);
+
+  GeneratedColumn<String> get curriculum => $composableBuilder(
+      column: $table.curriculum, builder: (column) => column);
+
+  GeneratedColumn<String> get content =>
+      $composableBuilder(column: $table.content, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 }
 
 class $$LessonsTableTableManager extends RootTableManager<
@@ -7499,15 +8323,55 @@ class $$LessonsTableTableManager extends RootTableManager<
               $$LessonsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            Value<String> subject = const Value.absent(),
+            Value<String> classLevel = const Value.absent(),
+            Value<int> week = const Value.absent(),
+            Value<String> topic = const Value.absent(),
+            Value<String> difficulty = const Value.absent(),
+            Value<String> bloomsVerbs = const Value.absent(),
+            Value<String> curriculum = const Value.absent(),
+            Value<String> content = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
           }) =>
               LessonsCompanion(
             id: id,
+            subject: subject,
+            classLevel: classLevel,
+            week: week,
+            topic: topic,
+            difficulty: difficulty,
+            bloomsVerbs: bloomsVerbs,
+            curriculum: curriculum,
+            content: content,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            required String subject,
+            required String classLevel,
+            required int week,
+            required String topic,
+            required String difficulty,
+            required String bloomsVerbs,
+            required String curriculum,
+            required String content,
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
           }) =>
               LessonsCompanion.insert(
             id: id,
+            subject: subject,
+            classLevel: classLevel,
+            week: week,
+            topic: topic,
+            difficulty: difficulty,
+            bloomsVerbs: bloomsVerbs,
+            curriculum: curriculum,
+            content: content,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -7637,9 +8501,25 @@ typedef $$SchemeOfWorkTableProcessedTableManager = ProcessedTableManager<
     PrefetchHooks Function()>;
 typedef $$ExamsTableCreateCompanionBuilder = ExamsCompanion Function({
   Value<int> id,
+  required String subject,
+  required String classLevel,
+  required String topic,
+  required String difficulty,
+  required String curriculum,
+  required String content,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
 });
 typedef $$ExamsTableUpdateCompanionBuilder = ExamsCompanion Function({
   Value<int> id,
+  Value<String> subject,
+  Value<String> classLevel,
+  Value<String> topic,
+  Value<String> difficulty,
+  Value<String> curriculum,
+  Value<String> content,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
 });
 
 class $$ExamsTableFilterComposer extends Composer<_$AppDatabase, $ExamsTable> {
@@ -7652,6 +8532,30 @@ class $$ExamsTableFilterComposer extends Composer<_$AppDatabase, $ExamsTable> {
   });
   ColumnFilters<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get subject => $composableBuilder(
+      column: $table.subject, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get classLevel => $composableBuilder(
+      column: $table.classLevel, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get topic => $composableBuilder(
+      column: $table.topic, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get difficulty => $composableBuilder(
+      column: $table.difficulty, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get curriculum => $composableBuilder(
+      column: $table.curriculum, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get content => $composableBuilder(
+      column: $table.content, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
 }
 
 class $$ExamsTableOrderingComposer
@@ -7665,6 +8569,30 @@ class $$ExamsTableOrderingComposer
   });
   ColumnOrderings<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get subject => $composableBuilder(
+      column: $table.subject, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get classLevel => $composableBuilder(
+      column: $table.classLevel, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get topic => $composableBuilder(
+      column: $table.topic, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get difficulty => $composableBuilder(
+      column: $table.difficulty, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get curriculum => $composableBuilder(
+      column: $table.curriculum, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get content => $composableBuilder(
+      column: $table.content, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
 }
 
 class $$ExamsTableAnnotationComposer
@@ -7678,6 +8606,30 @@ class $$ExamsTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get subject =>
+      $composableBuilder(column: $table.subject, builder: (column) => column);
+
+  GeneratedColumn<String> get classLevel => $composableBuilder(
+      column: $table.classLevel, builder: (column) => column);
+
+  GeneratedColumn<String> get topic =>
+      $composableBuilder(column: $table.topic, builder: (column) => column);
+
+  GeneratedColumn<String> get difficulty => $composableBuilder(
+      column: $table.difficulty, builder: (column) => column);
+
+  GeneratedColumn<String> get curriculum => $composableBuilder(
+      column: $table.curriculum, builder: (column) => column);
+
+  GeneratedColumn<String> get content =>
+      $composableBuilder(column: $table.content, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 }
 
 class $$ExamsTableTableManager extends RootTableManager<
@@ -7704,15 +8656,47 @@ class $$ExamsTableTableManager extends RootTableManager<
               $$ExamsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            Value<String> subject = const Value.absent(),
+            Value<String> classLevel = const Value.absent(),
+            Value<String> topic = const Value.absent(),
+            Value<String> difficulty = const Value.absent(),
+            Value<String> curriculum = const Value.absent(),
+            Value<String> content = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
           }) =>
               ExamsCompanion(
             id: id,
+            subject: subject,
+            classLevel: classLevel,
+            topic: topic,
+            difficulty: difficulty,
+            curriculum: curriculum,
+            content: content,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            required String subject,
+            required String classLevel,
+            required String topic,
+            required String difficulty,
+            required String curriculum,
+            required String content,
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
           }) =>
               ExamsCompanion.insert(
             id: id,
+            subject: subject,
+            classLevel: classLevel,
+            topic: topic,
+            difficulty: difficulty,
+            curriculum: curriculum,
+            content: content,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

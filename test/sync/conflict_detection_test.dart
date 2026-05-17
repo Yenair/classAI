@@ -99,7 +99,7 @@ void main() {
     expect(conflict['resolution'], MergeResolution.unresolved.name);
   });
 
-  test('no conflict when only one side changes', () async {
+  test('no conflict when local and remote change different fields', () async {
     store.seedLocalRecord('lessons', 20, {
       'localId': 20,
       'title': 'Local updated title',

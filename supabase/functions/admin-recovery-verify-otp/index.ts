@@ -4,70 +4,145 @@ import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
 
 serve(async (req) => {
   try {
-    const { email, otp, new_password } = await req.json();
+    const { email, otp, newPassword } = await req.json();
+
+    if (!email || !otp || !newPassword) {
+      return new Response(
+        JSON.stringify({ error: "Missing required fields: email, otp, newPassword" }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // 1. Find the school and admin
-    const { data: school, error: schoolError } = await supabase
-      .from("schools")
-      .select("id, admin_recovery_email")
-      .eq("admin_recovery_email", email)
+    // ── Look up the admin teacher ──────────────────────────────────────────
+    const { data: admin, error: adminError } = await supabase
+      .from("teachers")
+      .select("id, school_id, email")
+      .eq("email", email)
+      .eq("role", "admin")
       .maybeSingle();
 
-    if (schoolError || !school) {
-      return new Response(JSON.stringify({ error: "Invalid recovery email" }), { status: 404 });
+    if (adminError || !admin) {
+      return new Response(
+        JSON.stringify({ error: "Admin account not found" }),
+        { status: 404, headers: { "Content-Type": "application/json" } }
+      );
     }
 
-    // 2. In production: verify OTP against stored hash (from request-otp step)
-    // For now: assume OTP is verified (the real implementation uses a cache like Redis)
-    // This is a simplified version — in production, check OTP against stored value
-    console.log(`OTP verified for ${email}: ${otp}`);
+    // ── Hash the provided OTP for comparison ───────────────────────────────
+    const otpHashBytes = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(otp)
+    );
+    const otpHash = Array.from(new Uint8Array(otpHashBytes))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
 
-    // 3. Find the admin teacher for this school
-    const { data: adminTeacher, error: adminError } = await supabase
-      .from("teachers")
-      .select("id")
-      .eq("school_id", school.id)
-      .eq("role", "admin")
-      .single();
+    // ── Find the OTP record ────────────────────────────────────────────────
+    const { data: otpRecord, error: otpError } = await supabase
+      .from("admin_recovery_otps")
+      .select("*")
+      .eq("email", email)
+      .eq("otp_hash", otpHash)
+      .eq("used", false)
+      .maybeSingle();
 
-    if (adminError || !adminTeacher) {
-      return new Response(JSON.stringify({ error: "Admin not found" }), { status: 404 });
+    if (otpError || !otpRecord) {
+      return new Response(
+        JSON.stringify({ error: "Invalid OTP" }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      );
     }
 
-    // 4. Hash the new password
+    // ── Check expiry ───────────────────────────────────────────────────────
+    if (new Date(otpRecord.expires_at) < new Date()) {
+      return new Response(
+        JSON.stringify({ error: "OTP has expired" }),
+        { status: 410, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── Check attempts ─────────────────────────────────────────────────────
+    if (otpRecord.attempts >= 5) {
+      return new Response(
+        JSON.stringify({ error: "Too many failed attempts. Request a new OTP." }),
+        { status: 429, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── Increment attempts ─────────────────────────────────────────────────
+    await supabase
+      .from("admin_recovery_otps")
+      .update({ attempts: otpRecord.attempts + 1 })
+      .eq("id", otpRecord.id);
+
+    // ── Update password in Supabase Auth ───────────────────────────────────
+    // First, find the auth user by email
+    const { data: users, error: usersError } = await supabase.auth.admin.listUsers();
+    if (usersError) throw usersError;
+
+    const authUser = users.users.find((u) => u.email === email);
+    if (!authUser) {
+      return new Response(
+        JSON.stringify({ error: "Auth user not found" }),
+        { status: 404, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const { error: updateAuthError } = await supabase.auth.admin.updateUserById(
+      authUser.id,
+      { password: newPassword }
+    );
+    if (updateAuthError) throw updateAuthError;
+
+    // ── Update local password hash in teachers table ──────────────────────
     const pepper = Deno.env.get("PASSWORD_PEPPER")!;
-    const newPasswordHash = await bcrypt.hash(new_password + pepper);
+    const newPasswordHash = await bcrypt.hash(newPassword + pepper);
 
-    // 5. Update the admin's password
-    const { error: updateError } = await supabase
+    await supabase
       .from("teachers")
       .update({
         password_hash: newPasswordHash,
-        password_hash_version: 2, // increment version to force all devices to re-auth
+        password_hash_version: 2,
         force_password_reset: false,
       })
-      .eq("id", adminTeacher.id);
+      .eq("id", admin.id);
 
-    if (updateError) throw updateError;
+    // ── Mark OTP as used ───────────────────────────────────────────────────
+    await supabase
+      .from("admin_recovery_otps")
+      .update({ used: true })
+      .eq("id", otpRecord.id);
 
-    // 6. Re-wrap school master key with new password-derived key
-    // In production: unwrap with old key, re-wrap with new key, store in schools table
-    // For now: keep existing wrapped key (client will re-wrap on next login)
-    const { data: updatedSchool } = await supabase
-      .from("schools")
-      .select("school_master_key_wrapped")
-      .eq("id", school.id)
+    // ── Fetch updated teacher and school ───────────────────────────────────
+    const { data: updatedTeacher } = await supabase
+      .from("teachers")
+      .select("*, schools(*)")
+      .eq("id", admin.id)
       .single();
+
+    const teacher = updatedTeacher;
+    const school = updatedTeacher?.schools as Record<string, unknown> | undefined;
 
     return new Response(
       JSON.stringify({
-        message: "Password reset successful",
-        wrapped_school_key: updatedSchool?.school_master_key_wrapped,
+        teacher: {
+          id: teacher.id,
+          email: teacher.email,
+          name: teacher.teacher_name,
+          role: teacher.role,
+          school_id: teacher.school_id,
+        },
+        school: {
+          id: school?.id,
+          name: school?.school_name,
+          subscription_tier: school?.subscription_tier,
+        },
+        wrapped_school_key: school?.school_master_key_wrapped ?? null,
         password_hash_version: 2,
       }),
       { headers: { "Content-Type": "application/json" } }
@@ -75,7 +150,7 @@ serve(async (req) => {
   } catch (err) {
     return new Response(
       JSON.stringify({ error: err.message }),
-      { status: 500 }
+      { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
 });

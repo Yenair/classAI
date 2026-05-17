@@ -3,48 +3,63 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 serve(async (req) => {
   try {
-    const url = new URL(req.url);
-    const cursor = url.searchParams.get("cursor"); // ISO timestamp
-    const schoolId = url.searchParams.get("school_id");
-    const limit = parseInt(url.searchParams.get("limit") || "50");
+    const { lastSyncTimestamp, tables } = await req.json();
+
+    if (!Array.isArray(tables) || tables.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "Request body must include a non-empty `tables` array." }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Pull changes from all syncable tables since cursor
-    const tables = ["subjects", "lessons", "exams", "progress_logs", "vault_items", "scheme_of_work"];
-    const changes: any[] = [];
+    const changes: { table: string; row: Record<string, unknown> }[] = [];
 
     for (const table of tables) {
       let query = supabase
         .from(table)
         .select("*")
-        .eq("school_id", schoolId)
-        .order("updated_at", { ascending: true })
-        .limit(limit);
+        .order("updated_at", { ascending: true });
 
-      if (cursor) {
-        query = query.gt("updated_at", cursor);
+      if (lastSyncTimestamp) {
+        query = query.gt("updated_at", lastSyncTimestamp);
       }
 
       const { data, error } = await query;
-      if (!error && data) {
-        changes.push(...data.map((row: any) => ({ table, row })));
+      if (error) {
+        console.warn(`sync-pull: error querying table "${table}": ${error.message}`);
+        continue; // skip tables that don't exist or cause errors
+      }
+
+      if (data && data.length > 0) {
+        for (const row of data) {
+          changes.push({ table, row });
+        }
       }
     }
 
-    // Sort by updated_at and paginate
-    changes.sort((a, b) => a.row.updated_at.localeCompare(b.row.updated_at));
-    const page = changes.slice(0, limit);
-    const nextCursor = page.length > 0 ? page[page.length - 1].row.updated_at : null;
+    // Sort all changes globally by updated_at for deterministic ordering
+    changes.sort((a, b) => {
+      const aTime = a.row.updated_at as string | undefined;
+      const bTime = b.row.updated_at as string | undefined;
+      if (!aTime && !bTime) return 0;
+      if (!aTime) return -1;
+      if (!bTime) return 1;
+      return aTime.localeCompare(bTime);
+    });
 
     return new Response(
-      JSON.stringify({ changes: page, next_cursor: nextCursor }),
+      JSON.stringify({ changes }),
       { headers: { "Content-Type": "application/json" } }
     );
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+    return new Response(
+      JSON.stringify({ error: err.message }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
   }
 });

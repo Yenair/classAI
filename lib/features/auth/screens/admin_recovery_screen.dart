@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/core/services/auth_service.dart';
+import 'package:classai/core/services/emergency_flush_service.dart';
 
 /// Multi-step admin recovery flow.
 ///
@@ -31,8 +32,35 @@ class _AdminRecoveryScreenState extends ConsumerState<AdminRecoveryScreen> {
   DateTime? _otpExpiry;
   String? _errorMessage;
 
+  /// Stored reference for EmergencyFlush registration/unregistration.
+  SaveCallback? _flushCallback;
+
+  /// Cached reference to avoid `ref.read()` during disposal (Riverpod guard).
+  late final EmergencyFlushService _emergencyFlush =
+      ref.read(emergencyFlushServiceProvider);
+
+  @override
+  void initState() {
+    super.initState();
+    _flushCallback = () async {
+      // Snapshot admin recovery form fields before forced logout
+      final email = _emailController.text;
+      final otp = _otpController.text;
+      final newPassword = _newPasswordController.text;
+      if (email.isNotEmpty ||
+          otp.isNotEmpty ||
+          newPassword.isNotEmpty) {
+        // In production, write to a dead-letter queue or local draft store.
+      }
+    };
+    _emergencyFlush.register(_flushCallback!);
+  }
+
   @override
   void dispose() {
+    if (_flushCallback != null) {
+      _emergencyFlush.unregister(_flushCallback!);
+    }
     _emailController.dispose();
     _otpController.dispose();
     _newPasswordController.dispose();

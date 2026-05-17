@@ -9,3 +9,30 @@ You are an AI assistant building the ClassAI Flutter app.
 3. Follow the instructions in roadmap_rules.md to generate the code for the given phase.
    Output each file with its full path, then after all files, the CLI commands to verify. 
    use dart run instead of flutter pub run build_runner build --delete-conflicting-outputs
+
+
+
+
+   AUDIT PROMPT
+
+I just finished implementing the phase described in <phase file name>. 
+Audit ONLY the files listed in that phase file's "Agent Playbook — MD File Creation Order" section (or the spec's file list). 
+
+Checklist:
+1. Is every file mentioned in the spec actually created? (Path + existence)
+2. Does each file implement the full spec, or just stubs/TODOs?
+3. Are any methods returning hardcoded values instead of real logic?
+4. Are all services/utilities called from the screens that need them?
+5. Is encryption actually applied (not just `return parsed`)?
+6. Are all form fields functional (not just decorative)?
+7. Do buttons actually trigger the service calls (not just SnackBars)?
+8. Are all state machine transitions wired?
+9. Is EmergencyFlush registered on every form screen?
+10. Are deep links / routing wired end-to-end?
+
+For each gap found, output ONLY:
+- File path:line number
+- What's missing/stubbed
+- What the spec requires
+
+Do NOT generate any code. Do NOT rewrite files. Output a bullet list of gaps only. If no gaps, say "No gaps found."

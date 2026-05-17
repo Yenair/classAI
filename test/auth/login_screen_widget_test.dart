@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mocktail/mocktail.dart';
@@ -52,6 +53,47 @@ void main() {
   late MockSecurityService mockSecurity;
 
   setUp(() async {
+    // Mock the device_info_plus method channel so AppConstants.getDeviceId()
+    // returns a fixed map with a known Android ID (avoiding MissingPluginException
+    // in the test environment).
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('dev.fluttercommunity.plus/device_info'),
+      (MethodCall methodCall) async {
+        if (methodCall.method == 'getDeviceInfo') {
+          return <String, dynamic>{
+            'id': 'test-android-device-id',
+            'version': <String, dynamic>{'sdkInt': 33},
+            'board': '',
+            'bootloader': '',
+            'brand': 'Test',
+            'device': 'test_device',
+            'display': '',
+            'fingerprint': '',
+            'hardware': '',
+            'host': '',
+            'manufacturer': 'Test',
+            'model': 'Test Model',
+            'product': 'test_product',
+            'name': 'test',
+            'supported32BitAbis': <String>[],
+            'supported64BitAbis': <String>[],
+            'supportedAbis': <String>[],
+            'tags': '',
+            'type': '',
+            'isPhysicalDevice': false,
+            'freeDiskSize': 0,
+            'totalDiskSize': 0,
+            'systemFeatures': <String>[],
+            'isLowRamDevice': false,
+            'physicalRamSize': 0,
+            'availableRamSize': 0,
+          };
+        }
+        return null;
+      },
+    );
+
     db = AppDatabase.forTesting();
     await db.initialize();
     mockAuth = MockAuthService();
@@ -63,6 +105,11 @@ void main() {
   });
 
   tearDown(() async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('dev.fluttercommunity.plus/device_info'),
+      null,
+    );
     await db.close();
   });
 

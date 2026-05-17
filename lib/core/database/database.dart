@@ -58,7 +58,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 4;
 
   static QueryExecutor _openConnection() {
     return LazyDatabase(() async {
@@ -130,6 +130,74 @@ class AppDatabase extends _$AppDatabase {
             );
             await customStatement(
               "ALTER TABLE conflicts ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+            );
+          }
+          if (from < 3) {
+            // Expand lessons table from bare id to full schema
+            await customStatement(
+              "ALTER TABLE lessons ADD COLUMN subject TEXT NOT NULL DEFAULT ''",
+            );
+            await customStatement(
+              "ALTER TABLE lessons ADD COLUMN class_level TEXT NOT NULL DEFAULT ''",
+            );
+            await customStatement(
+              'ALTER TABLE lessons ADD COLUMN week INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              "ALTER TABLE lessons ADD COLUMN topic TEXT NOT NULL DEFAULT ''",
+            );
+            await customStatement(
+              "ALTER TABLE lessons ADD COLUMN difficulty TEXT NOT NULL DEFAULT 'medium'",
+            );
+            await customStatement(
+              "ALTER TABLE lessons ADD COLUMN blooms_verbs TEXT NOT NULL DEFAULT ''",
+            );
+            await customStatement(
+              "ALTER TABLE lessons ADD COLUMN curriculum TEXT NOT NULL DEFAULT ''",
+            );
+            await customStatement(
+              "ALTER TABLE lessons ADD COLUMN content TEXT NOT NULL DEFAULT '{}'",
+            );
+            await customStatement(
+              'ALTER TABLE lessons ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
+            );
+            await customStatement(
+              'ALTER TABLE lessons ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
+            );
+            // Expand exams table from bare id to full schema
+            await customStatement(
+              "ALTER TABLE exams ADD COLUMN subject TEXT NOT NULL DEFAULT ''",
+            );
+            await customStatement(
+              "ALTER TABLE exams ADD COLUMN class_level TEXT NOT NULL DEFAULT ''",
+            );
+            await customStatement(
+              "ALTER TABLE exams ADD COLUMN topic TEXT NOT NULL DEFAULT ''",
+            );
+            await customStatement(
+              "ALTER TABLE exams ADD COLUMN difficulty TEXT NOT NULL DEFAULT 'medium'",
+            );
+            await customStatement(
+              "ALTER TABLE exams ADD COLUMN curriculum TEXT NOT NULL DEFAULT ''",
+            );
+            await customStatement(
+              "ALTER TABLE exams ADD COLUMN content TEXT NOT NULL DEFAULT '{}'",
+            );
+            await customStatement(
+              'ALTER TABLE exams ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
+            );
+            await customStatement(
+              'ALTER TABLE exams ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
+            );
+          }
+          if (from < 4) {
+            // Add email and attempted_at columns to pending_recovery_requests
+            // for rate limiting (3 attempts/hour per teacher).
+            await customStatement(
+              'ALTER TABLE pending_recovery_requests ADD COLUMN email TEXT NOT NULL DEFAULT \'\'',
+            );
+            await customStatement(
+              'ALTER TABLE pending_recovery_requests ADD COLUMN attempted_at TEXT NOT NULL DEFAULT \'1970-01-01T00:00:00.000\'',
             );
           }
         },

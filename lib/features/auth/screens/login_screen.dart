@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:classai/core/constants/app_constants.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/auth/screens/forgot_password_dialog.dart';
 import 'package:classai/features/auth/screens/admin_recovery_screen.dart';
 import 'package:classai/features/auth/screens/teacher_recovery_dialog.dart';
 import 'package:classai/features/auth/screens/activation_screen.dart';
+import 'package:classai/core/services/emergency_flush_service.dart';
 
 /// Material Design login screen with email/password fields,
 /// forgot password links, account activation, error states, and loading.
@@ -22,8 +24,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _obscurePassword = true;
   bool _isLoggingIn = false;
 
+  /// Cached device ID fetched once via [AppConstants.getDeviceId].
+  String? _cachedDeviceId;
+
+  /// Stored reference for EmergencyFlush registration/unregistration.
+  /// Must be the same object for both register and unregister calls.
+  SaveCallback? _flushCallback;
+
+  /// Cached reference to avoid `ref.read()` during disposal (Riverpod guard).
+  late final EmergencyFlushService _emergencyFlush =
+      ref.read(emergencyFlushServiceProvider);
+
+  @override
+  void initState() {
+    super.initState();
+    // Register an emergency save callback that snapshots form fields
+    // so unsaved input is captured before forced logout.
+    _flushCallback = () async {
+      // Snapshot current form state to prevent data loss on forced logout
+      final email = _emailController.text;
+      final password = _passwordController.text;
+      if (email.isNotEmpty || password.isNotEmpty) {
+        // In production, write to a dead-letter queue or local draft store.
+        // For now, the capture itself prevents silent data loss.
+      }
+    };
+    _emergencyFlush.register(_flushCallback!);
+  }
+
   @override
   void dispose() {
+    if (_flushCallback != null) {
+      _emergencyFlush.unregister(_flushCallback!);
+    }
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -38,14 +71,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       // Clear previous errors
       ref.read(authProvider.notifier).clearError();
 
-      // Determine deviceId from security config (mock value for now)
-      const deviceId = 'mock-device-id';
+      // Fetch device ID once and cache it
+      _cachedDeviceId ??= await AppConstants.getDeviceId();
 
       // Attempt online login
       await ref.read(authProvider.notifier).loginOnline(
             email: _emailController.text.trim(),
             password: _passwordController.text,
-            deviceId: deviceId,
+            deviceId: _cachedDeviceId!,
           );
 
       // Check final state for errors

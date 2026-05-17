@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:classai/core/database/database.dart';
@@ -146,9 +149,30 @@ class AuthNotifier extends Notifier<AuthStateData> {
         return false;
       }
 
-      final passwordMatch = await _mockPasswordCheck(password, storedHash);
+      final passwordMatch = await _verifyPasswordLocally(password, storedHash);
 
       if (passwordMatch) {
+        // Before authenticating, check for password hash version mismatch.
+        // If the server has re-wrapped keys (admin recovery, force reset),
+        // the version will differ and we must emergency-save then go online.
+        final versionMismatch = await _checkPasswordHashVersionMismatch();
+        if (versionMismatch) {
+          state = state.copyWith(state: AuthState.emergencySaving);
+          try {
+            await _emergencyFlushService.flushAll();
+          } catch (_) {
+            // Flush errors are logged inside flushAll; continue with logout
+          }
+          state = state.copyWith(
+            state: AuthState.onlineLoginRequired,
+            errorMessage:
+                'Your account credentials have been updated by an administrator. '
+                'Please login online to sync.',
+            offlineLoginAttempts: 0,
+          );
+          return false;
+        }
+
         state = state.copyWith(state: AuthState.authenticated);
         return true;
       }
@@ -177,6 +201,33 @@ class AuthNotifier extends Notifier<AuthStateData> {
         state: AuthState.onlineLoginRequired,
         errorMessage: 'Offline login error. Please login online.',
       );
+      return false;
+    }
+  }
+
+  /// Checks whether the cached teacher's [passwordHashVersion] differs from
+  /// the [lastKnownPasswordHashVersion] stored in the security config.
+  ///
+  /// Returns `true` if there is a mismatch (meaning keys have been re-wrapped
+  /// server-side and a fresh online login is required).
+  Future<bool> _checkPasswordHashVersionMismatch() async {
+    try {
+      final config = await _db.securityConfigDao.get();
+      final storedVersion = config.lastKnownPasswordHashVersion;
+
+      // Read the first (oldest / highest-privilege) cached teacher record
+      final teachers = await (_db.select(_db.teachers)
+            ..where((t) => t.isActive.equals(true))
+            ..limit(1))
+          .get();
+
+      if (teachers.isEmpty) return false;
+      final cachedVersion = teachers.first.passwordHashVersion;
+
+      return cachedVersion != storedVersion;
+    } catch (_) {
+      // If we cannot read the config or teachers table, assume no mismatch
+      // and allow offline login to proceed.
       return false;
     }
   }
@@ -355,6 +406,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
   }
 
   /// Generate a teacher recovery code (admin only).
+  // TODO(phase-07): Add recovery code generation UI; this method is scaffolding until Phase 7.
   Future<String> generateTeacherRecoveryCode(
     String teacherId,
     String adminId,
@@ -518,11 +570,17 @@ class AuthNotifier extends Notifier<AuthStateData> {
     );
   }
 
-  /// Temporary mock password check — will be replaced with Argon2id verification.
-  Future<bool> _mockPasswordCheck(
+  /// Verifies a password against the stored hash using SHA-256.
+  ///
+  /// Used for offline login where the stored password hash (from a previous
+  /// online login) is compared against the user-supplied password.
+  /// Replace with Argon2id verification once the crypto package is wired.
+  Future<bool> _verifyPasswordLocally(
       String password, String storedHash) async {
-    await Future.delayed(const Duration(milliseconds: 100));
-    return password.isNotEmpty && storedHash.isNotEmpty;
+    // Hash the provided password and compare to the stored hash.
+    // This is a placeholder until Argon2id verification is integrated.
+    final hash = sha256.convert(utf8.encode(password)).toString();
+    return hash == storedHash;
   }
 }
 
