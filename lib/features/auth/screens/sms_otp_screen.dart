@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:classai/core/services/sms_otp_service.dart';
+import 'package:classai/core/services/emergency_flush_service.dart';
+import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:dio/dio.dart';
 
 /// SMS OTP verification screen for account activation and password recovery.
@@ -24,11 +26,19 @@ class SmsOtpScreen extends ConsumerStatefulWidget {
   /// Optional custom message for the OTP SMS.
   final String? smsMessageTemplate;
 
+  /// Optional pre-filled email (to show which account is being verified).
+  final String? email;
+
+  /// Purpose of this OTP flow, for user-facing messaging.
+  final String purpose; // 'activation' or 'recovery'
+
   const SmsOtpScreen({
     super.key,
     this.initialPhoneNumber,
     required this.onVerified,
     this.smsMessageTemplate,
+    this.email,
+    this.purpose = 'activation',
   });
 
   @override
@@ -47,6 +57,13 @@ class _SmsOtpScreenState extends ConsumerState<SmsOtpScreen> {
   String? _successMessage;
   late final SmsOtpService _smsOtpService;
 
+  /// Stored reference for EmergencyFlush registration/unregistration.
+  SaveCallback? _flushCallback;
+
+  /// Cached reference to avoid `ref.read()` during disposal (Riverpod guard).
+  late final EmergencyFlushService _emergencyFlush =
+      ref.read(emergencyFlushServiceProvider);
+
   @override
   void initState() {
     super.initState();
@@ -62,10 +79,23 @@ class _SmsOtpScreenState extends ConsumerState<SmsOtpScreen> {
         senderId: 'ClassAI',
       ),
     );
+
+    // Register EmergencyFlush to snapshot form fields before forced logout
+    _flushCallback = () async {
+      final phone = _phoneController.text;
+      final otp = _otpController.text;
+      if (phone.isNotEmpty || otp.isNotEmpty) {
+        // In production, write to a dead-letter queue or local draft store.
+      }
+    };
+    _emergencyFlush.register(_flushCallback!);
   }
 
   @override
   void dispose() {
+    if (_flushCallback != null) {
+      _emergencyFlush.unregister(_flushCallback!);
+    }
     _phoneController.dispose();
     _otpController.dispose();
     super.dispose();
@@ -137,6 +167,10 @@ class _SmsOtpScreenState extends ConsumerState<SmsOtpScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('SMS Verification'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -152,18 +186,32 @@ class _SmsOtpScreenState extends ConsumerState<SmsOtpScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Phone Verification',
+                widget.purpose == 'activation'
+                    ? 'Phone Verification'
+                    : 'Recovery via SMS',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.headlineSmall,
               ),
               const SizedBox(height: 8),
               Text(
-                'Enter your phone number to receive a verification code via SMS.',
+                widget.purpose == 'activation'
+                    ? 'Enter your phone number to receive a verification code via SMS.'
+                    : 'Verify your identity via SMS to recover your account.',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
+              if (widget.email != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Account: ${widget.email}',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
               const SizedBox(height: 32),
 
               // Phone number field

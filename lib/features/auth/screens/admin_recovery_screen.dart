@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/core/services/auth_service.dart';
 import 'package:classai/core/services/emergency_flush_service.dart';
+import 'package:classai/features/auth/screens/sms_otp_screen.dart';
 
 /// Multi-step admin recovery flow.
 ///
@@ -393,6 +394,13 @@ class _AdminRecoveryScreenState extends ConsumerState<AdminRecoveryScreen> {
                             }),
                     child: const Text('Resend OTP (enter email again)'),
                   ),
+                  const SizedBox(height: 4),
+                  // SMS OTP alternative
+                  TextButton.icon(
+                    onPressed: _isLoading ? null : _navigateToSmsOtp,
+                    icon: const Icon(Icons.phone_android_rounded, size: 18),
+                    label: const Text('Use SMS recovery instead'),
+                  ),
                 ] else ...[
                   // --- Step 1: Request OTP button ---
                   FilledButton(
@@ -418,6 +426,25 @@ class _AdminRecoveryScreenState extends ConsumerState<AdminRecoveryScreen> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Navigate to SMS OTP screen for phone-based recovery.
+  Future<void> _navigateToSmsOtp() async {
+    final phoneNumber = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => SmsOtpScreen(
+          email: _emailController.text.trim(),
+          purpose: 'recovery',
+          smsMessageTemplate:
+              'Your ClassAI recovery code is: {{code}}',
+          initialPhoneNumber: null,
+          onVerified: (phone) async {
+            // Phone verified via SMS; proceed with recovery flow
+            return;
+          },
         ),
       ),
     );

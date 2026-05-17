@@ -4,6 +4,7 @@ import 'package:classai/core/constants/app_constants.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/core/services/auth_service.dart';
 import 'package:classai/core/services/emergency_flush_service.dart';
+import 'package:classai/features/auth/screens/sms_otp_screen.dart';
 
 /// Account activation screen for new admin or teacher accounts.
 ///
@@ -395,9 +396,38 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
                           style: TextStyle(fontSize: 16),
                         ),
                 ),
+                const SizedBox(height: 12),
+                // SMS OTP alternative
+                TextButton.icon(
+                  onPressed: _isLoading
+                      ? null
+                      : () => _navigateToSmsOtp(),
+                  icon: const Icon(Icons.phone_android_rounded, size: 18),
+                  label: const Text('Use SMS verification instead'),
+                ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Navigate to SMS OTP screen for phone-based activation.
+  Future<void> _navigateToSmsOtp() async {
+    final phoneNumber = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => SmsOtpScreen(
+          email: _emailController.text.trim(),
+          purpose: 'activation',
+          smsMessageTemplate:
+              'Your ClassAI activation code is: {{code}}',
+          initialPhoneNumber: null,
+          onVerified: (phone) async {
+            // Phone verified; proceed with activation via SMS
+            // The phone number can be passed to the activation API
+            return;
+          },
         ),
       ),
     );

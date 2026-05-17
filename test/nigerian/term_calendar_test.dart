@@ -10,7 +10,7 @@ void main() {
         expect(AcademicCalendarService.academicYearForDate(date), '2025/2026');
       });
 
-      test('returns correct year for Second Term (Jan-April)', () {
+      test('returns correct year for Second Term (Jan-March)', () {
         // January 2026 -> academic year 2025/2026
         final date = DateTime(2026, 1, 15);
         expect(AcademicCalendarService.academicYearForDate(date), '2025/2026');
@@ -40,16 +40,18 @@ void main() {
             1);
       });
 
-      test('returns 2 for Second Term months (Jan-April)', () {
+      test('returns 2 for Second Term months (Jan-March)', () {
         expect(AcademicCalendarService.termNumberForDate(DateTime(2026, 1, 15)),
             2);
         expect(
             AcademicCalendarService.termNumberForDate(DateTime(2026, 3, 1)), 2);
         expect(
-            AcademicCalendarService.termNumberForDate(DateTime(2026, 4, 30)), 2);
+            AcademicCalendarService.termNumberForDate(DateTime(2026, 3, 31)), 2);
       });
 
-      test('returns 3 for Third Term months (May-July)', () {
+      test('returns 3 for Third Term months (April-July)', () {
+        expect(
+            AcademicCalendarService.termNumberForDate(DateTime(2026, 4, 1)), 3);
         expect(AcademicCalendarService.termNumberForDate(DateTime(2026, 5, 1)),
             3);
         expect(
@@ -93,20 +95,20 @@ void main() {
             1); // Dec 31 - still First Term
       });
 
-      test('Second Term starts January and ends April', () {
-        // Second Term: Jan - April
+      test('Second Term starts January and ends March', () {
+        // Second Term: Jan - March
         expect(
             AcademicCalendarService.termNumberForDate(DateTime(2026, 1, 1)), 2);
         expect(
-            AcademicCalendarService.termNumberForDate(DateTime(2026, 4, 30)), 2);
-        expect(AcademicCalendarService.termNumberForDate(DateTime(2026, 5, 1)),
-            3); // May - Third Term
+            AcademicCalendarService.termNumberForDate(DateTime(2026, 3, 31)), 2);
+        expect(AcademicCalendarService.termNumberForDate(DateTime(2026, 4, 1)),
+            3); // April - Third Term
       });
 
-      test('Third Term starts May and ends July', () {
-        // Third Term: May - July
-        expect(AcademicCalendarService.termNumberForDate(DateTime(2026, 5, 1)),
-            3);
+      test('Third Term starts April and ends July', () {
+        // Third Term: April - July
+        expect(
+            AcademicCalendarService.termNumberForDate(DateTime(2026, 4, 1)), 3);
         expect(
             AcademicCalendarService.termNumberForDate(DateTime(2026, 7, 31)), 3);
         expect(AcademicCalendarService.termNumberForDate(DateTime(2026, 8, 1)),

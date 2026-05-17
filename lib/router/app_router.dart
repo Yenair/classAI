@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:classai/core/services/deep_link_service.dart';
 import 'package:classai/features/auth/screens/login_screen.dart';
+import 'package:classai/features/auth/screens/activation_screen.dart';
+import 'package:classai/features/auth/screens/admin_recovery_screen.dart';
 import 'package:classai/features/auth/screens/teacher_recovery_dialog.dart';
 import 'package:classai/features/dashboard/screens/dashboard_screen.dart';
 import 'package:classai/features/settings/screens/conflict_resolution_screen.dart';
@@ -97,6 +99,18 @@ final appRouter = GoRouter(
         appBar: AppBar(title: const Text('Settings')),
         body: const Center(child: Text('Settings — coming soon')),
       ),
+    ),
+    GoRoute(
+      path: '/activation',
+      name: 'activation',
+      builder: (context, state) => ActivationScreen(
+        initialCode: state.extra as String?,
+      ),
+    ),
+    GoRoute(
+      path: '/admin-recovery',
+      name: 'admin-recovery',
+      builder: (context, state) => const AdminRecoveryScreen(),
     ),
     GoRoute(
       path: '/payment',

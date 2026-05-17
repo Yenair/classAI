@@ -8,6 +8,7 @@ import 'package:classai/core/database/database.dart';
 import 'package:classai/core/services/merge_engine.dart';
 import 'package:classai/core/services/merge_strategies.dart';
 import 'package:classai/core/services/security_service.dart';
+import 'package:classai/core/utils/payload_compressor.dart';
 
 enum SyncState {
   idle,
@@ -621,11 +622,13 @@ class SyncService {
 
     for (final entry in sorted) {
       final payload = _decodePayload(entry.payload);
+      // Compress payload for 2G/3G optimization before pushing.
+      final compressed = PayloadCompressor.compress(payload);
       batches.add(
         SyncPushBatch(
           table: entry.queueTable,
           operation: entry.operation,
-          record: payload,
+          record: compressed,
         ),
       );
     }
@@ -719,7 +722,9 @@ class SyncService {
   }
 
   Future<void> _mergeRemoteChange(SyncChange change) async {
-    final remote = _normalizeRecord(change.row);
+    // Decompress the pulled change if it was compressed for 2G/3G optimization.
+    final decompressed = PayloadCompressor.decompress(change.row);
+    final remote = _normalizeRecord(decompressed);
     final localId = _readInt(remote, 'localId') ??
         _readInt(remote, 'local_id') ??
         _readInt(remote, 'id') ??

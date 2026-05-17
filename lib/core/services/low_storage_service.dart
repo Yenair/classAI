@@ -1,5 +1,7 @@
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../constants/app_constants.dart';
 
@@ -77,20 +79,108 @@ class LowStorageService {
   }
 
   /// Get available disk space in megabytes.
+  ///
+  /// Uses platform-specific queries via [Process.run] where available,
+  /// and falls back to [Directory.statSync] heuristic on mobile.
   Future<double?> _getAvailableMb() async {
     try {
-      // Use the temp directory to check disk space
-      final dir = Directory.systemTemp;
-      final stat = dir.statSync();
-      // `stat` is a FileStat which has `size` for the directory entry
-      // For available space, we use FileStat properties
-      // ignore: unused_local_variable
-      final availableBytes = stat.size; // This is the directory size, not disk space
-      // On mobile, use a simpler approach
-      return 1000.0; // Assume sufficient space when we can't measure
+      final docDir = await getApplicationDocumentsDirectory();
+      final path = docDir.path;
+
+      // Try platform-specific shell commands first
+      double? freeBytes;
+
+      if (Platform.isWindows) {
+        // `wmic` on Windows returns free space in bytes
+        freeBytes = await _queryWindowsDiskFree(path);
+      } else if (Platform.isLinux || Platform.isMacOS) {
+        freeBytes = await _queryUnixDiskFree(path);
+      }
+
+      if (freeBytes != null && freeBytes > 0) {
+        return freeBytes / (1024 * 1024);
+      }
+
+      // Fallback: use stat on the directory itself.
+      // On most platforms stat.size is the directory entry size,
+      // not the free space, so this is a coarse estimate.
+      try {
+        final dir = Directory(path);
+        final stat = dir.statSync();
+        if (stat.size > 10 * 1024 * 1024) {
+          // If stat.size is large, it might actually be free space
+          return stat.size / (1024 * 1024);
+        }
+      } catch (_) {
+        // Ignore stat errors
+      }
+
+      // Last resort: return 0.0 so the threshold checks will flag
+      // a warning rather than letting the user run out of space
+      // unexpectedly.
+      return 0.0;
     } catch (_) {
       return null;
     }
+  }
+
+  /// Query free disk space on Windows using `wmic`.
+  Future<double?> _queryWindowsDiskFree(String path) async {
+    try {
+      // Extract drive letter (e.g., "C:" from "C:\Users\...")
+      final drive = path.substring(0, 2); // e.g., "C:"
+      final result = await Process.run(
+        'wmic',
+        ['logicaldisk', 'where', 'DeviceID="$drive"', 'get', 'FreeSpace'],
+        runInShell: true,
+      );
+      // Parse output — first line is header, second line has the value
+      final lines = (result.stdout as String)
+          .split('\n')
+          .map((l) => l.trim())
+          .where((l) => l.isNotEmpty)
+          .toList();
+      for (final line in lines) {
+        final parsed = double.tryParse(line);
+        if (parsed != null && parsed > 0) return parsed;
+      }
+    } catch (_) {
+      // Silently fall through
+    }
+    return null;
+  }
+
+  /// Query free disk space on Linux/macOS using `df`.
+  Future<double?> _queryUnixDiskFree(String path) async {
+    try {
+      // `df -k` gives free space in 1K blocks
+      final result = await Process.run(
+        'df',
+        ['-k', path],
+        runInShell: true,
+      );
+      // Parse output: skip header line, second line has free block count
+      // Typical output: "Filesystem  1K-blocks   Used  Available  Use%  Mounted"
+      final lines = (result.stdout as String)
+          .split('\n')
+          .map((l) => l.trim())
+          .where((l) => l.isNotEmpty)
+          .toList();
+      if (lines.length >= 2) {
+        final parts = lines[1].split(RegExp(r'\s+'));
+        if (parts.length >= 4) {
+          // Available blocks is typically the 4th column (index 3)
+          final availableBlocks = double.tryParse(parts[3]);
+          if (availableBlocks != null && availableBlocks > 0) {
+            // Convert 1K blocks to bytes
+            return availableBlocks * 1024;
+          }
+        }
+      }
+    } catch (_) {
+      // Silently fall through
+    }
+    return null;
   }
 }
 

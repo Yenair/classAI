@@ -57,9 +57,13 @@ class AcademicCalendarService {
   /// Returns null if the date doesn't fall within a known term.
   static String? termNameForDate(DateTime date) {
     // NERDC standard trimesters
+    // First Term: September - December  (months 9-12)
+    // Second Term: January - March      (months 1-3)
+    // Third Term: April - July           (months 4-7)
+    // August (month 8) is the holiday break.
     if (date.month >= 9 && date.month <= 12) {
       return 'First Term';
-    } else if (date.month >= 1 && date.month <= 4) {
+    } else if (date.month >= 1 && date.month <= 3) {
       return 'Second Term';
     } else if (date.month >= 4 && date.month <= 7) {
       return 'Third Term';
@@ -70,7 +74,7 @@ class AcademicCalendarService {
   /// Get the NERDC term number (1, 2, or 3) for a date.
   static int? termNumberForDate(DateTime date) {
     if (date.month >= 9 && date.month <= 12) return 1;
-    if (date.month >= 1 && date.month <= 4) return 2;
+    if (date.month >= 1 && date.month <= 3) return 2;
     if (date.month >= 4 && date.month <= 7) return 3;
     return null; // August break
   }
