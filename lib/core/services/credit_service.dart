@@ -33,15 +33,18 @@ class CreditService {
       config.offlineCredits - amount,
     );
 
-    // 3. Queue for sync
+    // 3. Queue for sync — use a unique local ID so the sync push
+    //    response can correlate results back to this entry.
+    final uniqueLocalId = DateTime.now().microsecondsSinceEpoch;
     await _db.syncQueueDao.insertEntry(
       queueTable  : 'credit_spend',
-      recordLocalId: 0, // synthetic
+      recordLocalId: uniqueLocalId,
       operation: 'SPEND_CREDITS',
       payload: {
         'batch_id': batchId,
         'amount': amount,
         'content_ids': contentIds,
+        'local_id': uniqueLocalId,
       },
     );
 

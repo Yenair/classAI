@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/core/services/auth_service.dart';
 import 'package:classai/core/services/emergency_flush_service.dart';
 import 'package:classai/core/services/security_service.dart';
@@ -14,17 +16,13 @@ import 'package:classai/main.dart' show databaseProvider;
 // ---------------------------------------------------------------------------
 
 final authServiceProvider = Provider<AuthService>((ref) {
-  throw UnimplementedError(
-    'authServiceProvider must be overridden in main() before use',
-  );
+  // Default production implementation. Override in tests with a mock
+  // via ProviderContainer overrides.
+  return SupabaseAuthService();
 });
 
 final securityServiceProvider = Provider<SecurityService>((ref) {
   return SecurityService();
-});
-
-final emergencyFlushServiceProvider = Provider<EmergencyFlushService>((ref) {
-  return EmergencyFlushService();
 });
 
 // ---------------------------------------------------------------------------
@@ -53,6 +51,10 @@ enum AuthState {
 
   /// Emergency save in progress before forced logout.
   emergencySaving,
+
+  /// Server requires the user to change their password before proceeding.
+  /// The UI should show a password-change screen.
+  forcePasswordResetRequired,
 }
 
 /// Holds the current [AuthState] plus any associated data from transitions.
@@ -225,9 +227,13 @@ class AuthNotifier extends Notifier<AuthStateData> {
       final cachedVersion = teachers.first.passwordHashVersion;
 
       return cachedVersion != storedVersion;
-    } catch (_) {
+    } catch (e) {
       // If we cannot read the config or teachers table, assume no mismatch
       // and allow offline login to proceed.
+      await Sentry.captureException(
+        e,
+        hint: null,
+      );
       return false;
     }
   }
@@ -251,6 +257,18 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
       // Update local database with server state
       await _saveAuthResultToLocalDb(result);
+
+      if (result.forcePasswordReset == true) {
+        // Server flagged this account for forced password reset.
+        // Transition to a dedicated state so the UI shows the change-password screen.
+        state = state.copyWith(
+          state: AuthState.forcePasswordResetRequired,
+          currentTeacher: result.teacher,
+          currentSchool: result.school,
+          offlineLoginAttempts: 0,
+        );
+        return;
+      }
 
       state = state.copyWith(
         state: AuthState.authenticated,
@@ -348,15 +366,23 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
       try {
         await _emergencyFlushService.flushAll();
-      } catch (_) {
+      } catch (e) {
         // Flush errors are logged inside flushAll; continue with logout
+        await Sentry.captureException(
+          e,
+          hint: null,
+        );
       }
     }
 
     try {
       await _authService.logout();
-    } catch (_) {
+    } catch (e) {
       // Server logout failure is non-blocking
+      await Sentry.captureException(
+        e,
+        hint: null,
+      );
     }
 
     await _securityService.clearAll();
@@ -452,6 +478,115 @@ class AuthNotifier extends Notifier<AuthStateData> {
         errorMessage: 'Password recovery failed. Please try again.',
       );
     }
+  }
+
+  /// Register a new school and admin account via the signup edge function.
+  ///
+  /// On success, stores the password hash locally, upserts the school/teacher
+  /// records in the local DB, and transitions to [AuthState.authenticated].
+  Future<void> signup({
+    required String schoolName,
+    required String adminEmail,
+    required String adminPassword,
+    String? recoveryEmail,
+  }) async {
+    state = state.copyWith(
+      state: AuthState.onlineLoginRequired,
+      clearError: true,
+    );
+
+    try {
+      final result = await _authService.signup(
+        schoolName,
+        adminEmail,
+        adminPassword,
+        recoveryEmail,
+      );
+
+      await _securityService.storePasswordHash(adminPassword);
+      await _saveAuthResultToLocalDb(result);
+
+      state = state.copyWith(
+        state: AuthState.authenticated,
+        currentTeacher: result.teacher,
+        currentSchool: result.school,
+      );
+    } on AuthException catch (e) {
+      state = state.copyWith(
+        state: AuthState.onlineLoginRequired,
+        errorMessage: e.message,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        state: AuthState.onlineLoginRequired,
+        errorMessage: 'Signup failed. Please try again.',
+      );
+    }
+  }
+
+  /// Change the current user's password via the change-password edge function.
+  ///
+  /// On success the password hash in local storage is updated and the state
+  /// transitions to [AuthState.authenticated]. If the user was in
+  /// [AuthState.forcePasswordResetRequired], this resolves the forced reset.
+  Future<void> changePassword(String newPassword) async {
+    try {
+      await _authService.changePassword(newPassword);
+
+      // Update the locally stored password hash for future offline login
+      await _securityService.storePasswordHash(newPassword);
+
+      // Transition to authenticated state
+      state = state.copyWith(
+        state: AuthState.authenticated,
+        clearError: true,
+      );
+    } on AuthException catch (e) {
+      state = state.copyWith(
+        state: state.state, // keep current state (e.g. forcePasswordResetRequired)
+        errorMessage: e.message,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        state: state.state,
+        errorMessage: 'Failed to change password. Please try again.',
+      );
+    }
+  }
+
+  /// Add a teacher to the school (admin-only action).
+  ///
+  /// Delegates to [AuthService.addTeacher] and returns a success indicator.
+  /// Does not change the auth state.
+  Future<void> addTeacher({
+    required String email,
+    required String teacherName,
+    required String role,
+  }) async {
+    try {
+      await _authService.addTeacher(email, teacherName, role);
+    } on AuthException {
+      // Let AuthException propagate so the UI can catch and display it
+      rethrow;
+    } catch (e) {
+      throw AuthException(
+        code: AuthErrorCode.networkError,
+        message: 'Failed to add teacher. Please try again.',
+        originalError: e,
+      );
+    }
+  }
+
+  /// Set an error message on the current auth state without changing
+  /// the current state machine phase.
+  ///
+  /// Used by the [LoginScreen] as a last-resort fallback when an
+  /// unexpected exception escapes the normal error-handling flow.
+  void setErrorMessage(String message) {
+    state = state.copyWith(
+      errorMessage: message,
+      clearError: false,
+    );
   }
 
   /// Clear any displayed error message.

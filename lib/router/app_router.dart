@@ -2,25 +2,31 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:classai/core/services/deep_link_service.dart';
 import 'package:classai/features/auth/screens/login_screen.dart';
-import 'package:classai/features/auth/screens/activation_screen.dart';
+import 'package:classai/features/auth/screens/signup_screen.dart';
+import 'package:classai/features/auth/screens/change_password_screen.dart';
 import 'package:classai/features/auth/screens/admin_recovery_screen.dart';
 import 'package:classai/features/auth/screens/teacher_recovery_dialog.dart';
 import 'package:classai/features/dashboard/screens/dashboard_screen.dart';
 import 'package:classai/features/settings/screens/conflict_resolution_screen.dart';
 import 'package:classai/features/lesson/screens/lesson_editor_screen.dart';
+import 'package:classai/features/lesson/screens/lessons_list_screen.dart';
 import 'package:classai/features/exam/screens/exam_editor_screen.dart';
+import 'package:classai/features/exam/screens/exams_list_screen.dart';
 import 'package:classai/features/admin/screens/admin_dashboard_screen.dart';
 import 'package:classai/features/admin/screens/teacher_detail_screen.dart';
 import 'package:classai/features/vault/screens/vault_browser_screen.dart';
 import 'package:classai/features/vault/screens/vault_publisher_screen.dart';
 import 'package:classai/features/payment/screens/payment_screen.dart';
+import 'package:classai/features/settings/screens/settings_screen.dart';
 
 /// GoRouter configuration for the ClassAI app.
 ///
 /// Routes:
 /// - `/` → Dashboard (platform-gated Editor/Reader layout)
 /// - `/login` → Login screen
+/// - `/lessons` → Lessons list
 /// - `/lessons/:id` → Lesson editor
+/// - `/exams` → Exams list
 /// - `/exams/:id` → Exam editor
 /// - `/conflicts` → Conflict resolution screen
 /// - `/admin` → Admin dashboard (teacher management, vault queue, sync health)
@@ -32,7 +38,7 @@ import 'package:classai/features/payment/screens/payment_screen.dart';
 ///
 /// Deep links (parsed via [DeepLinkService]):
 /// - `classai://reset-password?token=xxx` → TeacherRecoveryDialog
-/// - `classai://activate?code=xxx` → ActivationScreen
+/// - `classai://activate?code=xxx` → SignupScreen
 /// - `classai://admin-recovery?token=xxx` → AdminRecoveryScreen
 final appRouter = GoRouter(
   initialLocation: '/',
@@ -49,9 +55,19 @@ final appRouter = GoRouter(
       builder: (context, state) => const LoginScreen(),
     ),
     GoRoute(
+      path: '/lessons',
+      name: 'lessons',
+      builder: (context, state) => const LessonsListScreen(),
+    ),
+    GoRoute(
       path: '/lessons/:id',
       name: 'lesson-editor',
       builder: (context, state) => const LessonEditorScreen(),
+    ),
+    GoRoute(
+      path: '/exams',
+      name: 'exams',
+      builder: (context, state) => const ExamsListScreen(),
     ),
     GoRoute(
       path: '/exams/:id',
@@ -95,22 +111,22 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/settings',
       name: 'settings',
-      builder: (context, state) => Scaffold(
-        appBar: AppBar(title: const Text('Settings')),
-        body: const Center(child: Text('Settings — coming soon')),
-      ),
+      builder: (context, state) => const SettingsScreen(),
     ),
     GoRoute(
-      path: '/activation',
-      name: 'activation',
-      builder: (context, state) => ActivationScreen(
-        initialCode: state.extra as String?,
-      ),
+      path: '/signup',
+      name: 'signup',
+      builder: (context, state) => const SignupScreen(),
     ),
     GoRoute(
       path: '/admin-recovery',
       name: 'admin-recovery',
       builder: (context, state) => const AdminRecoveryScreen(),
+    ),
+    GoRoute(
+      path: '/change-password',
+      name: 'change-password',
+      builder: (context, state) => const ChangePasswordScreen(),
     ),
     GoRoute(
       path: '/payment',
@@ -137,7 +153,7 @@ Future<bool> handleDeepLink(BuildContext context, String uriString) async {
       return true;
 
     case DeepLinkType.activate:
-      context.push('/activation', extra: parsed.code);
+      context.push('/signup');
       return true;
 
     case DeepLinkType.adminRecovery:

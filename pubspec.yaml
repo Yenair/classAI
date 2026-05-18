@@ -65,6 +65,9 @@ dependencies:
   # Monitoring
   sentry_flutter: ^8.14.2
 
+  # URL Launching
+  url_launcher: ^6.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

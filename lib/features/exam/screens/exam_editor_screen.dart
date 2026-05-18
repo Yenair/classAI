@@ -2,10 +2,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/core/services/credit_service.dart';
 import 'package:classai/core/constants/prompt_templates.dart';
-import 'package:classai/features/lesson/screens/lesson_editor_screen.dart'
-    show emergencyFlushServiceProvider;
 import 'package:classai/main.dart' show databaseProvider;
 
 enum QuestionType { mcq, theory, both }
@@ -428,7 +427,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
             const SizedBox(height: 8),
             RadioGroup<String>(
               groupValue: correct,
-              onChanged: (v) => _updateMcq(index, 'correct', v ?? 'A'),
+              onChanged: (v) =>
+                  _updateMcq(index, 'correct', v ?? 'A'),
               child: Column(
                 children: ['A', 'B', 'C', 'D'].map((key) {
                   final optVal = options[key] as String? ?? '';
@@ -436,7 +436,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Row(
                       children: [
-                        Radio<String>(value: key),
+                        Radio<String>(
+                          value: key,
+                        ),
                         Expanded(
                           child: TextFormField(
                             initialValue: optVal,

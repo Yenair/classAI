@@ -1,6 +1,6 @@
-import 'package:drift/drift.dart' hide isNull, isNotNull, Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/core/services/auth_service.dart';
 import 'package:classai/core/services/emergency_flush_service.dart';
@@ -76,20 +76,14 @@ class _TeacherRecoveryDialogState
 
   /// Checks whether the given [email] has exceeded the rate limit for recovery
   /// attempts. Returns an error message if rate-limited, or `null` if allowed.
+  ///
+  /// Uses [PendingRecoveryRequestsDao] for type-safe queries instead of raw SQL.
   Future<String?> _checkRateLimit(String email) async {
     final db = ref.read(databaseProvider);
     final cutoff = DateTime.now().subtract(kRecoveryRateLimitDuration);
 
-    final result = await db.customSelect(
-      'SELECT COUNT(*) as cnt FROM pending_recovery_requests '
-      'WHERE email = ? AND attempted_at > ?',
-      variables: [
-        Variable.withString(email),
-        Variable.withDateTime(cutoff),
-      ],
-    ).getSingle();
-
-    final count = result.read<int>('cnt');
+    final count = await db.pendingRecoveryRequestsDao
+        .countRecentAttempts(email, cutoff);
     if (count >= kMaxRecoveryAttemptsPerHour) {
       return 'Too many recovery attempts. Please try again in 1 hour.';
     }
@@ -97,15 +91,13 @@ class _TeacherRecoveryDialogState
   }
 
   /// Records a recovery attempt for the given [email] in the database.
+  ///
+  /// Uses [PendingRecoveryRequestsDao] for type-safe inserts instead of raw SQL.
   Future<void> _recordAttempt(String email) async {
     final db = ref.read(databaseProvider);
-    await db.customInsert(
-      'INSERT INTO pending_recovery_requests (email, attempted_at) '
-      'VALUES (?, ?)',
-      variables: [
-        Variable.withString(email),
-        Variable.withDateTime(DateTime.now()),
-      ],
+    await db.pendingRecoveryRequestsDao.recordAttempt(
+      email: email,
+      attemptedAt: DateTime.now(),
     );
   }
 

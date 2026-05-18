@@ -22,14 +22,27 @@ class ExportService {
     buffer.writeln('Title,Week,Topic,Objectives,Materials,Assessment,Created');
 
     for (final lesson in lessons) {
+      // Parse objectives, materials, assessment from content JSON
+      String objectives = '';
+      String materials = '';
+      String assessment = '';
+      try {
+        final content = jsonDecode(lesson.content) as Map<String, dynamic>;
+        objectives = _extractStringField(content, 'objectives');
+        materials = _extractStringField(content, 'materials');
+        assessment = content['assessment'] as String? ?? '';
+      } catch (_) {
+        // Content may be encrypted or malformed; leave fields empty
+      }
+
       final row = [
-        _escapeCsv(lesson.topic),
-        lesson.week.toString(),
-        _escapeCsv(lesson.topic),
-        _escapeCsv(''),
-        _escapeCsv(''),
-        _escapeCsv(''),
-        lesson.createdAt.toIso8601String(),
+        _escapeCsv(lesson.topic),        // Column 0: Title (no separate title field, use topic)
+        lesson.week.toString(),           // Column 1: Week
+        _escapeCsv(lesson.topic),         // Column 2: Topic
+        _escapeCsv(objectives),           // Column 3: Objectives
+        _escapeCsv(materials),            // Column 4: Materials
+        _escapeCsv(assessment),           // Column 5: Assessment
+        lesson.createdAt.toIso8601String(), // Column 6: Created
       ];
       buffer.writeln(row.join(','));
     }
@@ -106,5 +119,16 @@ class ExportService {
       return '"${value.replaceAll('"', '""')}"';
     }
     return value;
+  }
+
+  /// Extract a string from a JSON field that may be a List, String, or null.
+  /// If it's a List, join with "; ". If it's a String, use directly.
+  String _extractStringField(Map<String, dynamic> content, String key) {
+    final value = content[key];
+    if (value == null) return '';
+    if (value is List) {
+      return value.map((e) => e.toString()).join('; ');
+    }
+    return value.toString();
   }
 }

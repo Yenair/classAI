@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,11 +12,21 @@ import 'package:classai/features/dashboard/providers/unresolved_conflicts_provid
 
 /// Root dashboard screen that routes to either [EditorLayout] or [ReaderLayout]
 /// based on [PlatformHelper.isEditorMode].
+///
+/// Platform gate: On non-mobile platforms (desktop/web), always uses
+/// [EditorLayout] since those platforms have large screens that benefit
+/// from the wider layout. The mobile layout decision (width-based
+/// EditorLayout/ReaderLayout switch) is only used on Android and iOS.
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Platform gate: non-mobile platforms always use the editor layout
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      return const EditorLayout();
+    }
+
     return FutureBuilder<bool>(
       future: PlatformHelper.isEditorMode(context),
       builder: (context, snap) {
@@ -114,7 +125,7 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                   },
                   labelType: isCompact
                       ? NavigationRailLabelType.none
-                      : NavigationRailLabelType.selected,
+                      : NavigationRailLabelType.none,
                   extended: !isCompact,
                   minExtendedWidth: 200,
                   destinations: _destinations

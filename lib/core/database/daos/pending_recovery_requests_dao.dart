@@ -14,11 +14,15 @@ class PendingRecoveryRequestsDao extends DatabaseAccessor<AppDatabase>
   Future<int> queueRequest({
     required int teacherLocalId,
     required String requestedByAdminId,
+    String email = '',
+    DateTime? attemptedAt,
   }) async {
     return into(pendingRecoveryRequests).insert(
       PendingRecoveryRequestsCompanion.insert(
         teacherLocalId: teacherLocalId,
         requestedByAdminId: requestedByAdminId,
+        email: email,
+        attemptedAt: attemptedAt ?? DateTime.now(),
       ),
     );
   }
@@ -45,6 +49,33 @@ class PendingRecoveryRequestsDao extends DatabaseAccessor<AppDatabase>
         generatedCode: Value(generatedCode),
         codeExpiry: Value(codeExpiry),
         processedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  /// Counts the number of recovery attempts for the given [email] since [since].
+  ///
+  /// Used for rate-limiting password recovery flows. Uses Drift's type-safe
+  /// query builder so the query is checked at compile time.
+  Future<int> countRecentAttempts(String email, DateTime since) async {
+    final query = select(pendingRecoveryRequests)
+      ..where((t) =>
+          t.email.equals(email) & t.attemptedAt.isBiggerThan(Variable(since)));
+    final rows = await query.get();
+    return rows.length;
+  }
+
+  /// Records a password recovery attempt for the given [email].
+  Future<int> recordAttempt({
+    required String email,
+    required DateTime attemptedAt,
+  }) async {
+    return into(pendingRecoveryRequests).insert(
+      PendingRecoveryRequestsCompanion(
+        email: Value(email),
+        attemptedAt: Value(attemptedAt),
+        teacherLocalId: const Value(0), // placeholder; linked when teacher is known
+        requestedByAdminId: const Value(''),
       ),
     );
   }

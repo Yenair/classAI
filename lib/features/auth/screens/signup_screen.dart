@@ -1,38 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:classai/core/constants/app_constants.dart';
+import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/core/services/auth_service.dart';
 import 'package:classai/core/services/emergency_flush_service.dart';
-import 'package:classai/features/auth/screens/sms_otp_screen.dart';
 
-/// Account activation screen for new admin or teacher accounts.
+/// Signup screen for creating a new school account.
 ///
-/// - Activation code, email, password fields.
-/// - Role toggle (admin / teacher).
-/// - Recovery email field (required for admin only).
-/// - On success transitions to authenticated state.
-class ActivationScreen extends ConsumerStatefulWidget {
-  /// Optional activation code pre-filled via deep link.
-  final String? initialCode;
-
-  const ActivationScreen({super.key, this.initialCode});
+/// - School Name, Short Code (auto‑generated, read‑only), Admin Email,
+///   Admin Password, Recovery Email (optional).
+/// - On success transitions to authenticated state (Dashboard).
+class SignupScreen extends ConsumerStatefulWidget {
+  const SignupScreen({super.key});
 
   @override
-  ConsumerState<ActivationScreen> createState() => _ActivationScreenState();
+  ConsumerState<SignupScreen> createState() => _SignupScreenState();
 }
 
-class _ActivationScreenState extends ConsumerState<ActivationScreen> {
+class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _codeController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final _schoolNameController = TextEditingController();
+  final _shortCodeController = TextEditingController();
+  final _adminEmailController = TextEditingController();
+  final _adminPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _recoveryEmailController = TextEditingController();
 
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
-  bool _isAdmin = false; // default to teacher
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -46,22 +43,35 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
   late final EmergencyFlushService _emergencyFlush =
       ref.read(emergencyFlushServiceProvider);
 
+  /// Generates a short code from the school name (uppercase, max 6 chars).
+  String _generateShortCode(String schoolName) {
+    final cleaned = schoolName
+        .replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')
+        .toUpperCase();
+    return cleaned.length > 6 ? cleaned.substring(0, 6) : cleaned;
+  }
+
   @override
   void initState() {
     super.initState();
 
-    // If deep link provided an activation code, pre-fill it
-    if (widget.initialCode != null) {
-      _codeController.text = widget.initialCode!;
-    }
+    // Auto-generate short code when school name changes
+    _schoolNameController.addListener(() {
+      final name = _schoolNameController.text;
+      if (name.isNotEmpty) {
+        _shortCodeController.text = _generateShortCode(name);
+      } else {
+        _shortCodeController.text = '';
+      }
+    });
 
     _flushCallback = () async {
-      // Snapshot all activation form fields before forced logout
-      final code = _codeController.text;
-      final email = _emailController.text;
-      final password = _passwordController.text;
+      // Snapshot all signup form fields before forced logout
+      final schoolName = _schoolNameController.text;
+      final email = _adminEmailController.text;
+      final password = _adminPasswordController.text;
       final recoveryEmail = _recoveryEmailController.text;
-      if (code.isNotEmpty ||
+      if (schoolName.isNotEmpty ||
           email.isNotEmpty ||
           password.isNotEmpty ||
           recoveryEmail.isNotEmpty) {
@@ -76,15 +86,16 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
     if (_flushCallback != null) {
       _emergencyFlush.unregister(_flushCallback!);
     }
-    _codeController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
+    _schoolNameController.dispose();
+    _shortCodeController.dispose();
+    _adminEmailController.dispose();
+    _adminPasswordController.dispose();
     _confirmPasswordController.dispose();
     _recoveryEmailController.dispose();
     super.dispose();
   }
 
-  Future<void> _handleActivate() async {
+  Future<void> _handleSignUp() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -96,19 +107,18 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
       // Fetch device ID once and cache it
       _cachedDeviceId ??= await AppConstants.getDeviceId();
 
-      await ref.read(authProvider.notifier).activateAccount(
-            code: _codeController.text.trim(),
-            email: _emailController.text.trim(),
-            password: _passwordController.text,
-            deviceId: _cachedDeviceId!,
-            isAdmin: _isAdmin,
-            recoveryEmail: _isAdmin ? _recoveryEmailController.text.trim() : null,
+      await ref.read(authProvider.notifier).signup(
+            schoolName: _schoolNameController.text.trim(),
+            adminEmail: _adminEmailController.text.trim(),
+            adminPassword: _adminPasswordController.text,
+            recoveryEmail: _recoveryEmailController.text.trim().isEmpty
+                ? null
+                : _recoveryEmailController.text.trim(),
           );
 
       if (!mounted) return;
-      // On success, state machine transitions to authenticated.
-      // Parent widget will detect this and navigate away.
-      Navigator.of(context).pop();
+      // On success, navigate to the dashboard directly.
+      context.go('/');
     } on AuthException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -119,7 +129,7 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Activation failed. Please try again.';
+        _errorMessage = 'Signup failed. Please try again.';
       });
     }
   }
@@ -130,7 +140,7 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Activate Account'),
+        title: const Text('Create School Account'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
@@ -148,13 +158,13 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
               children: [
                 // Header
                 Icon(
-                  Icons.person_add_alt_1_rounded,
+                  Icons.school_rounded,
                   size: 64,
                   color: theme.colorScheme.primary,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Activate Your Account',
+                  'Create School Account',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
@@ -162,7 +172,7 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Enter the activation code provided by ClassAI support or your school administrator.',
+                  'Register your school to get started with ClassAI.',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
@@ -209,37 +219,53 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
                   const SizedBox(height: 16),
                 ],
 
-                // Activation code
+                // School Name
                 TextFormField(
-                  controller: _codeController,
+                  controller: _schoolNameController,
                   textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(
-                    labelText: 'Activation Code',
-                    prefixIcon: Icon(Icons.qr_code_rounded),
+                    labelText: 'School Name',
+                    prefixIcon: Icon(Icons.business_rounded),
                     border: OutlineInputBorder(),
                   ),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
-                      return 'Please enter your activation code';
+                      return 'Please enter your school name';
+                    }
+                    if (value.trim().length < 3) {
+                      return 'School name must be at least 3 characters';
                     }
                     return null;
                   },
                 ),
                 const SizedBox(height: 16),
 
-                // Email
+                // Short Code (auto-generated, read-only)
                 TextFormField(
-                  controller: _emailController,
+                  controller: _shortCodeController,
+                  readOnly: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Short Code',
+                    prefixIcon: Icon(Icons.qr_code_rounded),
+                    border: OutlineInputBorder(),
+                    helperText: 'Auto-generated from school name',
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Admin Email
+                TextFormField(
+                  controller: _adminEmailController,
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(
-                    labelText: 'Email',
+                    labelText: 'Admin Email',
                     prefixIcon: Icon(Icons.email_outlined),
                     border: OutlineInputBorder(),
                   ),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
-                      return 'Please enter your email';
+                      return 'Please enter the admin email';
                     }
                     if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
                         .hasMatch(value.trim())) {
@@ -250,13 +276,13 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Password
+                // Admin Password
                 TextFormField(
-                  controller: _passwordController,
+                  controller: _adminPasswordController,
                   obscureText: _obscurePassword,
                   textInputAction: TextInputAction.next,
                   decoration: InputDecoration(
-                    labelText: 'Password',
+                    labelText: 'Admin Password',
                     prefixIcon: const Icon(Icons.lock_outlined),
                     border: const OutlineInputBorder(),
                     suffixIcon: IconButton(
@@ -273,8 +299,8 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
                     if (value == null || value.isEmpty) {
                       return 'Please enter a password';
                     }
-                    if (value.length < 6) {
-                      return 'Password must be at least 6 characters';
+                    if (value.length < 8) {
+                      return 'Password must be at least 8 characters';
                     }
                     return null;
                   },
@@ -304,81 +330,47 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
                     if (value == null || value.isEmpty) {
                       return 'Please confirm your password';
                     }
-                    if (value != _passwordController.text) {
+                    if (value != _adminPasswordController.text) {
                       return 'Passwords do not match';
                     }
                     return null;
                   },
                 ),
-                const SizedBox(height: 24),
-
-                // Role toggle
-                Text(
-                  'Account Type',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment(
-                      value: false,
-                      label: Text('Teacher'),
-                      icon: Icon(Icons.person_rounded),
-                    ),
-                    ButtonSegment(
-                      value: true,
-                      label: Text('Admin'),
-                      icon: Icon(Icons.admin_panel_settings_rounded),
-                    ),
-                  ],
-                  selected: {_isAdmin},
-                  onSelectionChanged: (value) {
-                    setState(() => _isAdmin = value.first);
-                  },
-                ),
                 const SizedBox(height: 16),
 
-                // Recovery email (admin only)
-                if (_isAdmin) ...[
-                  TextFormField(
-                    controller: _recoveryEmailController,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.done,
-                    decoration: const InputDecoration(
-                      labelText: 'Recovery Email (Required for Admin)',
-                      prefixIcon: Icon(Icons.contact_mail_outlined),
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (value) {
-                      if (_isAdmin &&
-                          (value == null || value.trim().isEmpty)) {
-                        return 'Recovery email is required for admin accounts';
-                      }
-                      if (value != null &&
-                          value.isNotEmpty &&
-                          !RegExp(r'^[^@]+@[^@]+\.[^@]+')
-                              .hasMatch(value.trim())) {
-                        return 'Please enter a valid recovery email';
-                      }
-                      return null;
-                    },
+                // Recovery Email (optional)
+                TextFormField(
+                  controller: _recoveryEmailController,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.done,
+                  decoration: const InputDecoration(
+                    labelText: 'Recovery Email (optional)',
+                    prefixIcon: Icon(Icons.contact_mail_outlined),
+                    border: OutlineInputBorder(),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'This email will be used for password recovery. '
-                    'A verification OTP will be sent to this address.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                  validator: (value) {
+                    if (value != null &&
+                        value.isNotEmpty &&
+                        !RegExp(r'^[^@]+@[^@]+\.[^@]+')
+                            .hasMatch(value.trim())) {
+                      return 'Please enter a valid recovery email';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Used for admin password recovery. A verification OTP '
+                  'will be sent to this address if provided.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
-                  const SizedBox(height: 24),
-                ],
+                ),
+                const SizedBox(height: 24),
 
                 // Submit button
                 FilledButton(
-                  onPressed: _isLoading ? null : _handleActivate,
+                  onPressed: _isLoading ? null : _handleSignUp,
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
@@ -392,42 +384,13 @@ class _ActivationScreenState extends ConsumerState<ActivationScreen> {
                           ),
                         )
                       : const Text(
-                          'Activate Account',
+                          'Sign Up',
                           style: TextStyle(fontSize: 16),
                         ),
-                ),
-                const SizedBox(height: 12),
-                // SMS OTP alternative
-                TextButton.icon(
-                  onPressed: _isLoading
-                      ? null
-                      : () => _navigateToSmsOtp(),
-                  icon: const Icon(Icons.phone_android_rounded, size: 18),
-                  label: const Text('Use SMS verification instead'),
                 ),
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  /// Navigate to SMS OTP screen for phone-based activation.
-  Future<void> _navigateToSmsOtp() async {
-    final phoneNumber = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => SmsOtpScreen(
-          email: _emailController.text.trim(),
-          purpose: 'activation',
-          smsMessageTemplate:
-              'Your ClassAI activation code is: {{code}}',
-          initialPhoneNumber: null,
-          onVerified: (phone) async {
-            // Phone verified; proceed with activation via SMS
-            // The phone number can be passed to the activation API
-            return;
-          },
         ),
       ),
     );

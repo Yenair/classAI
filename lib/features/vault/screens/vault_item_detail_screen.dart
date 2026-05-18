@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/services/credit_service.dart';
 import 'package:classai/main.dart' show databaseProvider;
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 
@@ -253,31 +254,14 @@ class VaultItemDetailScreen extends ConsumerWidget {
     if (confirmed == true && context.mounted) {
       try {
         final db = ref.read(databaseProvider);
-        final batchId = DateTime.now().millisecondsSinceEpoch.toString();
-        final config = await db.securityConfigDao.get();
-        final newBalance = config.offlineCredits - item.creditCost;
-
-        // Decrement credits locally
-        await db.securityConfigDao.updateConfig(
-          offlineCredits: newBalance,
-          creditSpentIdsLocal: '[${config.creditSpentIdsLocal.isNotEmpty ? config.creditSpentIdsLocal.substring(1, config.creditSpentIdsLocal.length - 1) : ''}${config.creditSpentIdsLocal.length > 2 ? ',' : ''}$batchId]',
-          creditSpentBatchId: batchId,
+        final creditService = CreditService(db);
+        final batchId = await creditService.spendCredits(
+          amount: item.creditCost,
+          contentIds: ['vault_item:${item.id}'],
         );
 
         // Mark item as acquired
         await db.vaultItemsDao.markAcquired(item.id, creditSpentBatchId: batchId);
-
-        // Queue sync entry
-        await db.syncQueueDao.insertEntry(
-          queueTable: 'credit_spending',
-          recordLocalId: item.id,
-          operation: 'SPEND_CREDITS',
-          payload: {
-            'vault_item_id': item.id,
-            'credit_cost': item.creditCost,
-            'batch_id': batchId,
-          },
-        );
 
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

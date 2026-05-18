@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/core/services/auth_service.dart';
 import 'package:classai/core/services/emergency_flush_service.dart';
 import 'package:classai/core/services/security_service.dart';
@@ -132,9 +133,9 @@ void main() {
       // Should have the Sign In button
       expect(find.text('Sign In'), findsOneWidget);
 
-      // Should have forgot password and activate links
+      // Should have forgot password and create account links
       expect(find.text('Forgot Password?'), findsOneWidget);
-      expect(find.text('Activate Account'), findsOneWidget);
+      expect(find.text('Create a School Account'), findsOneWidget);
     });
 
     testWidgets('shows school icon', (tester) async {
@@ -359,7 +360,7 @@ void main() {
       expect(find.text('Reset Password'), findsWidgets);
     });
 
-    testWidgets('shows activation screen on activate account tap',
+    testWidgets('shows signup screen on create account tap',
         (tester) async {
       await tester.pumpWidget(createTestApp(
         child: const LoginScreen(),
@@ -368,17 +369,17 @@ void main() {
         securityService: mockSecurity,
       ));
 
-      // Tap Activate Account
-      await tester.tap(find.text('Activate Account'));
+      // Tap Create a School Account
+      await tester.tap(find.text('Create a School Account'));
       await tester.pumpAndSettle();
 
-      // Should navigate to ActivationScreen
-      expect(find.text('Activate Your Account'), findsOneWidget);
-      expect(find.text('Activation Code'), findsOneWidget);
-      expect(find.text('Account Type'), findsOneWidget);
+      // Should navigate to SignupScreen
+      expect(find.text('Create School Account'), findsNWidgets(2));
+      expect(find.text('School Name'), findsOneWidget);
+      expect(find.text('Admin Email'), findsOneWidget);
     });
 
-    testWidgets('activation screen shows recovery email field for admin',
+    testWidgets('signup screen shows recovery email field',
         (tester) async {
       await tester.pumpWidget(createTestApp(
         child: const LoginScreen(),
@@ -387,29 +388,12 @@ void main() {
         securityService: mockSecurity,
       ));
 
-      // Navigate to activation screen
-      await tester.tap(find.text('Activate Account'));
+      // Navigate to signup screen
+      await tester.tap(find.text('Create a School Account'));
       await tester.pumpAndSettle();
 
-      // Default is Teacher, so recovery email should NOT be visible
-      expect(find.text('Recovery Email (Required for Admin)'), findsNothing);
-
-      // Scroll down to make the SegmentedButton visible
-      await tester.scrollUntilVisible(
-        find.text('Admin'),
-        200.0,
-        scrollable: find.byType(Scrollable).first,
-      );
-
-      // Toggle to Admin
-      await tester.tap(find.text('Admin'));
-      await tester.pumpAndSettle();
-
-      // Now recovery email field should appear
-      expect(
-        find.text('Recovery Email (Required for Admin)'),
-        findsOneWidget,
-      );
+      // Recovery email field should be visible (it's always shown, optional)
+      expect(find.text('Recovery Email (optional)'), findsOneWidget);
     });
   });
 }

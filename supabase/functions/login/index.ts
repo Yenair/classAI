@@ -32,10 +32,9 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Invalid credentials" }), { status: 401 });
     }
 
-    // 3. If force_password_reset, tell client
-    if (teacher.force_password_reset) {
-      return new Response(JSON.stringify({ error: "Password reset required" }), { status: 403 });
-    }
+    // 3. If force_password_reset, issue short-lived JWT (5 min) with flag
+    const isForceReset = teacher.force_password_reset === true;
+    const tokenExpiry = isForceReset ? getNumericDate(60 * 5) : getNumericDate(60 * 60 * 24); // 5 min vs 24 hours
 
     // 4. Generate JWT
     const jwt = await create(
@@ -45,10 +44,39 @@ serve(async (req) => {
         teacher_id: teacher.id,
         school_id: teacher.school_id,
         is_admin: teacher.role === "admin",
-        exp: getNumericDate(60 * 60 * 24), // 24 hours
+        force_password_reset: isForceReset,
+        exp: tokenExpiry,
       },
       JWT_SECRET
     );
+
+    if (isForceReset) {
+      const school = teacher.schools;
+      return new Response(
+        JSON.stringify({
+          jwt,
+          force_password_reset: true,
+          teacher: {
+            id: teacher.id,
+            email: teacher.email,
+            name: teacher.teacher_name,
+            role: teacher.role,
+            school_id: teacher.school_id,
+          },
+          school: {
+            id: school.id,
+            name: school.school_name,
+            subscription_tier: school.subscription_tier,
+          },
+          wrapped_school_key: school.school_master_key_wrapped,
+          salt: teacher.salt,
+          password_hash_version: teacher.password_hash_version,
+          offline_credits: 3,
+          last_credit_refill_server_time: teacher.last_credit_refill_date?.toISOString() ?? null,
+        }),
+        { headers: { "Content-Type": "application/json" } }
+      );
+    }
 
     // 5. Register device
     if (device_id) {

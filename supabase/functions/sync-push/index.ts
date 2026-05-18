@@ -40,6 +40,7 @@ const KEY_MAP: Record<string, string> = {
   ed: "expiry_date",
   are: "admin_recovery_email",
   arev: "admin_recovery_email_verified",
+  acode: "activation_code",
   id: "id",
   n: "name",
   desc: "description",

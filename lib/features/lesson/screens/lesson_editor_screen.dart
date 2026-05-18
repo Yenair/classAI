@@ -2,14 +2,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/core/services/credit_service.dart';
 import 'package:classai/core/services/emergency_flush_service.dart';
 import 'package:classai/core/constants/prompt_templates.dart';
+import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
-
-/// Provider for EmergencyFlushService (must be available in widget tree).
-final emergencyFlushServiceProvider =
-    Provider<EmergencyFlushService>((ref) => EmergencyFlushService());
 
 /// Material Design lesson note editor with AI generation.
 ///
@@ -41,7 +39,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   final Set<String> _selectedBlooms = {};
   bool _isGenerating = false;
   bool _hasGenerated = false;
-  int _creditBalance = 3;
+  int _creditBalance = 0;
   String? _encryptedContent;
 
   // Generated content (editable after generation)
@@ -90,10 +88,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
 
   Future<void> _loadCreditBalance() async {
     try {
-      final db = ref.read(databaseProvider);
-      final config = await db.securityConfigDao.get();
+      await ref.read(creditStateProvider.notifier).refresh();
       if (mounted) {
-        setState(() => _creditBalance = config.offlineCredits);
+        setState(() => _creditBalance = ref.read(creditStateProvider).currentCredits);
       }
     } catch (_) {}
   }

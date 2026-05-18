@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:classai/core/constants/app_constants.dart';
+import 'package:classai/core/providers/emergency_flush_provider.dart';
+import 'package:classai/core/services/emergency_flush_service.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
+import 'package:classai/features/auth/screens/signup_screen.dart';
+import 'package:classai/features/auth/screens/change_password_screen.dart';
 import 'package:classai/features/auth/screens/forgot_password_dialog.dart';
 import 'package:classai/features/auth/screens/admin_recovery_screen.dart';
 import 'package:classai/features/auth/screens/teacher_recovery_dialog.dart';
-import 'package:classai/features/auth/screens/activation_screen.dart';
-import 'package:classai/core/services/emergency_flush_service.dart';
 
 /// Material Design login screen with email/password fields,
 /// forgot password links, account activation, error states, and loading.
@@ -72,7 +74,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       ref.read(authProvider.notifier).clearError();
 
       // Fetch device ID once and cache it
-      _cachedDeviceId ??= await AppConstants.getDeviceId();
+      try {
+        _cachedDeviceId ??= await AppConstants.getDeviceId();
+      } catch (_) {
+        // If device info fails, fall back to a random UUID
+        _cachedDeviceId ??= _generateFallbackDeviceId();
+      }
 
       // Attempt online login
       await ref.read(authProvider.notifier).loginOnline(
@@ -81,16 +88,43 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             deviceId: _cachedDeviceId!,
           );
 
-      // Check final state for errors
+      // Check final state for errors — the parent auth gate will redirect
+      // to the dashboard if authenticated, or show error banners here.
+      if (!mounted) return;
       final authState = ref.read(authProvider).state;
-      if (authState == AuthState.authenticated) {
-        // Navigate to main app handled by parent widget listening to auth state
+      if (authState == AuthState.forcePasswordResetRequired) {
+        // Navigate to change-password screen and clear previous error
+        ref.read(authProvider.notifier).clearError();
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => const ChangePasswordScreen(),
+          ),
+        );
+      }
+    } catch (e) {
+      // Defensive catch: if an unexpected exception escapes loginOnline's
+      // internal error handling, push it into the auth state so the UI
+      // displays the error banner instead of silently crashing.
+      if (mounted) {
+        ref.read(authProvider.notifier).setErrorMessage(
+          'An unexpected error occurred. Please try again.',
+        );
       }
     } finally {
       if (mounted) {
         setState(() => _isLoggingIn = false);
       }
     }
+  }
+
+  /// Returns a random UUID as a fallback device identifier when
+  /// [AppConstants.getDeviceId] fails (e.g., missing platform plugin).
+  String _generateFallbackDeviceId() {
+    // Imported via package:uuid in app_constants.dart; we duplicate
+    // the simple fallback here to avoid adding another import.
+    final now = DateTime.now().microsecondsSinceEpoch;
+    final random = now ^ (now << 21);
+    return 'fallback-${random.toRadixString(16).padLeft(12, '0')}';
   }
 
   @override
@@ -297,12 +331,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     child: const Text('Forgot Password?'),
                   ),
 
-                  // Activate account link
+                  // Create a School Account link
                   TextButton(
                     onPressed: _isLoggingIn
                         ? null
-                        : () => _showActivateAccountFlow(),
-                    child: const Text('Activate Account'),
+                        : () => _showCreateAccountFlow(),
+                    child: const Text('Create a School Account'),
                   ),
                 ],
               ),
@@ -337,11 +371,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
-  /// Navigate to the activation screen.
-  Future<void> _showActivateAccountFlow() async {
+  /// Navigate to the signup screen.
+  Future<void> _showCreateAccountFlow() async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => const ActivationScreen(),
+        builder: (_) => const SignupScreen(),
       ),
     );
   }

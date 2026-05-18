@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:classai/features/admin/providers/admin_provider.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
+import 'package:classai/core/services/auth_service.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
 /// Admin dashboard screen with teacher management, vault approval queue,
@@ -55,6 +56,11 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
           ],
         ),
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showAddTeacherDialog(context),
+        icon: const Icon(Icons.person_add_alt_1_rounded),
+        label: const Text('Add Teacher'),
+      ),
       body: dashboardData.loading
           ? const Center(child: CircularProgressIndicator())
           : dashboardData.errorMessage != null
@@ -91,7 +97,205 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                 ),
     );
   }
+
+  /// Shows the "Add Teacher" dialog.
+  void _showAddTeacherDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => const _AddTeacherDialog(),
+    );
+  }
 }
+
+// ---------------------------------------------------------------------------
+// Add Teacher Dialog
+// ---------------------------------------------------------------------------
+
+class _AddTeacherDialog extends ConsumerStatefulWidget {
+  const _AddTeacherDialog();
+
+  @override
+  ConsumerState<_AddTeacherDialog> createState() => _AddTeacherDialogState();
+}
+
+class _AddTeacherDialogState extends ConsumerState<_AddTeacherDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
+  final _nameController = TextEditingController();
+  String _selectedRole = 'teacher';
+  bool _isSubmitting = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleSubmit() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await ref.read(authProvider.notifier).addTeacher(
+            email: _emailController.text.trim(),
+            teacherName: _nameController.text.trim(),
+            role: _selectedRole,
+          );
+
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Teacher added. A temporary password has been emailed.',
+          ),
+        ),
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _errorMessage = e.message;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _errorMessage = 'Failed to add teacher. Please try again.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return AlertDialog(
+      title: const Text('Add Teacher'),
+      content: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Error message
+              if (_errorMessage != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.errorContainer,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    _errorMessage!,
+                    style: TextStyle(
+                      color: theme.colorScheme.onErrorContainer,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // Email field
+              TextFormField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  prefixIcon: Icon(Icons.email_outlined),
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Please enter an email';
+                  }
+                  if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
+                      .hasMatch(value.trim())) {
+                    return 'Please enter a valid email';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+
+              // Teacher Name field
+              TextFormField(
+                controller: _nameController,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: 'Teacher Name',
+                  prefixIcon: Icon(Icons.person_rounded),
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Please enter the teacher name';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+
+              // Role dropdown
+              DropdownButtonFormField<String>(
+                initialValue: _selectedRole,
+                decoration: const InputDecoration(
+                  labelText: 'Role',
+                  prefixIcon: Icon(Icons.badge_rounded),
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'teacher',
+                    child: Text('Teacher'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'admin',
+                    child: Text('Admin'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _selectedRole = value);
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _isSubmitting ? null : _handleSubmit,
+          child: _isSubmitting
+              ? const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text('Add'),
+        ),
+      ],
+    );
+  }
+}
+
 
 // ---------------------------------------------------------------------------
 // Teacher Management Tab

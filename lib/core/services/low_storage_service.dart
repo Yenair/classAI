@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 import '../constants/app_constants.dart';
 
@@ -21,6 +22,11 @@ class LowStorageService {
   /// Callback when storage level changes.
   void Function(LowStorageLevel level)? onLevelChanged;
 
+  /// Set to true when disk space measurement fails.
+  /// When true, storage checks are skipped (assume OK) to avoid
+  /// false-positive blocks (e.g., on emulators where disk queries fail).
+  bool _diskQueryFailed = false;
+
   LowStorageService() {
     _currentLevel = LowStorageLevel.ok;
   }
@@ -30,6 +36,13 @@ class LowStorageService {
   /// Returns [LowStorageLevel] indicating the current status.
   Future<LowStorageLevel> checkDiskSpace() async {
     try {
+      // If the disk query previously failed, skip the check entirely
+      // and assume storage is OK. This prevents false-positive blocks
+      // on platforms where disk queries are unsupported (e.g. emulators).
+      if (_diskQueryFailed) {
+        return LowStorageLevel.ok;
+      }
+
       final availableMB = await _getAvailableMb();
       if (availableMB == null) return LowStorageLevel.ok;
 
@@ -115,11 +128,26 @@ class LowStorageService {
         // Ignore stat errors
       }
 
-      // Last resort: return 0.0 so the threshold checks will flag
-      // a warning rather than letting the user run out of space
-      // unexpectedly.
-      return 0.0;
-    } catch (_) {
+      // Last resort: disk measurement failed. Instead of returning 0.0
+      // (which would trigger a false-positive storage block), set a flag
+      // so the caller can skip the check, and return a conservative
+      // estimate (500 MB) to avoid blocking PDF generation on platforms
+      // where disk queries fail (e.g. most mobile emulators).
+      _diskQueryFailed = true;
+      debugPrint(
+        'LowStorageService._getAvailableMb: disk query failed on all '
+        'platform-specific methods; falling back to 500 MB estimate',
+      );
+      await Sentry.captureException(
+        Exception(
+          'LowStorageService: disk query failed on all methods for path: $path',
+        ),
+      );
+      return 500.0;
+    } catch (e) {
+      _diskQueryFailed = true;
+      debugPrint('LowStorageService._getAvailableMb: unexpected error: $e');
+      await Sentry.captureException(e);
       return null;
     }
   }

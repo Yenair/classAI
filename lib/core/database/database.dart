@@ -88,7 +88,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 11;
 
   static QueryExecutor _openConnection() {
     return LazyDatabase(() async {
@@ -97,7 +97,6 @@ class AppDatabase extends _$AppDatabase {
 
       return NativeDatabase.createInBackground(
         File(file),
-        // CRITICAL: This uses SQLite Online Backup API internally
       );
     });
   }
@@ -163,7 +162,6 @@ class AppDatabase extends _$AppDatabase {
             );
           }
           if (from < 3) {
-            // Expand lessons table from bare id to full schema
             await customStatement(
               "ALTER TABLE lessons ADD COLUMN subject TEXT NOT NULL DEFAULT ''",
             );
@@ -194,7 +192,6 @@ class AppDatabase extends _$AppDatabase {
             await customStatement(
               'ALTER TABLE lessons ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
             );
-            // Expand exams table from bare id to full schema
             await customStatement(
               "ALTER TABLE exams ADD COLUMN subject TEXT NOT NULL DEFAULT ''",
             );
@@ -221,8 +218,6 @@ class AppDatabase extends _$AppDatabase {
             );
           }
           if (from < 4) {
-            // Add email and attempted_at columns to pending_recovery_requests
-            // for rate limiting (3 attempts/hour per teacher).
             await customStatement(
               'ALTER TABLE pending_recovery_requests ADD COLUMN email TEXT NOT NULL DEFAULT \'\'',
             );
@@ -231,7 +226,6 @@ class AppDatabase extends _$AppDatabase {
             );
           }
           if (from < 5) {
-            // Add PDF cache table
             await customStatement('''
               CREATE TABLE IF NOT EXISTS pdf_cache (
                 cache_key TEXT NOT NULL PRIMARY KEY,
@@ -241,7 +235,6 @@ class AppDatabase extends _$AppDatabase {
             ''');
           }
           if (from < 6) {
-            // Create teacher_subjects join table for teacher-subject assignments
             await customStatement('''
               CREATE TABLE IF NOT EXISTS teacher_subjects (
                 id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -251,17 +244,14 @@ class AppDatabase extends _$AppDatabase {
             ''');
           }
           if (from < 7) {
-            // Add expiry_date to schools table for subscription expiry checks
             await customStatement(
               'ALTER TABLE schools ADD COLUMN expiry_date INTEGER',
             );
-            // Add content_hash to lessons table for PDF caching
             await customStatement(
               'ALTER TABLE lessons ADD COLUMN content_hash TEXT',
             );
           }
           if (from < 8) {
-            // Create terms table for NERDC trimester management
             await customStatement('''
               CREATE TABLE IF NOT EXISTS terms (
                 id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -276,6 +266,38 @@ class AppDatabase extends _$AppDatabase {
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
               )
             ''');
+          }
+          if (from < 9) {
+            // Add columns to recovery_codes for USSD recovery flow.
+            await customStatement(
+              'ALTER TABLE recovery_codes ADD COLUMN phone_number TEXT NOT NULL DEFAULT \'\'',
+            );
+            await customStatement(
+              'ALTER TABLE recovery_codes ADD COLUMN code TEXT NOT NULL DEFAULT \'\'',
+            );
+            await customStatement(
+              'ALTER TABLE recovery_codes ADD COLUMN expires_at TEXT NOT NULL DEFAULT \'1970-01-01T00:00:00.000\'',
+            );
+            await customStatement(
+              'ALTER TABLE recovery_codes ADD COLUMN used INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              'ALTER TABLE recovery_codes ADD COLUMN teacher_local_id INTEGER',
+            );
+            await customStatement(
+              'ALTER TABLE recovery_codes ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
+            );
+          }
+          if (from < 10) {
+            // email and attempted_at columns were added to pending_recovery_requests
+            // in migration 4 but were missing from the Drift table definition.
+            // They already exist in the database; this empty migration acknowledges
+            // the schema version bump so Drift matches the table definition.
+          }
+          if (from < 11) {
+            await customStatement(
+              'ALTER TABLE schools ADD COLUMN activation_code TEXT',
+            );
           }
         },
         beforeOpen: (details) async {

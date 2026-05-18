@@ -1,7 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
 import 'package:classai/core/database/database.dart';
 
-/// Result of a login, activation, or password recovery operation.
+/// Result of a login, activation, signup or password recovery operation.
 class AuthResult {
   final Teacher teacher;
   final School school;
@@ -9,6 +9,7 @@ class AuthResult {
   final int passwordHashVersion;
   final int offlineCredits;
   final DateTime lastCreditRefillServerTime;
+  final bool? forcePasswordReset;
 
   AuthResult({
     required this.teacher,
@@ -17,6 +18,7 @@ class AuthResult {
     required this.passwordHashVersion,
     required this.offlineCredits,
     required this.lastCreditRefillServerTime,
+    this.forcePasswordReset,
   });
 }
 
@@ -86,6 +88,33 @@ abstract class AuthService {
   /// Verify an OTP code sent via SMS.
   /// Returns true if the code is valid.
   Future<bool> verifySmsOtp(String phoneNumber, String code);
+
+  /// Register a new school and admin account.
+  ///
+  /// Calls POST /functions/v1/signup with school_name, admin_email,
+  /// admin_password and optional recovery_email.
+  Future<AuthResult> signup(
+    String schoolName,
+    String adminEmail,
+    String adminPassword,
+    String? recoveryEmail,
+  );
+
+  /// Add a teacher to the school (admin-only).
+  ///
+  /// Calls POST /functions/v1/add-teacher with email, teacher_name, role
+  /// and the admin's JWT in the Authorization header.
+  Future<void> addTeacher(
+    String email,
+    String teacherName,
+    String role,
+  );
+
+  /// Change the current user's password.
+  ///
+  /// Calls POST /functions/v1/change-password with new_password
+  /// and the JWT in the Authorization header.
+  Future<void> changePassword(String newPassword);
 }
 
 /// Real implementation of [AuthService] backed by Supabase.
@@ -176,6 +205,9 @@ class SupabaseAuthService implements AuthService {
         lastModifiedBy: teacherData['last_modified_by'] as String?,
       );
 
+      final forcePwdReset =
+          teacherData['force_password_reset'] as bool? ?? false;
+
       return AuthResult(
         teacher: teacher,
         school: school,
@@ -189,6 +221,7 @@ class SupabaseAuthService implements AuthService {
                 ? DateTime.parse(
                     teacherData['last_credit_refill_date'] as String)
                 : DateTime.now(),
+        forcePasswordReset: forcePwdReset,
       );
     } on AuthException {
       rethrow;
@@ -400,57 +433,134 @@ class SupabaseAuthService implements AuthService {
 
   @override
   Future<void> sendSmsOtp(String phoneNumber) async {
+    throw UnimplementedError('SMS OTP is currently unavailable');
+  }
+
+  @override
+  Future<bool> verifySmsOtp(String phoneNumber, String code) async {
+    throw UnimplementedError('SMS OTP is currently unavailable');
+  }
+
+  @override
+  Future<AuthResult> signup(
+    String schoolName,
+    String adminEmail,
+    String adminPassword,
+    String? recoveryEmail,
+  ) async {
     final client = supabase_pkg.Supabase.instance.client;
     try {
       final response = await client.functions.invoke(
-        'send-sms-otp',
-        body: {'phone_number': phoneNumber},
+        'signup',
+        body: {
+          'school_name': schoolName,
+          'admin_email': adminEmail,
+          'admin_password': adminPassword,
+          'recovery_email': recoveryEmail,
+        },
       );
+
       final data = response.data as Map<String, dynamic>;
       final errorResponse = data['error'] as String?;
       if (errorResponse != null) {
         throw AuthException(
-          code: AuthErrorCode.networkError,
+          code: AuthErrorCode.validationError,
           message: errorResponse,
         );
       }
+      return _parseAuthResult(data);
     } on AuthException {
       rethrow;
     } catch (e) {
       throw AuthException(
         code: AuthErrorCode.networkError,
-        message: 'Failed to send SMS OTP. Please try again.',
+        message: 'Signup failed. Please try again.',
         originalError: e,
       );
     }
   }
 
   @override
-  Future<bool> verifySmsOtp(String phoneNumber, String code) async {
+  Future<void> addTeacher(
+    String email,
+    String teacherName,
+    String role,
+  ) async {
     final client = supabase_pkg.Supabase.instance.client;
+    final session = client.auth.currentSession;
+    final jwt = session?.accessToken;
+    if (jwt == null || jwt.isEmpty) {
+      throw AuthException(
+        code: AuthErrorCode.validationError,
+        message: 'No active session. Please login again.',
+      );
+    }
+
     try {
       final response = await client.functions.invoke(
-        'verify-sms-otp',
+        'add-teacher',
+        headers: {'Authorization': 'Bearer $jwt'},
         body: {
-          'phone_number': phoneNumber,
-          'code': code,
+          'email': email,
+          'teacher_name': teacherName,
+          'role': role,
         },
       );
+
       final data = response.data as Map<String, dynamic>;
       final errorResponse = data['error'] as String?;
       if (errorResponse != null) {
         throw AuthException(
-          code: AuthErrorCode.invalidOtp,
+          code: AuthErrorCode.validationError,
           message: errorResponse,
         );
       }
-      return data['verified'] as bool? ?? false;
     } on AuthException {
       rethrow;
     } catch (e) {
       throw AuthException(
         code: AuthErrorCode.networkError,
-        message: 'OTP verification failed. Please try again.',
+        message: 'Failed to add teacher. Please try again.',
+        originalError: e,
+      );
+    }
+  }
+
+  @override
+  Future<void> changePassword(String newPassword) async {
+    final client = supabase_pkg.Supabase.instance.client;
+    final session = client.auth.currentSession;
+    final jwt = session?.accessToken;
+    if (jwt == null || jwt.isEmpty) {
+      throw AuthException(
+        code: AuthErrorCode.validationError,
+        message: 'No active session. Please login again.',
+      );
+    }
+
+    try {
+      final response = await client.functions.invoke(
+        'change-password',
+        headers: {'Authorization': 'Bearer $jwt'},
+        body: {
+          'new_password': newPassword,
+        },
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final errorResponse = data['error'] as String?;
+      if (errorResponse != null) {
+        throw AuthException(
+          code: AuthErrorCode.validationError,
+          message: errorResponse,
+        );
+      }
+    } on AuthException {
+      rethrow;
+    } catch (e) {
+      throw AuthException(
+        code: AuthErrorCode.networkError,
+        message: 'Failed to change password. Please try again.',
         originalError: e,
       );
     }
@@ -529,6 +639,7 @@ class SupabaseAuthService implements AuthService {
       passwordHashVersion: data['password_hash_version'] as int? ?? 1,
       offlineCredits: data['offline_credits'] as int? ?? 3,
       lastCreditRefillServerTime: serverTime,
+      forcePasswordReset: data['force_password_reset'] as bool?,
     );
   }
 }

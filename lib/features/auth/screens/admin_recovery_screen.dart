@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/core/services/auth_service.dart';
 import 'package:classai/core/services/emergency_flush_service.dart';
-import 'package:classai/features/auth/screens/sms_otp_screen.dart';
+// import 'package:classai/features/auth/screens/sms_otp_screen.dart'; // SMS OTP disabled
 
 /// Multi-step admin recovery flow.
 ///
@@ -88,6 +89,23 @@ class _AdminRecoveryScreenState extends ConsumerState<AdminRecoveryScreen> {
         _otpSent = true;
         _otpExpiry = result.otpExpiry;
       });
+      // Show "check spam" hint regardless of email delivery outcome
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              "OTP sent. If you don't receive it within a few minutes, "
+              "please check your spam folder.",
+            ),
+            duration: const Duration(seconds: 6),
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'Dismiss',
+              onPressed: () {},
+            ),
+          ),
+        );
+      }
     } on AuthException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -395,12 +413,12 @@ class _AdminRecoveryScreenState extends ConsumerState<AdminRecoveryScreen> {
                     child: const Text('Resend OTP (enter email again)'),
                   ),
                   const SizedBox(height: 4),
-                  // SMS OTP alternative
-                  TextButton.icon(
-                    onPressed: _isLoading ? null : _navigateToSmsOtp,
-                    icon: const Icon(Icons.phone_android_rounded, size: 18),
-                    label: const Text('Use SMS recovery instead'),
-                  ),
+                  // // SMS OTP alternative — disabled
+                  // TextButton.icon(
+                  //   onPressed: _isLoading ? null : _navigateToSmsOtp,
+                  //   icon: const Icon(Icons.phone_android_rounded, size: 18),
+                  //   label: const Text('Use SMS recovery instead'),
+                  // ),
                 ] else ...[
                   // --- Step 1: Request OTP button ---
                   FilledButton(
@@ -431,22 +449,22 @@ class _AdminRecoveryScreenState extends ConsumerState<AdminRecoveryScreen> {
     );
   }
 
-  /// Navigate to SMS OTP screen for phone-based recovery.
-  Future<void> _navigateToSmsOtp() async {
-    final phoneNumber = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => SmsOtpScreen(
-          email: _emailController.text.trim(),
-          purpose: 'recovery',
-          smsMessageTemplate:
-              'Your ClassAI recovery code is: {{code}}',
-          initialPhoneNumber: null,
-          onVerified: (phone) async {
-            // Phone verified via SMS; proceed with recovery flow
-            return;
-          },
-        ),
-      ),
-    );
-  }
+  // /// Navigate to SMS OTP screen for phone-based recovery — disabled.
+  // Future<void> _navigateToSmsOtp() async {
+  //   final phoneNumber = await Navigator.of(context).push<String>(
+  //     MaterialPageRoute(
+  //       builder: (_) => SmsOtpScreen(
+  //         email: _emailController.text.trim(),
+  //         purpose: 'recovery',
+  //         smsMessageTemplate:
+  //             'Your ClassAI recovery code is: {{code}}',
+  //         initialPhoneNumber: null,
+  //         onVerified: (phone) async {
+  //           // Phone verified via SMS; proceed with recovery flow
+  //           return;
+  //         },
+  //       ),
+  //     ),
+  //   );
+  // }
 }

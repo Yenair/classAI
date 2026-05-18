@@ -139,6 +139,7 @@ class PayloadCompressor {
     'expiry_date': 'ed',
     'admin_recovery_email': 'are',
     'admin_recovery_email_verified': 'arev',
+    'activation_code': 'acode',
     'id': 'id',
     'name': 'n',
     'description': 'desc',

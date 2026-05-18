@@ -1,3 +1,5 @@
+import 'package:sentry_flutter/sentry_flutter.dart';
+
 /// Centralized emergency save mechanism.
 /// Replaces Riverpod onDispose for forced logout auto-save.
 /// Every form provider REGISTERS its save callback at creation time.
@@ -25,11 +27,15 @@ class EmergencyFlushService {
       } catch (e) {
         results.add(false);
         // Log failure but continue flushing others
+        await Sentry.captureException(
+          e,
+          hint: null,
+        );
       }
     }
     // If any failed, log to Sentry
     if (results.any((r) => !r)) {
-      // Sentry.captureMessage('Emergency flush incomplete');
+      await Sentry.captureMessage('Emergency flush incomplete');
     }
     _callbacks.clear();
   }

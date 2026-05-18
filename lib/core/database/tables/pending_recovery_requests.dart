@@ -12,4 +12,6 @@ class PendingRecoveryRequests extends Table {
   DateTimeColumn get codeExpiry => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get processedAt => dateTime().nullable()();
+  TextColumn get email => text()(); // teacher email for rate-limiting lookups
+  DateTimeColumn get attemptedAt => dateTime()(); // timestamp of the recovery attempt
 }

@@ -41,6 +41,14 @@ android {
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
+        debug {
+            // Disables stripping of native libraries for debug builds
+           packaging {
+            jniLibs {
+                keepDebugSymbols.add("**/*.so")
+            }
+        }
+        }
     }
 }
 

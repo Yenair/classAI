@@ -134,6 +134,12 @@ class $SchoolsTable extends Schools with TableInfo<$SchoolsTable, School> {
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('CHECK ("is_deleted" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _activationCodeMeta =
+      const VerificationMeta('activationCode');
+  @override
+  late final GeneratedColumn<String> activationCode = GeneratedColumn<String>(
+      'activation_code', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _lastModifiedByMeta =
       const VerificationMeta('lastModifiedBy');
   @override
@@ -159,6 +165,7 @@ class $SchoolsTable extends Schools with TableInfo<$SchoolsTable, School> {
         expiryDate,
         updateCounter,
         isDeleted,
+        activationCode,
         lastModifiedBy
       ];
   @override
@@ -265,6 +272,12 @@ class $SchoolsTable extends Schools with TableInfo<$SchoolsTable, School> {
       context.handle(_isDeletedMeta,
           isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta));
     }
+    if (data.containsKey('activation_code')) {
+      context.handle(
+          _activationCodeMeta,
+          activationCode.isAcceptableOrUnknown(
+              data['activation_code']!, _activationCodeMeta));
+    }
     if (data.containsKey('last_modified_by')) {
       context.handle(
           _lastModifiedByMeta,
@@ -317,6 +330,8 @@ class $SchoolsTable extends Schools with TableInfo<$SchoolsTable, School> {
           .read(DriftSqlType.int, data['${effectivePrefix}update_counter'])!,
       isDeleted: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_deleted'])!,
+      activationCode: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}activation_code']),
       lastModifiedBy: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}last_modified_by']),
     );
@@ -346,6 +361,7 @@ class School extends DataClass implements Insertable<School> {
   final DateTime? expiryDate;
   final int updateCounter;
   final bool isDeleted;
+  final String? activationCode;
   final String? lastModifiedBy;
   const School(
       {required this.localId,
@@ -365,6 +381,7 @@ class School extends DataClass implements Insertable<School> {
       this.expiryDate,
       required this.updateCounter,
       required this.isDeleted,
+      this.activationCode,
       this.lastModifiedBy});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -401,6 +418,9 @@ class School extends DataClass implements Insertable<School> {
     }
     map['update_counter'] = Variable<int>(updateCounter);
     map['is_deleted'] = Variable<bool>(isDeleted);
+    if (!nullToAbsent || activationCode != null) {
+      map['activation_code'] = Variable<String>(activationCode);
+    }
     if (!nullToAbsent || lastModifiedBy != null) {
       map['last_modified_by'] = Variable<String>(lastModifiedBy);
     }
@@ -438,6 +458,9 @@ class School extends DataClass implements Insertable<School> {
           : Value(expiryDate),
       updateCounter: Value(updateCounter),
       isDeleted: Value(isDeleted),
+      activationCode: activationCode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(activationCode),
       lastModifiedBy: lastModifiedBy == null && nullToAbsent
           ? const Value.absent()
           : Value(lastModifiedBy),
@@ -469,6 +492,7 @@ class School extends DataClass implements Insertable<School> {
       expiryDate: serializer.fromJson<DateTime?>(json['expiryDate']),
       updateCounter: serializer.fromJson<int>(json['updateCounter']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      activationCode: serializer.fromJson<String?>(json['activationCode']),
       lastModifiedBy: serializer.fromJson<String?>(json['lastModifiedBy']),
     );
   }
@@ -496,6 +520,7 @@ class School extends DataClass implements Insertable<School> {
       'expiryDate': serializer.toJson<DateTime?>(expiryDate),
       'updateCounter': serializer.toJson<int>(updateCounter),
       'isDeleted': serializer.toJson<bool>(isDeleted),
+      'activationCode': serializer.toJson<String?>(activationCode),
       'lastModifiedBy': serializer.toJson<String?>(lastModifiedBy),
     };
   }
@@ -518,6 +543,7 @@ class School extends DataClass implements Insertable<School> {
           Value<DateTime?> expiryDate = const Value.absent(),
           int? updateCounter,
           bool? isDeleted,
+          Value<String?> activationCode = const Value.absent(),
           Value<String?> lastModifiedBy = const Value.absent()}) =>
       School(
         localId: localId ?? this.localId,
@@ -544,6 +570,8 @@ class School extends DataClass implements Insertable<School> {
         expiryDate: expiryDate.present ? expiryDate.value : this.expiryDate,
         updateCounter: updateCounter ?? this.updateCounter,
         isDeleted: isDeleted ?? this.isDeleted,
+        activationCode:
+            activationCode.present ? activationCode.value : this.activationCode,
         lastModifiedBy:
             lastModifiedBy.present ? lastModifiedBy.value : this.lastModifiedBy,
       );
@@ -583,6 +611,9 @@ class School extends DataClass implements Insertable<School> {
           ? data.updateCounter.value
           : this.updateCounter,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      activationCode: data.activationCode.present
+          ? data.activationCode.value
+          : this.activationCode,
       lastModifiedBy: data.lastModifiedBy.present
           ? data.lastModifiedBy.value
           : this.lastModifiedBy,
@@ -609,6 +640,7 @@ class School extends DataClass implements Insertable<School> {
           ..write('expiryDate: $expiryDate, ')
           ..write('updateCounter: $updateCounter, ')
           ..write('isDeleted: $isDeleted, ')
+          ..write('activationCode: $activationCode, ')
           ..write('lastModifiedBy: $lastModifiedBy')
           ..write(')'))
         .toString();
@@ -633,6 +665,7 @@ class School extends DataClass implements Insertable<School> {
       expiryDate,
       updateCounter,
       isDeleted,
+      activationCode,
       lastModifiedBy);
   @override
   bool operator ==(Object other) =>
@@ -655,6 +688,7 @@ class School extends DataClass implements Insertable<School> {
           other.expiryDate == this.expiryDate &&
           other.updateCounter == this.updateCounter &&
           other.isDeleted == this.isDeleted &&
+          other.activationCode == this.activationCode &&
           other.lastModifiedBy == this.lastModifiedBy);
 }
 
@@ -676,6 +710,7 @@ class SchoolsCompanion extends UpdateCompanion<School> {
   final Value<DateTime?> expiryDate;
   final Value<int> updateCounter;
   final Value<bool> isDeleted;
+  final Value<String?> activationCode;
   final Value<String?> lastModifiedBy;
   const SchoolsCompanion({
     this.localId = const Value.absent(),
@@ -695,6 +730,7 @@ class SchoolsCompanion extends UpdateCompanion<School> {
     this.expiryDate = const Value.absent(),
     this.updateCounter = const Value.absent(),
     this.isDeleted = const Value.absent(),
+    this.activationCode = const Value.absent(),
     this.lastModifiedBy = const Value.absent(),
   });
   SchoolsCompanion.insert({
@@ -715,6 +751,7 @@ class SchoolsCompanion extends UpdateCompanion<School> {
     this.expiryDate = const Value.absent(),
     this.updateCounter = const Value.absent(),
     this.isDeleted = const Value.absent(),
+    this.activationCode = const Value.absent(),
     this.lastModifiedBy = const Value.absent(),
   })  : schoolName = Value(schoolName),
         shortCode = Value(shortCode);
@@ -736,6 +773,7 @@ class SchoolsCompanion extends UpdateCompanion<School> {
     Expression<DateTime>? expiryDate,
     Expression<int>? updateCounter,
     Expression<bool>? isDeleted,
+    Expression<String>? activationCode,
     Expression<String>? lastModifiedBy,
   }) {
     return RawValuesInsertable({
@@ -760,6 +798,7 @@ class SchoolsCompanion extends UpdateCompanion<School> {
       if (expiryDate != null) 'expiry_date': expiryDate,
       if (updateCounter != null) 'update_counter': updateCounter,
       if (isDeleted != null) 'is_deleted': isDeleted,
+      if (activationCode != null) 'activation_code': activationCode,
       if (lastModifiedBy != null) 'last_modified_by': lastModifiedBy,
     });
   }
@@ -782,6 +821,7 @@ class SchoolsCompanion extends UpdateCompanion<School> {
       Value<DateTime?>? expiryDate,
       Value<int>? updateCounter,
       Value<bool>? isDeleted,
+      Value<String?>? activationCode,
       Value<String?>? lastModifiedBy}) {
     return SchoolsCompanion(
       localId: localId ?? this.localId,
@@ -804,6 +844,7 @@ class SchoolsCompanion extends UpdateCompanion<School> {
       expiryDate: expiryDate ?? this.expiryDate,
       updateCounter: updateCounter ?? this.updateCounter,
       isDeleted: isDeleted ?? this.isDeleted,
+      activationCode: activationCode ?? this.activationCode,
       lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,
     );
   }
@@ -865,6 +906,9 @@ class SchoolsCompanion extends UpdateCompanion<School> {
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
     }
+    if (activationCode.present) {
+      map['activation_code'] = Variable<String>(activationCode.value);
+    }
     if (lastModifiedBy.present) {
       map['last_modified_by'] = Variable<String>(lastModifiedBy.value);
     }
@@ -891,6 +935,7 @@ class SchoolsCompanion extends UpdateCompanion<School> {
           ..write('expiryDate: $expiryDate, ')
           ..write('updateCounter: $updateCounter, ')
           ..write('isDeleted: $isDeleted, ')
+          ..write('activationCode: $activationCode, ')
           ..write('lastModifiedBy: $lastModifiedBy')
           ..write(')'))
         .toString();
@@ -7840,8 +7885,52 @@ class $RecoveryCodesTable extends RecoveryCodes
       requiredDuringInsert: false,
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _phoneNumberMeta =
+      const VerificationMeta('phoneNumber');
   @override
-  List<GeneratedColumn> get $columns => [id];
+  late final GeneratedColumn<String> phoneNumber = GeneratedColumn<String>(
+      'phone_number', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _codeMeta = const VerificationMeta('code');
+  @override
+  late final GeneratedColumn<String> code = GeneratedColumn<String>(
+      'code', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _expiresAtMeta =
+      const VerificationMeta('expiresAt');
+  @override
+  late final GeneratedColumn<DateTime> expiresAt = GeneratedColumn<DateTime>(
+      'expires_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _usedMeta = const VerificationMeta('used');
+  @override
+  late final GeneratedColumn<bool> used = GeneratedColumn<bool>(
+      'used', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("used" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _teacherLocalIdMeta =
+      const VerificationMeta('teacherLocalId');
+  @override
+  late final GeneratedColumn<int> teacherLocalId = GeneratedColumn<int>(
+      'teacher_local_id', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: true,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('REFERENCES teachers (local_id)'));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, phoneNumber, code, expiresAt, used, teacherLocalId, createdAt];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -7855,6 +7944,42 @@ class $RecoveryCodesTable extends RecoveryCodes
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
     }
+    if (data.containsKey('phone_number')) {
+      context.handle(
+          _phoneNumberMeta,
+          phoneNumber.isAcceptableOrUnknown(
+              data['phone_number']!, _phoneNumberMeta));
+    } else if (isInserting) {
+      context.missing(_phoneNumberMeta);
+    }
+    if (data.containsKey('code')) {
+      context.handle(
+          _codeMeta, code.isAcceptableOrUnknown(data['code']!, _codeMeta));
+    } else if (isInserting) {
+      context.missing(_codeMeta);
+    }
+    if (data.containsKey('expires_at')) {
+      context.handle(_expiresAtMeta,
+          expiresAt.isAcceptableOrUnknown(data['expires_at']!, _expiresAtMeta));
+    } else if (isInserting) {
+      context.missing(_expiresAtMeta);
+    }
+    if (data.containsKey('used')) {
+      context.handle(
+          _usedMeta, used.isAcceptableOrUnknown(data['used']!, _usedMeta));
+    }
+    if (data.containsKey('teacher_local_id')) {
+      context.handle(
+          _teacherLocalIdMeta,
+          teacherLocalId.isAcceptableOrUnknown(
+              data['teacher_local_id']!, _teacherLocalIdMeta));
+    } else if (isInserting) {
+      context.missing(_teacherLocalIdMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
     return context;
   }
 
@@ -7866,6 +7991,18 @@ class $RecoveryCodesTable extends RecoveryCodes
     return RecoveryCode(
       id: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      phoneNumber: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}phone_number'])!,
+      code: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}code'])!,
+      expiresAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}expires_at'])!,
+      used: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}used'])!,
+      teacherLocalId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}teacher_local_id'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
     );
   }
 
@@ -7877,17 +8014,42 @@ class $RecoveryCodesTable extends RecoveryCodes
 
 class RecoveryCode extends DataClass implements Insertable<RecoveryCode> {
   final int id;
-  const RecoveryCode({required this.id});
+  final String phoneNumber;
+  final String code;
+  final DateTime expiresAt;
+  final bool used;
+  final int teacherLocalId;
+  final DateTime createdAt;
+  const RecoveryCode(
+      {required this.id,
+      required this.phoneNumber,
+      required this.code,
+      required this.expiresAt,
+      required this.used,
+      required this.teacherLocalId,
+      required this.createdAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
+    map['phone_number'] = Variable<String>(phoneNumber);
+    map['code'] = Variable<String>(code);
+    map['expires_at'] = Variable<DateTime>(expiresAt);
+    map['used'] = Variable<bool>(used);
+    map['teacher_local_id'] = Variable<int>(teacherLocalId);
+    map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
 
   RecoveryCodesCompanion toCompanion(bool nullToAbsent) {
     return RecoveryCodesCompanion(
       id: Value(id),
+      phoneNumber: Value(phoneNumber),
+      code: Value(code),
+      expiresAt: Value(expiresAt),
+      used: Value(used),
+      teacherLocalId: Value(teacherLocalId),
+      createdAt: Value(createdAt),
     );
   }
 
@@ -7896,6 +8058,12 @@ class RecoveryCode extends DataClass implements Insertable<RecoveryCode> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return RecoveryCode(
       id: serializer.fromJson<int>(json['id']),
+      phoneNumber: serializer.fromJson<String>(json['phoneNumber']),
+      code: serializer.fromJson<String>(json['code']),
+      expiresAt: serializer.fromJson<DateTime>(json['expiresAt']),
+      used: serializer.fromJson<bool>(json['used']),
+      teacherLocalId: serializer.fromJson<int>(json['teacherLocalId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
   @override
@@ -7903,52 +8071,142 @@ class RecoveryCode extends DataClass implements Insertable<RecoveryCode> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
+      'phoneNumber': serializer.toJson<String>(phoneNumber),
+      'code': serializer.toJson<String>(code),
+      'expiresAt': serializer.toJson<DateTime>(expiresAt),
+      'used': serializer.toJson<bool>(used),
+      'teacherLocalId': serializer.toJson<int>(teacherLocalId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
 
-  RecoveryCode copyWith({int? id}) => RecoveryCode(
+  RecoveryCode copyWith(
+          {int? id,
+          String? phoneNumber,
+          String? code,
+          DateTime? expiresAt,
+          bool? used,
+          int? teacherLocalId,
+          DateTime? createdAt}) =>
+      RecoveryCode(
         id: id ?? this.id,
+        phoneNumber: phoneNumber ?? this.phoneNumber,
+        code: code ?? this.code,
+        expiresAt: expiresAt ?? this.expiresAt,
+        used: used ?? this.used,
+        teacherLocalId: teacherLocalId ?? this.teacherLocalId,
+        createdAt: createdAt ?? this.createdAt,
       );
   RecoveryCode copyWithCompanion(RecoveryCodesCompanion data) {
     return RecoveryCode(
       id: data.id.present ? data.id.value : this.id,
+      phoneNumber:
+          data.phoneNumber.present ? data.phoneNumber.value : this.phoneNumber,
+      code: data.code.present ? data.code.value : this.code,
+      expiresAt: data.expiresAt.present ? data.expiresAt.value : this.expiresAt,
+      used: data.used.present ? data.used.value : this.used,
+      teacherLocalId: data.teacherLocalId.present
+          ? data.teacherLocalId.value
+          : this.teacherLocalId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
 
   @override
   String toString() {
     return (StringBuffer('RecoveryCode(')
-          ..write('id: $id')
+          ..write('id: $id, ')
+          ..write('phoneNumber: $phoneNumber, ')
+          ..write('code: $code, ')
+          ..write('expiresAt: $expiresAt, ')
+          ..write('used: $used, ')
+          ..write('teacherLocalId: $teacherLocalId, ')
+          ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => Object.hash(
+      id, phoneNumber, code, expiresAt, used, teacherLocalId, createdAt);
   @override
   bool operator ==(Object other) =>
-      identical(this, other) || (other is RecoveryCode && other.id == this.id);
+      identical(this, other) ||
+      (other is RecoveryCode &&
+          other.id == this.id &&
+          other.phoneNumber == this.phoneNumber &&
+          other.code == this.code &&
+          other.expiresAt == this.expiresAt &&
+          other.used == this.used &&
+          other.teacherLocalId == this.teacherLocalId &&
+          other.createdAt == this.createdAt);
 }
 
 class RecoveryCodesCompanion extends UpdateCompanion<RecoveryCode> {
   final Value<int> id;
+  final Value<String> phoneNumber;
+  final Value<String> code;
+  final Value<DateTime> expiresAt;
+  final Value<bool> used;
+  final Value<int> teacherLocalId;
+  final Value<DateTime> createdAt;
   const RecoveryCodesCompanion({
     this.id = const Value.absent(),
+    this.phoneNumber = const Value.absent(),
+    this.code = const Value.absent(),
+    this.expiresAt = const Value.absent(),
+    this.used = const Value.absent(),
+    this.teacherLocalId = const Value.absent(),
+    this.createdAt = const Value.absent(),
   });
   RecoveryCodesCompanion.insert({
     this.id = const Value.absent(),
-  });
+    required String phoneNumber,
+    required String code,
+    required DateTime expiresAt,
+    this.used = const Value.absent(),
+    required int teacherLocalId,
+    this.createdAt = const Value.absent(),
+  })  : phoneNumber = Value(phoneNumber),
+        code = Value(code),
+        expiresAt = Value(expiresAt),
+        teacherLocalId = Value(teacherLocalId);
   static Insertable<RecoveryCode> custom({
     Expression<int>? id,
+    Expression<String>? phoneNumber,
+    Expression<String>? code,
+    Expression<DateTime>? expiresAt,
+    Expression<bool>? used,
+    Expression<int>? teacherLocalId,
+    Expression<DateTime>? createdAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
+      if (phoneNumber != null) 'phone_number': phoneNumber,
+      if (code != null) 'code': code,
+      if (expiresAt != null) 'expires_at': expiresAt,
+      if (used != null) 'used': used,
+      if (teacherLocalId != null) 'teacher_local_id': teacherLocalId,
+      if (createdAt != null) 'created_at': createdAt,
     });
   }
 
-  RecoveryCodesCompanion copyWith({Value<int>? id}) {
+  RecoveryCodesCompanion copyWith(
+      {Value<int>? id,
+      Value<String>? phoneNumber,
+      Value<String>? code,
+      Value<DateTime>? expiresAt,
+      Value<bool>? used,
+      Value<int>? teacherLocalId,
+      Value<DateTime>? createdAt}) {
     return RecoveryCodesCompanion(
       id: id ?? this.id,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      code: code ?? this.code,
+      expiresAt: expiresAt ?? this.expiresAt,
+      used: used ?? this.used,
+      teacherLocalId: teacherLocalId ?? this.teacherLocalId,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 
@@ -7958,13 +8216,37 @@ class RecoveryCodesCompanion extends UpdateCompanion<RecoveryCode> {
     if (id.present) {
       map['id'] = Variable<int>(id.value);
     }
+    if (phoneNumber.present) {
+      map['phone_number'] = Variable<String>(phoneNumber.value);
+    }
+    if (code.present) {
+      map['code'] = Variable<String>(code.value);
+    }
+    if (expiresAt.present) {
+      map['expires_at'] = Variable<DateTime>(expiresAt.value);
+    }
+    if (used.present) {
+      map['used'] = Variable<bool>(used.value);
+    }
+    if (teacherLocalId.present) {
+      map['teacher_local_id'] = Variable<int>(teacherLocalId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
     return map;
   }
 
   @override
   String toString() {
     return (StringBuffer('RecoveryCodesCompanion(')
-          ..write('id: $id')
+          ..write('id: $id, ')
+          ..write('phoneNumber: $phoneNumber, ')
+          ..write('code: $code, ')
+          ..write('expiresAt: $expiresAt, ')
+          ..write('used: $used, ')
+          ..write('teacherLocalId: $teacherLocalId, ')
+          ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
   }
@@ -8036,6 +8318,17 @@ class $PendingRecoveryRequestsTable extends PendingRecoveryRequests
   late final GeneratedColumn<DateTime> processedAt = GeneratedColumn<DateTime>(
       'processed_at', aliasedName, true,
       type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _emailMeta = const VerificationMeta('email');
+  @override
+  late final GeneratedColumn<String> email = GeneratedColumn<String>(
+      'email', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _attemptedAtMeta =
+      const VerificationMeta('attemptedAt');
+  @override
+  late final GeneratedColumn<DateTime> attemptedAt = GeneratedColumn<DateTime>(
+      'attempted_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -8045,7 +8338,9 @@ class $PendingRecoveryRequestsTable extends PendingRecoveryRequests
         generatedCode,
         codeExpiry,
         createdAt,
-        processedAt
+        processedAt,
+        email,
+        attemptedAt
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -8103,6 +8398,20 @@ class $PendingRecoveryRequestsTable extends PendingRecoveryRequests
           processedAt.isAcceptableOrUnknown(
               data['processed_at']!, _processedAtMeta));
     }
+    if (data.containsKey('email')) {
+      context.handle(
+          _emailMeta, email.isAcceptableOrUnknown(data['email']!, _emailMeta));
+    } else if (isInserting) {
+      context.missing(_emailMeta);
+    }
+    if (data.containsKey('attempted_at')) {
+      context.handle(
+          _attemptedAtMeta,
+          attemptedAt.isAcceptableOrUnknown(
+              data['attempted_at']!, _attemptedAtMeta));
+    } else if (isInserting) {
+      context.missing(_attemptedAtMeta);
+    }
     return context;
   }
 
@@ -8128,6 +8437,10 @@ class $PendingRecoveryRequestsTable extends PendingRecoveryRequests
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       processedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}processed_at']),
+      email: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}email'])!,
+      attemptedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}attempted_at'])!,
     );
   }
 
@@ -8147,6 +8460,8 @@ class PendingRecoveryRequest extends DataClass
   final DateTime? codeExpiry;
   final DateTime createdAt;
   final DateTime? processedAt;
+  final String email;
+  final DateTime attemptedAt;
   const PendingRecoveryRequest(
       {required this.id,
       required this.teacherLocalId,
@@ -8155,7 +8470,9 @@ class PendingRecoveryRequest extends DataClass
       this.generatedCode,
       this.codeExpiry,
       required this.createdAt,
-      this.processedAt});
+      this.processedAt,
+      required this.email,
+      required this.attemptedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -8173,6 +8490,8 @@ class PendingRecoveryRequest extends DataClass
     if (!nullToAbsent || processedAt != null) {
       map['processed_at'] = Variable<DateTime>(processedAt);
     }
+    map['email'] = Variable<String>(email);
+    map['attempted_at'] = Variable<DateTime>(attemptedAt);
     return map;
   }
 
@@ -8192,6 +8511,8 @@ class PendingRecoveryRequest extends DataClass
       processedAt: processedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(processedAt),
+      email: Value(email),
+      attemptedAt: Value(attemptedAt),
     );
   }
 
@@ -8208,6 +8529,8 @@ class PendingRecoveryRequest extends DataClass
       codeExpiry: serializer.fromJson<DateTime?>(json['codeExpiry']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       processedAt: serializer.fromJson<DateTime?>(json['processedAt']),
+      email: serializer.fromJson<String>(json['email']),
+      attemptedAt: serializer.fromJson<DateTime>(json['attemptedAt']),
     );
   }
   @override
@@ -8222,6 +8545,8 @@ class PendingRecoveryRequest extends DataClass
       'codeExpiry': serializer.toJson<DateTime?>(codeExpiry),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'processedAt': serializer.toJson<DateTime?>(processedAt),
+      'email': serializer.toJson<String>(email),
+      'attemptedAt': serializer.toJson<DateTime>(attemptedAt),
     };
   }
 
@@ -8233,7 +8558,9 @@ class PendingRecoveryRequest extends DataClass
           Value<String?> generatedCode = const Value.absent(),
           Value<DateTime?> codeExpiry = const Value.absent(),
           DateTime? createdAt,
-          Value<DateTime?> processedAt = const Value.absent()}) =>
+          Value<DateTime?> processedAt = const Value.absent(),
+          String? email,
+          DateTime? attemptedAt}) =>
       PendingRecoveryRequest(
         id: id ?? this.id,
         teacherLocalId: teacherLocalId ?? this.teacherLocalId,
@@ -8244,6 +8571,8 @@ class PendingRecoveryRequest extends DataClass
         codeExpiry: codeExpiry.present ? codeExpiry.value : this.codeExpiry,
         createdAt: createdAt ?? this.createdAt,
         processedAt: processedAt.present ? processedAt.value : this.processedAt,
+        email: email ?? this.email,
+        attemptedAt: attemptedAt ?? this.attemptedAt,
       );
   PendingRecoveryRequest copyWithCompanion(
       PendingRecoveryRequestsCompanion data) {
@@ -8264,6 +8593,9 @@ class PendingRecoveryRequest extends DataClass
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       processedAt:
           data.processedAt.present ? data.processedAt.value : this.processedAt,
+      email: data.email.present ? data.email.value : this.email,
+      attemptedAt:
+          data.attemptedAt.present ? data.attemptedAt.value : this.attemptedAt,
     );
   }
 
@@ -8277,14 +8609,25 @@ class PendingRecoveryRequest extends DataClass
           ..write('generatedCode: $generatedCode, ')
           ..write('codeExpiry: $codeExpiry, ')
           ..write('createdAt: $createdAt, ')
-          ..write('processedAt: $processedAt')
+          ..write('processedAt: $processedAt, ')
+          ..write('email: $email, ')
+          ..write('attemptedAt: $attemptedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, teacherLocalId, requestedByAdminId,
-      fulfilled, generatedCode, codeExpiry, createdAt, processedAt);
+  int get hashCode => Object.hash(
+      id,
+      teacherLocalId,
+      requestedByAdminId,
+      fulfilled,
+      generatedCode,
+      codeExpiry,
+      createdAt,
+      processedAt,
+      email,
+      attemptedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -8296,7 +8639,9 @@ class PendingRecoveryRequest extends DataClass
           other.generatedCode == this.generatedCode &&
           other.codeExpiry == this.codeExpiry &&
           other.createdAt == this.createdAt &&
-          other.processedAt == this.processedAt);
+          other.processedAt == this.processedAt &&
+          other.email == this.email &&
+          other.attemptedAt == this.attemptedAt);
 }
 
 class PendingRecoveryRequestsCompanion
@@ -8309,6 +8654,8 @@ class PendingRecoveryRequestsCompanion
   final Value<DateTime?> codeExpiry;
   final Value<DateTime> createdAt;
   final Value<DateTime?> processedAt;
+  final Value<String> email;
+  final Value<DateTime> attemptedAt;
   const PendingRecoveryRequestsCompanion({
     this.id = const Value.absent(),
     this.teacherLocalId = const Value.absent(),
@@ -8318,6 +8665,8 @@ class PendingRecoveryRequestsCompanion
     this.codeExpiry = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.processedAt = const Value.absent(),
+    this.email = const Value.absent(),
+    this.attemptedAt = const Value.absent(),
   });
   PendingRecoveryRequestsCompanion.insert({
     this.id = const Value.absent(),
@@ -8328,8 +8677,12 @@ class PendingRecoveryRequestsCompanion
     this.codeExpiry = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.processedAt = const Value.absent(),
+    required String email,
+    required DateTime attemptedAt,
   })  : teacherLocalId = Value(teacherLocalId),
-        requestedByAdminId = Value(requestedByAdminId);
+        requestedByAdminId = Value(requestedByAdminId),
+        email = Value(email),
+        attemptedAt = Value(attemptedAt);
   static Insertable<PendingRecoveryRequest> custom({
     Expression<int>? id,
     Expression<int>? teacherLocalId,
@@ -8339,6 +8692,8 @@ class PendingRecoveryRequestsCompanion
     Expression<DateTime>? codeExpiry,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? processedAt,
+    Expression<String>? email,
+    Expression<DateTime>? attemptedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -8350,6 +8705,8 @@ class PendingRecoveryRequestsCompanion
       if (codeExpiry != null) 'code_expiry': codeExpiry,
       if (createdAt != null) 'created_at': createdAt,
       if (processedAt != null) 'processed_at': processedAt,
+      if (email != null) 'email': email,
+      if (attemptedAt != null) 'attempted_at': attemptedAt,
     });
   }
 
@@ -8361,7 +8718,9 @@ class PendingRecoveryRequestsCompanion
       Value<String?>? generatedCode,
       Value<DateTime?>? codeExpiry,
       Value<DateTime>? createdAt,
-      Value<DateTime?>? processedAt}) {
+      Value<DateTime?>? processedAt,
+      Value<String>? email,
+      Value<DateTime>? attemptedAt}) {
     return PendingRecoveryRequestsCompanion(
       id: id ?? this.id,
       teacherLocalId: teacherLocalId ?? this.teacherLocalId,
@@ -8371,6 +8730,8 @@ class PendingRecoveryRequestsCompanion
       codeExpiry: codeExpiry ?? this.codeExpiry,
       createdAt: createdAt ?? this.createdAt,
       processedAt: processedAt ?? this.processedAt,
+      email: email ?? this.email,
+      attemptedAt: attemptedAt ?? this.attemptedAt,
     );
   }
 
@@ -8401,6 +8762,12 @@ class PendingRecoveryRequestsCompanion
     if (processedAt.present) {
       map['processed_at'] = Variable<DateTime>(processedAt.value);
     }
+    if (email.present) {
+      map['email'] = Variable<String>(email.value);
+    }
+    if (attemptedAt.present) {
+      map['attempted_at'] = Variable<DateTime>(attemptedAt.value);
+    }
     return map;
   }
 
@@ -8414,7 +8781,9 @@ class PendingRecoveryRequestsCompanion
           ..write('generatedCode: $generatedCode, ')
           ..write('codeExpiry: $codeExpiry, ')
           ..write('createdAt: $createdAt, ')
-          ..write('processedAt: $processedAt')
+          ..write('processedAt: $processedAt, ')
+          ..write('email: $email, ')
+          ..write('attemptedAt: $attemptedAt')
           ..write(')'))
         .toString();
   }
@@ -10080,6 +10449,7 @@ typedef $$SchoolsTableCreateCompanionBuilder = SchoolsCompanion Function({
   Value<DateTime?> expiryDate,
   Value<int> updateCounter,
   Value<bool> isDeleted,
+  Value<String?> activationCode,
   Value<String?> lastModifiedBy,
 });
 typedef $$SchoolsTableUpdateCompanionBuilder = SchoolsCompanion Function({
@@ -10100,6 +10470,7 @@ typedef $$SchoolsTableUpdateCompanionBuilder = SchoolsCompanion Function({
   Value<DateTime?> expiryDate,
   Value<int> updateCounter,
   Value<bool> isDeleted,
+  Value<String?> activationCode,
   Value<String?> lastModifiedBy,
 });
 
@@ -10204,6 +10575,10 @@ class $$SchoolsTableFilterComposer
 
   ColumnFilters<bool> get isDeleted => $composableBuilder(
       column: $table.isDeleted, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get activationCode => $composableBuilder(
+      column: $table.activationCode,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get lastModifiedBy => $composableBuilder(
       column: $table.lastModifiedBy,
@@ -10319,6 +10694,10 @@ class $$SchoolsTableOrderingComposer
   ColumnOrderings<bool> get isDeleted => $composableBuilder(
       column: $table.isDeleted, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get activationCode => $composableBuilder(
+      column: $table.activationCode,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get lastModifiedBy => $composableBuilder(
       column: $table.lastModifiedBy,
       builder: (column) => ColumnOrderings(column));
@@ -10383,6 +10762,9 @@ class $$SchoolsTableAnnotationComposer
 
   GeneratedColumn<bool> get isDeleted =>
       $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<String> get activationCode => $composableBuilder(
+      column: $table.activationCode, builder: (column) => column);
 
   GeneratedColumn<String> get lastModifiedBy => $composableBuilder(
       column: $table.lastModifiedBy, builder: (column) => column);
@@ -10470,6 +10852,7 @@ class $$SchoolsTableTableManager extends RootTableManager<
             Value<DateTime?> expiryDate = const Value.absent(),
             Value<int> updateCounter = const Value.absent(),
             Value<bool> isDeleted = const Value.absent(),
+            Value<String?> activationCode = const Value.absent(),
             Value<String?> lastModifiedBy = const Value.absent(),
           }) =>
               SchoolsCompanion(
@@ -10490,6 +10873,7 @@ class $$SchoolsTableTableManager extends RootTableManager<
             expiryDate: expiryDate,
             updateCounter: updateCounter,
             isDeleted: isDeleted,
+            activationCode: activationCode,
             lastModifiedBy: lastModifiedBy,
           ),
           createCompanionCallback: ({
@@ -10510,6 +10894,7 @@ class $$SchoolsTableTableManager extends RootTableManager<
             Value<DateTime?> expiryDate = const Value.absent(),
             Value<int> updateCounter = const Value.absent(),
             Value<bool> isDeleted = const Value.absent(),
+            Value<String?> activationCode = const Value.absent(),
             Value<String?> lastModifiedBy = const Value.absent(),
           }) =>
               SchoolsCompanion.insert(
@@ -10530,6 +10915,7 @@ class $$SchoolsTableTableManager extends RootTableManager<
             expiryDate: expiryDate,
             updateCounter: updateCounter,
             isDeleted: isDeleted,
+            activationCode: activationCode,
             lastModifiedBy: lastModifiedBy,
           ),
           withReferenceMapper: (p0) => p0
@@ -10646,6 +11032,22 @@ final class $$TeachersTableReferences
     if (item == null) return manager;
     return ProcessedTableManager(
         manager.$state.copyWith(prefetchedData: [item]));
+  }
+
+  static MultiTypedResultKey<$RecoveryCodesTable, List<RecoveryCode>>
+      _recoveryCodesRefsTable(_$AppDatabase db) =>
+          MultiTypedResultKey.fromTable(db.recoveryCodes,
+              aliasName: $_aliasNameGenerator(
+                  db.teachers.localId, db.recoveryCodes.teacherLocalId));
+
+  $$RecoveryCodesTableProcessedTableManager get recoveryCodesRefs {
+    final manager = $$RecoveryCodesTableTableManager($_db, $_db.recoveryCodes)
+        .filter((f) =>
+            f.teacherLocalId.localId.sqlEquals($_itemColumn<int>('local_id')!));
+
+    final cache = $_typedResult.readTableOrNull(_recoveryCodesRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
   }
 
   static MultiTypedResultKey<$PendingRecoveryRequestsTable,
@@ -10787,6 +11189,27 @@ class $$TeachersTableFilterComposer
                   $removeJoinBuilderFromRootComposer,
             ));
     return composer;
+  }
+
+  Expression<bool> recoveryCodesRefs(
+      Expression<bool> Function($$RecoveryCodesTableFilterComposer f) f) {
+    final $$RecoveryCodesTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.localId,
+        referencedTable: $db.recoveryCodes,
+        getReferencedColumn: (t) => t.teacherLocalId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$RecoveryCodesTableFilterComposer(
+              $db: $db,
+              $table: $db.recoveryCodes,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
   }
 
   Expression<bool> pendingRecoveryRequestsRefs(
@@ -11023,6 +11446,27 @@ class $$TeachersTableAnnotationComposer
     return composer;
   }
 
+  Expression<T> recoveryCodesRefs<T extends Object>(
+      Expression<T> Function($$RecoveryCodesTableAnnotationComposer a) f) {
+    final $$RecoveryCodesTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.localId,
+        referencedTable: $db.recoveryCodes,
+        getReferencedColumn: (t) => t.teacherLocalId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$RecoveryCodesTableAnnotationComposer(
+              $db: $db,
+              $table: $db.recoveryCodes,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
   Expression<T> pendingRecoveryRequestsRefs<T extends Object>(
       Expression<T> Function($$PendingRecoveryRequestsTableAnnotationComposer a)
           f) {
@@ -11102,6 +11546,7 @@ class $$TeachersTableTableManager extends RootTableManager<
     Teacher,
     PrefetchHooks Function(
         {bool schoolLocalId,
+        bool recoveryCodesRefs,
         bool pendingRecoveryRequestsRefs,
         bool teacherDevicesRefs,
         bool teacherSubjectsRefs})> {
@@ -11201,12 +11646,14 @@ class $$TeachersTableTableManager extends RootTableManager<
               .toList(),
           prefetchHooksCallback: (
               {schoolLocalId = false,
+              recoveryCodesRefs = false,
               pendingRecoveryRequestsRefs = false,
               teacherDevicesRefs = false,
               teacherSubjectsRefs = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [
+                if (recoveryCodesRefs) db.recoveryCodes,
                 if (pendingRecoveryRequestsRefs) db.pendingRecoveryRequests,
                 if (teacherDevicesRefs) db.teacherDevices,
                 if (teacherSubjectsRefs) db.teacherSubjects
@@ -11240,6 +11687,19 @@ class $$TeachersTableTableManager extends RootTableManager<
               },
               getPrefetchedDataCallback: (items) async {
                 return [
+                  if (recoveryCodesRefs)
+                    await $_getPrefetchedData<Teacher, $TeachersTable,
+                            RecoveryCode>(
+                        currentTable: table,
+                        referencedTable: $$TeachersTableReferences
+                            ._recoveryCodesRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$TeachersTableReferences(db, table, p0)
+                                .recoveryCodesRefs,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.teacherLocalId == item.localId),
+                        typedResults: items),
                   if (pendingRecoveryRequestsRefs)
                     await $_getPrefetchedData<Teacher, $TeachersTable,
                             PendingRecoveryRequest>(
@@ -11299,6 +11759,7 @@ typedef $$TeachersTableProcessedTableManager = ProcessedTableManager<
     Teacher,
     PrefetchHooks Function(
         {bool schoolLocalId,
+        bool recoveryCodesRefs,
         bool pendingRecoveryRequestsRefs,
         bool teacherDevicesRefs,
         bool teacherSubjectsRefs})>;
@@ -14236,11 +14697,44 @@ typedef $$PaymentEventsTableProcessedTableManager = ProcessedTableManager<
 typedef $$RecoveryCodesTableCreateCompanionBuilder = RecoveryCodesCompanion
     Function({
   Value<int> id,
+  required String phoneNumber,
+  required String code,
+  required DateTime expiresAt,
+  Value<bool> used,
+  required int teacherLocalId,
+  Value<DateTime> createdAt,
 });
 typedef $$RecoveryCodesTableUpdateCompanionBuilder = RecoveryCodesCompanion
     Function({
   Value<int> id,
+  Value<String> phoneNumber,
+  Value<String> code,
+  Value<DateTime> expiresAt,
+  Value<bool> used,
+  Value<int> teacherLocalId,
+  Value<DateTime> createdAt,
 });
+
+final class $$RecoveryCodesTableReferences
+    extends BaseReferences<_$AppDatabase, $RecoveryCodesTable, RecoveryCode> {
+  $$RecoveryCodesTableReferences(
+      super.$_db, super.$_table, super.$_typedResult);
+
+  static $TeachersTable _teacherLocalIdTable(_$AppDatabase db) =>
+      db.teachers.createAlias($_aliasNameGenerator(
+          db.recoveryCodes.teacherLocalId, db.teachers.localId));
+
+  $$TeachersTableProcessedTableManager get teacherLocalId {
+    final $_column = $_itemColumn<int>('teacher_local_id')!;
+
+    final manager = $$TeachersTableTableManager($_db, $_db.teachers)
+        .filter((f) => f.localId.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_teacherLocalIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+}
 
 class $$RecoveryCodesTableFilterComposer
     extends Composer<_$AppDatabase, $RecoveryCodesTable> {
@@ -14253,6 +14747,41 @@ class $$RecoveryCodesTableFilterComposer
   });
   ColumnFilters<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get phoneNumber => $composableBuilder(
+      column: $table.phoneNumber, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get code => $composableBuilder(
+      column: $table.code, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get expiresAt => $composableBuilder(
+      column: $table.expiresAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get used => $composableBuilder(
+      column: $table.used, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  $$TeachersTableFilterComposer get teacherLocalId {
+    final $$TeachersTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.teacherLocalId,
+        referencedTable: $db.teachers,
+        getReferencedColumn: (t) => t.localId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TeachersTableFilterComposer(
+              $db: $db,
+              $table: $db.teachers,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
 }
 
 class $$RecoveryCodesTableOrderingComposer
@@ -14266,6 +14795,41 @@ class $$RecoveryCodesTableOrderingComposer
   });
   ColumnOrderings<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get phoneNumber => $composableBuilder(
+      column: $table.phoneNumber, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get code => $composableBuilder(
+      column: $table.code, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get expiresAt => $composableBuilder(
+      column: $table.expiresAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get used => $composableBuilder(
+      column: $table.used, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  $$TeachersTableOrderingComposer get teacherLocalId {
+    final $$TeachersTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.teacherLocalId,
+        referencedTable: $db.teachers,
+        getReferencedColumn: (t) => t.localId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TeachersTableOrderingComposer(
+              $db: $db,
+              $table: $db.teachers,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
 }
 
 class $$RecoveryCodesTableAnnotationComposer
@@ -14279,6 +14843,41 @@ class $$RecoveryCodesTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get phoneNumber => $composableBuilder(
+      column: $table.phoneNumber, builder: (column) => column);
+
+  GeneratedColumn<String> get code =>
+      $composableBuilder(column: $table.code, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get expiresAt =>
+      $composableBuilder(column: $table.expiresAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get used =>
+      $composableBuilder(column: $table.used, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$TeachersTableAnnotationComposer get teacherLocalId {
+    final $$TeachersTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.teacherLocalId,
+        referencedTable: $db.teachers,
+        getReferencedColumn: (t) => t.localId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TeachersTableAnnotationComposer(
+              $db: $db,
+              $table: $db.teachers,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
 }
 
 class $$RecoveryCodesTableTableManager extends RootTableManager<
@@ -14290,12 +14889,9 @@ class $$RecoveryCodesTableTableManager extends RootTableManager<
     $$RecoveryCodesTableAnnotationComposer,
     $$RecoveryCodesTableCreateCompanionBuilder,
     $$RecoveryCodesTableUpdateCompanionBuilder,
-    (
-      RecoveryCode,
-      BaseReferences<_$AppDatabase, $RecoveryCodesTable, RecoveryCode>
-    ),
+    (RecoveryCode, $$RecoveryCodesTableReferences),
     RecoveryCode,
-    PrefetchHooks Function()> {
+    PrefetchHooks Function({bool teacherLocalId})> {
   $$RecoveryCodesTableTableManager(_$AppDatabase db, $RecoveryCodesTable table)
       : super(TableManagerState(
           db: db,
@@ -14308,20 +14904,82 @@ class $$RecoveryCodesTableTableManager extends RootTableManager<
               $$RecoveryCodesTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            Value<String> phoneNumber = const Value.absent(),
+            Value<String> code = const Value.absent(),
+            Value<DateTime> expiresAt = const Value.absent(),
+            Value<bool> used = const Value.absent(),
+            Value<int> teacherLocalId = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
           }) =>
               RecoveryCodesCompanion(
             id: id,
+            phoneNumber: phoneNumber,
+            code: code,
+            expiresAt: expiresAt,
+            used: used,
+            teacherLocalId: teacherLocalId,
+            createdAt: createdAt,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            required String phoneNumber,
+            required String code,
+            required DateTime expiresAt,
+            Value<bool> used = const Value.absent(),
+            required int teacherLocalId,
+            Value<DateTime> createdAt = const Value.absent(),
           }) =>
               RecoveryCodesCompanion.insert(
             id: id,
+            phoneNumber: phoneNumber,
+            code: code,
+            expiresAt: expiresAt,
+            used: used,
+            teacherLocalId: teacherLocalId,
+            createdAt: createdAt,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable(table),
+                    $$RecoveryCodesTableReferences(db, table, e)
+                  ))
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({teacherLocalId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (teacherLocalId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.teacherLocalId,
+                    referencedTable:
+                        $$RecoveryCodesTableReferences._teacherLocalIdTable(db),
+                    referencedColumn: $$RecoveryCodesTableReferences
+                        ._teacherLocalIdTable(db)
+                        .localId,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
         ));
 }
 
@@ -14334,12 +14992,9 @@ typedef $$RecoveryCodesTableProcessedTableManager = ProcessedTableManager<
     $$RecoveryCodesTableAnnotationComposer,
     $$RecoveryCodesTableCreateCompanionBuilder,
     $$RecoveryCodesTableUpdateCompanionBuilder,
-    (
-      RecoveryCode,
-      BaseReferences<_$AppDatabase, $RecoveryCodesTable, RecoveryCode>
-    ),
+    (RecoveryCode, $$RecoveryCodesTableReferences),
     RecoveryCode,
-    PrefetchHooks Function()>;
+    PrefetchHooks Function({bool teacherLocalId})>;
 typedef $$PendingRecoveryRequestsTableCreateCompanionBuilder
     = PendingRecoveryRequestsCompanion Function({
   Value<int> id,
@@ -14350,6 +15005,8 @@ typedef $$PendingRecoveryRequestsTableCreateCompanionBuilder
   Value<DateTime?> codeExpiry,
   Value<DateTime> createdAt,
   Value<DateTime?> processedAt,
+  required String email,
+  required DateTime attemptedAt,
 });
 typedef $$PendingRecoveryRequestsTableUpdateCompanionBuilder
     = PendingRecoveryRequestsCompanion Function({
@@ -14361,6 +15018,8 @@ typedef $$PendingRecoveryRequestsTableUpdateCompanionBuilder
   Value<DateTime?> codeExpiry,
   Value<DateTime> createdAt,
   Value<DateTime?> processedAt,
+  Value<String> email,
+  Value<DateTime> attemptedAt,
 });
 
 final class $$PendingRecoveryRequestsTableReferences extends BaseReferences<
@@ -14415,6 +15074,12 @@ class $$PendingRecoveryRequestsTableFilterComposer
   ColumnFilters<DateTime> get processedAt => $composableBuilder(
       column: $table.processedAt, builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<String> get email => $composableBuilder(
+      column: $table.email, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get attemptedAt => $composableBuilder(
+      column: $table.attemptedAt, builder: (column) => ColumnFilters(column));
+
   $$TeachersTableFilterComposer get teacherLocalId {
     final $$TeachersTableFilterComposer composer = $composerBuilder(
         composer: this,
@@ -14468,6 +15133,12 @@ class $$PendingRecoveryRequestsTableOrderingComposer
   ColumnOrderings<DateTime> get processedAt => $composableBuilder(
       column: $table.processedAt, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get email => $composableBuilder(
+      column: $table.email, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get attemptedAt => $composableBuilder(
+      column: $table.attemptedAt, builder: (column) => ColumnOrderings(column));
+
   $$TeachersTableOrderingComposer get teacherLocalId {
     final $$TeachersTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -14518,6 +15189,12 @@ class $$PendingRecoveryRequestsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get processedAt => $composableBuilder(
       column: $table.processedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get email =>
+      $composableBuilder(column: $table.email, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get attemptedAt => $composableBuilder(
+      column: $table.attemptedAt, builder: (column) => column);
 
   $$TeachersTableAnnotationComposer get teacherLocalId {
     final $$TeachersTableAnnotationComposer composer = $composerBuilder(
@@ -14575,6 +15252,8 @@ class $$PendingRecoveryRequestsTableTableManager extends RootTableManager<
             Value<DateTime?> codeExpiry = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> processedAt = const Value.absent(),
+            Value<String> email = const Value.absent(),
+            Value<DateTime> attemptedAt = const Value.absent(),
           }) =>
               PendingRecoveryRequestsCompanion(
             id: id,
@@ -14585,6 +15264,8 @@ class $$PendingRecoveryRequestsTableTableManager extends RootTableManager<
             codeExpiry: codeExpiry,
             createdAt: createdAt,
             processedAt: processedAt,
+            email: email,
+            attemptedAt: attemptedAt,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -14595,6 +15276,8 @@ class $$PendingRecoveryRequestsTableTableManager extends RootTableManager<
             Value<DateTime?> codeExpiry = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> processedAt = const Value.absent(),
+            required String email,
+            required DateTime attemptedAt,
           }) =>
               PendingRecoveryRequestsCompanion.insert(
             id: id,
@@ -14605,6 +15288,8 @@ class $$PendingRecoveryRequestsTableTableManager extends RootTableManager<
             codeExpiry: codeExpiry,
             createdAt: createdAt,
             processedAt: processedAt,
+            email: email,
+            attemptedAt: attemptedAt,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (

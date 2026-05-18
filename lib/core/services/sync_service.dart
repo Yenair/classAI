@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:classai/core/database/database.dart';
@@ -210,8 +212,15 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
       if (data != null) {
         return SyncPullPage.fromJson(data);
       }
-    } catch (e) {
-      // Edge Function not deployed or call failed — fall through
+    } catch (e, stackTrace) {
+      // Edge Function not deployed or call failed — log and fall through.
+      // The sync loop (_pullChanges) relies on empty pages as a graceful
+      // fallback; throwing here would abort the entire sync cycle.
+      debugPrint('SupabaseSyncRemoteApi.pullChanges failed: $e');
+      await Sentry.captureException(
+        e,
+        stackTrace: stackTrace,
+      );
     }
 
     // Edge Function call failed; return an empty page so the sync cycle
@@ -258,7 +267,11 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
         );
       }
     } catch (e) {
-      // Edge Function not deployed — fall through
+      // Edge Function not deployed — log and fall through
+      await Sentry.captureException(
+        e,
+        hint: null,
+      );
     }
 
     // Edge Function call failed; return an error response so the sync
@@ -286,18 +299,29 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
   }) async {
     try {
       final response = await client.functions.invoke('sync-realtime-events', body: {
-        'sinceEventId': sinceEventId,
+        'since_event_id': sinceEventId,
+        'school_id': schoolId,
       });
       final data = response.data as Map<String, dynamic>?;
-      if (data != null && data['ok'] == true) {
-        // Placeholder Edge Function — no events yet
-        return SyncRealtimePage(events: [], latestEventId: sinceEventId);
+      if (data != null) {
+        // Try to parse the response as a real SyncRealtimePage.
+        // When the Edge Function is properly deployed, this will return
+        // actual events. Until then, data will only contain { ok: true }
+        // which will result in an empty page from SyncRealtimePage.fromJson().
+        return SyncRealtimePage.fromJson(data);
       }
     } catch (e) {
-      // Edge Function not deployed — fall through
+      // Edge Function not deployed or call failed — log and fall through.
+      // The pull-based sync cycle (SyncService._pullChanges()) serves as
+      // a fallback to catch up on missed changes when the realtime endpoint
+      // is unavailable.
+      // ignore: avoid_print
+      print('[sync] sync-realtime-events call failed: $e');
     }
 
-    // Edge Function call failed; return empty page so the cycle continues.
+    // Edge Function call failed; return empty page so the sync cycle
+    // can continue without crashing. The next periodic pull cycle will
+    // pick up any missed changes.
     return SyncRealtimePage(events: [], latestEventId: sinceEventId);
   }
 }

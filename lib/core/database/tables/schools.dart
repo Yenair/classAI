@@ -18,6 +18,7 @@ class Schools extends Table {
   DateTimeColumn get expiryDate => dateTime().nullable()();
   IntColumn get updateCounter => integer().withDefault(const Constant(0))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+  TextColumn get activationCode => text().nullable()();
   TextColumn get lastModifiedBy => text().nullable()(); // teacher_id for sync
 
 }
