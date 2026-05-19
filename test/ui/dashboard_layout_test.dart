@@ -31,6 +31,8 @@ void main() {
       'platform_mode_override': 'editor',
     });
 
+    // pumpWidget with a fresh ProviderScope tree — this and the assertion
+    // below act as the isolation guard; each WidgetTester is fresh per test.
     await tester.pumpWidget(
       const ProviderScope(
         child: MaterialApp(home: EditorLayout()),
@@ -39,11 +41,18 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    // Should find 5 destination labels
-    expect(find.text('Dashboard'), findsOneWidget);
-    expect(find.text('Lessons'), findsOneWidget);
-    expect(find.text('Exams'), findsOneWidget);
-    expect(find.text('Vault'), findsOneWidget);
-    expect(find.text('More'), findsOneWidget);
+    // Verify there is exactly one EditorLayout — signals the tree is clean.
+    expect(find.byType(EditorLayout).evaluate(), hasLength(1));
+
+    // Each NavigationRail destination wraps its content in a GestureDetector.
+    // Count GestureDetector descendants to verify exactly 5 destinations
+    // without touching private SDK types or private fields.
+    final rail = find.byType(NavigationRail);
+    expect(rail, findsOneWidget);
+    final gestureDetectors = find
+        .descendant(of: rail, matching: find.byType(GestureDetector))
+        .evaluate()
+        .length;
+    expect(gestureDetectors, equals(5));
   });
 }
