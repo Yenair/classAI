@@ -1,6 +1,3 @@
-import 'dart:convert';
-
-import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -87,11 +84,9 @@ class AuthStateData {
       state: state ?? this.state,
       currentTeacher:
           clearTeacher ? null : (currentTeacher ?? this.currentTeacher),
-      currentSchool:
-          clearSchool ? null : (currentSchool ?? this.currentSchool),
+      currentSchool: clearSchool ? null : (currentSchool ?? this.currentSchool),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
-      offlineLoginAttempts:
-          offlineLoginAttempts ?? this.offlineLoginAttempts,
+      offlineLoginAttempts: offlineLoginAttempts ?? this.offlineLoginAttempts,
     );
   }
 }
@@ -125,7 +120,14 @@ class AuthNotifier extends Notifier<AuthStateData> {
     try {
       final storedHash = await _securityService.getPasswordHash();
       if (storedHash != null && storedHash.isNotEmpty) {
-        state = state.copyWith(state: AuthState.offlineLoginAttempt);
+        // Offline login is disabled because the server uses bcrypt+pepper
+        // while the client stored a SHA-256 hash that will never match.
+        // Require online login to use the server's bcrypt verification.
+        state = state.copyWith(
+          state: AuthState.onlineLoginRequired,
+          errorMessage:
+              'Offline login unavailable — connect to the internet to sign in.',
+        );
       } else {
         state = state.copyWith(state: AuthState.onlineLoginRequired);
       }
@@ -137,105 +139,16 @@ class AuthNotifier extends Notifier<AuthStateData> {
   /// Attempt offline login using stored password hash.
   /// Returns true if login succeeded.
   Future<bool> attemptOfflineLogin(String password) async {
-    if (state.state != AuthState.offlineLoginAttempt) {
-      return false;
-    }
-
-    try {
-      final storedHash = await _securityService.getPasswordHash();
-      if (storedHash == null) {
-        state = state.copyWith(
-          state: AuthState.onlineLoginRequired,
-          errorMessage: 'No stored credentials. Please login online.',
-        );
-        return false;
-      }
-
-      final passwordMatch = await _verifyPasswordLocally(password, storedHash);
-
-      if (passwordMatch) {
-        // Before authenticating, check for password hash version mismatch.
-        // If the server has re-wrapped keys (admin recovery, force reset),
-        // the version will differ and we must emergency-save then go online.
-        final versionMismatch = await _checkPasswordHashVersionMismatch();
-        if (versionMismatch) {
-          state = state.copyWith(state: AuthState.emergencySaving);
-          try {
-            await _emergencyFlushService.flushAll();
-          } catch (_) {
-            // Flush errors are logged inside flushAll; continue with logout
-          }
-          state = state.copyWith(
-            state: AuthState.onlineLoginRequired,
-            errorMessage:
-                'Your account credentials have been updated by an administrator. '
-                'Please login online to sync.',
-            offlineLoginAttempts: 0,
-          );
-          return false;
-        }
-
-        state = state.copyWith(state: AuthState.authenticated);
-        return true;
-      }
-
-      final attempts = state.offlineLoginAttempts + 1;
-
-      if (attempts >= maxOfflineAttempts) {
-        state = state.copyWith(
-          state: AuthState.onlineLoginRequired,
-          errorMessage:
-              'Too many failed attempts. Login online to continue.',
-          offlineLoginAttempts: attempts,
-        );
-      } else {
-        state = state.copyWith(
-          state: AuthState.offlineLoginAttempt,
-          errorMessage:
-              'Invalid password. ${maxOfflineAttempts - attempts} attempt(s) remaining.',
-          offlineLoginAttempts: attempts,
-        );
-      }
-
-      return false;
-    } catch (e) {
-      state = state.copyWith(
-        state: AuthState.onlineLoginRequired,
-        errorMessage: 'Offline login error. Please login online.',
-      );
-      return false;
-    }
-  }
-
-  /// Checks whether the cached teacher's [passwordHashVersion] differs from
-  /// the [lastKnownPasswordHashVersion] stored in the security config.
-  ///
-  /// Returns `true` if there is a mismatch (meaning keys have been re-wrapped
-  /// server-side and a fresh online login is required).
-  Future<bool> _checkPasswordHashVersionMismatch() async {
-    try {
-      final config = await _db.securityConfigDao.get();
-      final storedVersion = config.lastKnownPasswordHashVersion;
-
-      // Read the first (oldest / highest-privilege) cached teacher record
-      final teachers = await (_db.select(_db.teachers)
-            ..where((t) => t.isActive.equals(true))
-            ..limit(1))
-          .get();
-
-      if (teachers.isEmpty) return false;
-      final cachedVersion = teachers.first.passwordHashVersion;
-
-      return cachedVersion != storedVersion;
-    } catch (e) {
-      // If we cannot read the config or teachers table, assume no mismatch
-      // and allow offline login to proceed.
-      await Sentry.captureException(
-        e,
-        hint: null,
-      );
-      return false;
-    }
+    // Offline login is disabled — the server uses bcrypt+pepper for
+    // password verification while the client stored a SHA-256 hash that
+    // will never match. Require online login for all authentication.
+    state = state.copyWith(
+      state: AuthState.onlineLoginRequired,
+      errorMessage:
+          'Offline login unavailable — connect to the internet to sign in.',
+      offlineLoginAttempts: 0,
+    );
+    return false;
   }
 
   /// Perform server-side login with email, password, and device ID.
@@ -407,8 +320,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
     );
 
     try {
-      final result =
-          await _authService.verifyAdminOtp(email, otp, newPassword);
+      final result = await _authService.verifyAdminOtp(email, otp, newPassword);
 
       await _securityService.storePasswordHash(newPassword);
       await _saveAuthResultToLocalDb(result);
@@ -517,9 +429,11 @@ class AuthNotifier extends Notifier<AuthStateData> {
         errorMessage: e.message,
       );
     } catch (e) {
+      // Log to Sentry and surface the actual error for debugging
+      await Sentry.captureException(e);
       state = state.copyWith(
         state: AuthState.onlineLoginRequired,
-        errorMessage: 'Signup failed. Please try again.',
+        errorMessage: 'Signup failed: ${e.toString()}',
       );
     }
   }
@@ -543,7 +457,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
       );
     } on AuthException catch (e) {
       state = state.copyWith(
-        state: state.state, // keep current state (e.g. forcePasswordResetRequired)
+        state:
+            state.state, // keep current state (e.g. forcePasswordResetRequired)
         errorMessage: e.message,
       );
     } catch (e) {
@@ -599,11 +514,60 @@ class AuthNotifier extends Notifier<AuthStateData> {
   // -----------------------------------------------------------------------
 
   Future<void> _saveAuthResultToLocalDb(AuthResult result) async {
-    // Upsert teacher record
+    // First, upsert school record to get a valid localId for the foreign key
+    int schoolLocalIdToUse = 0;
+    if (result.school.serverId != null) {
+      final existingSchools = await (_db.select(_db.schools)
+            ..where((s) => s.serverId.equals(result.school.serverId!)))
+          .get();
+
+      if (existingSchools.isNotEmpty) {
+        final existing = existingSchools.first;
+        schoolLocalIdToUse = existing.localId;
+        await (_db.update(_db.schools)
+              ..where((s) => s.localId.equals(existing.localId)))
+            .write(
+          SchoolsCompanion(
+            schoolName: Value(result.school.schoolName),
+            shortCode: Value(result.school.shortCode),
+            subscriptionTier: Value(result.school.subscriptionTier),
+            activeCurriculum: Value(result.school.activeCurriculum),
+            activeCurriculumVersion:
+                Value(result.school.activeCurriculumVersion),
+            totalSeats: Value(result.school.totalSeats),
+            schoolMasterKeyWrapped: Value(result.school.schoolMasterKeyWrapped),
+            adminRecoveryEmail: Value(result.school.adminRecoveryEmail),
+            adminRecoveryEmailVerified:
+                Value(result.school.adminRecoveryEmailVerified),
+            updatedAt: Value(DateTime.now()),
+            updateCounter: Value(existing.updateCounter + 1),
+          ),
+        );
+      } else {
+        final schoolId = await (_db.into(_db.schools)).insert(
+          SchoolsCompanion.insert(
+            serverId: Value(result.school.serverId),
+            schoolName: result.school.schoolName,
+            shortCode: result.school.shortCode,
+            subscriptionTier: Value(result.school.subscriptionTier),
+            activeCurriculum: Value(result.school.activeCurriculum),
+            activeCurriculumVersion:
+                Value(result.school.activeCurriculumVersion),
+            totalSeats: Value(result.school.totalSeats),
+            schoolMasterKeyWrapped: Value(result.school.schoolMasterKeyWrapped),
+            adminRecoveryEmail: Value(result.school.adminRecoveryEmail),
+            adminRecoveryEmailVerified:
+                Value(result.school.adminRecoveryEmailVerified),
+          ),
+        );
+        schoolLocalIdToUse = schoolId;
+      }
+    }
+
+    // Upsert teacher record - now we have a valid school localId
     if (result.teacher.serverId != null) {
       final existingTeachers = await (_db.select(_db.teachers)
-            ..where(
-                (t) => t.serverId.equals(result.teacher.serverId!)))
+            ..where((t) => t.serverId.equals(result.teacher.serverId!)))
           .get();
 
       if (existingTeachers.isNotEmpty) {
@@ -616,6 +580,9 @@ class AuthNotifier extends Notifier<AuthStateData> {
             teacherName: Value(result.teacher.teacherName),
             role: Value(result.teacher.role),
             schoolServerId: Value(result.teacher.schoolServerId),
+            schoolLocalId: Value(schoolLocalIdToUse != 0
+                ? schoolLocalIdToUse
+                : result.teacher.schoolLocalId),
             isActive: Value(result.teacher.isActive),
             forcePasswordReset: Value(result.teacher.forcePasswordReset),
             passwordHashVersion: Value(result.passwordHashVersion),
@@ -629,14 +596,16 @@ class AuthNotifier extends Notifier<AuthStateData> {
       }
     }
 
-    // Insert new teacher
+    // Insert new teacher with valid school localId
     await (_db.into(_db.teachers)).insert(
       TeachersCompanion.insert(
         serverId: Value(result.teacher.serverId),
         email: result.teacher.email,
         teacherName: result.teacher.teacherName,
         role: Value(result.teacher.role),
-        schoolLocalId: result.teacher.schoolLocalId,
+        schoolLocalId: schoolLocalIdToUse != 0
+            ? schoolLocalIdToUse
+            : result.teacher.schoolLocalId,
         schoolServerId: Value(result.teacher.schoolServerId),
         isActive: Value(result.teacher.isActive),
         forcePasswordReset: Value(result.teacher.forcePasswordReset),
@@ -646,77 +615,12 @@ class AuthNotifier extends Notifier<AuthStateData> {
       ),
     );
 
-    // Upsert school record
-    if (result.school.serverId != null) {
-      final existingSchools = await (_db.select(_db.schools)
-            ..where(
-                (s) => s.serverId.equals(result.school.serverId!)))
-          .get();
-
-      if (existingSchools.isNotEmpty) {
-        final existing = existingSchools.first;
-        await (_db.update(_db.schools)
-              ..where((s) => s.localId.equals(existing.localId)))
-            .write(
-          SchoolsCompanion(
-            schoolName: Value(result.school.schoolName),
-            shortCode: Value(result.school.shortCode),
-            subscriptionTier: Value(result.school.subscriptionTier),
-            activeCurriculum: Value(result.school.activeCurriculum),
-            activeCurriculumVersion:
-                Value(result.school.activeCurriculumVersion),
-            totalSeats: Value(result.school.totalSeats),
-            schoolMasterKeyWrapped:
-                Value(result.school.schoolMasterKeyWrapped),
-            adminRecoveryEmail: Value(result.school.adminRecoveryEmail),
-            adminRecoveryEmailVerified:
-                Value(result.school.adminRecoveryEmailVerified),
-            updatedAt: Value(DateTime.now()),
-            updateCounter: Value(existing.updateCounter + 1),
-          ),
-        );
-        return;
-      }
-    }
-
-    // Insert new school
-    await (_db.into(_db.schools)).insert(
-      SchoolsCompanion.insert(
-        serverId: Value(result.school.serverId),
-        schoolName: result.school.schoolName,
-        shortCode: result.school.shortCode,
-        subscriptionTier: Value(result.school.subscriptionTier),
-        activeCurriculum: Value(result.school.activeCurriculum),
-        activeCurriculumVersion:
-            Value(result.school.activeCurriculumVersion),
-        totalSeats: Value(result.school.totalSeats),
-        schoolMasterKeyWrapped:
-            Value(result.school.schoolMasterKeyWrapped),
-        adminRecoveryEmail: Value(result.school.adminRecoveryEmail),
-        adminRecoveryEmailVerified:
-            Value(result.school.adminRecoveryEmailVerified),
-      ),
-    );
-
     // Update security config with server credit state
     await _db.securityConfigDao.updateConfig(
       offlineCredits: result.offlineCredits,
       lastCreditRefillServerTime: result.lastCreditRefillServerTime,
       lastKnownPasswordHashVersion: result.passwordHashVersion,
     );
-  }
-
-  /// Verifies a password against the stored hash using SHA-256.
-  ///
-  /// Used for offline login where the stored password hash (from a previous
-  /// online login) is compared against the user-supplied password.
-  /// Replace with Argon2id verification once the crypto package is wired.
-  Future<bool> _verifyPasswordLocally(
-      String password, String storedHash) async {
-    // Hash the provided password and compare to the stored hash.
-    // This is a placeholder until Argon2id verification is integrated.
-    final hash = sha256.convert(utf8.encode(password)).toString();
-    return hash == storedHash;
   }
 }
 

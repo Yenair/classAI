@@ -6,32 +6,63 @@ import 'package:classai/features/dashboard/providers/credit_state_provider.dart'
 
 /// Credit counter chip in the AppBar.
 ///
-/// Renders an [ActionChip] showing the current credit count. On tap, shows
-/// an [AlertDialog] with tier, next refill time, and an upgrade action.
+/// Stitch style: compact pill container, primary tint background when
+/// credits are positive, thin mono-style numerics for the count.
 class CreditCounter extends ConsumerWidget {
   const CreditCounter({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final creditData = ref.watch(creditStateProvider);
-    final theme = Theme.of(context);
+    final cs = Theme.of(context).colorScheme;
+
+    final isPositive = creditData.currentCredits > 0;
+    final labelColor = isPositive ? cs.primary : cs.error;
 
     return ActionChip(
-      avatar: Text(
-        '🔓',
-        style: theme.textTheme.bodyMedium,
+      backgroundColor: labelColor.withValues(alpha: isPositive ? 0.10 : 0.12),
+      side: BorderSide(
+        color: labelColor.withValues(alpha: isPositive ? 0.24 : 0.30),
+        width: 1,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      labelPadding: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      avatar: Container(
+        width: 20,
+        height: 20,
+        decoration: BoxDecoration(
+          color: labelColor.withValues(alpha: isPositive ? 0.16 : 0.18),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        alignment: Alignment.center,
+        child: Icon(
+          Icons.lock_open_rounded,
+          size: 11,
+          color: labelColor,
+        ),
       ),
       label: Text(
         creditData.loading ? '…' : '${creditData.currentCredits}',
-        style: theme.textTheme.labelMedium?.copyWith(
-          fontWeight: FontWeight.bold,
-        ),
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: labelColor,
+              letterSpacing: 0.25,
+            ),
       ),
-      onPressed: () => _showCreditDetailsDialog(context, creditData),
+      onPressed: () {
+        if (creditData.currentCredits <= 0) {
+          context.push('/insufficient-credit');
+        } else {
+          _showCreditDetailsDialog(context, creditData);
+        }
+      },
     );
   }
 
-  void _showCreditDetailsDialog(BuildContext context, CreditStateData data) {
+  void _showCreditDetailsDialog(BuildContext context, dynamic data) {
     showDialog(
       context: context,
       builder: (_) => _CreditDetailsDialog(data: data),
@@ -40,83 +71,125 @@ class CreditCounter extends ConsumerWidget {
 }
 
 class _CreditDetailsDialog extends StatelessWidget {
-  final CreditStateData data;
-
   const _CreditDetailsDialog({required this.data});
+  final dynamic data;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final cs = Theme.of(context).colorScheme;
     final dateFormat = DateFormat('MMM d, yyyy – h:mm a');
 
     return AlertDialog(
-      title: const Text('Credits'),
+      backgroundColor: cs.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+      contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+      actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+      title: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: const BoxDecoration(
+              color: Color(0xFF3674B5),
+              borderRadius: BorderRadius.all(Radius.circular(10)),
+            ),
+            child: const Icon(Icons.account_balance_rounded,
+                color: Colors.white, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'Credits',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSurface,
+                ),
+          ),
+        ],
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Current credits
+          // ── Available credits ──────────────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 'Available credits',
-                style: theme.textTheme.bodyMedium,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
               ),
               Text(
-                '🔓 ${data.currentCredits}',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                '${data.currentCredits}',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: cs.primary,
+                      letterSpacing: -0.25,
+                    ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
 
-          // Tier name
+          // ── Tier ───────────────────────────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 'Tier',
-                style: theme.textTheme.bodyMedium,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
               ),
               Chip(
                 label: Text(
                   data.tierName,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: cs.onPrimaryContainer,
+                      ),
                 ),
+                backgroundColor: cs.primaryContainer,
                 visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
 
-          // Next refill
+          // ── Next refill ────────────────────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 'Next refill',
-                style: theme.textTheme.bodyMedium,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
               ),
               Text(
                 data.nextRefillTime != null
                     ? dateFormat.format(data.nextRefillTime!)
                     : 'N/A',
-                style: theme.textTheme.bodySmall,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
               ),
             ],
           ),
           if (data.errorMessage != null) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Text(
               data.errorMessage!,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.error,
-              ),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: cs.error,
+                    fontWeight: FontWeight.w500,
+                  ),
             ),
           ],
         ],

@@ -15,10 +15,6 @@ class FakeSyncRecordStore implements SyncRecordStore {
 
   FakeSyncRecordStore(this.db);
 
-  String _key(String tableName, int localId, String? hash) {
-    return '$tableName:$localId:${hash ?? ''}';
-  }
-
   void seedLocalRecord(String tableName, int localId, Map<String, dynamic> record) {
     localRecords.putIfAbsent(tableName, () => {});
     localRecords[tableName]![localId] = Map<String, dynamic>.from(record);

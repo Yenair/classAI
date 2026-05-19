@@ -1,7 +1,18 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PlatformHelper {
+  /// Returns `true` if the device has network connectivity.
+  ///
+  /// Uses [connectivity_plus] to check for active network connections.
+  /// Returns `true` if any connectivity result is not `none`.
+  static Future<bool> isOnline() async {
+    final connectivity = Connectivity();
+    final results = await connectivity.checkConnectivity();
+    return results.any((r) => r != ConnectivityResult.none);
+  }
+
   /// Returns `true` for Editor layout (desktop/large tablet), `false` for Reader layout (phone/small tablet).
   ///
   /// Respects the `platform_mode_override` in `shared_preferences`:

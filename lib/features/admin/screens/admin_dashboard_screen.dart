@@ -40,11 +40,15 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
   Widget build(BuildContext context) {
     final dashboardData = ref.watch(adminDashboardProvider);
     final authData = ref.watch(authProvider);
-    final theme = Theme.of(context);
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Admin Dashboard'),
+        elevation: 0,
+        backgroundColor: cs.surface,
+        foregroundColor: cs.onSurface,
+        surfaceTintColor: cs.surface,
         bottom: TabBar(
           controller: _tabController,
           tabs: [
@@ -65,20 +69,34 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
           ? const Center(child: CircularProgressIndicator())
           : dashboardData.errorMessage != null
               ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Error: ${dashboardData.errorMessage}',
-                        style: TextStyle(color: theme.colorScheme.error),
-                      ),
-                      const SizedBox(height: 16),
-                      FilledButton(
-                        onPressed: () =>
-                            ref.read(adminDashboardProvider.notifier).refresh(),
-                        child: const Text('Retry'),
-                      ),
-                    ],
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.error_outline_rounded,
+                          size: 56,
+                          color: cs.error,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Error: ${dashboardData.errorMessage}',
+                          textAlign: TextAlign.center,
+                          style:
+                              Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                    color: cs.error,
+                                  ),
+                        ),
+                        const SizedBox(height: 16),
+                        FilledButton(
+                          onPressed: () => ref
+                              .read(adminDashboardProvider.notifier)
+                              .refresh(),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
                   ),
                 )
               : TabBarView(
@@ -174,7 +192,7 @@ class _AddTeacherDialogState extends ConsumerState<_AddTeacherDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final cs = Theme.of(context).colorScheme;
 
     return AlertDialog(
       title: const Text('Add Teacher'),
@@ -188,17 +206,32 @@ class _AddTeacherDialogState extends ConsumerState<_AddTeacherDialog> {
               // Error message
               if (_errorMessage != null) ...[
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.errorContainer,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    _errorMessage!,
-                    style: TextStyle(
-                      color: theme.colorScheme.onErrorContainer,
-                      fontSize: 13,
+                    color: cs.errorContainer.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: cs.error.withValues(alpha: 0.25),
                     ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.error_outline_rounded,
+                        size: 18,
+                        color: cs.onErrorContainer,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _errorMessage!,
+                          style: TextStyle(
+                            color: cs.onErrorContainer,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -212,14 +245,12 @@ class _AddTeacherDialogState extends ConsumerState<_AddTeacherDialog> {
                 decoration: const InputDecoration(
                   labelText: 'Email',
                   prefixIcon: Icon(Icons.email_outlined),
-                  border: OutlineInputBorder(),
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
                     return 'Please enter an email';
                   }
-                  if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
-                      .hasMatch(value.trim())) {
+                  if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value.trim())) {
                     return 'Please enter a valid email';
                   }
                   return null;
@@ -234,7 +265,6 @@ class _AddTeacherDialogState extends ConsumerState<_AddTeacherDialog> {
                 decoration: const InputDecoration(
                   labelText: 'Teacher Name',
                   prefixIcon: Icon(Icons.person_rounded),
-                  border: OutlineInputBorder(),
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
@@ -251,7 +281,6 @@ class _AddTeacherDialogState extends ConsumerState<_AddTeacherDialog> {
                 decoration: const InputDecoration(
                   labelText: 'Role',
                   prefixIcon: Icon(Icons.badge_rounded),
-                  border: OutlineInputBorder(),
                 ),
                 items: const [
                   DropdownMenuItem(
@@ -296,7 +325,6 @@ class _AddTeacherDialogState extends ConsumerState<_AddTeacherDialog> {
   }
 }
 
-
 // ---------------------------------------------------------------------------
 // Teacher Management Tab
 // ---------------------------------------------------------------------------
@@ -312,10 +340,27 @@ class _TeacherManagementTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-
     if (teachers.isEmpty) {
-      return const Center(child: Text('No teachers found.'));
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.people_outline_rounded,
+              size: 64,
+              color: Theme.of(context)
+                  .colorScheme
+                  .onSurfaceVariant
+                  .withValues(alpha: 0.45),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No teachers found.',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ],
+        ),
+      );
     }
 
     return ListView.builder(
@@ -325,19 +370,27 @@ class _TeacherManagementTab extends ConsumerWidget {
         final teacher = teachers[index];
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            leading: _StatusDot(color: _statusColor(teacher.statusColor)),
-            title: Text(teacher.teacherName),
-            subtitle: Text(
-              '${teacher.email} • ${teacher.role}'
-              '${teacher.deviceCount > 0 ? ' • ${teacher.deviceCount} device(s)' : ''}'
-              ' • Last sync: ${teacher.formattedLastSync}',
-              style: theme.textTheme.bodySmall,
-            ),
-            trailing: const Icon(Icons.chevron_right),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
             onTap: () {
               context.push('/admin/teachers/${teacher.localId}');
             },
+            child: ListTile(
+              leading: _StatusDot(color: _statusColor(teacher.statusColor)),
+              title: Text(
+                teacher.teacherName,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              subtitle: Text(
+                '${teacher.email} \u00b7 ${teacher.role}'
+                '${teacher.deviceCount > 0 ? ' \u00b7 ${teacher.deviceCount} device(s)' : ''}'
+                ' \u00b7 Last sync: ${teacher.formattedLastSync}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+            ),
           ),
         );
       },
@@ -369,7 +422,7 @@ class _VaultApprovalTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
+    final cs = Theme.of(context).colorScheme;
 
     // Tier gate: Standard+ required for vault approval queue visibility
     final tier = authData.currentSchool?.subscriptionTier ?? 'free';
@@ -379,12 +432,19 @@ class _VaultApprovalTab extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.lock_outline, size: 64, color: Colors.grey.shade400),
+            Icon(
+              Icons.lock_outline_rounded,
+              size: 64,
+              color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+            ),
             const SizedBox(height: 16),
             Text(
               'Vault approval queue requires a Standard or Elite subscription.',
-              style: theme.textTheme.titleMedium,
               textAlign: TextAlign.center,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(color: cs.onSurfaceVariant),
             ),
           ],
         ),
@@ -405,12 +465,15 @@ class _VaultApprovalTab extends ConsumerWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.check_circle_outline,
-                    size: 64, color: Colors.green.shade300),
+                Icon(
+                  Icons.check_circle_outline_rounded,
+                  size: 64,
+                  color: Colors.green.withValues(alpha: 0.6),
+                ),
                 const SizedBox(height: 16),
                 Text(
                   'No pending approvals',
-                  style: theme.textTheme.titleMedium,
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
               ],
             ),
@@ -431,38 +494,36 @@ class _VaultApprovalTab extends ConsumerWidget {
                   children: [
                     Text(
                       item.title,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'By ${item.authorName} • ${item.subject} • ${item.classLevel}',
-                      style: theme.textTheme.bodySmall,
+                      'By ${item.authorName} \u00b7 ${item.subject} \u00b7 ${item.classLevel}',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                     const SizedBox(height: 4),
                     Text(
                       item.description,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium,
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     const SizedBox(height: 12),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         OutlinedButton(
-                          onPressed: () =>
-                              _rejectItem(context, ref, item.id),
+                          onPressed: () => _rejectItem(context, ref, item.id),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.red,
+                            foregroundColor: cs.error,
                           ),
                           child: const Text('Reject'),
                         ),
                         const SizedBox(width: 8),
                         FilledButton(
-                          onPressed: () =>
-                              _approveItem(context, ref, item.id),
+                          onPressed: () => _approveItem(context, ref, item.id),
                           child: const Text('Approve'),
                         ),
                       ],
@@ -504,9 +565,11 @@ class _VaultApprovalTab extends ConsumerWidget {
   }
 }
 
-class _RejectionDialog extends StatelessWidget {
+class _RejectionDialog extends ConsumerWidget {
+  const _RejectionDialog();
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final controller = TextEditingController();
     return AlertDialog(
       title: const Text('Rejection Reason'),
@@ -514,7 +577,6 @@ class _RejectionDialog extends StatelessWidget {
         controller: controller,
         decoration: const InputDecoration(
           hintText: 'Enter reason for rejection...',
-          border: OutlineInputBorder(),
         ),
         maxLines: 3,
       ),
@@ -540,12 +602,13 @@ class _SyncHealthTab extends StatelessWidget {
   final List<TeacherAdminData> teachers;
   final AdminDashboardData dashboardData;
 
-  const _SyncHealthTab({required this.teachers, required this.dashboardData});
+  const _SyncHealthTab({
+    required this.teachers,
+    required this.dashboardData,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     if (teachers.isEmpty) {
       return const Center(child: Text('No teacher data available.'));
     }
@@ -561,9 +624,9 @@ class _SyncHealthTab extends StatelessWidget {
               children: [
                 Text(
                   'Sync Overview',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                 ),
                 const SizedBox(height: 12),
                 _SyncStatRow(
@@ -573,7 +636,8 @@ class _SyncHealthTab extends StatelessWidget {
                 ),
                 _SyncStatRow(
                   label: 'Recent (1-24 hrs)',
-                  count: teachers.where((t) => t.statusColor == 'yellow').length,
+                  count:
+                      teachers.where((t) => t.statusColor == 'yellow').length,
                   color: Colors.orange,
                 ),
                 _SyncStatRow(
@@ -589,12 +653,16 @@ class _SyncHealthTab extends StatelessWidget {
                 const Divider(height: 24),
                 _SyncStatRow(
                   label: 'Pending sync entries',
-                  count: dashboardData.teachers.isNotEmpty ? dashboardData.teachers.first.pendingSyncCount : 0,
+                  count: dashboardData.teachers.isNotEmpty
+                      ? dashboardData.teachers.first.pendingSyncCount
+                      : 0,
                   color: Colors.orange,
                 ),
                 _SyncStatRow(
                   label: 'Unresolved conflicts',
-                  count: dashboardData.teachers.isNotEmpty ? dashboardData.teachers.first.conflictCount : 0,
+                  count: dashboardData.teachers.isNotEmpty
+                      ? dashboardData.teachers.first.conflictCount
+                      : 0,
                   color: Colors.red,
                 ),
               ],
@@ -604,23 +672,44 @@ class _SyncHealthTab extends StatelessWidget {
         const SizedBox(height: 16),
         ...teachers.map((teacher) => Card(
               margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: _StatusDot(
-                    color: _statusColor(teacher.statusColor)),
-                title: Text(teacher.teacherName),
-                subtitle: Column(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Last sync: ${teacher.lastSyncTime != null ? _formatTime(teacher.lastSyncTime!) : "Never"}',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                    Text(
-                      'Devices: ${teacher.deviceCount} • '
-                      'Pending: ${teacher.pendingSyncCount} • '
-                      'Conflicts: ${teacher.conflictCount}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
+                    _StatusDot(color: _statusColor(teacher.statusColor)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            teacher.teacherName,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Last sync: ${teacher.lastSyncTime != null ? _formatTime(teacher.lastSyncTime!) : "Never"}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Devices: ${teacher.deviceCount} \u00b7 '
+                            'Pending: ${teacher.pendingSyncCount} \u00b7 '
+                            'Conflicts: ${teacher.conflictCount}',
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -666,19 +755,24 @@ class _SyncStatRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         children: [
           Container(
-            width: 12,
-            height: 12,
+            width: 10,
+            height: 10,
             decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
-          const SizedBox(width: 8),
-          Expanded(child: Text(label)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
           Text(
             '$count',
-            style: const TextStyle(fontWeight: FontWeight.bold),
+            style: const TextStyle(fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -694,8 +788,8 @@ class _StatusDot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 12,
-      height: 12,
+      width: 10,
+      height: 10,
       decoration: BoxDecoration(
         color: color,
         shape: BoxShape.circle,

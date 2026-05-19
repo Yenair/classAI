@@ -185,6 +185,7 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_previewing ? 'Preview' : 'Publish to Vault'),
+        elevation: 0,
         actions: [
           if (!_previewing)
             TextButton(
@@ -207,196 +208,247 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
   }
 
   Widget _buildForm() {
-    final textTheme = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Item Details',
-              style: textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _titleCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Title *',
-                border: OutlineInputBorder(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.5),
               ),
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Title is required' : null,
             ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _descriptionCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Description *',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Description is required' : null,
-            ),
-            const SizedBox(height: 12),
-            Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _subjectCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Subject *',
-                      border: OutlineInputBorder(),
+                Text(
+                  'Item Details',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _titleCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Title *',
+                  ),
+                  validator: (v) => v == null || v.trim().isEmpty
+                      ? 'Title is required'
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _descriptionCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Description *',
+                  ),
+                  maxLines: 3,
+                  validator: (v) => v == null || v.trim().isEmpty
+                      ? 'Description is required'
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _subjectCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Subject *',
+                        ),
+                        validator: (v) =>
+                            v == null || v.trim().isEmpty ? 'Required' : null,
+                      ),
                     ),
-                    validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Required' : null,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _classLevelCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Class Level *',
+                        ),
+                        validator: (v) =>
+                            v == null || v.trim().isEmpty ? 'Required' : null,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _curriculumCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Curriculum',
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    controller: _classLevelCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Class Level *',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Required' : null,
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _contentCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Content (JSON) *',
+                    hintText: '{"text": "...", "resources": [...]}',
+                  ),
+                  maxLines: 5,
+                  validator: (v) => v == null || v.trim().isEmpty
+                      ? 'Content is required'
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _thumbnailUrlCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Thumbnail URL',
+                    hintText: 'https://example.com/image.png',
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _curriculumCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Curriculum',
-                border: OutlineInputBorder(),
+          ),
+          const SizedBox(height: 16),
+
+          // Attachment section
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.5),
               ),
             ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _contentCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Content (JSON) *',
-                border: OutlineInputBorder(),
-                hintText: '{"text": "...", "resources": [...]}',
-              ),
-              maxLines: 5,
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Content is required' : null,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _thumbnailUrlCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Thumbnail URL',
-                border: OutlineInputBorder(),
-                hintText: 'https://example.com/image.png',
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Attachment',
-              style: textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            if (_pickedImage != null)
-              Row(
-                children: [
-                  Icon(Icons.image, color: Theme.of(context).colorScheme.primary),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _pickedImage!.name,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: _removeImage,
-                    tooltip: 'Remove image',
-                  ),
-                ],
-              )
-            else
-              OutlinedButton.icon(
-                onPressed: _pickingImage ? null : _pickImage,
-                icon: _pickingImage
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.attach_file),
-                label: Text(_pickingImage ? 'Picking…' : 'Attach Image'),
-              ),
-            const SizedBox(height: 16),
-            Text(
-              'Credit Cost',
-              style: textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Credits required to acquire:'),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 100,
-                  child: TextFormField(
-                    initialValue: '0',
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                    onChanged: (v) =>
-                        setState(() => _creditCost = int.tryParse(v) ?? 0),
+                Text(
+                  'Attachment',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                if (_pickedImage != null)
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.image_rounded,
+                        color: cs.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _pickedImage!.name,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: _removeImage,
+                        tooltip: 'Remove image',
+                      ),
+                    ],
+                  )
+                else
+                  OutlinedButton.icon(
+                    onPressed: _pickingImage ? null : _pickImage,
+                    icon: _pickingImage
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.attach_file_rounded),
+                    label:
+                        Text(_pickingImage ? 'Picking\u2026' : 'Attach Image'),
                   ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Credit Cost section
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.5),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Credit Cost',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Text(
+                      'Credits required to acquire:',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 100,
+                      child: TextFormField(
+                        initialValue: '0',
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                        ),
+                        onChanged: (v) =>
+                            setState(() => _creditCost = int.tryParse(v) ?? 0),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _submitting ? null : _submit,
-                child: _submitting
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Submit for Review'),
-              ),
+          ),
+          const SizedBox(height: 24),
+
+          // Submit button
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: _submitting ? null : _submit,
+              child: _submitting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Submit for Review'),
             ),
-            const SizedBox(height: 8),
-            Center(
-              child: Text(
-                'Items require admin approval before appearing in the vault.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                textAlign: TextAlign.center,
-              ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: Text(
+              'Items require admin approval before appearing in the vault.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+              textAlign: TextAlign.center,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildPreview() {
-    final theme = Theme.of(context);
+    final cs = Theme.of(context).colorScheme;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -408,37 +460,47 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
             height: 200,
             width: double.infinity,
             decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(12),
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(16),
             ),
             child: _compressedImageBytes != null
                 ? ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                     child: Image.memory(
                       _compressedImageBytes!,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.image,
-                          size: 64),
+                      errorBuilder: (_, __, ___) => Icon(
+                        Icons.image_rounded,
+                        size: 64,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.45),
+                      ),
                     ),
                   )
                 : _thumbnailUrlCtrl.text.isNotEmpty
                     ? ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(16),
                         child: Image.network(
                           _thumbnailUrlCtrl.text,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Icon(Icons.image,
-                              size: 64),
+                          errorBuilder: (_, __, ___) => Icon(
+                            Icons.image_rounded,
+                            size: 64,
+                            color: cs.onSurfaceVariant.withValues(alpha: 0.45),
+                          ),
                         ),
                       )
-                    : const Icon(Icons.image, size: 64),
+                    : Icon(
+                        Icons.image_rounded,
+                        size: 64,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.45),
+                      ),
           ),
           const SizedBox(height: 16),
           Text(
             _titleCtrl.text.isEmpty ? '(Untitled)' : _titleCtrl.text,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
           ),
           const SizedBox(height: 8),
           Row(
@@ -467,37 +529,39 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
             _descriptionCtrl.text.isEmpty
                 ? '(No description)'
                 : _descriptionCtrl.text,
-            style: theme.textTheme.bodyLarge,
+            style: Theme.of(context).textTheme.bodyLarge,
           ),
           const SizedBox(height: 16),
           Text(
             'Curriculum: ${_curriculumCtrl.text.isEmpty ? "N/A" : _curriculumCtrl.text}',
-            style: theme.textTheme.bodyMedium,
+            style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 8),
           Text(
             'Credit Cost: $_creditCost',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: Colors.amber.shade800,
-            ),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.amber,
+                ),
           ),
           const SizedBox(height: 16),
-          Divider(),
+          Divider(
+            color: cs.outlineVariant.withValues(alpha: 0.5),
+          ),
           const SizedBox(height: 8),
           Text(
             'Content Preview',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
           ),
           const SizedBox(height: 8),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(10),
             ),
             child: SelectableText(
               _contentCtrl.text.isEmpty ? '(No content)' : _contentCtrl.text,

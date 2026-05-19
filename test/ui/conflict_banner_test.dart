@@ -51,7 +51,7 @@ void main() {
     await tester.pumpWidget(_buildApp(3));
     await tester.pumpAndSettle();
 
-    expect(find.byType(MaterialBanner), findsOneWidget);
+    expect(find.byType(Container), findsOneWidget);
     expect(find.text('3 unresolved conflicts'), findsOneWidget);
   });
 

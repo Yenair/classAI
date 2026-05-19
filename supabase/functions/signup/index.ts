@@ -1,12 +1,29 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
+import bcrypt from "npm:bcryptjs";
 import { create, getNumericDate } from "https://deno.land/x/djwt@v2.8/mod.ts";
 
-const JWT_SECRET = Deno.env.get("JWT_SECRET")!;
+/** Convert a plain string secret into a CryptoKey for HS256 JWT signing. */
+function getHmacKey(secret: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+}
 
 serve(async (req) => {
   try {
+    const JWT_SECRET = Deno.env.get("JWT_SECRET");
+    if (!JWT_SECRET) {
+      return new Response(
+        JSON.stringify({ error: "Server misconfiguration: JWT_SECRET not set" }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
     const { school_name, admin_email, admin_password, recovery_email } =
       await req.json();
 
@@ -47,8 +64,14 @@ serve(async (req) => {
     }
 
     // ── Hash password with bcrypt + pepper ─────────────────────────────────
-    const pepper = Deno.env.get("PASSWORD_PEPPER")!;
-    const passwordHash = await bcrypt.hash(admin_password + pepper);
+    const pepper = Deno.env.get("PASSWORD_PEPPER");
+    if (!pepper) {
+      return new Response(
+        JSON.stringify({ error: "Server misconfiguration: PASSWORD_PEPPER not set" }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    const passwordHash = await bcrypt.hash(admin_password + pepper, 10);
 
     // Generate random 32-byte salt (base64)
     const salt = crypto.getRandomValues(new Uint8Array(32));
@@ -104,6 +127,7 @@ serve(async (req) => {
     }
 
     // ── Generate JWT ──────────────────────────────────────────────────────
+    const cryptoKey = await getHmacKey(JWT_SECRET);
     const jwt = await create(
       { alg: "HS256", typ: "JWT" },
       {
@@ -113,7 +137,7 @@ serve(async (req) => {
         is_admin: true,
         exp: getNumericDate(60 * 60 * 24), // 24 hours
       },
-      JWT_SECRET
+      cryptoKey
     );
 
     // ── Return AuthResult-compatible payload ──────────────────────────────

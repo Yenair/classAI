@@ -22,11 +22,15 @@ void main() {
     // BottomNavigationBar should be present
     expect(find.byType(BottomNavigationBar), findsOneWidget);
 
-    // Should have 4 items (check via labels)
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Lessons'), findsOneWidget);
-    expect(find.text('Exams'), findsOneWidget);
-    expect(find.text('More'), findsOneWidget);
+    // ReaderLayout renders both NavigationRail (destinations) and
+    // BottomNavigationBar simultaneously, so shared labels appear twice.
+    expect(find.text('Home'), findsNWidgets(1));
+    // "Lessons" and "Exams" appear in both NavigationRail and BottomNavigationBar
+    expect(find.text('Lessons'), findsNWidgets(2));
+    expect(find.text('Exams'), findsNWidgets(2));
+    expect(find.text('More'), findsNWidgets(1));
+    // "Dashboard" is a NavigationRail-only destination, absent from BottomNavBar
+    expect(find.text('Dashboard'), findsNothing);
   });
 
   testWidgets('ReaderLayout shows Home, Lessons, Exams, More labels',
@@ -43,10 +47,11 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Lessons'), findsOneWidget);
-    expect(find.text('Exams'), findsOneWidget);
-    expect(find.text('More'), findsOneWidget);
+    // Both NavigationRail and BottomNavigationBar render "Lessons" and "Exams".
+    expect(find.text('Home'), findsNWidgets(1));
+    expect(find.text('Lessons'), findsNWidgets(2));
+    expect(find.text('Exams'), findsNWidgets(2));
+    expect(find.text('More'), findsNWidgets(1));
   });
 
   testWidgets('ReaderLayout has AppBar with ClassAI title', (tester) async {

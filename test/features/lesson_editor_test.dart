@@ -52,14 +52,29 @@ void main() {
       await tester.pumpWidget(createTestApp());
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('Credits:'), findsOneWidget);
+      // AppBar shows credit balance as a lock-icon pill with a number
+      final lockPill = find.byWidgetPredicate((w) {
+        if (w is! Row) return false;
+        final children = w.children.toList();
+        return children
+                .any((c) => c is Icon && (c.icon == Icons.lock_rounded)) &&
+            children.any(
+                (c) => c is Text && (c.data?.contains(RegExp(r'\d')) ?? false));
+      });
+      expect(lockPill, findsOneWidget);
     });
 
     testWidgets('topic validation requires input', (tester) async {
       await tester.pumpWidget(createTestApp());
       await tester.pumpAndSettle();
 
-      // Tap Generate without filling topic
+      // Scroll to and tap Generate without filling topic
+      await tester.scrollUntilVisible(
+        find.text('Generate'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Generate'));
       await tester.pumpAndSettle();
 
@@ -111,7 +126,8 @@ void main() {
       expect(find.text('1'), findsWidgets);
     });
 
-    testWidgets('generate callback is invoked with valid prompt', (tester) async {
+    testWidgets('generate callback is invoked with valid prompt',
+        (tester) async {
       String? capturedPrompt;
       final result = {
         'raw': {
@@ -145,7 +161,13 @@ void main() {
       await tester.enterText(find.byType(TextFormField).first, 'Algebra');
       await tester.pumpAndSettle();
 
-      // Tap Generate
+      // Scroll to and tap Generate
+      await tester.scrollUntilVisible(
+        find.text('Generate'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Generate'));
       await tester.pumpAndSettle();
 
@@ -189,10 +211,16 @@ void main() {
 
       // Fill topic and generate
       await tester.enterText(find.byType(TextFormField).first, 'Algebra');
+      await tester.scrollUntilVisible(
+        find.text('Generate'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Generate'));
       await tester.pumpAndSettle();
 
-      // Wait for the "Lesson generated successfully!" SnackBar to auto-dismiss
+      // Wait for the Lesson generated successfully! SnackBar to auto-dismiss
       await tester.pump(const Duration(seconds: 5));
       await tester.pumpAndSettle();
 
@@ -243,6 +271,12 @@ void main() {
 
       // Fill topic and generate
       await tester.enterText(find.byType(TextFormField).first, 'Algebra');
+      await tester.scrollUntilVisible(
+        find.text('Generate'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Generate'));
       await tester.pumpAndSettle();
 

@@ -77,7 +77,7 @@ void main() {
   });
 
   group('checkLocalAuth', () {
-    test('transitions to offlineLoginAttempt when stored hash exists',
+    test('transitions to onlineLoginRequired when stored hash exists (offline login disabled)',
         () async {
       when(() => mockSecurity.getPasswordHash())
           .thenAnswer((_) async => 'stored_hash');
@@ -91,7 +91,8 @@ void main() {
       await container.read(authProvider.notifier).checkLocalAuth();
 
       final state = container.read(authProvider);
-      expect(state.state, equals(AuthState.offlineLoginAttempt));
+      expect(state.state, equals(AuthState.onlineLoginRequired));
+      expect(state.errorMessage, contains('Offline login unavailable'));
     });
 
     test('transitions to onlineLoginRequired when no stored hash', () async {
@@ -129,9 +130,9 @@ void main() {
   });
 
   group('offline login attempts', () {
-    test('returns true and transitions to authenticated on match', () async {
+    test('returns false and shows offline unavailable message', () async {
       when(() => mockSecurity.getPasswordHash())
-          .thenAnswer((_) async => 'stored_hash');
+          .thenAnswer((_) async => 'some_hash');
 
       final container = await createContainer(
         db: db,
@@ -139,62 +140,29 @@ void main() {
         securityService: mockSecurity,
       );
 
-      // First go to offlineLoginAttempt
+      // First go to checkingLocalAuth
       await container.read(authProvider.notifier).checkLocalAuth();
-      expect(
-        container.read(authProvider).state,
-        equals(AuthState.offlineLoginAttempt),
-      );
 
-      // Attempt offline login with non-empty password
+      // Offline login should be unavailable
       final success =
           await container.read(authProvider.notifier).attemptOfflineLogin(
-                'correct_password',
+                'any_password',
               );
-      expect(success, isTrue);
+      expect(success, isFalse);
       expect(
         container.read(authProvider).state,
-        equals(AuthState.authenticated),
+        equals(AuthState.onlineLoginRequired),
       );
-    });
-
-    test('increments attempts on mismatch and locks after 3', () async {
-      when(() => mockSecurity.getPasswordHash())
-          .thenAnswer((_) async => 'stored_hash');
-
-      final container = await createContainer(
-        db: db,
-        authService: mockAuth,
-        securityService: mockSecurity,
-      );
-
-      // First go to offlineLoginAttempt
-      await container.read(authProvider.notifier).checkLocalAuth();
-
-      // Attempt 1: wrong password (empty string won't match 'stored_hash')
-      // Actually, the mock check returns true if both are non-empty.
-      // Let me use a different approach - we just test the flow.
-
-      // The mock _mockPasswordCheck returns true if both password and storedHash
-      // are non-empty. So we can't test "wrong password" with the current mock.
-      // But we can test the attempt counting and the lock-out.
-
-      // Let's just verify the state transitions work correctly.
       expect(
-        container.read(authProvider).state,
-        equals(AuthState.offlineLoginAttempt),
+        container.read(authProvider).errorMessage,
+        contains('Offline login unavailable'),
       );
-
-      // Since mock check always returns true for non-empty strings,
-      // we test the success path here with specific mock overrides.
-      // The failure path is covered by the mock logic.
     });
   });
 
   group('loginOnline', () {
     setUp(() async {
       // Insert a school record so teacher foreign key references work
-      final now = DateTime.now();
       await db.into(db.schools).insert(
         SchoolsCompanion.insert(
           serverId: Value('00000000-0000-0000-0000-000000000010'),
@@ -477,7 +445,6 @@ void main() {
 
   group('verifyAdminOtp', () {
     setUp(() async {
-      final now = DateTime.now();
       await db.into(db.schools).insert(
         SchoolsCompanion.insert(
           serverId: Value('00000000-0000-0000-0000-000000000010'),
@@ -618,7 +585,6 @@ void main() {
 
   group('recoverTeacherPassword', () {
     setUp(() async {
-      final now = DateTime.now();
       await db.into(db.schools).insert(
         SchoolsCompanion.insert(
           serverId: Value('00000000-0000-0000-0000-000000000010'),

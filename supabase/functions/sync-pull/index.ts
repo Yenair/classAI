@@ -17,13 +17,15 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    const PAGE_SIZE = 50;
     const changes: { table: string; row: Record<string, unknown> }[] = [];
 
     for (const table of tables) {
       let query = supabase
         .from(table)
         .select("*")
-        .order("updated_at", { ascending: true });
+        .order("updated_at", { ascending: true })
+        .limit(PAGE_SIZE);
 
       if (lastSyncTimestamp) {
         query = query.gt("updated_at", lastSyncTimestamp);
@@ -52,8 +54,15 @@ serve(async (req) => {
       return aTime.localeCompare(bTime);
     });
 
+    // Determine next_cursor from the last change's updated_at if we hit the page limit
+    let nextCursor: string | null = null;
+    if (changes.length >= PAGE_SIZE) {
+      const lastChange = changes[changes.length - 1];
+      nextCursor = (lastChange.row.updated_at as string) ?? null;
+    }
+
     return new Response(
-      JSON.stringify({ changes }),
+      JSON.stringify({ changes, next_cursor: nextCursor }),
       { headers: { "Content-Type": "application/json" } }
     );
   } catch (err) {

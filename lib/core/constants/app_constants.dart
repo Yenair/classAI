@@ -40,6 +40,16 @@ class AppConstants {
   /// NGN currency code for Paystack.
   static const String ngnCurrencyCode = 'NGN';
 
+  // --- Payment Plan Prices (Yearly) ---
+  /// Basic plan price in Naira per year.
+  static const int basicPlanPriceNaira = 49999;
+
+  /// Standard plan price in Naira per year.
+  static const int standardPlanPriceNaira = 99999;
+
+  /// Elite plan price in Naira per year.
+  static const int elitePlanPriceNaira = 249999;
+
   /// Retrieves a real device identifier using [DeviceInfoPlugin].
   ///
   /// - **Android**: returns the Android ID ([AndroidDeviceInfo.id]).

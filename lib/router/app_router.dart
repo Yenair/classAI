@@ -18,6 +18,7 @@ import 'package:classai/features/vault/screens/vault_browser_screen.dart';
 import 'package:classai/features/vault/screens/vault_publisher_screen.dart';
 import 'package:classai/features/payment/screens/payment_screen.dart';
 import 'package:classai/features/settings/screens/settings_screen.dart';
+import 'package:classai/features/credit/screens/insufficient_credit_screen.dart';
 
 /// GoRouter configuration for the ClassAI app.
 ///
@@ -65,6 +66,11 @@ final appRouter = GoRouter(
       builder: (context, state) => const LessonEditorScreen(),
     ),
     GoRoute(
+      path: '/lesson-editor',
+      name: 'lesson-creator',
+      builder: (context, state) => const LessonEditorScreen(),
+    ),
+    GoRoute(
       path: '/exams',
       name: 'exams',
       builder: (context, state) => const ExamsListScreen(),
@@ -72,6 +78,11 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/exams/:id',
       name: 'exam-editor',
+      builder: (context, state) => const ExamEditorScreen(),
+    ),
+    GoRoute(
+      path: '/exam-editor',
+      name: 'exam-creator',
       builder: (context, state) => const ExamEditorScreen(),
     ),
     GoRoute(
@@ -132,6 +143,11 @@ final appRouter = GoRouter(
       path: '/payment',
       name: 'payment',
       builder: (context, state) => const PaymentScreen(),
+    ),
+    GoRoute(
+      path: '/insufficient-credit',
+      name: 'insufficient-credit',
+      builder: (context, state) => const InsufficientCreditScreen(),
     ),
   ],
 );

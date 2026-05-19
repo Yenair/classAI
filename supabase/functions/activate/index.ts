@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
+import bcrypt from "npm:bcryptjs";
 
 serve(async (req) => {
   try {
@@ -85,7 +85,7 @@ serve(async (req) => {
 
     // ── 3. Hash password with bcrypt + pepper ──────────────────────────────
     const pepper = Deno.env.get("PASSWORD_PEPPER")!;
-    const passwordHash = await bcrypt.hash(password + pepper);
+    const passwordHash = await bcrypt.hash(password + pepper, 10);
 
     // Generate salt for offline login
     const salt = crypto.getRandomValues(new Uint8Array(32));

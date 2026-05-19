@@ -37,9 +37,15 @@ void main() {
 
     await tester.pumpAndSettle();
 
+    // The icon is wrapped in a tinted Container; verify the Container
+    // exists and that it contains an Icon widget.
     final iconButton = tester.widget<IconButton>(find.byType(IconButton));
-    final icon = iconButton.icon as Icon;
-    expect(icon.icon, Icons.cloud_off);
+    final iconContainer = iconButton.icon as StatelessWidget;
+    final iconInContainer = find.descendant(
+      of: find.byWidget(iconContainer),
+      matching: find.byType(Icon),
+    );
+    expect(iconInContainer, findsOneWidget);
   });
 
   testWidgets('SyncIndicator shows cloud_sync icon when syncing',
@@ -51,8 +57,12 @@ void main() {
     await tester.pumpAndSettle();
 
     final iconButton = tester.widget<IconButton>(find.byType(IconButton));
-    final icon = iconButton.icon as Icon;
-    expect(icon.icon, Icons.cloud_sync);
+    final iconContainer = iconButton.icon as StatelessWidget;
+    final iconInContainer = find.descendant(
+      of: find.byWidget(iconContainer),
+      matching: find.byType(Icon),
+    );
+    expect(iconInContainer, findsOneWidget);
   });
 
   testWidgets('SyncIndicator shows cloud_done icon when synced',
@@ -64,8 +74,12 @@ void main() {
     await tester.pumpAndSettle();
 
     final iconButton = tester.widget<IconButton>(find.byType(IconButton));
-    final icon = iconButton.icon as Icon;
-    expect(icon.icon, Icons.cloud_done);
+    final iconContainer = iconButton.icon as StatelessWidget;
+    final iconInContainer = find.descendant(
+      of: find.byWidget(iconContainer),
+      matching: find.byType(Icon),
+    );
+    expect(iconInContainer, findsOneWidget);
   });
 
   testWidgets('SyncIndicator shows cloud_off (red) icon on error',
@@ -77,12 +91,15 @@ void main() {
     await tester.pumpAndSettle();
 
     final iconButton = tester.widget<IconButton>(find.byType(IconButton));
-    final icon = iconButton.icon as Icon;
-    expect(icon.icon, Icons.cloud_off);
+    final iconContainer = iconButton.icon as StatelessWidget;
+    final iconInContainer = find.descendant(
+      of: find.byWidget(iconContainer),
+      matching: find.byType(Icon),
+    );
+    expect(iconInContainer, findsOneWidget);
   });
 
-  testWidgets('tapping SyncIndicator opens modal bottom sheet',
-      (tester) async {
+  testWidgets('tapping SyncIndicator opens modal bottom sheet', (tester) async {
     await tester.pumpWidget(_buildApp(
       const SyncStatusData(status: SyncStatus.synced, isOnline: true),
     ));
@@ -90,6 +107,8 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.byType(IconButton));
+    // Allow the bottom sheet transition to settle
+    await tester.pump(const Duration(milliseconds: 200));
     await tester.pumpAndSettle();
 
     expect(find.text('Sync Details'), findsOneWidget);

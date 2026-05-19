@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
+import bcrypt from "npm:bcryptjs";
 import { verify } from "https://deno.land/x/djwt@v2.8/mod.ts";
 import nodemailer from "npm:nodemailer";
 
@@ -78,7 +78,7 @@ serve(async (req) => {
 
     // ── 6. Hash password with bcrypt + pepper ────────────────────────────
     const pepper = Deno.env.get("PASSWORD_PEPPER")!;
-    const passwordHash = await bcrypt.hash(tempPassword + pepper);
+    const passwordHash = await bcrypt.hash(tempPassword + pepper, 10);
 
     // Generate random 32-byte salt (base64)
     const salt = crypto.getRandomValues(new Uint8Array(32));

@@ -2231,6 +2231,12 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
       requiredDuringInsert: false,
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _serverIdMeta =
+      const VerificationMeta('serverId');
+  @override
+  late final GeneratedColumn<String> serverId = GeneratedColumn<String>(
+      'server_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _subjectMeta =
       const VerificationMeta('subject');
   @override
@@ -2299,9 +2305,34 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
       type: DriftSqlType.dateTime,
       requiredDuringInsert: false,
       defaultValue: currentDateAndTime);
+  static const VerificationMeta _updateCounterMeta =
+      const VerificationMeta('updateCounter');
+  @override
+  late final GeneratedColumn<int> updateCounter = GeneratedColumn<int>(
+      'update_counter', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _isDeletedMeta =
+      const VerificationMeta('isDeleted');
+  @override
+  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
+      'is_deleted', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_deleted" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _lastModifiedByMeta =
+      const VerificationMeta('lastModifiedBy');
+  @override
+  late final GeneratedColumn<String> lastModifiedBy = GeneratedColumn<String>(
+      'last_modified_by', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
+        serverId,
         subject,
         classLevel,
         week,
@@ -2312,7 +2343,10 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
         content,
         contentHash,
         createdAt,
-        updatedAt
+        updatedAt,
+        updateCounter,
+        isDeleted,
+        lastModifiedBy
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2326,6 +2360,10 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('server_id')) {
+      context.handle(_serverIdMeta,
+          serverId.isAcceptableOrUnknown(data['server_id']!, _serverIdMeta));
     }
     if (data.containsKey('subject')) {
       context.handle(_subjectMeta,
@@ -2397,6 +2435,22 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
       context.handle(_updatedAtMeta,
           updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
     }
+    if (data.containsKey('update_counter')) {
+      context.handle(
+          _updateCounterMeta,
+          updateCounter.isAcceptableOrUnknown(
+              data['update_counter']!, _updateCounterMeta));
+    }
+    if (data.containsKey('is_deleted')) {
+      context.handle(_isDeletedMeta,
+          isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta));
+    }
+    if (data.containsKey('last_modified_by')) {
+      context.handle(
+          _lastModifiedByMeta,
+          lastModifiedBy.isAcceptableOrUnknown(
+              data['last_modified_by']!, _lastModifiedByMeta));
+    }
     return context;
   }
 
@@ -2408,6 +2462,8 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
     return Lesson(
       id: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      serverId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}server_id']),
       subject: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}subject'])!,
       classLevel: attachedDatabase.typeMapping
@@ -2430,6 +2486,12 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      updateCounter: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}update_counter'])!,
+      isDeleted: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_deleted'])!,
+      lastModifiedBy: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}last_modified_by']),
     );
   }
 
@@ -2441,6 +2503,7 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
 
 class Lesson extends DataClass implements Insertable<Lesson> {
   final int id;
+  final String? serverId;
   final String subject;
   final String classLevel;
   final int week;
@@ -2452,8 +2515,12 @@ class Lesson extends DataClass implements Insertable<Lesson> {
   final String? contentHash;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final int updateCounter;
+  final bool isDeleted;
+  final String? lastModifiedBy;
   const Lesson(
       {required this.id,
+      this.serverId,
       required this.subject,
       required this.classLevel,
       required this.week,
@@ -2464,11 +2531,17 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       required this.content,
       this.contentHash,
       required this.createdAt,
-      required this.updatedAt});
+      required this.updatedAt,
+      required this.updateCounter,
+      required this.isDeleted,
+      this.lastModifiedBy});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
+    if (!nullToAbsent || serverId != null) {
+      map['server_id'] = Variable<String>(serverId);
+    }
     map['subject'] = Variable<String>(subject);
     map['class_level'] = Variable<String>(classLevel);
     map['week'] = Variable<int>(week);
@@ -2482,12 +2555,20 @@ class Lesson extends DataClass implements Insertable<Lesson> {
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['update_counter'] = Variable<int>(updateCounter);
+    map['is_deleted'] = Variable<bool>(isDeleted);
+    if (!nullToAbsent || lastModifiedBy != null) {
+      map['last_modified_by'] = Variable<String>(lastModifiedBy);
+    }
     return map;
   }
 
   LessonsCompanion toCompanion(bool nullToAbsent) {
     return LessonsCompanion(
       id: Value(id),
+      serverId: serverId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(serverId),
       subject: Value(subject),
       classLevel: Value(classLevel),
       week: Value(week),
@@ -2501,6 +2582,11 @@ class Lesson extends DataClass implements Insertable<Lesson> {
           : Value(contentHash),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
+      updateCounter: Value(updateCounter),
+      isDeleted: Value(isDeleted),
+      lastModifiedBy: lastModifiedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastModifiedBy),
     );
   }
 
@@ -2509,6 +2595,7 @@ class Lesson extends DataClass implements Insertable<Lesson> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return Lesson(
       id: serializer.fromJson<int>(json['id']),
+      serverId: serializer.fromJson<String?>(json['serverId']),
       subject: serializer.fromJson<String>(json['subject']),
       classLevel: serializer.fromJson<String>(json['classLevel']),
       week: serializer.fromJson<int>(json['week']),
@@ -2520,6 +2607,9 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       contentHash: serializer.fromJson<String?>(json['contentHash']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      updateCounter: serializer.fromJson<int>(json['updateCounter']),
+      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      lastModifiedBy: serializer.fromJson<String?>(json['lastModifiedBy']),
     );
   }
   @override
@@ -2527,6 +2617,7 @@ class Lesson extends DataClass implements Insertable<Lesson> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
+      'serverId': serializer.toJson<String?>(serverId),
       'subject': serializer.toJson<String>(subject),
       'classLevel': serializer.toJson<String>(classLevel),
       'week': serializer.toJson<int>(week),
@@ -2538,11 +2629,15 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       'contentHash': serializer.toJson<String?>(contentHash),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'updateCounter': serializer.toJson<int>(updateCounter),
+      'isDeleted': serializer.toJson<bool>(isDeleted),
+      'lastModifiedBy': serializer.toJson<String?>(lastModifiedBy),
     };
   }
 
   Lesson copyWith(
           {int? id,
+          Value<String?> serverId = const Value.absent(),
           String? subject,
           String? classLevel,
           int? week,
@@ -2553,9 +2648,13 @@ class Lesson extends DataClass implements Insertable<Lesson> {
           String? content,
           Value<String?> contentHash = const Value.absent(),
           DateTime? createdAt,
-          DateTime? updatedAt}) =>
+          DateTime? updatedAt,
+          int? updateCounter,
+          bool? isDeleted,
+          Value<String?> lastModifiedBy = const Value.absent()}) =>
       Lesson(
         id: id ?? this.id,
+        serverId: serverId.present ? serverId.value : this.serverId,
         subject: subject ?? this.subject,
         classLevel: classLevel ?? this.classLevel,
         week: week ?? this.week,
@@ -2567,10 +2666,15 @@ class Lesson extends DataClass implements Insertable<Lesson> {
         contentHash: contentHash.present ? contentHash.value : this.contentHash,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
+        updateCounter: updateCounter ?? this.updateCounter,
+        isDeleted: isDeleted ?? this.isDeleted,
+        lastModifiedBy:
+            lastModifiedBy.present ? lastModifiedBy.value : this.lastModifiedBy,
       );
   Lesson copyWithCompanion(LessonsCompanion data) {
     return Lesson(
       id: data.id.present ? data.id.value : this.id,
+      serverId: data.serverId.present ? data.serverId.value : this.serverId,
       subject: data.subject.present ? data.subject.value : this.subject,
       classLevel:
           data.classLevel.present ? data.classLevel.value : this.classLevel,
@@ -2587,6 +2691,13 @@ class Lesson extends DataClass implements Insertable<Lesson> {
           data.contentHash.present ? data.contentHash.value : this.contentHash,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      updateCounter: data.updateCounter.present
+          ? data.updateCounter.value
+          : this.updateCounter,
+      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      lastModifiedBy: data.lastModifiedBy.present
+          ? data.lastModifiedBy.value
+          : this.lastModifiedBy,
     );
   }
 
@@ -2594,6 +2705,7 @@ class Lesson extends DataClass implements Insertable<Lesson> {
   String toString() {
     return (StringBuffer('Lesson(')
           ..write('id: $id, ')
+          ..write('serverId: $serverId, ')
           ..write('subject: $subject, ')
           ..write('classLevel: $classLevel, ')
           ..write('week: $week, ')
@@ -2604,7 +2716,10 @@ class Lesson extends DataClass implements Insertable<Lesson> {
           ..write('content: $content, ')
           ..write('contentHash: $contentHash, ')
           ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('updateCounter: $updateCounter, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('lastModifiedBy: $lastModifiedBy')
           ..write(')'))
         .toString();
   }
@@ -2612,6 +2727,7 @@ class Lesson extends DataClass implements Insertable<Lesson> {
   @override
   int get hashCode => Object.hash(
       id,
+      serverId,
       subject,
       classLevel,
       week,
@@ -2622,12 +2738,16 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       content,
       contentHash,
       createdAt,
-      updatedAt);
+      updatedAt,
+      updateCounter,
+      isDeleted,
+      lastModifiedBy);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is Lesson &&
           other.id == this.id &&
+          other.serverId == this.serverId &&
           other.subject == this.subject &&
           other.classLevel == this.classLevel &&
           other.week == this.week &&
@@ -2638,11 +2758,15 @@ class Lesson extends DataClass implements Insertable<Lesson> {
           other.content == this.content &&
           other.contentHash == this.contentHash &&
           other.createdAt == this.createdAt &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.updateCounter == this.updateCounter &&
+          other.isDeleted == this.isDeleted &&
+          other.lastModifiedBy == this.lastModifiedBy);
 }
 
 class LessonsCompanion extends UpdateCompanion<Lesson> {
   final Value<int> id;
+  final Value<String?> serverId;
   final Value<String> subject;
   final Value<String> classLevel;
   final Value<int> week;
@@ -2654,8 +2778,12 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
   final Value<String?> contentHash;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
+  final Value<int> updateCounter;
+  final Value<bool> isDeleted;
+  final Value<String?> lastModifiedBy;
   const LessonsCompanion({
     this.id = const Value.absent(),
+    this.serverId = const Value.absent(),
     this.subject = const Value.absent(),
     this.classLevel = const Value.absent(),
     this.week = const Value.absent(),
@@ -2667,9 +2795,13 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     this.contentHash = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.updateCounter = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.lastModifiedBy = const Value.absent(),
   });
   LessonsCompanion.insert({
     this.id = const Value.absent(),
+    this.serverId = const Value.absent(),
     required String subject,
     required String classLevel,
     required int week,
@@ -2681,6 +2813,9 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     this.contentHash = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.updateCounter = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.lastModifiedBy = const Value.absent(),
   })  : subject = Value(subject),
         classLevel = Value(classLevel),
         week = Value(week),
@@ -2691,6 +2826,7 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
         content = Value(content);
   static Insertable<Lesson> custom({
     Expression<int>? id,
+    Expression<String>? serverId,
     Expression<String>? subject,
     Expression<String>? classLevel,
     Expression<int>? week,
@@ -2702,9 +2838,13 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     Expression<String>? contentHash,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
+    Expression<int>? updateCounter,
+    Expression<bool>? isDeleted,
+    Expression<String>? lastModifiedBy,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
+      if (serverId != null) 'server_id': serverId,
       if (subject != null) 'subject': subject,
       if (classLevel != null) 'class_level': classLevel,
       if (week != null) 'week': week,
@@ -2716,11 +2856,15 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
       if (contentHash != null) 'content_hash': contentHash,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (updateCounter != null) 'update_counter': updateCounter,
+      if (isDeleted != null) 'is_deleted': isDeleted,
+      if (lastModifiedBy != null) 'last_modified_by': lastModifiedBy,
     });
   }
 
   LessonsCompanion copyWith(
       {Value<int>? id,
+      Value<String?>? serverId,
       Value<String>? subject,
       Value<String>? classLevel,
       Value<int>? week,
@@ -2731,9 +2875,13 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
       Value<String>? content,
       Value<String?>? contentHash,
       Value<DateTime>? createdAt,
-      Value<DateTime>? updatedAt}) {
+      Value<DateTime>? updatedAt,
+      Value<int>? updateCounter,
+      Value<bool>? isDeleted,
+      Value<String?>? lastModifiedBy}) {
     return LessonsCompanion(
       id: id ?? this.id,
+      serverId: serverId ?? this.serverId,
       subject: subject ?? this.subject,
       classLevel: classLevel ?? this.classLevel,
       week: week ?? this.week,
@@ -2745,6 +2893,9 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
       contentHash: contentHash ?? this.contentHash,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      updateCounter: updateCounter ?? this.updateCounter,
+      isDeleted: isDeleted ?? this.isDeleted,
+      lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,
     );
   }
 
@@ -2753,6 +2904,9 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     final map = <String, Expression>{};
     if (id.present) {
       map['id'] = Variable<int>(id.value);
+    }
+    if (serverId.present) {
+      map['server_id'] = Variable<String>(serverId.value);
     }
     if (subject.present) {
       map['subject'] = Variable<String>(subject.value);
@@ -2787,6 +2941,15 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (updateCounter.present) {
+      map['update_counter'] = Variable<int>(updateCounter.value);
+    }
+    if (isDeleted.present) {
+      map['is_deleted'] = Variable<bool>(isDeleted.value);
+    }
+    if (lastModifiedBy.present) {
+      map['last_modified_by'] = Variable<String>(lastModifiedBy.value);
+    }
     return map;
   }
 
@@ -2794,6 +2957,7 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
   String toString() {
     return (StringBuffer('LessonsCompanion(')
           ..write('id: $id, ')
+          ..write('serverId: $serverId, ')
           ..write('subject: $subject, ')
           ..write('classLevel: $classLevel, ')
           ..write('week: $week, ')
@@ -2804,7 +2968,10 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
           ..write('content: $content, ')
           ..write('contentHash: $contentHash, ')
           ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('updateCounter: $updateCounter, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('lastModifiedBy: $lastModifiedBy')
           ..write(')'))
         .toString();
   }
@@ -2825,8 +2992,107 @@ class $SchemeOfWorkTable extends SchemeOfWork
       requiredDuringInsert: false,
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _serverIdMeta =
+      const VerificationMeta('serverId');
   @override
-  List<GeneratedColumn> get $columns => [id];
+  late final GeneratedColumn<String> serverId = GeneratedColumn<String>(
+      'server_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _schoolIdMeta =
+      const VerificationMeta('schoolId');
+  @override
+  late final GeneratedColumn<int> schoolId = GeneratedColumn<int>(
+      'school_id', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _subjectIdMeta =
+      const VerificationMeta('subjectId');
+  @override
+  late final GeneratedColumn<int> subjectId = GeneratedColumn<int>(
+      'subject_id', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _termMeta = const VerificationMeta('term');
+  @override
+  late final GeneratedColumn<String> term = GeneratedColumn<String>(
+      'term', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
+  static const VerificationMeta _weekNumberMeta =
+      const VerificationMeta('weekNumber');
+  @override
+  late final GeneratedColumn<int> weekNumber = GeneratedColumn<int>(
+      'week_number', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(1));
+  static const VerificationMeta _topicMeta = const VerificationMeta('topic');
+  @override
+  late final GeneratedColumn<String> topic = GeneratedColumn<String>(
+      'topic', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
+  static const VerificationMeta _objectivesMeta =
+      const VerificationMeta('objectives');
+  @override
+  late final GeneratedColumn<String> objectives = GeneratedColumn<String>(
+      'objectives', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
+  static const VerificationMeta _updateCounterMeta =
+      const VerificationMeta('updateCounter');
+  @override
+  late final GeneratedColumn<int> updateCounter = GeneratedColumn<int>(
+      'update_counter', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _isDeletedMeta =
+      const VerificationMeta('isDeleted');
+  @override
+  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
+      'is_deleted', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_deleted" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        serverId,
+        schoolId,
+        subjectId,
+        term,
+        weekNumber,
+        topic,
+        objectives,
+        updateCounter,
+        isDeleted,
+        createdAt,
+        updatedAt
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -2840,6 +3106,56 @@ class $SchemeOfWorkTable extends SchemeOfWork
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
     }
+    if (data.containsKey('server_id')) {
+      context.handle(_serverIdMeta,
+          serverId.isAcceptableOrUnknown(data['server_id']!, _serverIdMeta));
+    }
+    if (data.containsKey('school_id')) {
+      context.handle(_schoolIdMeta,
+          schoolId.isAcceptableOrUnknown(data['school_id']!, _schoolIdMeta));
+    }
+    if (data.containsKey('subject_id')) {
+      context.handle(_subjectIdMeta,
+          subjectId.isAcceptableOrUnknown(data['subject_id']!, _subjectIdMeta));
+    }
+    if (data.containsKey('term')) {
+      context.handle(
+          _termMeta, term.isAcceptableOrUnknown(data['term']!, _termMeta));
+    }
+    if (data.containsKey('week_number')) {
+      context.handle(
+          _weekNumberMeta,
+          weekNumber.isAcceptableOrUnknown(
+              data['week_number']!, _weekNumberMeta));
+    }
+    if (data.containsKey('topic')) {
+      context.handle(
+          _topicMeta, topic.isAcceptableOrUnknown(data['topic']!, _topicMeta));
+    }
+    if (data.containsKey('objectives')) {
+      context.handle(
+          _objectivesMeta,
+          objectives.isAcceptableOrUnknown(
+              data['objectives']!, _objectivesMeta));
+    }
+    if (data.containsKey('update_counter')) {
+      context.handle(
+          _updateCounterMeta,
+          updateCounter.isAcceptableOrUnknown(
+              data['update_counter']!, _updateCounterMeta));
+    }
+    if (data.containsKey('is_deleted')) {
+      context.handle(_isDeletedMeta,
+          isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
     return context;
   }
 
@@ -2851,6 +3167,28 @@ class $SchemeOfWorkTable extends SchemeOfWork
     return SchemeOfWorkData(
       id: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      serverId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}server_id']),
+      schoolId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}school_id'])!,
+      subjectId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}subject_id'])!,
+      term: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}term'])!,
+      weekNumber: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}week_number'])!,
+      topic: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}topic'])!,
+      objectives: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}objectives'])!,
+      updateCounter: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}update_counter'])!,
+      isDeleted: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_deleted'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
     );
   }
 
@@ -2863,17 +3201,66 @@ class $SchemeOfWorkTable extends SchemeOfWork
 class SchemeOfWorkData extends DataClass
     implements Insertable<SchemeOfWorkData> {
   final int id;
-  const SchemeOfWorkData({required this.id});
+  final String? serverId;
+  final int schoolId;
+  final int subjectId;
+  final String term;
+  final int weekNumber;
+  final String topic;
+  final String objectives;
+  final int updateCounter;
+  final bool isDeleted;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const SchemeOfWorkData(
+      {required this.id,
+      this.serverId,
+      required this.schoolId,
+      required this.subjectId,
+      required this.term,
+      required this.weekNumber,
+      required this.topic,
+      required this.objectives,
+      required this.updateCounter,
+      required this.isDeleted,
+      required this.createdAt,
+      required this.updatedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
+    if (!nullToAbsent || serverId != null) {
+      map['server_id'] = Variable<String>(serverId);
+    }
+    map['school_id'] = Variable<int>(schoolId);
+    map['subject_id'] = Variable<int>(subjectId);
+    map['term'] = Variable<String>(term);
+    map['week_number'] = Variable<int>(weekNumber);
+    map['topic'] = Variable<String>(topic);
+    map['objectives'] = Variable<String>(objectives);
+    map['update_counter'] = Variable<int>(updateCounter);
+    map['is_deleted'] = Variable<bool>(isDeleted);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
 
   SchemeOfWorkCompanion toCompanion(bool nullToAbsent) {
     return SchemeOfWorkCompanion(
       id: Value(id),
+      serverId: serverId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(serverId),
+      schoolId: Value(schoolId),
+      subjectId: Value(subjectId),
+      term: Value(term),
+      weekNumber: Value(weekNumber),
+      topic: Value(topic),
+      objectives: Value(objectives),
+      updateCounter: Value(updateCounter),
+      isDeleted: Value(isDeleted),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
     );
   }
 
@@ -2882,6 +3269,17 @@ class SchemeOfWorkData extends DataClass
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return SchemeOfWorkData(
       id: serializer.fromJson<int>(json['id']),
+      serverId: serializer.fromJson<String?>(json['serverId']),
+      schoolId: serializer.fromJson<int>(json['schoolId']),
+      subjectId: serializer.fromJson<int>(json['subjectId']),
+      term: serializer.fromJson<String>(json['term']),
+      weekNumber: serializer.fromJson<int>(json['weekNumber']),
+      topic: serializer.fromJson<String>(json['topic']),
+      objectives: serializer.fromJson<String>(json['objectives']),
+      updateCounter: serializer.fromJson<int>(json['updateCounter']),
+      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
   @override
@@ -2889,53 +3287,216 @@ class SchemeOfWorkData extends DataClass
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
+      'serverId': serializer.toJson<String?>(serverId),
+      'schoolId': serializer.toJson<int>(schoolId),
+      'subjectId': serializer.toJson<int>(subjectId),
+      'term': serializer.toJson<String>(term),
+      'weekNumber': serializer.toJson<int>(weekNumber),
+      'topic': serializer.toJson<String>(topic),
+      'objectives': serializer.toJson<String>(objectives),
+      'updateCounter': serializer.toJson<int>(updateCounter),
+      'isDeleted': serializer.toJson<bool>(isDeleted),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
 
-  SchemeOfWorkData copyWith({int? id}) => SchemeOfWorkData(
+  SchemeOfWorkData copyWith(
+          {int? id,
+          Value<String?> serverId = const Value.absent(),
+          int? schoolId,
+          int? subjectId,
+          String? term,
+          int? weekNumber,
+          String? topic,
+          String? objectives,
+          int? updateCounter,
+          bool? isDeleted,
+          DateTime? createdAt,
+          DateTime? updatedAt}) =>
+      SchemeOfWorkData(
         id: id ?? this.id,
+        serverId: serverId.present ? serverId.value : this.serverId,
+        schoolId: schoolId ?? this.schoolId,
+        subjectId: subjectId ?? this.subjectId,
+        term: term ?? this.term,
+        weekNumber: weekNumber ?? this.weekNumber,
+        topic: topic ?? this.topic,
+        objectives: objectives ?? this.objectives,
+        updateCounter: updateCounter ?? this.updateCounter,
+        isDeleted: isDeleted ?? this.isDeleted,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
       );
   SchemeOfWorkData copyWithCompanion(SchemeOfWorkCompanion data) {
     return SchemeOfWorkData(
       id: data.id.present ? data.id.value : this.id,
+      serverId: data.serverId.present ? data.serverId.value : this.serverId,
+      schoolId: data.schoolId.present ? data.schoolId.value : this.schoolId,
+      subjectId: data.subjectId.present ? data.subjectId.value : this.subjectId,
+      term: data.term.present ? data.term.value : this.term,
+      weekNumber:
+          data.weekNumber.present ? data.weekNumber.value : this.weekNumber,
+      topic: data.topic.present ? data.topic.value : this.topic,
+      objectives:
+          data.objectives.present ? data.objectives.value : this.objectives,
+      updateCounter: data.updateCounter.present
+          ? data.updateCounter.value
+          : this.updateCounter,
+      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
 
   @override
   String toString() {
     return (StringBuffer('SchemeOfWorkData(')
-          ..write('id: $id')
+          ..write('id: $id, ')
+          ..write('serverId: $serverId, ')
+          ..write('schoolId: $schoolId, ')
+          ..write('subjectId: $subjectId, ')
+          ..write('term: $term, ')
+          ..write('weekNumber: $weekNumber, ')
+          ..write('topic: $topic, ')
+          ..write('objectives: $objectives, ')
+          ..write('updateCounter: $updateCounter, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => Object.hash(
+      id,
+      serverId,
+      schoolId,
+      subjectId,
+      term,
+      weekNumber,
+      topic,
+      objectives,
+      updateCounter,
+      isDeleted,
+      createdAt,
+      updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is SchemeOfWorkData && other.id == this.id);
+      (other is SchemeOfWorkData &&
+          other.id == this.id &&
+          other.serverId == this.serverId &&
+          other.schoolId == this.schoolId &&
+          other.subjectId == this.subjectId &&
+          other.term == this.term &&
+          other.weekNumber == this.weekNumber &&
+          other.topic == this.topic &&
+          other.objectives == this.objectives &&
+          other.updateCounter == this.updateCounter &&
+          other.isDeleted == this.isDeleted &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
 }
 
 class SchemeOfWorkCompanion extends UpdateCompanion<SchemeOfWorkData> {
   final Value<int> id;
+  final Value<String?> serverId;
+  final Value<int> schoolId;
+  final Value<int> subjectId;
+  final Value<String> term;
+  final Value<int> weekNumber;
+  final Value<String> topic;
+  final Value<String> objectives;
+  final Value<int> updateCounter;
+  final Value<bool> isDeleted;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
   const SchemeOfWorkCompanion({
     this.id = const Value.absent(),
+    this.serverId = const Value.absent(),
+    this.schoolId = const Value.absent(),
+    this.subjectId = const Value.absent(),
+    this.term = const Value.absent(),
+    this.weekNumber = const Value.absent(),
+    this.topic = const Value.absent(),
+    this.objectives = const Value.absent(),
+    this.updateCounter = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
   });
   SchemeOfWorkCompanion.insert({
     this.id = const Value.absent(),
+    this.serverId = const Value.absent(),
+    this.schoolId = const Value.absent(),
+    this.subjectId = const Value.absent(),
+    this.term = const Value.absent(),
+    this.weekNumber = const Value.absent(),
+    this.topic = const Value.absent(),
+    this.objectives = const Value.absent(),
+    this.updateCounter = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
   });
   static Insertable<SchemeOfWorkData> custom({
     Expression<int>? id,
+    Expression<String>? serverId,
+    Expression<int>? schoolId,
+    Expression<int>? subjectId,
+    Expression<String>? term,
+    Expression<int>? weekNumber,
+    Expression<String>? topic,
+    Expression<String>? objectives,
+    Expression<int>? updateCounter,
+    Expression<bool>? isDeleted,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
+      if (serverId != null) 'server_id': serverId,
+      if (schoolId != null) 'school_id': schoolId,
+      if (subjectId != null) 'subject_id': subjectId,
+      if (term != null) 'term': term,
+      if (weekNumber != null) 'week_number': weekNumber,
+      if (topic != null) 'topic': topic,
+      if (objectives != null) 'objectives': objectives,
+      if (updateCounter != null) 'update_counter': updateCounter,
+      if (isDeleted != null) 'is_deleted': isDeleted,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
     });
   }
 
-  SchemeOfWorkCompanion copyWith({Value<int>? id}) {
+  SchemeOfWorkCompanion copyWith(
+      {Value<int>? id,
+      Value<String?>? serverId,
+      Value<int>? schoolId,
+      Value<int>? subjectId,
+      Value<String>? term,
+      Value<int>? weekNumber,
+      Value<String>? topic,
+      Value<String>? objectives,
+      Value<int>? updateCounter,
+      Value<bool>? isDeleted,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt}) {
     return SchemeOfWorkCompanion(
       id: id ?? this.id,
+      serverId: serverId ?? this.serverId,
+      schoolId: schoolId ?? this.schoolId,
+      subjectId: subjectId ?? this.subjectId,
+      term: term ?? this.term,
+      weekNumber: weekNumber ?? this.weekNumber,
+      topic: topic ?? this.topic,
+      objectives: objectives ?? this.objectives,
+      updateCounter: updateCounter ?? this.updateCounter,
+      isDeleted: isDeleted ?? this.isDeleted,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 
@@ -2945,13 +3506,57 @@ class SchemeOfWorkCompanion extends UpdateCompanion<SchemeOfWorkData> {
     if (id.present) {
       map['id'] = Variable<int>(id.value);
     }
+    if (serverId.present) {
+      map['server_id'] = Variable<String>(serverId.value);
+    }
+    if (schoolId.present) {
+      map['school_id'] = Variable<int>(schoolId.value);
+    }
+    if (subjectId.present) {
+      map['subject_id'] = Variable<int>(subjectId.value);
+    }
+    if (term.present) {
+      map['term'] = Variable<String>(term.value);
+    }
+    if (weekNumber.present) {
+      map['week_number'] = Variable<int>(weekNumber.value);
+    }
+    if (topic.present) {
+      map['topic'] = Variable<String>(topic.value);
+    }
+    if (objectives.present) {
+      map['objectives'] = Variable<String>(objectives.value);
+    }
+    if (updateCounter.present) {
+      map['update_counter'] = Variable<int>(updateCounter.value);
+    }
+    if (isDeleted.present) {
+      map['is_deleted'] = Variable<bool>(isDeleted.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
     return map;
   }
 
   @override
   String toString() {
     return (StringBuffer('SchemeOfWorkCompanion(')
-          ..write('id: $id')
+          ..write('id: $id, ')
+          ..write('serverId: $serverId, ')
+          ..write('schoolId: $schoolId, ')
+          ..write('subjectId: $subjectId, ')
+          ..write('term: $term, ')
+          ..write('weekNumber: $weekNumber, ')
+          ..write('topic: $topic, ')
+          ..write('objectives: $objectives, ')
+          ..write('updateCounter: $updateCounter, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
@@ -2971,6 +3576,12 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
       requiredDuringInsert: false,
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _serverIdMeta =
+      const VerificationMeta('serverId');
+  @override
+  late final GeneratedColumn<String> serverId = GeneratedColumn<String>(
+      'server_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _subjectMeta =
       const VerificationMeta('subject');
   @override
@@ -3022,9 +3633,34 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
       type: DriftSqlType.dateTime,
       requiredDuringInsert: false,
       defaultValue: currentDateAndTime);
+  static const VerificationMeta _updateCounterMeta =
+      const VerificationMeta('updateCounter');
+  @override
+  late final GeneratedColumn<int> updateCounter = GeneratedColumn<int>(
+      'update_counter', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _isDeletedMeta =
+      const VerificationMeta('isDeleted');
+  @override
+  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
+      'is_deleted', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_deleted" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _lastModifiedByMeta =
+      const VerificationMeta('lastModifiedBy');
+  @override
+  late final GeneratedColumn<String> lastModifiedBy = GeneratedColumn<String>(
+      'last_modified_by', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
+        serverId,
         subject,
         classLevel,
         topic,
@@ -3032,7 +3668,10 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
         curriculum,
         content,
         createdAt,
-        updatedAt
+        updatedAt,
+        updateCounter,
+        isDeleted,
+        lastModifiedBy
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3046,6 +3685,10 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('server_id')) {
+      context.handle(_serverIdMeta,
+          serverId.isAcceptableOrUnknown(data['server_id']!, _serverIdMeta));
     }
     if (data.containsKey('subject')) {
       context.handle(_subjectMeta,
@@ -3097,6 +3740,22 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
       context.handle(_updatedAtMeta,
           updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
     }
+    if (data.containsKey('update_counter')) {
+      context.handle(
+          _updateCounterMeta,
+          updateCounter.isAcceptableOrUnknown(
+              data['update_counter']!, _updateCounterMeta));
+    }
+    if (data.containsKey('is_deleted')) {
+      context.handle(_isDeletedMeta,
+          isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta));
+    }
+    if (data.containsKey('last_modified_by')) {
+      context.handle(
+          _lastModifiedByMeta,
+          lastModifiedBy.isAcceptableOrUnknown(
+              data['last_modified_by']!, _lastModifiedByMeta));
+    }
     return context;
   }
 
@@ -3108,6 +3767,8 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
     return Exam(
       id: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      serverId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}server_id']),
       subject: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}subject'])!,
       classLevel: attachedDatabase.typeMapping
@@ -3124,6 +3785,12 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      updateCounter: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}update_counter'])!,
+      isDeleted: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_deleted'])!,
+      lastModifiedBy: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}last_modified_by']),
     );
   }
 
@@ -3135,6 +3802,7 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
 
 class Exam extends DataClass implements Insertable<Exam> {
   final int id;
+  final String? serverId;
   final String subject;
   final String classLevel;
   final String topic;
@@ -3143,8 +3811,12 @@ class Exam extends DataClass implements Insertable<Exam> {
   final String content;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final int updateCounter;
+  final bool isDeleted;
+  final String? lastModifiedBy;
   const Exam(
       {required this.id,
+      this.serverId,
       required this.subject,
       required this.classLevel,
       required this.topic,
@@ -3152,11 +3824,17 @@ class Exam extends DataClass implements Insertable<Exam> {
       required this.curriculum,
       required this.content,
       required this.createdAt,
-      required this.updatedAt});
+      required this.updatedAt,
+      required this.updateCounter,
+      required this.isDeleted,
+      this.lastModifiedBy});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
+    if (!nullToAbsent || serverId != null) {
+      map['server_id'] = Variable<String>(serverId);
+    }
     map['subject'] = Variable<String>(subject);
     map['class_level'] = Variable<String>(classLevel);
     map['topic'] = Variable<String>(topic);
@@ -3165,12 +3843,20 @@ class Exam extends DataClass implements Insertable<Exam> {
     map['content'] = Variable<String>(content);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['update_counter'] = Variable<int>(updateCounter);
+    map['is_deleted'] = Variable<bool>(isDeleted);
+    if (!nullToAbsent || lastModifiedBy != null) {
+      map['last_modified_by'] = Variable<String>(lastModifiedBy);
+    }
     return map;
   }
 
   ExamsCompanion toCompanion(bool nullToAbsent) {
     return ExamsCompanion(
       id: Value(id),
+      serverId: serverId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(serverId),
       subject: Value(subject),
       classLevel: Value(classLevel),
       topic: Value(topic),
@@ -3179,6 +3865,11 @@ class Exam extends DataClass implements Insertable<Exam> {
       content: Value(content),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
+      updateCounter: Value(updateCounter),
+      isDeleted: Value(isDeleted),
+      lastModifiedBy: lastModifiedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastModifiedBy),
     );
   }
 
@@ -3187,6 +3878,7 @@ class Exam extends DataClass implements Insertable<Exam> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return Exam(
       id: serializer.fromJson<int>(json['id']),
+      serverId: serializer.fromJson<String?>(json['serverId']),
       subject: serializer.fromJson<String>(json['subject']),
       classLevel: serializer.fromJson<String>(json['classLevel']),
       topic: serializer.fromJson<String>(json['topic']),
@@ -3195,6 +3887,9 @@ class Exam extends DataClass implements Insertable<Exam> {
       content: serializer.fromJson<String>(json['content']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      updateCounter: serializer.fromJson<int>(json['updateCounter']),
+      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      lastModifiedBy: serializer.fromJson<String?>(json['lastModifiedBy']),
     );
   }
   @override
@@ -3202,6 +3897,7 @@ class Exam extends DataClass implements Insertable<Exam> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
+      'serverId': serializer.toJson<String?>(serverId),
       'subject': serializer.toJson<String>(subject),
       'classLevel': serializer.toJson<String>(classLevel),
       'topic': serializer.toJson<String>(topic),
@@ -3210,11 +3906,15 @@ class Exam extends DataClass implements Insertable<Exam> {
       'content': serializer.toJson<String>(content),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'updateCounter': serializer.toJson<int>(updateCounter),
+      'isDeleted': serializer.toJson<bool>(isDeleted),
+      'lastModifiedBy': serializer.toJson<String?>(lastModifiedBy),
     };
   }
 
   Exam copyWith(
           {int? id,
+          Value<String?> serverId = const Value.absent(),
           String? subject,
           String? classLevel,
           String? topic,
@@ -3222,9 +3922,13 @@ class Exam extends DataClass implements Insertable<Exam> {
           String? curriculum,
           String? content,
           DateTime? createdAt,
-          DateTime? updatedAt}) =>
+          DateTime? updatedAt,
+          int? updateCounter,
+          bool? isDeleted,
+          Value<String?> lastModifiedBy = const Value.absent()}) =>
       Exam(
         id: id ?? this.id,
+        serverId: serverId.present ? serverId.value : this.serverId,
         subject: subject ?? this.subject,
         classLevel: classLevel ?? this.classLevel,
         topic: topic ?? this.topic,
@@ -3233,10 +3937,15 @@ class Exam extends DataClass implements Insertable<Exam> {
         content: content ?? this.content,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
+        updateCounter: updateCounter ?? this.updateCounter,
+        isDeleted: isDeleted ?? this.isDeleted,
+        lastModifiedBy:
+            lastModifiedBy.present ? lastModifiedBy.value : this.lastModifiedBy,
       );
   Exam copyWithCompanion(ExamsCompanion data) {
     return Exam(
       id: data.id.present ? data.id.value : this.id,
+      serverId: data.serverId.present ? data.serverId.value : this.serverId,
       subject: data.subject.present ? data.subject.value : this.subject,
       classLevel:
           data.classLevel.present ? data.classLevel.value : this.classLevel,
@@ -3248,6 +3957,13 @@ class Exam extends DataClass implements Insertable<Exam> {
       content: data.content.present ? data.content.value : this.content,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      updateCounter: data.updateCounter.present
+          ? data.updateCounter.value
+          : this.updateCounter,
+      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      lastModifiedBy: data.lastModifiedBy.present
+          ? data.lastModifiedBy.value
+          : this.lastModifiedBy,
     );
   }
 
@@ -3255,6 +3971,7 @@ class Exam extends DataClass implements Insertable<Exam> {
   String toString() {
     return (StringBuffer('Exam(')
           ..write('id: $id, ')
+          ..write('serverId: $serverId, ')
           ..write('subject: $subject, ')
           ..write('classLevel: $classLevel, ')
           ..write('topic: $topic, ')
@@ -3262,19 +3979,35 @@ class Exam extends DataClass implements Insertable<Exam> {
           ..write('curriculum: $curriculum, ')
           ..write('content: $content, ')
           ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('updateCounter: $updateCounter, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('lastModifiedBy: $lastModifiedBy')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, subject, classLevel, topic, difficulty,
-      curriculum, content, createdAt, updatedAt);
+  int get hashCode => Object.hash(
+      id,
+      serverId,
+      subject,
+      classLevel,
+      topic,
+      difficulty,
+      curriculum,
+      content,
+      createdAt,
+      updatedAt,
+      updateCounter,
+      isDeleted,
+      lastModifiedBy);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is Exam &&
           other.id == this.id &&
+          other.serverId == this.serverId &&
           other.subject == this.subject &&
           other.classLevel == this.classLevel &&
           other.topic == this.topic &&
@@ -3282,11 +4015,15 @@ class Exam extends DataClass implements Insertable<Exam> {
           other.curriculum == this.curriculum &&
           other.content == this.content &&
           other.createdAt == this.createdAt &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.updateCounter == this.updateCounter &&
+          other.isDeleted == this.isDeleted &&
+          other.lastModifiedBy == this.lastModifiedBy);
 }
 
 class ExamsCompanion extends UpdateCompanion<Exam> {
   final Value<int> id;
+  final Value<String?> serverId;
   final Value<String> subject;
   final Value<String> classLevel;
   final Value<String> topic;
@@ -3295,8 +4032,12 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
   final Value<String> content;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
+  final Value<int> updateCounter;
+  final Value<bool> isDeleted;
+  final Value<String?> lastModifiedBy;
   const ExamsCompanion({
     this.id = const Value.absent(),
+    this.serverId = const Value.absent(),
     this.subject = const Value.absent(),
     this.classLevel = const Value.absent(),
     this.topic = const Value.absent(),
@@ -3305,9 +4046,13 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     this.content = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.updateCounter = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.lastModifiedBy = const Value.absent(),
   });
   ExamsCompanion.insert({
     this.id = const Value.absent(),
+    this.serverId = const Value.absent(),
     required String subject,
     required String classLevel,
     required String topic,
@@ -3316,6 +4061,9 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     required String content,
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.updateCounter = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.lastModifiedBy = const Value.absent(),
   })  : subject = Value(subject),
         classLevel = Value(classLevel),
         topic = Value(topic),
@@ -3324,6 +4072,7 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
         content = Value(content);
   static Insertable<Exam> custom({
     Expression<int>? id,
+    Expression<String>? serverId,
     Expression<String>? subject,
     Expression<String>? classLevel,
     Expression<String>? topic,
@@ -3332,9 +4081,13 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     Expression<String>? content,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
+    Expression<int>? updateCounter,
+    Expression<bool>? isDeleted,
+    Expression<String>? lastModifiedBy,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
+      if (serverId != null) 'server_id': serverId,
       if (subject != null) 'subject': subject,
       if (classLevel != null) 'class_level': classLevel,
       if (topic != null) 'topic': topic,
@@ -3343,11 +4096,15 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
       if (content != null) 'content': content,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (updateCounter != null) 'update_counter': updateCounter,
+      if (isDeleted != null) 'is_deleted': isDeleted,
+      if (lastModifiedBy != null) 'last_modified_by': lastModifiedBy,
     });
   }
 
   ExamsCompanion copyWith(
       {Value<int>? id,
+      Value<String?>? serverId,
       Value<String>? subject,
       Value<String>? classLevel,
       Value<String>? topic,
@@ -3355,9 +4112,13 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
       Value<String>? curriculum,
       Value<String>? content,
       Value<DateTime>? createdAt,
-      Value<DateTime>? updatedAt}) {
+      Value<DateTime>? updatedAt,
+      Value<int>? updateCounter,
+      Value<bool>? isDeleted,
+      Value<String?>? lastModifiedBy}) {
     return ExamsCompanion(
       id: id ?? this.id,
+      serverId: serverId ?? this.serverId,
       subject: subject ?? this.subject,
       classLevel: classLevel ?? this.classLevel,
       topic: topic ?? this.topic,
@@ -3366,6 +4127,9 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
       content: content ?? this.content,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      updateCounter: updateCounter ?? this.updateCounter,
+      isDeleted: isDeleted ?? this.isDeleted,
+      lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,
     );
   }
 
@@ -3374,6 +4138,9 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     final map = <String, Expression>{};
     if (id.present) {
       map['id'] = Variable<int>(id.value);
+    }
+    if (serverId.present) {
+      map['server_id'] = Variable<String>(serverId.value);
     }
     if (subject.present) {
       map['subject'] = Variable<String>(subject.value);
@@ -3399,6 +4166,15 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (updateCounter.present) {
+      map['update_counter'] = Variable<int>(updateCounter.value);
+    }
+    if (isDeleted.present) {
+      map['is_deleted'] = Variable<bool>(isDeleted.value);
+    }
+    if (lastModifiedBy.present) {
+      map['last_modified_by'] = Variable<String>(lastModifiedBy.value);
+    }
     return map;
   }
 
@@ -3406,6 +4182,7 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
   String toString() {
     return (StringBuffer('ExamsCompanion(')
           ..write('id: $id, ')
+          ..write('serverId: $serverId, ')
           ..write('subject: $subject, ')
           ..write('classLevel: $classLevel, ')
           ..write('topic: $topic, ')
@@ -3413,7 +4190,10 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
           ..write('curriculum: $curriculum, ')
           ..write('content: $content, ')
           ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('updateCounter: $updateCounter, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('lastModifiedBy: $lastModifiedBy')
           ..write(')'))
         .toString();
   }
@@ -6468,8 +7248,22 @@ class $SyncQueueSnapshotTable extends SyncQueueSnapshot
       requiredDuringInsert: false,
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _snapshotDataMeta =
+      const VerificationMeta('snapshotData');
   @override
-  List<GeneratedColumn> get $columns => [id];
+  late final GeneratedColumn<String> snapshotData = GeneratedColumn<String>(
+      'snapshot_data', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns => [id, snapshotData, createdAt];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -6484,6 +7278,18 @@ class $SyncQueueSnapshotTable extends SyncQueueSnapshot
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
     }
+    if (data.containsKey('snapshot_data')) {
+      context.handle(
+          _snapshotDataMeta,
+          snapshotData.isAcceptableOrUnknown(
+              data['snapshot_data']!, _snapshotDataMeta));
+    } else if (isInserting) {
+      context.missing(_snapshotDataMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
     return context;
   }
 
@@ -6495,6 +7301,10 @@ class $SyncQueueSnapshotTable extends SyncQueueSnapshot
     return SyncQueueSnapshotData(
       id: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      snapshotData: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}snapshot_data'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
     );
   }
 
@@ -6507,17 +7317,24 @@ class $SyncQueueSnapshotTable extends SyncQueueSnapshot
 class SyncQueueSnapshotData extends DataClass
     implements Insertable<SyncQueueSnapshotData> {
   final int id;
-  const SyncQueueSnapshotData({required this.id});
+  final String snapshotData;
+  final DateTime createdAt;
+  const SyncQueueSnapshotData(
+      {required this.id, required this.snapshotData, required this.createdAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
+    map['snapshot_data'] = Variable<String>(snapshotData);
+    map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
 
   SyncQueueSnapshotCompanion toCompanion(bool nullToAbsent) {
     return SyncQueueSnapshotCompanion(
       id: Value(id),
+      snapshotData: Value(snapshotData),
+      createdAt: Value(createdAt),
     );
   }
 
@@ -6526,6 +7343,8 @@ class SyncQueueSnapshotData extends DataClass
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return SyncQueueSnapshotData(
       id: serializer.fromJson<int>(json['id']),
+      snapshotData: serializer.fromJson<String>(json['snapshotData']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
   @override
@@ -6533,54 +7352,84 @@ class SyncQueueSnapshotData extends DataClass
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
+      'snapshotData': serializer.toJson<String>(snapshotData),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
 
-  SyncQueueSnapshotData copyWith({int? id}) => SyncQueueSnapshotData(
+  SyncQueueSnapshotData copyWith(
+          {int? id, String? snapshotData, DateTime? createdAt}) =>
+      SyncQueueSnapshotData(
         id: id ?? this.id,
+        snapshotData: snapshotData ?? this.snapshotData,
+        createdAt: createdAt ?? this.createdAt,
       );
   SyncQueueSnapshotData copyWithCompanion(SyncQueueSnapshotCompanion data) {
     return SyncQueueSnapshotData(
       id: data.id.present ? data.id.value : this.id,
+      snapshotData: data.snapshotData.present
+          ? data.snapshotData.value
+          : this.snapshotData,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
 
   @override
   String toString() {
     return (StringBuffer('SyncQueueSnapshotData(')
-          ..write('id: $id')
+          ..write('id: $id, ')
+          ..write('snapshotData: $snapshotData, ')
+          ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => Object.hash(id, snapshotData, createdAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is SyncQueueSnapshotData && other.id == this.id);
+      (other is SyncQueueSnapshotData &&
+          other.id == this.id &&
+          other.snapshotData == this.snapshotData &&
+          other.createdAt == this.createdAt);
 }
 
 class SyncQueueSnapshotCompanion
     extends UpdateCompanion<SyncQueueSnapshotData> {
   final Value<int> id;
+  final Value<String> snapshotData;
+  final Value<DateTime> createdAt;
   const SyncQueueSnapshotCompanion({
     this.id = const Value.absent(),
+    this.snapshotData = const Value.absent(),
+    this.createdAt = const Value.absent(),
   });
   SyncQueueSnapshotCompanion.insert({
     this.id = const Value.absent(),
-  });
+    required String snapshotData,
+    this.createdAt = const Value.absent(),
+  }) : snapshotData = Value(snapshotData);
   static Insertable<SyncQueueSnapshotData> custom({
     Expression<int>? id,
+    Expression<String>? snapshotData,
+    Expression<DateTime>? createdAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
+      if (snapshotData != null) 'snapshot_data': snapshotData,
+      if (createdAt != null) 'created_at': createdAt,
     });
   }
 
-  SyncQueueSnapshotCompanion copyWith({Value<int>? id}) {
+  SyncQueueSnapshotCompanion copyWith(
+      {Value<int>? id,
+      Value<String>? snapshotData,
+      Value<DateTime>? createdAt}) {
     return SyncQueueSnapshotCompanion(
       id: id ?? this.id,
+      snapshotData: snapshotData ?? this.snapshotData,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 
@@ -6590,13 +7439,21 @@ class SyncQueueSnapshotCompanion
     if (id.present) {
       map['id'] = Variable<int>(id.value);
     }
+    if (snapshotData.present) {
+      map['snapshot_data'] = Variable<String>(snapshotData.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
     return map;
   }
 
   @override
   String toString() {
     return (StringBuffer('SyncQueueSnapshotCompanion(')
-          ..write('id: $id')
+          ..write('id: $id, ')
+          ..write('snapshotData: $snapshotData, ')
+          ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
   }
@@ -9270,8 +10127,69 @@ class $SchemeGenerationQueueTable extends SchemeGenerationQueue
       requiredDuringInsert: false,
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _schoolIdMeta =
+      const VerificationMeta('schoolId');
   @override
-  List<GeneratedColumn> get $columns => [id];
+  late final GeneratedColumn<int> schoolId = GeneratedColumn<int>(
+      'school_id', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _subjectIdMeta =
+      const VerificationMeta('subjectId');
+  @override
+  late final GeneratedColumn<int> subjectId = GeneratedColumn<int>(
+      'subject_id', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _termMeta = const VerificationMeta('term');
+  @override
+  late final GeneratedColumn<String> term = GeneratedColumn<String>(
+      'term', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+      'status', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('pending'));
+  static const VerificationMeta _errorMessageMeta =
+      const VerificationMeta('errorMessage');
+  @override
+  late final GeneratedColumn<String> errorMessage = GeneratedColumn<String>(
+      'error_message', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        schoolId,
+        subjectId,
+        term,
+        status,
+        errorMessage,
+        createdAt,
+        updatedAt
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -9286,6 +10204,36 @@ class $SchemeGenerationQueueTable extends SchemeGenerationQueue
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
     }
+    if (data.containsKey('school_id')) {
+      context.handle(_schoolIdMeta,
+          schoolId.isAcceptableOrUnknown(data['school_id']!, _schoolIdMeta));
+    }
+    if (data.containsKey('subject_id')) {
+      context.handle(_subjectIdMeta,
+          subjectId.isAcceptableOrUnknown(data['subject_id']!, _subjectIdMeta));
+    }
+    if (data.containsKey('term')) {
+      context.handle(
+          _termMeta, term.isAcceptableOrUnknown(data['term']!, _termMeta));
+    }
+    if (data.containsKey('status')) {
+      context.handle(_statusMeta,
+          status.isAcceptableOrUnknown(data['status']!, _statusMeta));
+    }
+    if (data.containsKey('error_message')) {
+      context.handle(
+          _errorMessageMeta,
+          errorMessage.isAcceptableOrUnknown(
+              data['error_message']!, _errorMessageMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
     return context;
   }
 
@@ -9298,6 +10246,20 @@ class $SchemeGenerationQueueTable extends SchemeGenerationQueue
     return SchemeGenerationQueueData(
       id: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      schoolId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}school_id'])!,
+      subjectId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}subject_id'])!,
+      term: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}term'])!,
+      status: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
+      errorMessage: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}error_message']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
     );
   }
 
@@ -9310,17 +10272,50 @@ class $SchemeGenerationQueueTable extends SchemeGenerationQueue
 class SchemeGenerationQueueData extends DataClass
     implements Insertable<SchemeGenerationQueueData> {
   final int id;
-  const SchemeGenerationQueueData({required this.id});
+  final int schoolId;
+  final int subjectId;
+  final String term;
+  final String status;
+  final String? errorMessage;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const SchemeGenerationQueueData(
+      {required this.id,
+      required this.schoolId,
+      required this.subjectId,
+      required this.term,
+      required this.status,
+      this.errorMessage,
+      required this.createdAt,
+      required this.updatedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
+    map['school_id'] = Variable<int>(schoolId);
+    map['subject_id'] = Variable<int>(subjectId);
+    map['term'] = Variable<String>(term);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || errorMessage != null) {
+      map['error_message'] = Variable<String>(errorMessage);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
 
   SchemeGenerationQueueCompanion toCompanion(bool nullToAbsent) {
     return SchemeGenerationQueueCompanion(
       id: Value(id),
+      schoolId: Value(schoolId),
+      subjectId: Value(subjectId),
+      term: Value(term),
+      status: Value(status),
+      errorMessage: errorMessage == null && nullToAbsent
+          ? const Value.absent()
+          : Value(errorMessage),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
     );
   }
 
@@ -9329,6 +10324,13 @@ class SchemeGenerationQueueData extends DataClass
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return SchemeGenerationQueueData(
       id: serializer.fromJson<int>(json['id']),
+      schoolId: serializer.fromJson<int>(json['schoolId']),
+      subjectId: serializer.fromJson<int>(json['subjectId']),
+      term: serializer.fromJson<String>(json['term']),
+      status: serializer.fromJson<String>(json['status']),
+      errorMessage: serializer.fromJson<String?>(json['errorMessage']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
   @override
@@ -9336,55 +10338,154 @@ class SchemeGenerationQueueData extends DataClass
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
+      'schoolId': serializer.toJson<int>(schoolId),
+      'subjectId': serializer.toJson<int>(subjectId),
+      'term': serializer.toJson<String>(term),
+      'status': serializer.toJson<String>(status),
+      'errorMessage': serializer.toJson<String?>(errorMessage),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
 
-  SchemeGenerationQueueData copyWith({int? id}) => SchemeGenerationQueueData(
+  SchemeGenerationQueueData copyWith(
+          {int? id,
+          int? schoolId,
+          int? subjectId,
+          String? term,
+          String? status,
+          Value<String?> errorMessage = const Value.absent(),
+          DateTime? createdAt,
+          DateTime? updatedAt}) =>
+      SchemeGenerationQueueData(
         id: id ?? this.id,
+        schoolId: schoolId ?? this.schoolId,
+        subjectId: subjectId ?? this.subjectId,
+        term: term ?? this.term,
+        status: status ?? this.status,
+        errorMessage:
+            errorMessage.present ? errorMessage.value : this.errorMessage,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
       );
   SchemeGenerationQueueData copyWithCompanion(
       SchemeGenerationQueueCompanion data) {
     return SchemeGenerationQueueData(
       id: data.id.present ? data.id.value : this.id,
+      schoolId: data.schoolId.present ? data.schoolId.value : this.schoolId,
+      subjectId: data.subjectId.present ? data.subjectId.value : this.subjectId,
+      term: data.term.present ? data.term.value : this.term,
+      status: data.status.present ? data.status.value : this.status,
+      errorMessage: data.errorMessage.present
+          ? data.errorMessage.value
+          : this.errorMessage,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
 
   @override
   String toString() {
     return (StringBuffer('SchemeGenerationQueueData(')
-          ..write('id: $id')
+          ..write('id: $id, ')
+          ..write('schoolId: $schoolId, ')
+          ..write('subjectId: $subjectId, ')
+          ..write('term: $term, ')
+          ..write('status: $status, ')
+          ..write('errorMessage: $errorMessage, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => Object.hash(id, schoolId, subjectId, term, status,
+      errorMessage, createdAt, updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is SchemeGenerationQueueData && other.id == this.id);
+      (other is SchemeGenerationQueueData &&
+          other.id == this.id &&
+          other.schoolId == this.schoolId &&
+          other.subjectId == this.subjectId &&
+          other.term == this.term &&
+          other.status == this.status &&
+          other.errorMessage == this.errorMessage &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
 }
 
 class SchemeGenerationQueueCompanion
     extends UpdateCompanion<SchemeGenerationQueueData> {
   final Value<int> id;
+  final Value<int> schoolId;
+  final Value<int> subjectId;
+  final Value<String> term;
+  final Value<String> status;
+  final Value<String?> errorMessage;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
   const SchemeGenerationQueueCompanion({
     this.id = const Value.absent(),
+    this.schoolId = const Value.absent(),
+    this.subjectId = const Value.absent(),
+    this.term = const Value.absent(),
+    this.status = const Value.absent(),
+    this.errorMessage = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
   });
   SchemeGenerationQueueCompanion.insert({
     this.id = const Value.absent(),
+    this.schoolId = const Value.absent(),
+    this.subjectId = const Value.absent(),
+    this.term = const Value.absent(),
+    this.status = const Value.absent(),
+    this.errorMessage = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
   });
   static Insertable<SchemeGenerationQueueData> custom({
     Expression<int>? id,
+    Expression<int>? schoolId,
+    Expression<int>? subjectId,
+    Expression<String>? term,
+    Expression<String>? status,
+    Expression<String>? errorMessage,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
+      if (schoolId != null) 'school_id': schoolId,
+      if (subjectId != null) 'subject_id': subjectId,
+      if (term != null) 'term': term,
+      if (status != null) 'status': status,
+      if (errorMessage != null) 'error_message': errorMessage,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
     });
   }
 
-  SchemeGenerationQueueCompanion copyWith({Value<int>? id}) {
+  SchemeGenerationQueueCompanion copyWith(
+      {Value<int>? id,
+      Value<int>? schoolId,
+      Value<int>? subjectId,
+      Value<String>? term,
+      Value<String>? status,
+      Value<String?>? errorMessage,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt}) {
     return SchemeGenerationQueueCompanion(
       id: id ?? this.id,
+      schoolId: schoolId ?? this.schoolId,
+      subjectId: subjectId ?? this.subjectId,
+      term: term ?? this.term,
+      status: status ?? this.status,
+      errorMessage: errorMessage ?? this.errorMessage,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 
@@ -9394,13 +10495,41 @@ class SchemeGenerationQueueCompanion
     if (id.present) {
       map['id'] = Variable<int>(id.value);
     }
+    if (schoolId.present) {
+      map['school_id'] = Variable<int>(schoolId.value);
+    }
+    if (subjectId.present) {
+      map['subject_id'] = Variable<int>(subjectId.value);
+    }
+    if (term.present) {
+      map['term'] = Variable<String>(term.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (errorMessage.present) {
+      map['error_message'] = Variable<String>(errorMessage.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
     return map;
   }
 
   @override
   String toString() {
     return (StringBuffer('SchemeGenerationQueueCompanion(')
-          ..write('id: $id')
+          ..write('id: $id, ')
+          ..write('schoolId: $schoolId, ')
+          ..write('subjectId: $subjectId, ')
+          ..write('term: $term, ')
+          ..write('status: $status, ')
+          ..write('errorMessage: $errorMessage, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
@@ -12059,6 +13188,7 @@ typedef $$SubjectsTableProcessedTableManager = ProcessedTableManager<
     PrefetchHooks Function({bool teacherSubjectsRefs})>;
 typedef $$LessonsTableCreateCompanionBuilder = LessonsCompanion Function({
   Value<int> id,
+  Value<String?> serverId,
   required String subject,
   required String classLevel,
   required int week,
@@ -12070,9 +13200,13 @@ typedef $$LessonsTableCreateCompanionBuilder = LessonsCompanion Function({
   Value<String?> contentHash,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
+  Value<int> updateCounter,
+  Value<bool> isDeleted,
+  Value<String?> lastModifiedBy,
 });
 typedef $$LessonsTableUpdateCompanionBuilder = LessonsCompanion Function({
   Value<int> id,
+  Value<String?> serverId,
   Value<String> subject,
   Value<String> classLevel,
   Value<int> week,
@@ -12084,6 +13218,9 @@ typedef $$LessonsTableUpdateCompanionBuilder = LessonsCompanion Function({
   Value<String?> contentHash,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
+  Value<int> updateCounter,
+  Value<bool> isDeleted,
+  Value<String?> lastModifiedBy,
 });
 
 class $$LessonsTableFilterComposer
@@ -12097,6 +13234,9 @@ class $$LessonsTableFilterComposer
   });
   ColumnFilters<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get serverId => $composableBuilder(
+      column: $table.serverId, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get subject => $composableBuilder(
       column: $table.subject, builder: (column) => ColumnFilters(column));
@@ -12130,6 +13270,16 @@ class $$LessonsTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get updateCounter => $composableBuilder(
+      column: $table.updateCounter, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isDeleted => $composableBuilder(
+      column: $table.isDeleted, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get lastModifiedBy => $composableBuilder(
+      column: $table.lastModifiedBy,
+      builder: (column) => ColumnFilters(column));
 }
 
 class $$LessonsTableOrderingComposer
@@ -12143,6 +13293,9 @@ class $$LessonsTableOrderingComposer
   });
   ColumnOrderings<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get serverId => $composableBuilder(
+      column: $table.serverId, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get subject => $composableBuilder(
       column: $table.subject, builder: (column) => ColumnOrderings(column));
@@ -12176,6 +13329,17 @@ class $$LessonsTableOrderingComposer
 
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get updateCounter => $composableBuilder(
+      column: $table.updateCounter,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get isDeleted => $composableBuilder(
+      column: $table.isDeleted, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get lastModifiedBy => $composableBuilder(
+      column: $table.lastModifiedBy,
+      builder: (column) => ColumnOrderings(column));
 }
 
 class $$LessonsTableAnnotationComposer
@@ -12189,6 +13353,9 @@ class $$LessonsTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get serverId =>
+      $composableBuilder(column: $table.serverId, builder: (column) => column);
 
   GeneratedColumn<String> get subject =>
       $composableBuilder(column: $table.subject, builder: (column) => column);
@@ -12222,6 +13389,15 @@ class $$LessonsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get updateCounter => $composableBuilder(
+      column: $table.updateCounter, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDeleted =>
+      $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<String> get lastModifiedBy => $composableBuilder(
+      column: $table.lastModifiedBy, builder: (column) => column);
 }
 
 class $$LessonsTableTableManager extends RootTableManager<
@@ -12248,6 +13424,7 @@ class $$LessonsTableTableManager extends RootTableManager<
               $$LessonsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            Value<String?> serverId = const Value.absent(),
             Value<String> subject = const Value.absent(),
             Value<String> classLevel = const Value.absent(),
             Value<int> week = const Value.absent(),
@@ -12259,9 +13436,13 @@ class $$LessonsTableTableManager extends RootTableManager<
             Value<String?> contentHash = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> updateCounter = const Value.absent(),
+            Value<bool> isDeleted = const Value.absent(),
+            Value<String?> lastModifiedBy = const Value.absent(),
           }) =>
               LessonsCompanion(
             id: id,
+            serverId: serverId,
             subject: subject,
             classLevel: classLevel,
             week: week,
@@ -12273,9 +13454,13 @@ class $$LessonsTableTableManager extends RootTableManager<
             contentHash: contentHash,
             createdAt: createdAt,
             updatedAt: updatedAt,
+            updateCounter: updateCounter,
+            isDeleted: isDeleted,
+            lastModifiedBy: lastModifiedBy,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            Value<String?> serverId = const Value.absent(),
             required String subject,
             required String classLevel,
             required int week,
@@ -12287,9 +13472,13 @@ class $$LessonsTableTableManager extends RootTableManager<
             Value<String?> contentHash = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> updateCounter = const Value.absent(),
+            Value<bool> isDeleted = const Value.absent(),
+            Value<String?> lastModifiedBy = const Value.absent(),
           }) =>
               LessonsCompanion.insert(
             id: id,
+            serverId: serverId,
             subject: subject,
             classLevel: classLevel,
             week: week,
@@ -12301,6 +13490,9 @@ class $$LessonsTableTableManager extends RootTableManager<
             contentHash: contentHash,
             createdAt: createdAt,
             updatedAt: updatedAt,
+            updateCounter: updateCounter,
+            isDeleted: isDeleted,
+            lastModifiedBy: lastModifiedBy,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -12324,10 +13516,32 @@ typedef $$LessonsTableProcessedTableManager = ProcessedTableManager<
 typedef $$SchemeOfWorkTableCreateCompanionBuilder = SchemeOfWorkCompanion
     Function({
   Value<int> id,
+  Value<String?> serverId,
+  Value<int> schoolId,
+  Value<int> subjectId,
+  Value<String> term,
+  Value<int> weekNumber,
+  Value<String> topic,
+  Value<String> objectives,
+  Value<int> updateCounter,
+  Value<bool> isDeleted,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
 });
 typedef $$SchemeOfWorkTableUpdateCompanionBuilder = SchemeOfWorkCompanion
     Function({
   Value<int> id,
+  Value<String?> serverId,
+  Value<int> schoolId,
+  Value<int> subjectId,
+  Value<String> term,
+  Value<int> weekNumber,
+  Value<String> topic,
+  Value<String> objectives,
+  Value<int> updateCounter,
+  Value<bool> isDeleted,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
 });
 
 class $$SchemeOfWorkTableFilterComposer
@@ -12341,6 +13555,39 @@ class $$SchemeOfWorkTableFilterComposer
   });
   ColumnFilters<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get serverId => $composableBuilder(
+      column: $table.serverId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get schoolId => $composableBuilder(
+      column: $table.schoolId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get subjectId => $composableBuilder(
+      column: $table.subjectId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get term => $composableBuilder(
+      column: $table.term, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get weekNumber => $composableBuilder(
+      column: $table.weekNumber, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get topic => $composableBuilder(
+      column: $table.topic, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get objectives => $composableBuilder(
+      column: $table.objectives, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get updateCounter => $composableBuilder(
+      column: $table.updateCounter, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isDeleted => $composableBuilder(
+      column: $table.isDeleted, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
 }
 
 class $$SchemeOfWorkTableOrderingComposer
@@ -12354,6 +13601,40 @@ class $$SchemeOfWorkTableOrderingComposer
   });
   ColumnOrderings<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get serverId => $composableBuilder(
+      column: $table.serverId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get schoolId => $composableBuilder(
+      column: $table.schoolId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get subjectId => $composableBuilder(
+      column: $table.subjectId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get term => $composableBuilder(
+      column: $table.term, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get weekNumber => $composableBuilder(
+      column: $table.weekNumber, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get topic => $composableBuilder(
+      column: $table.topic, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get objectives => $composableBuilder(
+      column: $table.objectives, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get updateCounter => $composableBuilder(
+      column: $table.updateCounter,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get isDeleted => $composableBuilder(
+      column: $table.isDeleted, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
 }
 
 class $$SchemeOfWorkTableAnnotationComposer
@@ -12367,6 +13648,39 @@ class $$SchemeOfWorkTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get serverId =>
+      $composableBuilder(column: $table.serverId, builder: (column) => column);
+
+  GeneratedColumn<int> get schoolId =>
+      $composableBuilder(column: $table.schoolId, builder: (column) => column);
+
+  GeneratedColumn<int> get subjectId =>
+      $composableBuilder(column: $table.subjectId, builder: (column) => column);
+
+  GeneratedColumn<String> get term =>
+      $composableBuilder(column: $table.term, builder: (column) => column);
+
+  GeneratedColumn<int> get weekNumber => $composableBuilder(
+      column: $table.weekNumber, builder: (column) => column);
+
+  GeneratedColumn<String> get topic =>
+      $composableBuilder(column: $table.topic, builder: (column) => column);
+
+  GeneratedColumn<String> get objectives => $composableBuilder(
+      column: $table.objectives, builder: (column) => column);
+
+  GeneratedColumn<int> get updateCounter => $composableBuilder(
+      column: $table.updateCounter, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDeleted =>
+      $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 }
 
 class $$SchemeOfWorkTableTableManager extends RootTableManager<
@@ -12396,15 +13710,59 @@ class $$SchemeOfWorkTableTableManager extends RootTableManager<
               $$SchemeOfWorkTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            Value<String?> serverId = const Value.absent(),
+            Value<int> schoolId = const Value.absent(),
+            Value<int> subjectId = const Value.absent(),
+            Value<String> term = const Value.absent(),
+            Value<int> weekNumber = const Value.absent(),
+            Value<String> topic = const Value.absent(),
+            Value<String> objectives = const Value.absent(),
+            Value<int> updateCounter = const Value.absent(),
+            Value<bool> isDeleted = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
           }) =>
               SchemeOfWorkCompanion(
             id: id,
+            serverId: serverId,
+            schoolId: schoolId,
+            subjectId: subjectId,
+            term: term,
+            weekNumber: weekNumber,
+            topic: topic,
+            objectives: objectives,
+            updateCounter: updateCounter,
+            isDeleted: isDeleted,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            Value<String?> serverId = const Value.absent(),
+            Value<int> schoolId = const Value.absent(),
+            Value<int> subjectId = const Value.absent(),
+            Value<String> term = const Value.absent(),
+            Value<int> weekNumber = const Value.absent(),
+            Value<String> topic = const Value.absent(),
+            Value<String> objectives = const Value.absent(),
+            Value<int> updateCounter = const Value.absent(),
+            Value<bool> isDeleted = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
           }) =>
               SchemeOfWorkCompanion.insert(
             id: id,
+            serverId: serverId,
+            schoolId: schoolId,
+            subjectId: subjectId,
+            term: term,
+            weekNumber: weekNumber,
+            topic: topic,
+            objectives: objectives,
+            updateCounter: updateCounter,
+            isDeleted: isDeleted,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -12430,6 +13788,7 @@ typedef $$SchemeOfWorkTableProcessedTableManager = ProcessedTableManager<
     PrefetchHooks Function()>;
 typedef $$ExamsTableCreateCompanionBuilder = ExamsCompanion Function({
   Value<int> id,
+  Value<String?> serverId,
   required String subject,
   required String classLevel,
   required String topic,
@@ -12438,9 +13797,13 @@ typedef $$ExamsTableCreateCompanionBuilder = ExamsCompanion Function({
   required String content,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
+  Value<int> updateCounter,
+  Value<bool> isDeleted,
+  Value<String?> lastModifiedBy,
 });
 typedef $$ExamsTableUpdateCompanionBuilder = ExamsCompanion Function({
   Value<int> id,
+  Value<String?> serverId,
   Value<String> subject,
   Value<String> classLevel,
   Value<String> topic,
@@ -12449,6 +13812,9 @@ typedef $$ExamsTableUpdateCompanionBuilder = ExamsCompanion Function({
   Value<String> content,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
+  Value<int> updateCounter,
+  Value<bool> isDeleted,
+  Value<String?> lastModifiedBy,
 });
 
 class $$ExamsTableFilterComposer extends Composer<_$AppDatabase, $ExamsTable> {
@@ -12461,6 +13827,9 @@ class $$ExamsTableFilterComposer extends Composer<_$AppDatabase, $ExamsTable> {
   });
   ColumnFilters<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get serverId => $composableBuilder(
+      column: $table.serverId, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get subject => $composableBuilder(
       column: $table.subject, builder: (column) => ColumnFilters(column));
@@ -12485,6 +13854,16 @@ class $$ExamsTableFilterComposer extends Composer<_$AppDatabase, $ExamsTable> {
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get updateCounter => $composableBuilder(
+      column: $table.updateCounter, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isDeleted => $composableBuilder(
+      column: $table.isDeleted, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get lastModifiedBy => $composableBuilder(
+      column: $table.lastModifiedBy,
+      builder: (column) => ColumnFilters(column));
 }
 
 class $$ExamsTableOrderingComposer
@@ -12498,6 +13877,9 @@ class $$ExamsTableOrderingComposer
   });
   ColumnOrderings<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get serverId => $composableBuilder(
+      column: $table.serverId, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get subject => $composableBuilder(
       column: $table.subject, builder: (column) => ColumnOrderings(column));
@@ -12522,6 +13904,17 @@ class $$ExamsTableOrderingComposer
 
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get updateCounter => $composableBuilder(
+      column: $table.updateCounter,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get isDeleted => $composableBuilder(
+      column: $table.isDeleted, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get lastModifiedBy => $composableBuilder(
+      column: $table.lastModifiedBy,
+      builder: (column) => ColumnOrderings(column));
 }
 
 class $$ExamsTableAnnotationComposer
@@ -12535,6 +13928,9 @@ class $$ExamsTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get serverId =>
+      $composableBuilder(column: $table.serverId, builder: (column) => column);
 
   GeneratedColumn<String> get subject =>
       $composableBuilder(column: $table.subject, builder: (column) => column);
@@ -12559,6 +13955,15 @@ class $$ExamsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get updateCounter => $composableBuilder(
+      column: $table.updateCounter, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDeleted =>
+      $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<String> get lastModifiedBy => $composableBuilder(
+      column: $table.lastModifiedBy, builder: (column) => column);
 }
 
 class $$ExamsTableTableManager extends RootTableManager<
@@ -12585,6 +13990,7 @@ class $$ExamsTableTableManager extends RootTableManager<
               $$ExamsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            Value<String?> serverId = const Value.absent(),
             Value<String> subject = const Value.absent(),
             Value<String> classLevel = const Value.absent(),
             Value<String> topic = const Value.absent(),
@@ -12593,9 +13999,13 @@ class $$ExamsTableTableManager extends RootTableManager<
             Value<String> content = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> updateCounter = const Value.absent(),
+            Value<bool> isDeleted = const Value.absent(),
+            Value<String?> lastModifiedBy = const Value.absent(),
           }) =>
               ExamsCompanion(
             id: id,
+            serverId: serverId,
             subject: subject,
             classLevel: classLevel,
             topic: topic,
@@ -12604,9 +14014,13 @@ class $$ExamsTableTableManager extends RootTableManager<
             content: content,
             createdAt: createdAt,
             updatedAt: updatedAt,
+            updateCounter: updateCounter,
+            isDeleted: isDeleted,
+            lastModifiedBy: lastModifiedBy,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            Value<String?> serverId = const Value.absent(),
             required String subject,
             required String classLevel,
             required String topic,
@@ -12615,9 +14029,13 @@ class $$ExamsTableTableManager extends RootTableManager<
             required String content,
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> updateCounter = const Value.absent(),
+            Value<bool> isDeleted = const Value.absent(),
+            Value<String?> lastModifiedBy = const Value.absent(),
           }) =>
               ExamsCompanion.insert(
             id: id,
+            serverId: serverId,
             subject: subject,
             classLevel: classLevel,
             topic: topic,
@@ -12626,6 +14044,9 @@ class $$ExamsTableTableManager extends RootTableManager<
             content: content,
             createdAt: createdAt,
             updatedAt: updatedAt,
+            updateCounter: updateCounter,
+            isDeleted: isDeleted,
+            lastModifiedBy: lastModifiedBy,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -13962,10 +15383,14 @@ typedef $$SyncQueueTableProcessedTableManager = ProcessedTableManager<
 typedef $$SyncQueueSnapshotTableCreateCompanionBuilder
     = SyncQueueSnapshotCompanion Function({
   Value<int> id,
+  required String snapshotData,
+  Value<DateTime> createdAt,
 });
 typedef $$SyncQueueSnapshotTableUpdateCompanionBuilder
     = SyncQueueSnapshotCompanion Function({
   Value<int> id,
+  Value<String> snapshotData,
+  Value<DateTime> createdAt,
 });
 
 class $$SyncQueueSnapshotTableFilterComposer
@@ -13979,6 +15404,12 @@ class $$SyncQueueSnapshotTableFilterComposer
   });
   ColumnFilters<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get snapshotData => $composableBuilder(
+      column: $table.snapshotData, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
 }
 
 class $$SyncQueueSnapshotTableOrderingComposer
@@ -13992,6 +15423,13 @@ class $$SyncQueueSnapshotTableOrderingComposer
   });
   ColumnOrderings<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get snapshotData => $composableBuilder(
+      column: $table.snapshotData,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 }
 
 class $$SyncQueueSnapshotTableAnnotationComposer
@@ -14005,6 +15443,12 @@ class $$SyncQueueSnapshotTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get snapshotData => $composableBuilder(
+      column: $table.snapshotData, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
 }
 
 class $$SyncQueueSnapshotTableTableManager extends RootTableManager<
@@ -14037,15 +15481,23 @@ class $$SyncQueueSnapshotTableTableManager extends RootTableManager<
                   $db: db, $table: table),
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            Value<String> snapshotData = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
           }) =>
               SyncQueueSnapshotCompanion(
             id: id,
+            snapshotData: snapshotData,
+            createdAt: createdAt,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            required String snapshotData,
+            Value<DateTime> createdAt = const Value.absent(),
           }) =>
               SyncQueueSnapshotCompanion.insert(
             id: id,
+            snapshotData: snapshotData,
+            createdAt: createdAt,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -15684,10 +17136,24 @@ typedef $$TeacherDevicesTableProcessedTableManager = ProcessedTableManager<
 typedef $$SchemeGenerationQueueTableCreateCompanionBuilder
     = SchemeGenerationQueueCompanion Function({
   Value<int> id,
+  Value<int> schoolId,
+  Value<int> subjectId,
+  Value<String> term,
+  Value<String> status,
+  Value<String?> errorMessage,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
 });
 typedef $$SchemeGenerationQueueTableUpdateCompanionBuilder
     = SchemeGenerationQueueCompanion Function({
   Value<int> id,
+  Value<int> schoolId,
+  Value<int> subjectId,
+  Value<String> term,
+  Value<String> status,
+  Value<String?> errorMessage,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
 });
 
 class $$SchemeGenerationQueueTableFilterComposer
@@ -15701,6 +17167,27 @@ class $$SchemeGenerationQueueTableFilterComposer
   });
   ColumnFilters<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get schoolId => $composableBuilder(
+      column: $table.schoolId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get subjectId => $composableBuilder(
+      column: $table.subjectId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get term => $composableBuilder(
+      column: $table.term, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get errorMessage => $composableBuilder(
+      column: $table.errorMessage, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
 }
 
 class $$SchemeGenerationQueueTableOrderingComposer
@@ -15714,6 +17201,28 @@ class $$SchemeGenerationQueueTableOrderingComposer
   });
   ColumnOrderings<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get schoolId => $composableBuilder(
+      column: $table.schoolId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get subjectId => $composableBuilder(
+      column: $table.subjectId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get term => $composableBuilder(
+      column: $table.term, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get errorMessage => $composableBuilder(
+      column: $table.errorMessage,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
 }
 
 class $$SchemeGenerationQueueTableAnnotationComposer
@@ -15727,6 +17236,27 @@ class $$SchemeGenerationQueueTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get schoolId =>
+      $composableBuilder(column: $table.schoolId, builder: (column) => column);
+
+  GeneratedColumn<int> get subjectId =>
+      $composableBuilder(column: $table.subjectId, builder: (column) => column);
+
+  GeneratedColumn<String> get term =>
+      $composableBuilder(column: $table.term, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get errorMessage => $composableBuilder(
+      column: $table.errorMessage, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 }
 
 class $$SchemeGenerationQueueTableTableManager extends RootTableManager<
@@ -15761,15 +17291,43 @@ class $$SchemeGenerationQueueTableTableManager extends RootTableManager<
                   $db: db, $table: table),
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            Value<int> schoolId = const Value.absent(),
+            Value<int> subjectId = const Value.absent(),
+            Value<String> term = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<String?> errorMessage = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
           }) =>
               SchemeGenerationQueueCompanion(
             id: id,
+            schoolId: schoolId,
+            subjectId: subjectId,
+            term: term,
+            status: status,
+            errorMessage: errorMessage,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            Value<int> schoolId = const Value.absent(),
+            Value<int> subjectId = const Value.absent(),
+            Value<String> term = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<String?> errorMessage = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
           }) =>
               SchemeGenerationQueueCompanion.insert(
             id: id,
+            schoolId: schoolId,
+            subjectId: subjectId,
+            term: term,
+            status: status,
+            errorMessage: errorMessage,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

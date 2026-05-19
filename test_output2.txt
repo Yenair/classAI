@@ -1,0 +1,9 @@
+﻿flutter : Could not find an option named "--platforms".
+At line:1 char:39
++ ... ion 'C:\Users\Yene\classai'; flutter test --platforms vm 2>&1 | Out-F ...
++                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Could not find ... "--platforms".:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+Run 'flutter -h' (or 'flutter <command> -h') for available flutter commands and options.

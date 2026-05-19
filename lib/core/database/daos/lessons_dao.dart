@@ -24,4 +24,9 @@ class LessonsDao extends DatabaseAccessor<AppDatabase>
           ..orderBy([(t) => OrderingTerm(expression: t.week, mode: OrderingMode.asc)]))
         .get();
   }
+
+  /// Insert a new lesson and return its auto-generated ID.
+  Future<int> insertLesson(LessonsCompanion companion) {
+    return into(lessons).insert(companion);
+  }
 }

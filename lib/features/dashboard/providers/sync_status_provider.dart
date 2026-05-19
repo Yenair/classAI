@@ -108,7 +108,11 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
   }
 }
 
-final syncStatusProvider =
-    NotifierProvider<SyncStatusNotifier, SyncStatusData>(
+final syncStatusProvider = NotifierProvider<SyncStatusNotifier, SyncStatusData>(
   SyncStatusNotifier.new,
 );
+
+/// Computed provider that exposes just the offline state.
+final isOfflineProvider = Provider<bool>((ref) {
+  return !ref.watch(syncStatusProvider).isOnline;
+});

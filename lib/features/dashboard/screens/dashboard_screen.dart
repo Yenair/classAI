@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/core/widgets/sync_indicator.dart';
 import 'package:classai/core/widgets/credit_counter.dart';
@@ -35,9 +36,7 @@ class DashboardScreen extends ConsumerWidget {
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        return snap.data!
-            ? const EditorLayout()
-            : const ReaderLayout();
+        return snap.data! ? const EditorLayout() : const ReaderLayout();
       },
     );
   }
@@ -59,18 +58,18 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
 
   static const _destinations = <NavigationDestination>[
     NavigationDestination(
-      icon: Icon(Icons.dashboard_outlined),
-      selectedIcon: Icon(Icons.dashboard),
+      icon: FaIcon(FontAwesomeIcons.school),
+      selectedIcon: FaIcon(FontAwesomeIcons.school),
       label: 'Dashboard',
     ),
     NavigationDestination(
-      icon: Icon(Icons.book_outlined),
-      selectedIcon: Icon(Icons.book),
+      icon: FaIcon(FontAwesomeIcons.bookOpen),
+      selectedIcon: FaIcon(FontAwesomeIcons.bookOpen),
       label: 'Lessons',
     ),
     NavigationDestination(
-      icon: Icon(Icons.quiz_outlined),
-      selectedIcon: Icon(Icons.quiz),
+      icon: FaIcon(FontAwesomeIcons.fileLines),
+      selectedIcon: FaIcon(FontAwesomeIcons.fileLines),
       label: 'Exams',
     ),
     NavigationDestination(
@@ -79,8 +78,8 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
       label: 'Vault',
     ),
     NavigationDestination(
-      icon: Icon(Icons.settings_outlined),
-      selectedIcon: Icon(Icons.settings),
+      icon: FaIcon(FontAwesomeIcons.gear),
+      selectedIcon: FaIcon(FontAwesomeIcons.gear),
       label: 'More',
     ),
   ];
@@ -98,18 +97,28 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
 
   @override
   Widget build(BuildContext context) {
-    final isCompact = MediaQuery.of(context).size.width <= 1024;
-    final theme = Theme.of(context);
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ClassAI'),
-        actions: [
-          const CreditCounter(),
-          const SizedBox(width: 4),
-          const SyncIndicator(),
-          const SizedBox(width: 8),
+        title: Text(
+          'ClassAI',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.12,
+                color: cs.onSurface,
+              ),
+        ),
+        actions: const [
+          CreditCounter(),
+          SizedBox(width: 4),
+          SyncIndicator(),
+          SizedBox(width: 8),
         ],
+        elevation: 0,
+        backgroundColor: cs.surface,
+        foregroundColor: cs.onSurface,
+        surfaceTintColor: cs.surface,
       ),
       body: Column(
         children: [
@@ -117,45 +126,49 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
           Expanded(
             child: Row(
               children: [
-                NavigationRail(
-                  selectedIndex: _selectedIndex,
-                  onDestinationSelected: (index) {
-                    setState(() => _selectedIndex = index);
-                    _onNavDestination(context, index);
-                  },
-                  labelType: isCompact
-                      ? NavigationRailLabelType.none
-                      : NavigationRailLabelType.none,
-                  extended: !isCompact,
-                  minExtendedWidth: 200,
-                  destinations: _destinations
-                      .map((d) => NavigationRailDestination(
-                            icon: d.icon,
-                            selectedIcon: d.selectedIcon,
-                            label: Text(d.label),
-                          ))
-                      .toList(),
+                // ── Navigation Rail ──────────────────────────────
+                Container(
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerLow.withValues(alpha: 0.5),
+                    border: const Border(
+                      right: BorderSide(color: Color(0xFFC1C7D2)),
+                    ),
+                  ),
+                  child: NavigationRail(
+                    selectedIndex: _selectedIndex,
+                    onDestinationSelected: (index) {
+                      setState(() => _selectedIndex = index);
+                      _onNavDestination(context, index);
+                    },
+                    extended: true,
+                    minExtendedWidth: 200,
+                    backgroundColor: Colors.transparent,
+                    indicatorColor: cs.secondaryContainer,
+                    destinations: _destinations
+                        .map((d) => NavigationRailDestination(
+                              icon: d.icon,
+                              selectedIcon: d.selectedIcon,
+                              label: Text(
+                                d.label,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelLarge
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                              ),
+                            ))
+                        .toList(),
+                  ),
                 ),
-                const VerticalDivider(width: 1),
-                Expanded(
-                  child: _buildContent(theme),
+                // ── Content ───────────────────────────────────────
+                const Expanded(
+                  child: _EditorContent(),
                 ),
               ],
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildContent(ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: Text(
-          'Welcome to ClassAI',
-          style: theme.textTheme.headlineSmall,
-        ),
       ),
     );
   }
@@ -178,6 +191,144 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
   }
 }
 
+/// Central dashboard content shown in the EditorLayout pane.
+class _EditorContent extends ConsumerWidget {
+  const _EditorContent();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+
+    return Container(
+      color: cs.surface,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 40),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Page title ────────────────────────────────────
+                Text(
+                  'Welcome to ClassAI',
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
+                    color: cs.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Nigerian Academic Partner — your intelligent teaching assistant.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 32),
+
+                // ── Quick-action cards ───────────────────────────
+                Row(
+                  children: [
+                    Expanded(
+                      child: _QuickActionCard(
+                        icon: Icons.school_rounded,
+                        label: 'New Lesson',
+                        cs: cs,
+                        onTap: () => context.push('/lesson-editor'),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _QuickActionCard(
+                        icon: Icons.assignment_rounded,
+                        label: 'New Exam',
+                        cs: cs,
+                        onTap: () => context.push('/exam-editor'),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _QuickActionCard(
+                        icon: Icons.folder_rounded,
+                        label: 'Vault',
+                        cs: cs,
+                        onTap: () => context.push('/vault'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickActionCard extends StatelessWidget {
+  const _QuickActionCard({
+    required this.icon,
+    required this.label,
+    required this.cs,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final ColorScheme cs;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: cs.outlineVariant.withValues(alpha: 0.6),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: cs.onSurface.withValues(alpha: 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: cs.primary.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, size: 24, color: cs.primary),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurface,
+                  ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Reader Layout (phone / small tablet)
 // ---------------------------------------------------------------------------
@@ -194,23 +345,23 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
 
   static const _destinations = <BottomNavigationBarItem>[
     BottomNavigationBarItem(
-      icon: Icon(Icons.home_outlined),
-      activeIcon: Icon(Icons.home),
+      icon: FaIcon(FontAwesomeIcons.school),
+      activeIcon: FaIcon(FontAwesomeIcons.school),
       label: 'Home',
     ),
     BottomNavigationBarItem(
-      icon: Icon(Icons.book_outlined),
-      activeIcon: Icon(Icons.book),
+      icon: FaIcon(FontAwesomeIcons.bookOpen),
+      activeIcon: FaIcon(FontAwesomeIcons.bookOpen),
       label: 'Lessons',
     ),
     BottomNavigationBarItem(
-      icon: Icon(Icons.quiz_outlined),
-      activeIcon: Icon(Icons.quiz),
+      icon: FaIcon(FontAwesomeIcons.fileLines),
+      activeIcon: FaIcon(FontAwesomeIcons.fileLines),
       label: 'Exams',
     ),
     BottomNavigationBarItem(
-      icon: Icon(Icons.more_horiz_outlined),
-      activeIcon: Icon(Icons.more_horiz),
+      icon: FaIcon(FontAwesomeIcons.gear),
+      activeIcon: FaIcon(FontAwesomeIcons.gear),
       label: 'More',
     ),
   ];
@@ -227,49 +378,129 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ClassAI'),
-        actions: [
-          const CreditCounter(),
-          const SizedBox(width: 4),
-          const SyncIndicator(),
-          const SizedBox(width: 8),
+        title: Text(
+          'ClassAI',
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.12,
+            color: cs.onSurface,
+          ),
+        ),
+        actions: const [
+          CreditCounter(),
+          SizedBox(width: 4),
+          SyncIndicator(),
+          SizedBox(width: 8),
         ],
+        elevation: 0,
+        backgroundColor: cs.surface,
+        foregroundColor: cs.onSurface,
+        surfaceTintColor: cs.surface,
       ),
       body: Column(
         children: [
           const ConflictBanner(),
           Expanded(
-            child: _buildContent(theme),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 480),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          color: cs.primaryContainer,
+                          borderRadius: BorderRadius.circular(22),
+                        ),
+                        child: Icon(
+                          Icons.school_rounded,
+                          size: 36,
+                          color: cs.onPrimaryContainer,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Welcome to ClassAI',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Nigerian Academic Partner — your intelligent teaching assistant.',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+
+                      // ── Quick action buttons ────────────────────────
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _ReaderActionButton(
+                              icon: Icons.auto_stories_rounded,
+                              label: 'Lessons',
+                              onTap: () => context.push('/lessons'),
+                              cs: cs,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _ReaderActionButton(
+                              icon: Icons.assignment_rounded,
+                              label: 'Exams',
+                              onTap: () => context.push('/exams'),
+                              cs: cs,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        selectedFontSize: 16,
-        unselectedFontSize: 14,
-        currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() => _selectedIndex = index);
-          _onNavDestination(context, index);
-        },
-        items: _destinations,
-      ),
-    );
-  }
-
-  Widget _buildContent(ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Center(
-        child: Text(
-          'Welcome to ClassAI',
-          style: theme.textTheme.headlineSmall?.copyWith(
-            fontSize: 18, // ≥16pt for reader mode
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLowest,
+          border: Border(
+            top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.6)),
           ),
+        ),
+        child: BottomNavigationBar(
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: cs.surfaceContainerLowest,
+          selectedItemColor: cs.primary,
+          unselectedItemColor: cs.onSurfaceVariant,
+          selectedFontSize: 12,
+          unselectedFontSize: 11,
+          currentIndex: _selectedIndex,
+          onTap: (index) {
+            setState(() => _selectedIndex = index);
+            _onNavDestination(context, index);
+          },
+          items: _destinations,
+          selectedLabelStyle: Theme.of(context)
+              .textTheme
+              .labelSmall
+              ?.copyWith(inherit: true, fontWeight: FontWeight.w600),
         ),
       ),
     );
@@ -287,5 +518,49 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
         context.push('/settings');
         break;
     }
+  }
+}
+
+class _ReaderActionButton extends StatelessWidget {
+  const _ReaderActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    required this.cs,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final ColorScheme cs;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.6)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 28, color: cs.primary),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurface,
+                  ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -106,7 +106,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Waiting for payment confirmation…'),
+        content: Text('Waiting for payment confirmation\u2026'),
         duration: Duration(seconds: 5),
       ),
     );
@@ -180,6 +180,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
   Future<void> _showActivationCodeDialog(
       BuildContext context, String activationCode) async {
+    final cs = Theme.of(context).colorScheme;
     return showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -187,7 +188,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         return AlertDialog(
           title: Row(
             children: [
-              Icon(Icons.check_circle, color: Colors.green.shade700),
+              Icon(Icons.check_circle_rounded,
+                  color: Colors.green.withValues(alpha: 0.9)),
               const SizedBox(width: 8),
               const Text('Payment Successful!'),
             ],
@@ -205,20 +207,22 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
+                  horizontal: 18,
+                  vertical: 16,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300),
+                  color: cs.surfaceContainerHighest.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: cs.outlineVariant.withValues(alpha: 0.6),
+                  ),
                 ),
                 child: SelectableText(
                   activationCode,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w700,
                     letterSpacing: 1.5,
                     fontFamily: 'monospace',
                   ),
@@ -226,15 +230,16 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Your activation code: $activationCode',
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-                textAlign: TextAlign.center,
+                'Copy and save your activation code:',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
               ),
             ],
           ),
           actions: [
             TextButton.icon(
-              icon: const Icon(Icons.copy, size: 18),
+              icon: const Icon(Icons.copy_rounded, size: 18),
               label: const Text('Copy'),
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: activationCode));
@@ -258,11 +263,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Upgrade Plan'),
+        elevation: 0,
       ),
       body: Stack(
         children: [
@@ -270,38 +276,42 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             padding: const EdgeInsets.all(24),
             children: [
               Icon(
-                Icons.lock_outline,
-                size: 64,
-                color: theme.colorScheme.primary,
+                Icons.lock_outline_rounded,
+                size: 72,
+                color: cs.primary.withValues(alpha: 0.6),
               ),
               const SizedBox(height: 16),
-              Text(
-                'Choose a plan to get more credits',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyLarge,
+              Center(
+                child: Text(
+                  'Choose a plan to get more credits',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                ),
               ),
               const SizedBox(height: 32),
               _PlanCard(
                 name: 'Basic',
-                price: '₦5,000/mo',
+                price: '\u20A649,999/yr',
                 credits: 50,
                 tier: 'basic',
-                color: Colors.blue,
+                cs: cs,
                 features: [
                   '50 credits per month',
                   'Access to basic vault items',
                 ],
                 onSelect: _isProcessing
                     ? null
-                    : () => _initializePayment(context, ref, 'basic', 5000),
+                    : () => _initializePayment(context, ref, 'basic', 49999),
               ),
               const SizedBox(height: 16),
               _PlanCard(
                 name: 'Standard',
-                price: '₦10,000/mo',
+                price: '\u20A699,999/yr',
                 credits: 120,
                 tier: 'standard',
-                color: Colors.purple,
+                cs: cs,
                 features: [
                   '120 credits per month',
                   'Access to standard vault items',
@@ -310,16 +320,15 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                 isPopular: true,
                 onSelect: _isProcessing
                     ? null
-                    : () =>
-                        _initializePayment(context, ref, 'standard', 10000),
+                    : () => _initializePayment(context, ref, 'standard', 99999),
               ),
               const SizedBox(height: 16),
               _PlanCard(
                 name: 'Elite',
-                price: '₦25,000/mo',
+                price: '\u20A6249,999/yr',
                 credits: 350,
                 tier: 'elite',
-                color: Colors.amber,
+                cs: cs,
                 features: [
                   '350 credits per month',
                   'Full vault access',
@@ -327,13 +336,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                 ],
                 onSelect: _isProcessing
                     ? null
-                    : () => _initializePayment(context, ref, 'elite', 25000),
+                    : () => _initializePayment(context, ref, 'elite', 249999),
               ),
             ],
           ),
           if (_isProcessing)
-            Container(
-              color: Colors.black26,
+            ColoredBox(
+              color: Colors.black.withValues(alpha: 0.32),
               child: const Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -341,10 +350,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                     CircularProgressIndicator(),
                     SizedBox(height: 16),
                     Text(
-                      'Processing payment…',
+                      'Processing payment\u2026',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 16,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
@@ -362,7 +372,7 @@ class _PlanCard extends StatelessWidget {
   final String price;
   final int credits;
   final String tier;
-  final Color color;
+  final ColorScheme cs;
   final List<String> features;
   final bool isPopular;
   final VoidCallback? onSelect;
@@ -372,7 +382,7 @@ class _PlanCard extends StatelessWidget {
     required this.price,
     required this.credits,
     required this.tier,
-    required this.color,
+    required this.cs,
     required this.features,
     this.isPopular = false,
     this.onSelect,
@@ -380,91 +390,111 @@ class _PlanCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Card(
-      elevation: isPopular ? 4 : 1,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: isPopular
-            ? BorderSide(color: theme.colorScheme.primary, width: 2)
-            : BorderSide.none,
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isPopular
+              ? cs.primary.withValues(alpha: 0.45)
+              : cs.outlineVariant.withValues(alpha: 0.45),
+          width: isPopular ? 1.5 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: cs.onSurface.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(22),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (isPopular)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(4),
+                  color: cs.primaryContainer,
+                  borderRadius: BorderRadius.circular(6),
                 ),
+                margin: const EdgeInsets.only(bottom: 12),
                 child: Text(
                   'MOST POPULAR',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.onPrimaryContainer,
-                  ),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: cs.onPrimaryContainer,
+                        letterSpacing: 0.6,
+                      ),
                 ),
               ),
-            if (isPopular) const SizedBox(height: 8),
             Row(
               children: [
                 Container(
                   width: 12,
                   height: 12,
                   decoration: BoxDecoration(
-                    color: color,
+                    color: cs.primary,
                     shape: BoxShape.circle,
                   ),
                 ),
                 const SizedBox(width: 8),
                 Text(
                   name,
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
             Text(
               price,
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.primary,
-              ),
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: cs.primary,
+                  ),
             ),
             Text(
               '$credits credits per month',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             ...features.map(
               (f) => Padding(
-                padding: const EdgeInsets.only(bottom: 4),
+                padding: const EdgeInsets.only(bottom: 6),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.check, size: 16, color: Colors.green),
-                    const SizedBox(width: 8),
-                    Text(f, style: theme.textTheme.bodySmall),
+                    Icon(
+                      Icons.check_rounded,
+                      size: 18,
+                      color: Colors.green,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        f,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,
               child: FilledButton(
                 onPressed: onSelect,
                 style: isPopular
                     ? FilledButton.styleFrom(
-                        backgroundColor: theme.colorScheme.primary,
+                        backgroundColor: cs.primary,
                       )
                     : null,
                 child: Text('Choose $name'),

@@ -1,9 +1,20 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
+import bcrypt from "npm:bcryptjs";
 import { verify } from "https://deno.land/x/djwt@v2.8/mod.ts";
 
 const JWT_SECRET = Deno.env.get("JWT_SECRET")!;
+
+/** Convert a plain string secret into a CryptoKey for HS256 JWT verification. */
+function getHmacVerifyKey(secret: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["verify"],
+  );
+}
 
 serve(async (req) => {
   try {
@@ -19,7 +30,8 @@ serve(async (req) => {
     const token = authHeader.replace("Bearer ", "");
     let claims: Record<string, unknown>;
     try {
-      claims = await verify(token, JWT_SECRET, "HS256");
+      const cryptoKey = await getHmacVerifyKey(JWT_SECRET);
+      claims = await verify(token, cryptoKey);
     } catch {
       return new Response(
         JSON.stringify({ error: "Invalid or expired JWT" }),
@@ -67,7 +79,7 @@ serve(async (req) => {
 
     // ── 4. Hash new password with bcrypt + pepper ─────────────────────────
     const pepper = Deno.env.get("PASSWORD_PEPPER")!;
-    const newPasswordHash = await bcrypt.hash(new_password + pepper);
+    const newPasswordHash = await bcrypt.hash(new_password + pepper, 10);
 
     // ── 5. Update password in teachers table ──────────────────────────────
     const newVersion = (teacher.password_hash_version ?? 1) + 1;

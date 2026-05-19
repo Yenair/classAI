@@ -152,8 +152,27 @@ serve(async (req) => {
       }
     }
 
+    // Build per-entry results matching SyncPushResponse.fromJson expectations.
+    // Each result includes local_id, status, server_id, and retryable.
+    const results: Record<string, unknown>[] = [];
+    for (const change of changes) {
+      const fullRowData = decompressRow(change.rowData as Record<string, unknown>);
+      const localId = getValue(fullRowData, "local_id", "localId", "id");
+      const serverId = getValue(fullRowData, "server_id", "serverId", "id");
+      results.push({
+        local_id: localId ?? 0,
+        status: "updated",
+        server_id: serverId ?? null,
+        retryable: false,
+      });
+    }
+
     return new Response(
-      JSON.stringify({ success: true, processed }),
+      JSON.stringify({
+        success: true,
+        processed,
+        results,
+      }),
       { headers: { "Content-Type": "application/json" } }
     );
   } catch (err) {

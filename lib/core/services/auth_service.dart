@@ -1,3 +1,4 @@
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
 import 'package:classai/core/database/database.dart';
 
@@ -150,7 +151,7 @@ class SupabaseAuthService implements AuthService {
           .from('teachers')
           .select('*, schools(*)')
           .eq('id', user.id)
-          .single() as Map<String, dynamic>;
+          .single();
 
       final schoolData = teacherData['schools'] as Map<String, dynamic>;
 
@@ -472,9 +473,12 @@ class SupabaseAuthService implements AuthService {
     } on AuthException {
       rethrow;
     } catch (e) {
+      // Capture full error details in Sentry for diagnosis
+      await Sentry.captureException(e);
+      final detail = e.toString();
       throw AuthException(
         code: AuthErrorCode.networkError,
-        message: 'Signup failed. Please try again.',
+        message: 'Signup failed. $detail',
         originalError: e,
       );
     }

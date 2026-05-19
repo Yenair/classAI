@@ -19,12 +19,15 @@ class VaultItemDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final creditData = ref.watch(creditStateProvider);
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(item.title),
+        elevation: 0,
+        backgroundColor: cs.surface,
+        foregroundColor: cs.onSurface,
+        surfaceTintColor: cs.surface,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -35,16 +38,17 @@ class VaultItemDetailScreen extends ConsumerWidget {
               height: 200,
               width: double.infinity,
               decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
+                color: cs.surfaceContainerHighest.withValues(alpha: 0.65),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
                 child: Image.network(
                   item.thumbnailUrl!,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) =>
-                      const Icon(Icons.image, size: 64),
+                  errorBuilder: (_, __, ___) => Icon(Icons.image_rounded,
+                      size: 64,
+                      color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
                 ),
               ),
             ),
@@ -54,9 +58,9 @@ class VaultItemDetailScreen extends ConsumerWidget {
           // Title
           Text(
             item.title,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
           ),
           const SizedBox(height: 8),
 
@@ -65,9 +69,9 @@ class VaultItemDetailScreen extends ConsumerWidget {
             children: [
               Text(
                 'By ${item.authorName}',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
               ),
               const Spacer(),
               _TierBadge(tier: item.minTier),
@@ -80,18 +84,16 @@ class VaultItemDetailScreen extends ConsumerWidget {
             spacing: 8,
             children: [
               Chip(
-                label: Text(item.subject, style: const TextStyle(fontSize: 12)),
+                label: Text(item.subject),
                 visualDensity: VisualDensity.compact,
               ),
               Chip(
-                label: Text(item.classLevel,
-                    style: const TextStyle(fontSize: 12)),
+                label: Text(item.classLevel),
                 visualDensity: VisualDensity.compact,
               ),
               if (item.curriculum.isNotEmpty)
                 Chip(
-                  label: Text(item.curriculum,
-                      style: const TextStyle(fontSize: 12)),
+                  label: Text(item.curriculum),
                   visualDensity: VisualDensity.compact,
                 ),
             ],
@@ -102,14 +104,14 @@ class VaultItemDetailScreen extends ConsumerWidget {
           if (item.description.isNotEmpty) ...[
             Text(
               'Description',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
             ),
             const SizedBox(height: 8),
             Text(
               item.description,
-              style: theme.textTheme.bodyLarge,
+              style: Theme.of(context).textTheme.bodyLarge,
             ),
             const SizedBox(height: 16),
           ],
@@ -117,17 +119,17 @@ class VaultItemDetailScreen extends ConsumerWidget {
           // Content preview
           Text(
             'Content',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
           ),
           const SizedBox(height: 8),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(10),
             ),
             child: SelectableText(
               item.content,
@@ -139,14 +141,18 @@ class VaultItemDetailScreen extends ConsumerWidget {
           // Credit cost
           Row(
             children: [
-              const Icon(Icons.monetization_on, size: 20, color: Colors.amber),
+              const Icon(
+                Icons.monetization_on_rounded,
+                size: 20,
+                color: Colors.amber,
+              ),
               const SizedBox(width: 4),
               Text(
                 '${item.creditCost} credits',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.amber.shade800,
-                ),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: Colors.amber,
+                    ),
               ),
             ],
           ),
@@ -155,13 +161,14 @@ class VaultItemDetailScreen extends ConsumerWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                const Icon(Icons.check_circle, size: 20, color: Colors.green),
+                const Icon(Icons.check_circle_rounded,
+                    size: 20, color: Colors.green),
                 const SizedBox(width: 4),
                 Text(
                   'Acquired on ${_formatDate(item.acquisitionDate!)}',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.green.shade700,
-                  ),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.green,
+                      ),
                 ),
               ],
             ),
@@ -175,20 +182,20 @@ class VaultItemDetailScreen extends ConsumerWidget {
               width: double.infinity,
               child: FilledButton.icon(
                 onPressed: () => _acquireItem(context, ref, item),
-                icon: const Icon(Icons.shopping_cart),
+                icon: const Icon(Icons.shopping_cart_rounded),
                 label: Text('Acquire for ${item.creditCost} credits'),
               ),
             ),
 
-          if (creditData.currentCredits < item.creditCost)
+          if (ref.watch(creditStateProvider).currentCredits < item.creditCost)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                'You have ${creditData.currentCredits} credits. '
+                'You have ${ref.watch(creditStateProvider).currentCredits} credits. '
                 'Purchase more to acquire this item.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: cs.error,
+                    ),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -261,7 +268,10 @@ class VaultItemDetailScreen extends ConsumerWidget {
         );
 
         // Mark item as acquired
-        await db.vaultItemsDao.markAcquired(item.id, creditSpentBatchId: batchId);
+        await db.vaultItemsDao.markAcquired(
+          item.id,
+          creditSpentBatchId: batchId,
+        );
 
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -296,23 +306,27 @@ class _TierBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final (Color bgColor, Color fgColor, String label) = switch (tier) {
       'free' => (Colors.grey.shade200, Colors.grey.shade700, 'Free'),
-      'basic' => (Colors.blue.shade100, Colors.blue.shade700, 'Basic'),
-      'standard' => (Colors.amber.shade100, Colors.amber.shade900, 'Standard'),
-      'elite' => (Colors.purple.shade100, Colors.purple.shade700, 'Elite'),
+      'basic' => (const Color(0xFF3674B5), Colors.white, 'Basic'),
+      'standard' => (
+          const Color(0xFF8C94FF),
+          const Color(0xFF1E258F),
+          'Standard'
+        ),
+      'elite' => (const Color(0xFF5068D9), Colors.white, 'Elite'),
       _ => (Colors.grey.shade200, Colors.grey.shade700, tier),
     };
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
         label,
         style: TextStyle(
           fontSize: 11,
-          fontWeight: FontWeight.bold,
+          fontWeight: FontWeight.w600,
           color: fgColor,
         ),
       ),

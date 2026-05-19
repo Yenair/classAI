@@ -88,7 +88,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   static QueryExecutor _openConnection() {
     return LazyDatabase(() async {
@@ -297,6 +297,97 @@ class AppDatabase extends _$AppDatabase {
           if (from < 11) {
             await customStatement(
               'ALTER TABLE schools ADD COLUMN activation_code TEXT',
+            );
+          }
+          if (from < 12) {
+            // Add sync columns to lessons table
+            await customStatement(
+              'ALTER TABLE lessons ADD COLUMN server_id TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE lessons ADD COLUMN update_counter INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              'ALTER TABLE lessons ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              'ALTER TABLE lessons ADD COLUMN last_modified_by TEXT',
+            );
+            // Add sync columns to exams table
+            await customStatement(
+              'ALTER TABLE exams ADD COLUMN server_id TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE exams ADD COLUMN update_counter INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              'ALTER TABLE exams ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              'ALTER TABLE exams ADD COLUMN last_modified_by TEXT',
+            );
+            // Expand sync_queue_snapshot stub table
+            await customStatement(
+              'ALTER TABLE sync_queue_snapshot ADD COLUMN snapshot_data TEXT NOT NULL DEFAULT \'{}\'',
+            );
+            await customStatement(
+              'ALTER TABLE sync_queue_snapshot ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
+            );
+            // Expand scheme_of_work stub table
+            await customStatement(
+              'ALTER TABLE scheme_of_work ADD COLUMN server_id TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE scheme_of_work ADD COLUMN school_id INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              'ALTER TABLE scheme_of_work ADD COLUMN subject_id INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              'ALTER TABLE scheme_of_work ADD COLUMN term TEXT NOT NULL DEFAULT \'\'',
+            );
+            await customStatement(
+              'ALTER TABLE scheme_of_work ADD COLUMN week_number INTEGER NOT NULL DEFAULT 1',
+            );
+            await customStatement(
+              'ALTER TABLE scheme_of_work ADD COLUMN topic TEXT NOT NULL DEFAULT \'\'',
+            );
+            await customStatement(
+              'ALTER TABLE scheme_of_work ADD COLUMN objectives TEXT NOT NULL DEFAULT \'\'',
+            );
+            await customStatement(
+              'ALTER TABLE scheme_of_work ADD COLUMN update_counter INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              'ALTER TABLE scheme_of_work ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              'ALTER TABLE scheme_of_work ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
+            );
+            await customStatement(
+              'ALTER TABLE scheme_of_work ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
+            );
+            // Expand scheme_generation_queue stub table
+            await customStatement(
+              'ALTER TABLE scheme_generation_queue ADD COLUMN school_id INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              'ALTER TABLE scheme_generation_queue ADD COLUMN subject_id INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              'ALTER TABLE scheme_generation_queue ADD COLUMN term TEXT NOT NULL DEFAULT \'\'',
+            );
+            await customStatement(
+              "ALTER TABLE scheme_generation_queue ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'",
+            );
+            await customStatement(
+              'ALTER TABLE scheme_generation_queue ADD COLUMN error_message TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE scheme_generation_queue ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
+            );
+            await customStatement(
+              'ALTER TABLE scheme_generation_queue ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
             );
           }
         },

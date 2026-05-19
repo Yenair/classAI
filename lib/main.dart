@@ -14,6 +14,7 @@ import 'features/auth/screens/login_screen.dart';
 import 'features/auth/screens/signup_screen.dart';
 import 'features/auth/screens/admin_recovery_screen.dart';
 import 'features/auth/screens/teacher_recovery_dialog.dart';
+import 'features/settings/providers/theme_provider.dart';
 import 'router/app_router.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
@@ -28,13 +29,15 @@ void main() async {
 
   await Supabase.initialize(
     url: 'https://zbqhxqnkoggckxoyoqox.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpicWh4cW5rb2dnY2t4b3lvcW94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MzY3ODQsImV4cCI6MjA5NDUxMjc4NH0.RzcpDMMLwux0BFe4H4zSFCgHcIw4JPJSK9fuihI3-Y4',
+    anonKey:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpicWh4cW5rb2dnY2t4b3lvcW94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MzY3ODQsImV4cCI6MjA5NDUxMjc4NH0.RzcpDMMLwux0BFe4H4zSFCgHcIw4JPJSK9fuihI3-Y4',
   );
 
   // Initialize Sentry for crash/error monitoring.
   await SentryFlutter.init(
     (options) {
-      options.dsn = 'https://e31852d48258815d67f87abe1bf441dc@o4511410305761280.ingest.us.sentry.io/4511410311725056';
+      options.dsn =
+          'https://e31852d48258815d67f87abe1bf441dc@o4511410305761280.ingest.us.sentry.io/4511410311725056';
       options.tracesSampleRate = 1.0;
     },
     appRunner: () => runApp(const ProviderScope(child: ClassAiApp())),
@@ -92,6 +95,7 @@ class _DatabaseBootstrapperState extends State<DatabaseBootstrapper> {
         if (snapshot.connectionState != ConnectionState.done) {
           return MaterialApp(
             title: 'ClassAI',
+            debugShowCheckedModeBanner: false,
             theme: AppTheme.light(),
             darkTheme: AppTheme.dark(),
             home: const Scaffold(
@@ -118,6 +122,7 @@ class _DatabaseBootstrapperState extends State<DatabaseBootstrapper> {
           );
           return MaterialApp(
             title: 'ClassAI',
+            debugShowCheckedModeBanner: false,
             theme: AppTheme.light(),
             darkTheme: AppTheme.dark(),
             home: Scaffold(
@@ -149,6 +154,7 @@ class _DatabaseBootstrapperState extends State<DatabaseBootstrapper> {
         if (snapshot.data == null) {
           return MaterialApp(
             title: 'ClassAI',
+            debugShowCheckedModeBanner: false,
             theme: AppTheme.light(),
             darkTheme: AppTheme.dark(),
             home: const Scaffold(
@@ -198,6 +204,8 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
   @override
   void initState() {
     super.initState();
+    // Load saved theme preference
+    ref.read(themeProvider.notifier).loadTheme();
     // Defer auth check to after the initial build frame to avoid
     // calling markNeedsBuild() on the ProviderScope during its own
     // build phase (which causes a FlutterError).
@@ -279,6 +287,7 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
         authData.state == AuthState.offlineLoginAttempt) {
       return MaterialApp(
         title: 'ClassAI',
+        debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
         darkTheme: AppTheme.dark(),
         home: const Scaffold(
@@ -300,6 +309,7 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
     if (authData.state == AuthState.emergencySaving) {
       return MaterialApp(
         title: 'ClassAI',
+        debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
         darkTheme: AppTheme.dark(),
         home: const Scaffold(
@@ -321,6 +331,7 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
     if (authData.state != AuthState.authenticated) {
       return MaterialApp(
         title: 'ClassAI',
+        debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
         darkTheme: AppTheme.dark(),
         home: const LoginScreen(),
@@ -330,8 +341,10 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
     // ── Authenticated — show full app with GoRouter ────────────────────
     return MaterialApp.router(
       title: 'ClassAI',
+      debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
+      themeMode: ref.watch(themeProvider),
       routerConfig: appRouter,
     );
   }

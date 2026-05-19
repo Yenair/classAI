@@ -44,8 +44,9 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
   Future<void> _loadTeacher() async {
     setState(() => _loading = true);
     try {
-      final results = await (ref.read(databaseProvider).select(
-              ref.read(databaseProvider).teachers)
+      final results = await (ref
+              .read(databaseProvider)
+              .select(ref.read(databaseProvider).teachers)
             ..where((t) => t.localId.equals(widget.teacherLocalId)))
           .get();
       if (results.isNotEmpty) {
@@ -77,10 +78,7 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
   Future<void> _loadSubjects() async {
     setState(() => _subjectsLoading = true);
     try {
-      final allSubjects = await ref
-          .read(databaseProvider)
-          .subjectsDao
-          .getAll();
+      final allSubjects = await ref.read(databaseProvider).subjectsDao.getAll();
       final assignedIds = await ref
           .read(databaseProvider)
           .teacherSubjectsDao
@@ -136,7 +134,7 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
       final authNotifier = ref.read(authProvider.notifier);
       final currentTeacher = ref.read(authProvider).currentTeacher;
 
-      if (currentTeacher?.serverId == null) {
+      if (currentTeacher == null || currentTeacher.serverId == null) {
         // Offline: queue the recovery request for later sync
         final db = ref.read(databaseProvider);
         await db.pendingRecoveryRequestsDao.queueRequest(
@@ -157,7 +155,7 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
 
       final code = await authNotifier.generateTeacherRecoveryCode(
         _teacher!.serverId!,
-        currentTeacher!.serverId!,
+        currentTeacher.serverId!,
       );
 
       setState(() {
@@ -195,6 +193,7 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
   }
 
   Future<void> _deactivateTeacher() async {
+    final cs = Theme.of(context).colorScheme;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -210,7 +209,7 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(backgroundColor: cs.error),
             child: const Text('Deactivate'),
           ),
         ],
@@ -246,19 +245,44 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final cs = Theme.of(context).colorScheme;
 
     if (_loading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Teacher Details')),
+        appBar: AppBar(
+          title: const Text('Teacher Details'),
+          elevation: 0,
+        ),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_teacher == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Teacher Details')),
-        body: const Center(child: Text('Teacher not found.')),
+        appBar: AppBar(
+          title: const Text('Teacher Details'),
+          elevation: 0,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.person_off_rounded,
+                    size: 64, color: Colors.grey),
+                const SizedBox(height: 16),
+                Text(
+                  'Teacher not found.',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
 
@@ -267,6 +291,10 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(teacher.teacherName),
+        elevation: 0,
+        backgroundColor: cs.surface,
+        foregroundColor: cs.onSurface,
+        surfaceTintColor: cs.surface,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -281,13 +309,14 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
                   Row(
                     children: [
                       CircleAvatar(
-                        backgroundColor: theme.colorScheme.primaryContainer,
+                        backgroundColor: cs.primaryContainer,
                         child: Text(
                           teacher.teacherName.isNotEmpty
                               ? teacher.teacherName[0].toUpperCase()
                               : '?',
                           style: TextStyle(
-                            color: theme.colorScheme.onPrimaryContainer,
+                            fontWeight: FontWeight.w700,
+                            color: cs.onPrimaryContainer,
                           ),
                         ),
                       ),
@@ -298,51 +327,54 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
                           children: [
                             Text(
                               teacher.teacherName,
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleLarge
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
                             ),
                             Text(
                               teacher.email,
-                              style: theme.textTheme.bodyMedium,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
                             ),
                           ],
                         ),
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
+                            horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
                           color: teacher.isActive
-                              ? Colors.green.shade50
-                              : Colors.red.shade50,
+                              ? Colors.green.withValues(alpha: 0.12)
+                              : cs.error.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
                           teacher.isActive ? 'Active' : 'Inactive',
                           style: TextStyle(
-                            color: teacher.isActive
-                                ? Colors.green.shade700
-                                : Colors.red.shade700,
+                            color: teacher.isActive ? Colors.green : cs.error,
                             fontSize: 12,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  Divider(),
-                  _InfoRow(label: 'Role', value: teacher.role),
-                  _InfoRow(
-                      label: 'Server ID',
-                      value: teacher.serverId ?? 'N/A'),
-                  _InfoRow(
-                      label: 'Created',
-                      value: _formatDate(teacher.createdAt)),
-                  _InfoRow(
-                      label: 'Updated',
-                      value: _formatDate(teacher.updatedAt)),
+                  const SizedBox(height: 16),
+                  Divider(
+                    color: cs.outlineVariant.withValues(alpha: 0.5),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildInfoRow('Role', teacher.role),
+                  _buildInfoRow('Server ID', teacher.serverId ?? 'N/A'),
+                  _buildInfoRow('Created', _formatDate(teacher.createdAt)),
+                  _buildInfoRow('Updated', _formatDate(teacher.updatedAt)),
                 ],
               ),
             ),
@@ -358,37 +390,39 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
                 children: [
                   Text(
                     'Recovery Code',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Generate a 16-character recovery code valid for 24 hours. '
                     'The teacher can use this code to reset their password.',
-                    style: theme.textTheme.bodySmall,
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 12),
                   if (_generatedCode != null) ...[
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.blue.shade200),
+                        color: cs.primaryContainer.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: cs.primaryContainer.withValues(alpha: 0.4),
+                        ),
                       ),
                       child: Column(
                         children: [
                           Row(
                             children: [
-                              Icon(Icons.vpn_key,
-                                  size: 20, color: Colors.blue.shade700),
+                              Icon(Icons.vpn_key_rounded,
+                                  size: 20, color: cs.primary),
                               const SizedBox(width: 8),
                               Text(
                                 'Recovery Code',
                                 style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.blue.shade700,
+                                  fontWeight: FontWeight.w700,
+                                  color: cs.primary,
                                 ),
                               ),
                             ],
@@ -396,19 +430,25 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
                           const SizedBox(height: 8),
                           SelectableText(
                             _generatedCode!,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontFamily: 'monospace',
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 2,
-                            ),
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(
+                                  fontFamily: 'monospace',
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 2,
+                                ),
                           ),
                           if (_codeExpiry != null) ...[
                             const SizedBox(height: 4),
                             Text(
                               'Expires: ${_formatDate(_codeExpiry!)}',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: Colors.red.shade600,
-                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: cs.error,
+                                  ),
                             ),
                           ],
                         ],
@@ -424,10 +464,9 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
                           ? const SizedBox(
                               width: 16,
                               height: 16,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2),
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Icon(Icons.vpn_key),
+                          : const Icon(Icons.vpn_key_rounded),
                       label: Text(
                           _generatingCode ? 'Generating...' : 'Generate Code'),
                     ),
@@ -447,9 +486,9 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
                 children: [
                   Text(
                     'Devices (${_devices.length})',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                   ),
                   const SizedBox(height: 8),
                   if (_devicesLoading)
@@ -462,7 +501,7 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
                   else if (_devices.isEmpty)
                     Text(
                       'No devices registered.',
-                      style: theme.textTheme.bodySmall,
+                      style: Theme.of(context).textTheme.bodySmall,
                     )
                   else
                     ..._devices.map((device) => Padding(
@@ -471,12 +510,13 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
                             children: [
                               Icon(
                                 device.isActive
-                                    ? Icons.phone_android
+                                    ? Icons.phone_android_rounded
                                     : Icons.phone_disabled,
                                 size: 20,
                                 color: device.isActive
                                     ? Colors.green
-                                    : Colors.grey,
+                                    : cs.onSurfaceVariant
+                                        .withValues(alpha: 0.5),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
@@ -485,13 +525,17 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
                                   children: [
                                     Text(
                                       device.deviceName,
-                                      style: theme.textTheme.bodyMedium?.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                     ),
                                     Text(
-                                      '${device.platform} • ${device.lastActive ?? "Never"}',
-                                      style: theme.textTheme.bodySmall,
+                                      '${device.platform} \u00b7 ${device.lastActive ?? "Never"}',
+                                      style:
+                                          Theme.of(context).textTheme.bodySmall,
                                     ),
                                   ],
                                 ),
@@ -514,9 +558,9 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
                 children: [
                   Text(
                     'Actions',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                   ),
                   const SizedBox(height: 12),
                   SizedBox(
@@ -524,15 +568,15 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
                     child: teacher.isActive
                         ? FilledButton.icon(
                             onPressed: _deactivateTeacher,
-                            icon: const Icon(Icons.block),
+                            icon: const Icon(Icons.block_rounded),
                             style: FilledButton.styleFrom(
-                              backgroundColor: Colors.red,
+                              backgroundColor: cs.error,
                             ),
                             label: const Text('Deactivate Account'),
                           )
                         : FilledButton.icon(
                             onPressed: _reactivateTeacher,
-                            icon: const Icon(Icons.check_circle),
+                            icon: const Icon(Icons.check_circle_rounded),
                             style: FilledButton.styleFrom(
                               backgroundColor: Colors.green,
                             ),
@@ -554,9 +598,9 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
                 children: [
                   Text(
                     'Subject Assignment',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                   ),
                   const SizedBox(height: 8),
                   if (_subjectsLoading)
@@ -567,15 +611,20 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
                       ),
                     )
                   else if (_allSubjects.isEmpty)
-                    Text(
-                      'No subjects available. Sync with server to load subjects.',
-                      style: theme.textTheme.bodySmall,
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text(
+                        'No subjects available. Sync with server to load subjects.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     )
                   else
                     ..._allSubjects.map((subject) => CheckboxListTile(
                           title: Text(subject.name),
-                          subtitle: subject.alias != null && subject.alias!.isNotEmpty
-                              ? Text(subject.alias!, style: theme.textTheme.bodySmall)
+                          subtitle: subject.alias != null &&
+                                  subject.alias!.isNotEmpty
+                              ? Text(subject.alias!,
+                                  style: Theme.of(context).textTheme.bodySmall)
                               : null,
                           value: _assignedSubjectIds.contains(subject.id),
                           onChanged: (checked) {
@@ -590,21 +639,23 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
                           dense: true,
                           contentPadding: EdgeInsets.zero,
                         )),
-                  if (_allSubjects.isNotEmpty)
-                    const SizedBox(height: 12),
+                  if (_allSubjects.isNotEmpty) const SizedBox(height: 12),
                   if (_allSubjects.isNotEmpty)
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.icon(
-                        onPressed: _savingSubjects ? null : _saveSubjectAssignments,
+                        onPressed:
+                            _savingSubjects ? null : _saveSubjectAssignments,
                         icon: _savingSubjects
                             ? const SizedBox(
                                 width: 16,
                                 height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               )
-                            : const Icon(Icons.save),
-                        label: Text(_savingSubjects ? 'Saving...' : 'Save Assignments'),
+                            : const Icon(Icons.save_rounded),
+                        label: Text(
+                            _savingSubjects ? 'Saving...' : 'Save Assignments'),
                       ),
                     ),
                 ],
@@ -616,21 +667,7 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
     );
   }
 
-  String _formatDate(DateTime dt) {
-    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
-        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _InfoRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+  Widget _buildInfoRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -640,17 +677,25 @@ class _InfoRow extends StatelessWidget {
             width: 100,
             child: Text(
               label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
             ),
           ),
           Expanded(
-            child: Text(value, style: theme.textTheme.bodyMedium),
+            child: Text(
+              value,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
           ),
         ],
       ),
     );
+  }
+
+  String _formatDate(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
+        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 }

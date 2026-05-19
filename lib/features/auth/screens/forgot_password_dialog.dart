@@ -19,13 +19,17 @@ class ForgotPasswordDialog extends StatelessWidget {
     final theme = Theme.of(context);
 
     return AlertDialog(
-      title: const Text('Reset Password'),
+      title: Text(
+        'Reset Password',
+        style: theme.textTheme.titleLarge,
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(
+          Text(
             'Are you an admin or a teacher?',
             textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium,
           ),
           const SizedBox(height: 24),
           // Admin option
@@ -33,9 +37,10 @@ class ForgotPasswordDialog extends StatelessWidget {
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: () => Navigator.of(context).pop('admin'),
-              icon: const Icon(Icons.admin_panel_settings_rounded),
-              label: const Text('I\'m an Admin'),
+              icon: Icon(Icons.admin_panel_settings_rounded, color: theme.colorScheme.primary),
+              label: Text('I\'m an Admin', style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary)),
               style: OutlinedButton.styleFrom(
+                foregroundColor: theme.colorScheme.primary,
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ),
@@ -46,9 +51,10 @@ class ForgotPasswordDialog extends StatelessWidget {
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: () => Navigator.of(context).pop('teacher'),
-              icon: const Icon(Icons.person_rounded),
-              label: const Text('I\'m a Teacher'),
+              icon: Icon(Icons.person_rounded, color: theme.colorScheme.primary),
+              label: Text('I\'m a Teacher', style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary)),
               style: OutlinedButton.styleFrom(
+                foregroundColor: theme.colorScheme.primary,
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ),
@@ -58,7 +64,10 @@ class ForgotPasswordDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          style: TextButton.styleFrom(
+            foregroundColor: theme.colorScheme.primary,
+          ),
+          child: Text('Cancel', style: theme.textTheme.labelLarge),
         ),
       ],
     );

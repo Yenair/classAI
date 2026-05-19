@@ -63,51 +63,133 @@ class _VaultBrowserScreenState extends ConsumerState<VaultBrowserScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final creditData = ref.watch(creditStateProvider);
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Vault'),
+        elevation: 0,
+        backgroundColor: cs.surface,
+        foregroundColor: cs.onSurface,
+        surfaceTintColor: cs.surface,
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer,
+                  color: cs.primaryContainer.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '🔓 ${creditData.currentCredits} credits',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.onPrimaryContainer,
+                  border: Border.all(
+                    color: cs.primaryContainer.withValues(alpha: 0.4),
                   ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.lock_open_rounded,
+                        size: 15, color: cs.onPrimaryContainer),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${ref.watch(creditStateProvider).currentCredits} credits',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: cs.onPrimaryContainer,
+                          ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.add),
+            icon: const Icon(Icons.add_rounded),
             tooltip: 'Publish new item',
             onPressed: () => context.push('/vault/publish'),
           ),
+          const SizedBox(width: 4),
         ],
       ),
       body: Column(
         children: [
           // Filter bar
-          _FilterBar(
-            onApply: (subject, classLevel, curriculum) {
-              setState(() {
-                _filterSubject = subject;
-                _filterClassLevel = classLevel;
-                _filterCurriculum = curriculum;
-              });
-              _loadItems();
-            },
+          Container(
+            margin: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.5),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          decoration: const InputDecoration(
+                            labelText: 'Subject',
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          decoration: const InputDecoration(
+                            labelText: 'Class Level',
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          decoration: const InputDecoration(
+                            labelText: 'Curriculum',
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      OutlinedButton(
+                        onPressed: () {
+                          setState(() {
+                            _filterSubject = null;
+                            _filterClassLevel = null;
+                            _filterCurriculum = null;
+                          });
+                          _loadItems();
+                        },
+                        child: const Text('Clear'),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        onPressed: () {
+                          setState(() {
+                            _filterSubject = _filterSubject;
+                            _filterClassLevel = _filterClassLevel;
+                            _filterCurriculum = _filterCurriculum;
+                          });
+                          _loadItems();
+                        },
+                        child: const Text('Filter'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ),
           // Items grid
           Expanded(
@@ -115,19 +197,34 @@ class _VaultBrowserScreenState extends ConsumerState<VaultBrowserScreen> {
                 ? const Center(child: CircularProgressIndicator())
                 : _errorMessage != null
                     ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _errorMessage!,
-                              style: TextStyle(color: theme.colorScheme.error),
-                            ),
-                            const SizedBox(height: 16),
-                            FilledButton(
-                              onPressed: _loadItems,
-                              child: const Text('Retry'),
-                            ),
-                          ],
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.error_outline_rounded,
+                                size: 56,
+                                color: cs.error,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                _errorMessage!,
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyLarge
+                                    ?.copyWith(
+                                      color: cs.error,
+                                    ),
+                              ),
+                              const SizedBox(height: 16),
+                              FilledButton(
+                                onPressed: _loadItems,
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ),
                         ),
                       )
                     : _items.isEmpty
@@ -135,23 +232,34 @@ class _VaultBrowserScreenState extends ConsumerState<VaultBrowserScreen> {
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.inventory_2_outlined,
-                                    size: 64, color: Colors.grey.shade400),
+                                Icon(
+                                  Icons.inventory_2_outlined,
+                                  size: 64,
+                                  color: cs.onSurfaceVariant
+                                      .withValues(alpha: 0.5),
+                                ),
                                 const SizedBox(height: 16),
                                 Text(
                                   'No vault items found',
-                                  style: theme.textTheme.titleMedium,
+                                  style:
+                                      Theme.of(context).textTheme.titleMedium,
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
                                   'Adjust filters or check back later.',
-                                  style: theme.textTheme.bodySmall,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: cs.onSurfaceVariant,
+                                      ),
                                 ),
                               ],
                             ),
                           )
                         : GridView.builder(
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 8),
                             gridDelegate:
                                 const SliverGridDelegateWithFixedCrossAxisCount(
                               crossAxisCount: 2,
@@ -204,83 +312,86 @@ class _FilterBarState extends State<_FilterBar> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _subjectCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Subject',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Theme.of(context)
+              .colorScheme
+              .outlineVariant
+              .withValues(alpha: 0.5),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _subjectCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Subject',
+                      isDense: true,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: _classLevelCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Class Level',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _classLevelCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Class Level',
+                      isDense: true,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: _curriculumCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Curriculum',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _curriculumCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Curriculum',
+                      isDense: true,
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  OutlinedButton(
-                    onPressed: () {
-                      _subjectCtrl.clear();
-                      _classLevelCtrl.clear();
-                      _curriculumCtrl.clear();
-                      widget.onApply(null, null, null);
-                    },
-                    child: const Text('Clear'),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: () {
-                      widget.onApply(
-                        _subjectCtrl.text.isNotEmpty
-                            ? _subjectCtrl.text
-                            : null,
-                        _classLevelCtrl.text.isNotEmpty
-                            ? _classLevelCtrl.text
-                            : null,
-                        _curriculumCtrl.text.isNotEmpty
-                            ? _curriculumCtrl.text
-                            : null,
-                      );
-                    },
-                    child: const Text('Filter'),
-                  ),
-                ],
-              ),
-            ],
-          ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton(
+                  onPressed: () {
+                    _subjectCtrl.clear();
+                    _classLevelCtrl.clear();
+                    _curriculumCtrl.clear();
+                    widget.onApply(null, null, null);
+                  },
+                  child: const Text('Clear'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () {
+                    widget.onApply(
+                      _subjectCtrl.text.isNotEmpty ? _subjectCtrl.text : null,
+                      _classLevelCtrl.text.isNotEmpty
+                          ? _classLevelCtrl.text
+                          : null,
+                      _curriculumCtrl.text.isNotEmpty
+                          ? _curriculumCtrl.text
+                          : null,
+                    );
+                  },
+                  child: const Text('Filter'),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -303,11 +414,11 @@ class _VaultItemCard extends StatelessWidget {
       case 'free':
         return Colors.grey;
       case 'basic':
-        return Colors.blue;
+        return const Color(0xFF3674B5);
       case 'standard':
-        return Colors.amber;
+        return const Color(0xFF8C94FF);
       case 'elite':
-        return Colors.purple;
+        return const Color(0xFF5068D9);
       default:
         return Colors.grey;
     }
@@ -315,12 +426,19 @@ class _VaultItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final cs = Theme.of(context).colorScheme;
 
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: cs.outlineVariant.withValues(alpha: 0.45),
+          ),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -331,22 +449,28 @@ class _VaultItemCard extends StatelessWidget {
                 height: 80,
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
+                  color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: item.thumbnailUrl != null && item.thumbnailUrl!.isNotEmpty
+                child: item.thumbnailUrl != null &&
+                        item.thumbnailUrl!.isNotEmpty
                     ? ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
                         child: Image.network(
                           item.thumbnailUrl!,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Icon(
-                            Icons.image,
-                            size: 40,
+                          errorBuilder: (_, __, ___) => Icon(
+                            Icons.image_rounded,
+                            size: 32,
+                            color: cs.onSurfaceVariant.withValues(alpha: 0.45),
                           ),
                         ),
                       )
-                    : const Icon(Icons.image, size: 40),
+                    : Icon(
+                        Icons.image_rounded,
+                        size: 32,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.45),
+                      ),
               ),
               const SizedBox(height: 8),
               // Title
@@ -354,68 +478,74 @@ class _VaultItemCard extends StatelessWidget {
                 item.title,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
               ),
               const SizedBox(height: 2),
               // Author
               Text(
                 'By ${item.authorName}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontSize: 11,
-                ),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      fontSize: 11,
+                    ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 4),
               // Metadata
               Text(
-                '${item.subject} • ${item.classLevel}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+                '${item.subject} \u00b7 ${item.classLevel}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 4),
               // Tier badge
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: _tierColor(item.minTier).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(4),
+                  color: _tierColor(item.minTier).withValues(alpha: 0.13),
+                  borderRadius: BorderRadius.circular(6),
                   border: Border.all(
-                    color: _tierColor(item.minTier).withValues(alpha: 0.4),
+                    color: _tierColor(item.minTier).withValues(alpha: 0.35),
+                    width: 0.5,
                   ),
                 ),
                 child: Text(
                   item.minTier.toUpperCase(),
                   style: TextStyle(
                     fontSize: 10,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w600,
                     color: _tierColor(item.minTier),
+                    letterSpacing: 0.3,
                   ),
                 ),
               ),
               const Spacer(),
-              // Credit cost
+              // Credit cost + lock
               Row(
                 children: [
-                  Icon(Icons.monetization_on, size: 16, color: Colors.amber),
+                  Icon(
+                    Icons.monetization_on_rounded,
+                    size: 14,
+                    color: Colors.amber.withValues(alpha: 0.85),
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     '${item.creditCost} credits',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                   ),
                   const Spacer(),
                   Icon(
-                    Icons.lock_outline,
-                    size: 14,
-                    color: theme.colorScheme.outline,
+                    Icons.lock_outline_rounded,
+                    size: 13,
+                    color: cs.outline.withValues(alpha: 0.65),
                   ),
                 ],
               ),

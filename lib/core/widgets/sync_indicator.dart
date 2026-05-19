@@ -3,142 +3,198 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
 
-/// Sync indicator icon in the AppBar.
+/// Sync indicator for the AppBar.
 ///
-/// Renders an [IconButton] whose icon and colour reflect the current
-/// [SyncStatus]. On tap, shows a modal bottom sheet with sync details.
+/// Renders a pill-shaped container icon whose fill colour reflects the
+/// current [SyncStatus].  Stitch pattern: subtle surface container with
+/// a soft tinted fill; tint matches the status colour at low opacity.
 class SyncIndicator extends ConsumerWidget {
   const SyncIndicator({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final syncData = ref.watch(syncStatusProvider);
+    final cs = Theme.of(context).colorScheme;
 
-    final (IconData icon, Color color, String tooltip) = switch (syncData.status) {
-      SyncStatus.offline => (Icons.cloud_off, Colors.grey, 'Offline'),
-      SyncStatus.syncing => (Icons.cloud_sync, Colors.blue, 'Syncing…'),
-      SyncStatus.synced => (Icons.cloud_done, Colors.green, 'Synced'),
-      SyncStatus.error => (Icons.cloud_off, Colors.red, 'Sync error'),
+    final (IconData icon, Color tint, String label) = switch (syncData.status) {
+      SyncStatus.offline => (Icons.cloud_off, cs.error, 'Offline'),
+      SyncStatus.syncing => (Icons.cloud_sync, cs.primary, 'Syncing…'),
+      SyncStatus.synced => (Icons.cloud_done, cs.primary, 'Synced'),
+      SyncStatus.error => (Icons.cloud_off, cs.error, 'Sync error'),
     };
 
     return IconButton(
-      icon: Icon(icon, color: color),
-      tooltip: tooltip,
+      tooltip: label,
       onPressed: () => _showSyncDetailsSheet(context, ref, syncData),
+      icon: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: tint.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(
+          icon,
+          size: 20,
+          color: tint,
+        ),
+      ),
     );
   }
 
-  void _showSyncDetailsSheet(BuildContext context, WidgetRef ref, SyncStatusData data) {
+  void _showSyncDetailsSheet(
+    BuildContext context,
+    WidgetRef ref,
+    SyncStatusData data,
+  ) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
       builder: (_) => _SyncDetailsSheet(data: data, ref: ref),
     );
   }
 }
 
 class _SyncDetailsSheet extends ConsumerWidget {
+  const _SyncDetailsSheet({required this.data, required this.ref});
+
   final SyncStatusData data;
   final WidgetRef ref;
 
-  const _SyncDetailsSheet({required this.data, required this.ref});
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
+    final cs = Theme.of(context).colorScheme;
     final dateFormat = DateFormat('MMM d, yyyy – h:mm a');
 
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Sync Details',
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.bold,
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Sheet handle
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: cs.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
-          _infoRow(
-            context,
-            'Status',
-            switch (data.status) {
-              SyncStatus.offline => 'Offline',
-              SyncStatus.syncing => 'Syncing…',
-              SyncStatus.synced => 'Synced',
-              SyncStatus.error => 'Error',
-            },
-          ),
-          const SizedBox(height: 8),
-          _infoRow(
-            context,
-            'Network',
-            data.isOnline ? 'Connected' : 'Offline',
-          ),
-          const SizedBox(height: 8),
-          _infoRow(
-            context,
-            'Last sync',
-            data.lastSyncTime != null
-                ? dateFormat.format(data.lastSyncTime!)
-                : 'Never',
-          ),
-          const SizedBox(height: 8),
-          _infoRow(
-            context,
-            'Pending push',
-            '${data.pendingPushCount} item(s)',
-          ),
-          const SizedBox(height: 8),
-          _infoRow(
-            context,
-            'Pending pull',
-            '${data.pendingPullCount} item(s)',
-          ),
-          const SizedBox(height: 8),
-          _infoRow(
-            context,
-            'Conflicts',
-            '${data.conflictCount}',
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.tonal(
-              onPressed: data.isOnline && data.status != SyncStatus.syncing
-                  ? () {
-                      ref.read(syncStatusProvider.notifier).refresh();
-                      Navigator.of(context).pop();
-                    }
-                  : null,
-              child: const Text('Sync Now'),
+            // Title row
+            Row(
+              children: [
+                Icon(Icons.history_rounded, color: cs.primary, size: 22),
+                const SizedBox(width: 10),
+                Text(
+                  'Sync Details',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: cs.onSurface,
+                      ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 8),
-        ],
+            const SizedBox(height: 24),
+
+            // Stat rows
+            _StatRow(label: 'Status', value: _statusLabel(data.status), cs: cs),
+            const SizedBox(height: 12),
+            _StatRow(
+                label: 'Network',
+                value: data.isOnline ? 'Connected' : 'Offline',
+                cs: cs),
+            const SizedBox(height: 12),
+            _StatRow(
+              label: 'Last sync',
+              value: data.lastSyncTime != null
+                  ? dateFormat.format(data.lastSyncTime!)
+                  : 'Never',
+              cs: cs,
+            ),
+            const SizedBox(height: 12),
+            _StatRow(
+                label: 'Pending push',
+                value: '${data.pendingPushCount} item(s)',
+                cs: cs),
+            const SizedBox(height: 12),
+            _StatRow(
+                label: 'Pending pull',
+                value: '${data.pendingPullCount} item(s)',
+                cs: cs),
+            const SizedBox(height: 12),
+            _StatRow(
+                label: 'Conflicts', value: '${data.conflictCount}', cs: cs),
+
+            const SizedBox(height: 28),
+            // Sync Now
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: FilledButton(
+                onPressed: data.isOnline && data.status != SyncStatus.syncing
+                    ? () {
+                        ref.read(syncStatusProvider.notifier).refresh();
+                        Navigator.of(context).pop();
+                      }
+                    : null,
+                child: const Text(
+                  'Sync Now',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
       ),
     );
   }
+}
 
-  Widget _infoRow(BuildContext context, String label, String value) {
-    final theme = Theme.of(context);
+class _StatRow extends StatelessWidget {
+  const _StatRow({required this.label, required this.value, required this.cs});
+  final String label;
+  final String value;
+  final ColorScheme cs;
+
+  @override
+  Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
           label,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-          ),
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: cs.onSurface.withValues(alpha: 0.65),
+                fontWeight: FontWeight.w400,
+              ),
         ),
         Text(
           value,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.w500,
-          ),
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
         ),
       ],
     );
   }
 }
+
+String _statusLabel(SyncStatus s) => switch (s) {
+      SyncStatus.offline => 'Offline',
+      SyncStatus.syncing => 'Syncing…',
+      SyncStatus.synced => 'Synced',
+      SyncStatus.error => 'Error',
+    };

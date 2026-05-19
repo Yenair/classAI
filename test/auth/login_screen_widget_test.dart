@@ -99,8 +99,7 @@ void main() {
     mockSecurity = MockSecurityService();
 
     // Default mock behaviour: no stored hash (offline login not available)
-    when(() => mockSecurity.getPasswordHash())
-        .thenAnswer((_) async => null);
+    when(() => mockSecurity.getPasswordHash()).thenAnswer((_) async => null);
   });
 
   tearDown(() async {
@@ -360,8 +359,7 @@ void main() {
       expect(find.text('Reset Password'), findsWidgets);
     });
 
-    testWidgets('shows signup screen on create account tap',
-        (tester) async {
+    testWidgets('shows signup screen on create account tap', (tester) async {
       await tester.pumpWidget(createTestApp(
         child: const LoginScreen(),
         db: db,
@@ -369,18 +367,18 @@ void main() {
         securityService: mockSecurity,
       ));
 
+      // Ensure button is visible (may be off-screen in small test viewport)
+      await tester.ensureVisible(find.text('Create a School Account'));
       // Tap Create a School Account
       await tester.tap(find.text('Create a School Account'));
       await tester.pumpAndSettle();
 
       // Should navigate to SignupScreen
-      expect(find.text('Create School Account'), findsNWidgets(2));
+      expect(find.text('Create School Account'), findsOneWidget);
       expect(find.text('School Name'), findsOneWidget);
       expect(find.text('Admin Email'), findsOneWidget);
     });
-
-    testWidgets('signup screen shows recovery email field',
-        (tester) async {
+    testWidgets('signup screen shows recovery email field', (tester) async {
       await tester.pumpWidget(createTestApp(
         child: const LoginScreen(),
         db: db,
@@ -388,11 +386,13 @@ void main() {
         securityService: mockSecurity,
       ));
 
+      // Ensure button is visible (may be off-screen in small test viewport)
+      await tester.ensureVisible(find.text('Create a School Account'));
       // Navigate to signup screen
       await tester.tap(find.text('Create a School Account'));
       await tester.pumpAndSettle();
 
-      // Recovery email field should be visible (it's always shown, optional)
+      // Recovery email field should be present in the SignupScreen
       expect(find.text('Recovery Email (optional)'), findsOneWidget);
     });
   });

@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
+import bcrypt from "npm:bcryptjs";
 
 serve(async (req) => {
   try {
@@ -90,7 +90,7 @@ serve(async (req) => {
 
     // ── Update local password hash in teachers table ──────────────────────
     const pepper = Deno.env.get("PASSWORD_PEPPER")!;
-    const passwordHash = await bcrypt.hash(newPassword + pepper);
+    const passwordHash = await bcrypt.hash(newPassword + pepper, 10);
 
     const newVersion = (teacher.password_hash_version || 1) + 1;
     await supabase

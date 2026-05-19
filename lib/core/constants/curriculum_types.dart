@@ -36,3 +36,36 @@ extension SubscriptionTierX on SubscriptionTier {
     }
   }
 }
+
+/// Nigerian NERDC (National Educational Research and Development Council)
+/// subjects taught in Nigerian secondary schools (JSS and SSS).
+const List<String> nerdcSubjects = [
+  'English Studies',
+  'Mathematics',
+  'Basic Science',
+  'Social Studies',
+  'Christian Religious Studies',
+  'Islamic Religious Studies',
+  'French',
+  'Home Economics',
+  'Agricultural Science',
+  'Civic Education',
+  'Physical Education',
+  'Business Studies',
+  'Computer Studies',
+  'Fine Arts',
+  'Music',
+  'Hausa',
+  'Igbo',
+  'Yoruba',
+];
+
+/// Default subjects pre-selected for a new school.
+const List<String> defaultSubjects = [
+  'English Studies',
+  'Mathematics',
+  'Basic Science',
+  'Social Studies',
+  'Christian Religious Studies',
+  'Civic Education',
+];

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:classai/core/constants/app_constants.dart';
 import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
@@ -9,9 +8,13 @@ import 'package:classai/core/services/emergency_flush_service.dart';
 
 /// Signup screen for creating a new school account.
 ///
-/// - School Name, Short Code (auto‑generated, read‑only), Admin Email,
+/// - School Name, Short Code (auto-generated, read-only), Admin Email,
 ///   Admin Password, Recovery Email (optional).
 /// - On success transitions to authenticated state (Dashboard).
+///
+/// Layout and spacing match the Google Stitch Vault Publisher form card:
+/// surface-container-low card on gradient background, 56 px buttons,
+/// consistent 16-sp vertical gaps between fields.
 class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key});
 
@@ -45,9 +48,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
   /// Generates a short code from the school name (uppercase, max 6 chars).
   String _generateShortCode(String schoolName) {
-    final cleaned = schoolName
-        .replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')
-        .toUpperCase();
+    final cleaned =
+        schoolName.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
     return cleaned.length > 6 ? cleaned.substring(0, 6) : cleaned;
   }
 
@@ -66,7 +68,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     });
 
     _flushCallback = () async {
-      // Snapshot all signup form fields before forced logout
       final schoolName = _schoolNameController.text;
       final email = _adminEmailController.text;
       final password = _adminPasswordController.text;
@@ -104,7 +105,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     });
 
     try {
-      // Fetch device ID once and cache it
       _cachedDeviceId ??= await AppConstants.getDeviceId();
 
       await ref.read(authProvider.notifier).signup(
@@ -117,8 +117,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           );
 
       if (!mounted) return;
-      // On success, navigate to the dashboard directly.
-      context.go('/');
+      Navigator.of(context).pop();
     } on AuthException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -129,7 +128,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Signup failed. Please try again.';
+        _errorMessage = 'Signup failed. $e';
       });
     }
   }
@@ -137,261 +136,321 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    const v12 = SizedBox(height: 12);
+    const v16 = SizedBox(height: 16);
+    const v24 = SizedBox(height: 24);
+    const v32 = SizedBox(height: 32);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create School Account'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              cs.surface.withValues(alpha: 0.6),
+              cs.surfaceContainerLowest,
+            ],
+          ),
         ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Header
-                Icon(
-                  Icons.school_rounded,
-                  size: 64,
-                  color: theme.colorScheme.primary,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Create School Account',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // ── Header ────────────────────────────────────────
+                  Icon(
+                    Icons.groups_rounded,
+                    size: 56,
+                    color: cs.primary,
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Register your school to get started with ClassAI.',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Error banner
-                if (_errorMessage != null) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.errorContainer,
-                      borderRadius: BorderRadius.circular(8),
+                  v16,
+                  Text(
+                    'Create School Account',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface,
                     ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          color: theme.colorScheme.onErrorContainer,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _errorMessage!,
-                            style: TextStyle(
-                              color: theme.colorScheme.onErrorContainer,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () => setState(() => _errorMessage = null),
-                          child: Icon(
-                            Icons.close,
-                            size: 18,
-                            color: theme.colorScheme.onErrorContainer,
-                          ),
+                  ),
+                  v12,
+                  Text(
+                    'Register your school to get started with ClassAI.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // ── Form card ─────────────────────────────────────
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerLowest,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: cs.outlineVariant.withValues(alpha: 0.45),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: cs.onSurface.withValues(alpha: 0.05),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // ── Error banner ─────────────────────────────
+                          if (_errorMessage != null) ...[
+                            _ErrorBanner(
+                              message: _errorMessage!,
+                              cs: cs,
+                              onDismiss: () =>
+                                  setState(() => _errorMessage = null),
+                            ),
+                            v16,
+                          ],
 
-                // School Name
-                TextFormField(
-                  controller: _schoolNameController,
-                  textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'School Name',
-                    prefixIcon: Icon(Icons.business_rounded),
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter your school name';
-                    }
-                    if (value.trim().length < 3) {
-                      return 'School name must be at least 3 characters';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Short Code (auto-generated, read-only)
-                TextFormField(
-                  controller: _shortCodeController,
-                  readOnly: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Short Code',
-                    prefixIcon: Icon(Icons.qr_code_rounded),
-                    border: OutlineInputBorder(),
-                    helperText: 'Auto-generated from school name',
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Admin Email
-                TextFormField(
-                  controller: _adminEmailController,
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'Admin Email',
-                    prefixIcon: Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter the admin email';
-                    }
-                    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
-                        .hasMatch(value.trim())) {
-                      return 'Please enter a valid email';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Admin Password
-                TextFormField(
-                  controller: _adminPasswordController,
-                  obscureText: _obscurePassword,
-                  textInputAction: TextInputAction.next,
-                  decoration: InputDecoration(
-                    labelText: 'Admin Password',
-                    prefixIcon: const Icon(Icons.lock_outlined),
-                    border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined,
-                      ),
-                      onPressed: () =>
-                          setState(() => _obscurePassword = !_obscurePassword),
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter a password';
-                    }
-                    if (value.length < 8) {
-                      return 'Password must be at least 8 characters';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Confirm password
-                TextFormField(
-                  controller: _confirmPasswordController,
-                  obscureText: _obscureConfirm,
-                  textInputAction: TextInputAction.next,
-                  decoration: InputDecoration(
-                    labelText: 'Confirm Password',
-                    prefixIcon: const Icon(Icons.lock_outlined),
-                    border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscureConfirm
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined,
-                      ),
-                      onPressed: () =>
-                          setState(() => _obscureConfirm = !_obscureConfirm),
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please confirm your password';
-                    }
-                    if (value != _adminPasswordController.text) {
-                      return 'Passwords do not match';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Recovery Email (optional)
-                TextFormField(
-                  controller: _recoveryEmailController,
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.done,
-                  decoration: const InputDecoration(
-                    labelText: 'Recovery Email (optional)',
-                    prefixIcon: Icon(Icons.contact_mail_outlined),
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    if (value != null &&
-                        value.isNotEmpty &&
-                        !RegExp(r'^[^@]+@[^@]+\.[^@]+')
-                            .hasMatch(value.trim())) {
-                      return 'Please enter a valid recovery email';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Used for admin password recovery. A verification OTP '
-                  'will be sent to this address if provided.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Submit button
-                FilledButton(
-                  onPressed: _isLoading ? null : _handleSignUp,
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
+                          // ── School Name ──────────────────────────────
+                          TextFormField(
+                            controller: _schoolNameController,
+                            textInputAction: TextInputAction.next,
+                            decoration: const InputDecoration(
+                              labelText: 'School Name',
+                              prefixIcon: Icon(Icons.business_rounded),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Please enter your school name';
+                              }
+                              if (value.trim().length < 3) {
+                                return 'School name must be at least 3 characters';
+                              }
+                              return null;
+                            },
                           ),
-                        )
-                      : const Text(
-                          'Sign Up',
-                          style: TextStyle(fontSize: 16),
-                        ),
-                ),
-              ],
+                          v16,
+
+                          // ── Short Code (auto, read-only) ────────────
+                          TextFormField(
+                            controller: _shortCodeController,
+                            readOnly: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Short Code',
+                              prefixIcon: Icon(Icons.qr_code_rounded),
+                              helperText: 'Auto-generated from school name',
+                            ),
+                          ),
+                          v16,
+
+                          // ── Admin Email ─────────────────────────────
+                          TextFormField(
+                            controller: _adminEmailController,
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                            decoration: const InputDecoration(
+                              labelText: 'Admin Email',
+                              prefixIcon: Icon(Icons.email_outlined),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Please enter the admin email';
+                              }
+                              if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
+                                  .hasMatch(value.trim())) {
+                                return 'Please enter a valid email';
+                              }
+                              return null;
+                            },
+                          ),
+                          v16,
+
+                          // ── Admin Password ───────────────────────────
+                          TextFormField(
+                            controller: _adminPasswordController,
+                            obscureText: _obscurePassword,
+                            textInputAction: TextInputAction.next,
+                            decoration: InputDecoration(
+                              labelText: 'Admin Password',
+                              prefixIcon: const Icon(Icons.lock_outlined),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscurePassword
+                                      ? Icons.visibility_off_outlined
+                                      : Icons.visibility_outlined,
+                                ),
+                                onPressed: () => setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                ),
+                              ),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter a password';
+                              }
+                              if (value.length < 8) {
+                                return 'Password must be at least 8 characters';
+                              }
+                              return null;
+                            },
+                          ),
+                          v16,
+
+                          // ── Confirm Password ─────────────────────────
+                          TextFormField(
+                            controller: _confirmPasswordController,
+                            obscureText: _obscureConfirm,
+                            textInputAction: TextInputAction.next,
+                            decoration: InputDecoration(
+                              labelText: 'Confirm Password',
+                              prefixIcon: const Icon(Icons.lock_outlined),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscureConfirm
+                                      ? Icons.visibility_off_outlined
+                                      : Icons.visibility_outlined,
+                                ),
+                                onPressed: () => setState(
+                                  () => _obscureConfirm = !_obscureConfirm,
+                                ),
+                              ),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please confirm your password';
+                              }
+                              if (value != _adminPasswordController.text) {
+                                return 'Passwords do not match';
+                              }
+                              return null;
+                            },
+                          ),
+                          v16,
+
+                          // ── Recovery Email ───────────────────────────
+                          TextFormField(
+                            controller: _recoveryEmailController,
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.done,
+                            decoration: const InputDecoration(
+                              labelText: 'Recovery Email (optional)',
+                              prefixIcon: Icon(Icons.contact_mail_outlined),
+                            ),
+                            validator: (value) {
+                              if (value != null &&
+                                  value.isNotEmpty &&
+                                  !RegExp(r'^[^@]+@[^@]+\.[^@]+')
+                                      .hasMatch(value.trim())) {
+                                return 'Please enter a valid recovery email';
+                              }
+                              return null;
+                            },
+                          ),
+                          v24,
+
+                          // ── Sign Up button ──────────────────────────
+                          SizedBox(
+                            height: 56,
+                            child: FilledButton(
+                              onPressed: _isLoading ? null : _handleSignUp,
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      height: 22,
+                                      width: 22,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.5,
+                                      ),
+                                    )
+                                  : const Text(
+                                      'Sign Up',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stitch-derived helper widgets
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ErrorBanner extends StatelessWidget {
+  const _ErrorBanner({
+    required this.message,
+    required this.cs,
+    required this.onDismiss,
+  });
+
+  final String message;
+  final ColorScheme cs;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.errorContainer,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.error_outline,
+            color: cs.onErrorContainer,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: SelectableText(
+              message,
+              style: TextStyle(
+                color: cs.onErrorContainer,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                height: 1.4,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onDismiss,
+            child: Icon(
+              Icons.close,
+              size: 18,
+              color: cs.onErrorContainer,
+            ),
+          ),
+        ],
       ),
     );
   }

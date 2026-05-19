@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide AuthState;
 import 'package:classai/core/constants/app_constants.dart';
 import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/core/services/emergency_flush_service.dart';
@@ -12,6 +13,10 @@ import 'package:classai/features/auth/screens/teacher_recovery_dialog.dart';
 
 /// Material Design login screen with email/password fields,
 /// forgot password links, account activation, error states, and loading.
+///
+/// Layout and styling match the Google Stitch Vault Publisher design:
+/// centered surface-card on a surface background, 56 px touch targets,
+/// pill-shaped primary button, and low-prominence secondary links.
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -43,12 +48,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     // Register an emergency save callback that snapshots form fields
     // so unsaved input is captured before forced logout.
     _flushCallback = () async {
-      // Snapshot current form state to prevent data loss on forced logout
       final email = _emailController.text;
       final password = _passwordController.text;
       if (email.isNotEmpty || password.isNotEmpty) {
         // In production, write to a dead-letter queue or local draft store.
-        // For now, the capture itself prevents silent data loss.
       }
     };
     _emergencyFlush.register(_flushCallback!);
@@ -70,30 +73,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() => _isLoggingIn = true);
 
     try {
-      // Clear previous errors
       ref.read(authProvider.notifier).clearError();
 
-      // Fetch device ID once and cache it
       try {
         _cachedDeviceId ??= await AppConstants.getDeviceId();
       } catch (_) {
-        // If device info fails, fall back to a random UUID
         _cachedDeviceId ??= _generateFallbackDeviceId();
       }
 
-      // Attempt online login
       await ref.read(authProvider.notifier).loginOnline(
             email: _emailController.text.trim(),
             password: _passwordController.text,
             deviceId: _cachedDeviceId!,
           );
 
-      // Check final state for errors — the parent auth gate will redirect
-      // to the dashboard if authenticated, or show error banners here.
       if (!mounted) return;
       final authState = ref.read(authProvider).state;
       if (authState == AuthState.forcePasswordResetRequired) {
-        // Navigate to change-password screen and clear previous error
         ref.read(authProvider.notifier).clearError();
         await Navigator.of(context).push(
           MaterialPageRoute(
@@ -102,13 +98,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         );
       }
     } catch (e) {
-      // Defensive catch: if an unexpected exception escapes loginOnline's
-      // internal error handling, push it into the auth state so the UI
-      // displays the error banner instead of silently crashing.
       if (mounted) {
         ref.read(authProvider.notifier).setErrorMessage(
-          'An unexpected error occurred. Please try again.',
-        );
+              'An unexpected error occurred. Please try again.',
+            );
       }
     } finally {
       if (mounted) {
@@ -117,11 +110,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
-  /// Returns a random UUID as a fallback device identifier when
-  /// [AppConstants.getDeviceId] fails (e.g., missing platform plugin).
   String _generateFallbackDeviceId() {
-    // Imported via package:uuid in app_constants.dart; we duplicate
-    // the simple fallback here to avoid adding another import.
     final now = DateTime.now().microsecondsSinceEpoch;
     final random = now ^ (now << 21);
     return 'fallback-${random.toRadixString(16).padLeft(12, '0')}';
@@ -131,212 +120,212 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final authData = ref.watch(authProvider);
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    // ── Spacing scale (Stitch-like) ───────────────────────────────
+    const v8 = SizedBox(height: 8);
+    const v16 = SizedBox(height: 16);
+    const v24 = SizedBox(height: 24);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('ClassAI'),
-        centerTitle: true,
-      ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
-            child: Form(
-              key: _formKey,
+      body: Container(
+        // Stitch background: gradient-like surface / surface-container-low blend
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              cs.surface.withValues(alpha: 0.6),
+              cs.surfaceContainerLowest,
+            ],
+          ),
+        ),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // App icon / branding
-                  Icon(
-                    Icons.school_rounded,
-                    size: 72,
-                    color: theme.colorScheme.primary,
+                  // ── Header: school icon + title ─────────────────────
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: cs.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Icon(
+                      Icons.school_rounded,
+                      size: 32,
+                      color: cs.primary,
+                    ),
                   ),
-                  const SizedBox(height: 8),
+                  v16,
+                  Text(
+                    'ClassAI',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.5,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                  v8,
                   Text(
                     'Sign in to ClassAI',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface,
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  v24,
 
-                  // Error banner
-                  if (authData.errorMessage != null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.errorContainer,
-                        borderRadius: BorderRadius.circular(8),
+                  // ── Form card ──────────────────────────────────────
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerLowest,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: cs.outlineVariant.withValues(alpha: 0.45),
                       ),
-                      child: Row(
+                      boxShadow: [
+                        BoxShadow(
+                          color: cs.onSurface.withValues(alpha: 0.05),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Icon(
-                            Icons.error_outline,
-                            color: theme.colorScheme.onErrorContainer,
-                            size: 20,
+                          // ── Error banner ─────────────────────────────
+                          if (authData.errorMessage != null) ...[
+                            _ErrorBanner(
+                              message: authData.errorMessage!,
+                              cs: cs,
+                              onDismiss: () =>
+                                  ref.read(authProvider.notifier).clearError(),
+                            ),
+                            v16,
+                          ],
+
+                          // ── Account deactivated notice ───────────────
+                          if (authData.state ==
+                              AuthState.accountDeactivated) ...[
+                            _DeactivatedNotice(cs: cs),
+                            v16,
+                          ],
+
+                          // ── Email field ─────────────────────────────
+                          TextFormField(
+                            controller: _emailController,
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                            decoration: const InputDecoration(
+                              labelText: 'Email',
+                              prefixIcon: Icon(Icons.email_outlined),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.trim().isEmpty) {
+                                return 'Please enter your email';
+                              }
+                              if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
+                                  .hasMatch(value.trim())) {
+                                return 'Please enter a valid email';
+                              }
+                              return null;
+                            },
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              authData.errorMessage!,
-                              style: TextStyle(
-                                color: theme.colorScheme.onErrorContainer,
-                                fontSize: 13,
+                          v16,
+
+                          // ── Password field ──────────────────────────
+                          TextFormField(
+                            controller: _passwordController,
+                            obscureText: _obscurePassword,
+                            textInputAction: TextInputAction.done,
+                            onFieldSubmitted: (_) => _handleLogin(),
+                            decoration: InputDecoration(
+                              labelText: 'Password',
+                              prefixIcon: const Icon(Icons.lock_outlined),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscurePassword
+                                      ? Icons.visibility_off_outlined
+                                      : Icons.visibility_outlined,
+                                ),
+                                onPressed: () => setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                ),
                               ),
                             ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter your password';
+                              }
+                              if (value.length < 6) {
+                                return 'Password must be at least 6 characters';
+                              }
+                              return null;
+                            },
                           ),
-                          GestureDetector(
-                            onTap: () =>
-                                ref.read(authProvider.notifier).clearError(),
-                            child: Icon(
-                              Icons.close,
-                              size: 18,
-                              color: theme.colorScheme.onErrorContainer,
+                          v8,
+
+                          // ── Sign In button ──────────────────────────
+                          SizedBox(
+                            height: 56,
+                            child: FilledButton(
+                              onPressed: _isLoggingIn ? null : _handleLogin,
+                              child: _isLoggingIn
+                                  ? SizedBox(
+                                      height: 22,
+                                      width: 22,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.5,
+                                        color: cs.onPrimary,
+                                      ),
+                                    )
+                                  : const Text(
+                                      'Sign In',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
-                  ],
-
-                  // Account deactivated card
-                  if (authData.state == AuthState.accountDeactivated) ...[
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.orange.shade200),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.warning_amber_rounded,
-                              color: Colors.orange),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  'Account Deactivated',
-                                  style: theme.textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.orange.shade800,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Please contact your school administrator to reactivate your account.',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.orange.shade700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-
-                  // Email field
-                  TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      prefixIcon: Icon(Icons.email_outlined),
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Please enter your email';
-                      }
-                      if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value.trim())) {
-                        return 'Please enter a valid email';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Password field
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    textInputAction: TextInputAction.done,
-                    onFieldSubmitted: (_) => _handleLogin(),
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: const Icon(Icons.lock_outlined),
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_off_outlined
-                              : Icons.visibility_outlined,
-                        ),
-                        onPressed: () =>
-                            setState(() => _obscurePassword = !_obscurePassword),
-                      ),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your password';
-                      }
-                      if (value.length < 6) {
-                        return 'Password must be at least 6 characters';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Login button
-                  FilledButton(
-                    onPressed: _isLoggingIn ? null : _handleLogin,
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    child: _isLoggingIn
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text(
-                            'Sign In',
-                            style: TextStyle(fontSize: 16),
-                          ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Forgot password link
-                  TextButton(
-                    onPressed: _isLoggingIn
-                        ? null
-                        : () => _showForgotPasswordFlow(),
-                    child: const Text('Forgot Password?'),
                   ),
 
-                  // Create a School Account link
-                  TextButton(
-                    onPressed: _isLoggingIn
-                        ? null
-                        : () => _showCreateAccountFlow(),
-                    child: const Text('Create a School Account'),
+                  v24,
+
+                  // ── Secondary links ─────────────────────────────
+                  _SecondaryLink(
+                    label: 'Forgot Password?',
+                    onPressed: _isLoggingIn ? null : _showForgotPasswordFlow,
+                    cs: cs,
+                  ),
+                  const SizedBox(height: 8),
+                  _SecondaryLink(
+                    label: 'Resend Verification Email',
+                    onPressed: _isLoggingIn ? null : _resendVerificationEmail,
+                    cs: cs,
+                  ),
+                  const SizedBox(height: 8),
+                  _SecondaryLink(
+                    label: 'Create a School Account',
+                    onPressed: _isLoggingIn ? null : _showCreateAccountFlow,
+                    cs: cs,
                   ),
                 ],
               ),
@@ -348,26 +337,61 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   /// Role-branching forgot password flow.
-  ///
-  /// Shows a dialog asking "Admin or Teacher?" then navigates to the
-  /// appropriate recovery flow.
   Future<void> _showForgotPasswordFlow() async {
     final role = await ForgotPasswordDialog.show(context);
     if (!mounted || role == null) return;
 
     if (role == 'admin') {
-      // Navigate to admin recovery screen (full-screen, not a dialog)
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => const AdminRecoveryScreen(),
         ),
       );
     } else {
-      // Show teacher recovery dialog
       await showDialog(
         context: context,
         builder: (_) => const TeacherRecoveryDialog(),
       );
+    }
+  }
+
+  /// Resend verification email by calling the verify-email edge function.
+  Future<void> _resendVerificationEmail() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your email address first')),
+      );
+      return;
+    }
+
+    setState(() => _isLoggingIn = true);
+
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.functions.invoke('verify-email', body: {
+        'email': email,
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Verification email sent! Please check your inbox.'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send verification email: $e'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoggingIn = false);
+      }
     }
   }
 
@@ -377,6 +401,140 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       MaterialPageRoute(
         builder: (_) => const SignupScreen(),
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stitch-derived helper widgets
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Inline error banner matching Stitch error-token colours.
+class _ErrorBanner extends StatelessWidget {
+  const _ErrorBanner({
+    required this.message,
+    required this.cs,
+    required this.onDismiss,
+  });
+
+  final String message;
+  final ColorScheme cs;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.errorContainer,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.error_outline,
+            color: cs.onErrorContainer,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: SelectableText(
+              message,
+              style: TextStyle(
+                color: cs.onErrorContainer,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                height: 1.4,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onDismiss,
+            child: Icon(
+              Icons.close,
+              size: 18,
+              color: cs.onErrorContainer,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Account-deactivated notice card.
+class _DeactivatedNotice extends StatelessWidget {
+  const _DeactivatedNotice({required this.cs});
+
+  final ColorScheme cs;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.errorContainer.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: cs.error.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: cs.error),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Account Deactivated',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: cs.error,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Please contact your school administrator to reactivate your account.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: cs.onSurface.withValues(alpha: 0.7),
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Low-prominence text link used for secondary actions below the form.
+class _SecondaryLink extends StatelessWidget {
+  const _SecondaryLink({
+    required this.label,
+    this.onPressed,
+    required this.cs,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final ColorScheme cs;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+      ),
+      child: Text(label),
     );
   }
 }

@@ -63,7 +63,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Credits'), findsOneWidget);
-    expect(find.text('🔓 10'), findsOneWidget);
+    // "10" appears in both ActionChip label & dialog; scope to AlertDialog
+    final dialog = find.byType(AlertDialog);
+    expect(dialog, findsOneWidget);
+    expect(
+        find.descendant(of: dialog, matching: find.text('10')), findsOneWidget);
     expect(find.text('Standard'), findsOneWidget);
     expect(find.text('Upgrade'), findsOneWidget);
   });

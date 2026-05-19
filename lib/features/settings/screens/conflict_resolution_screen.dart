@@ -60,8 +60,7 @@ class _ConflictResolutionScreenState
       final db = ref.read(databaseProvider);
 
       // 1. Update the conflict record with the chosen resolution
-      await (db.update(db.conflicts)
-            ..where((t) => t.id.equals(conflict.id)))
+      await (db.update(db.conflicts)..where((t) => t.id.equals(conflict.id)))
           .write(
         ConflictsCompanion(
           resolution: Value(resolution),
@@ -101,8 +100,7 @@ class _ConflictResolutionScreenState
     // Read the current version hash snapshot
     final hashRow = await (db.select(db.versionHashes)
           ..where((t) =>
-              t.table.equals(tableName) &
-              t.recordLocalId.equals(localId))
+              t.table.equals(tableName) & t.recordLocalId.equals(localId))
           ..orderBy([
             (t) => OrderingTerm(expression: t.setAt, mode: OrderingMode.desc),
           ]))
@@ -128,8 +126,7 @@ class _ConflictResolutionScreenState
     final mergedJson = jsonEncode(snapshot);
     await (db.delete(db.versionHashes)
           ..where((t) =>
-              t.table.equals(tableName) &
-              t.recordLocalId.equals(localId)))
+              t.table.equals(tableName) & t.recordLocalId.equals(localId)))
         .go();
     await db.into(db.versionHashes).insert(
           VersionHashesCompanion.insert(
@@ -144,31 +141,42 @@ class _ConflictResolutionScreenState
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Conflict Resolution'),
+        elevation: 0,
       ),
-      body: _buildBody(theme),
+      body: _buildBody(cs),
     );
   }
 
-  Widget _buildBody(ThemeData theme) {
+  Widget _buildBody(ColorScheme cs) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
 
     if (_errorMessage != null) {
-      return SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Center(
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.error_outline, size: 48, color: theme.colorScheme.error),
+              Icon(
+                Icons.error_outline_rounded,
+                size: 56,
+                color: cs.error.withValues(alpha: 0.8),
+              ),
               const SizedBox(height: 16),
-              Text(_errorMessage!, textAlign: TextAlign.center),
+              Text(
+                _errorMessage!,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: cs.error,
+                    ),
+              ),
               const SizedBox(height: 16),
               FilledButton.tonal(
                 onPressed: _loadConflicts,
@@ -181,17 +189,29 @@ class _ConflictResolutionScreenState
     }
 
     if (_conflicts.isEmpty) {
-      return const SingleChildScrollView(
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(height: 48),
-              Icon(Icons.check_circle_outline, size: 64, color: Colors.green),
-              SizedBox(height: 16),
-              Text('No unresolved conflicts'),
-            ],
-          ),
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.10),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.check_circle_outline_rounded,
+                size: 36,
+                color: Colors.green,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No unresolved conflicts',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ],
         ),
       );
     }
@@ -201,11 +221,10 @@ class _ConflictResolutionScreenState
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: _conflicts.length,
-        itemBuilder: (context, index) =>
-            _ConflictCard(
-              conflict: _conflicts[index],
-              onResolve: _resolveConflict,
-            ),
+        itemBuilder: (context, index) => _ConflictCard(
+          conflict: _conflicts[index],
+          onResolve: _resolveConflict,
+        ),
       ),
     );
   }
@@ -232,7 +251,7 @@ class _ConflictCard extends StatelessWidget {
 
   /// Formats a raw value for display — strings are quoted, null shows "—".
   String _formatValue(dynamic value) {
-    if (value == null) return '—';
+    if (value == null) return '\u2014';
     if (value is String) {
       return value.isEmpty ? '(empty)' : value;
     }
@@ -244,7 +263,7 @@ class _ConflictCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final cs = Theme.of(context).colorScheme;
     final fields = List<String>.from(
       jsonDecode(conflict.conflictingFields) as List,
     );
@@ -252,9 +271,9 @@ class _ConflictCard extends StatelessWidget {
     final remoteMap = _decodeValues(conflict.remoteValue);
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 14),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -264,104 +283,145 @@ class _ConflictCard extends StatelessWidget {
                 Chip(
                   label: Text(
                     conflict.recordType,
-                    style: theme.textTheme.labelSmall,
+                    style: Theme.of(context).textTheme.labelSmall,
                   ),
                   visualDensity: VisualDensity.compact,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  'ID: ${conflict.recordLocalId}',
-                  style: theme.textTheme.bodySmall,
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    'ID: ${conflict.recordLocalId}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                        ),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
 
             // Conflicting fields with local vs remote values
             Text(
               'Conflicting fields:',
-              style: theme.textTheme.labelMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             ...fields.map(
               (field) => Padding(
-                padding: const EdgeInsets.only(left: 8, bottom: 8),
+                padding: const EdgeInsets.only(left: 4, bottom: 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Field name header
                     Text(
                       field,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.primary,
-                      ),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: cs.primary,
+                          ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4),
                     // Local value
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SizedBox(
-                          width: 80,
-                          child: Text(
-                            'Local:',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
+                        Container(
+                          width: 56,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: cs.primaryContainer.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Local:',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
                             ),
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
+                              horizontal: 10,
+                              vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: theme.colorScheme.primaryContainer
-                                  .withValues(alpha: 0.3),
-                              borderRadius: BorderRadius.circular(4),
+                              color:
+                                  cs.primaryContainer.withValues(alpha: 0.16),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
                               _formatValue(localMap[field]),
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                fontFamily: 'monospace',
-                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    fontFamily: 'monospace',
+                                  ),
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4),
                     // Remote value
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SizedBox(
-                          width: 80,
-                          child: Text(
-                            'Remote:',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
+                        Container(
+                          width: 56,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: cs.errorContainer.withValues(alpha: 0.25),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Remote:',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
                             ),
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
+                              horizontal: 10,
+                              vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: theme.colorScheme.errorContainer
-                                  .withValues(alpha: 0.3),
-                              borderRadius: BorderRadius.circular(4),
+                              color: cs.errorContainer.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
                               _formatValue(remoteMap[field]),
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                fontFamily: 'monospace',
-                              ),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    fontFamily: 'monospace',
+                                  ),
                             ),
                           ),
                         ),
@@ -371,7 +431,7 @@ class _ConflictCard extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
 
             // Action buttons
             Row(
@@ -379,14 +439,26 @@ class _ConflictCard extends StatelessWidget {
               children: [
                 TextButton(
                   onPressed: () => onResolve(conflict, 'local'),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                  ),
                   child: const Text('Keep Mine'),
                 ),
                 const SizedBox(width: 4),
                 TextButton(
                   onPressed: () => onResolve(conflict, 'remote'),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                  ),
                   child: const Text('Keep Theirs'),
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: 8),
                 FilledButton.tonal(
                   onPressed: () => onResolve(conflict, 'merged'),
                   child: const Text('Merge'),
