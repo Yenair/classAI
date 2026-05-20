@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide AuthState;
+import 'core/constants/app_constants.dart';
 import 'core/database/database.dart';
 import 'core/services/auth_service.dart';
 import 'core/services/deep_link_service.dart';
@@ -17,6 +19,8 @@ import 'features/auth/screens/teacher_recovery_dialog.dart';
 import 'features/settings/providers/theme_provider.dart';
 import 'router/app_router.dart';
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 final databaseProvider = Provider<AppDatabase>((ref) {
   // Default: return a working AppDatabase instance to prevent crashes
   // from premature access. The real override is set in main() once the
@@ -28,9 +32,8 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Supabase.initialize(
-    url: 'https://zbqhxqnkoggckxoyoqox.supabase.co',
-    anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpicWh4cW5rb2dnY2t4b3lvcW94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MzY3ODQsImV4cCI6MjA5NDUxMjc4NH0.RzcpDMMLwux0BFe4H4zSFCgHcIw4JPJSK9fuihI3-Y4',
+    url: AppConstants.supabaseUrl,
+    anonKey: AppConstants.supabaseAnonKey,
   );
 
   // Initialize Sentry for crash/error monitoring.
@@ -55,6 +58,59 @@ class ClassAiApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const DatabaseBootstrapper();
+  }
+}
+
+/// Global keyboard listener that intercepts the Escape key at the root of
+/// the widget tree. On Escape it first tries to pop the current route via
+/// [navigatorKey]; if no route is on top of the navigator (e.g. a modal dialog
+/// or bottom sheet is displayed), it falls back to calling
+/// `Navigator.maybePop(context)` on the listener's own [BuildContext] so the
+/// modal is dismissed.
+class _RootKeyboardListener extends StatefulWidget {
+  const _RootKeyboardListener({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_RootKeyboardListener> createState() => _RootKeyboardListenerState();
+}
+
+class _RootKeyboardListenerState extends State<_RootKeyboardListener> {
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_handleKey);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleKey);
+    super.dispose();
+  }
+
+  bool _handleKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.escape) return false;
+
+    // Try to pop via the global navigator key first.
+    final navContext = navigatorKey.currentContext;
+    if (navContext != null && Navigator.canPop(navContext)) {
+      Navigator.of(navContext).maybePop();
+      return true;
+    }
+
+    // If the navigator cannot pop, attempt to close any open modal
+    // (dialog, bottom sheet, etc.) using the listener's own context.
+    if (mounted && Navigator.canPop(context)) {
+      Navigator.of(context).maybePop();
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.child;
   }
 }
 
@@ -174,7 +230,9 @@ class _DatabaseBootstrapperState extends State<DatabaseBootstrapper> {
         );
         return UncontrolledProviderScope(
           container: _overrideContainer!,
-          child: const ClassAiRouterApp(),
+          child: const _RootKeyboardListener(
+            child: ClassAiRouterApp(),
+          ),
         );
       },
     );
@@ -334,6 +392,7 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
         darkTheme: AppTheme.dark(),
+        navigatorKey: navigatorKey,
         home: const LoginScreen(),
       );
     }

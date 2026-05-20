@@ -2,7 +2,8 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'package:classai/core/constants/app_constants.dart';
 
 class IdempotencyInterceptor extends Interceptor {}
 
@@ -18,15 +19,19 @@ const allowedFingerprints = <String>[];
 
 /// Creates an API client for Supabase Edge Function calls.
 ///
-/// Reads the Supabase URL and anon key from [Supabase.instance.client] so that
-/// [baseUrl] points to the Supabase REST/Edge Functions endpoint and every
-/// request carries the `Authorization: Bearer <anon-key>` header.
-Dio createApiClient({required String baseUrl, required List<String> certPins}) {
-  final supabase = Supabase.instance.client;
-  final anonKey = supabase.auth.currentSession?.accessToken ?? '';
+/// Uses the Supabase URL and anon key from [AppConstants] so that
+/// [baseUrl] defaults to the Supabase REST/Edge Functions endpoint and every
+/// request carries the `apikey` and `Authorization: Bearer <anon-key>` headers.
+Dio createApiClient({
+  String? baseUrl,
+  List<String>? certPins,
+}) {
+  final effectiveBaseUrl =
+      baseUrl ?? '${AppConstants.supabaseUrl}/functions/v1';
+  final anonKey = AppConstants.supabaseAnonKey;
 
   final dio = Dio(BaseOptions(
-    baseUrl: baseUrl,
+    baseUrl: effectiveBaseUrl,
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 30),
     headers: {

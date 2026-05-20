@@ -5,6 +5,16 @@ import 'package:uuid/uuid.dart';
 class AppConstants {
   static const String appName = 'ClassAI';
   static const String deepLinkScheme = 'classai';
+
+  // ── Supabase Configuration ──────────────────────────────────────────
+  /// Supabase project URL.
+  static const String supabaseUrl =
+      'https://zbqhxqnkoggckxoyoqox.supabase.co';
+
+  /// Supabase anon key (public) for the client.
+  static const String supabaseAnonKey =
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpicWh4cW5rb2dnY2t4b3lvcW94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MzY3ODQsImV4cCI6MjA5NDUxMjc4NH0.RzcpDMMLwux0BFe4H4zSFCgHcIw4JPJSK9fuihI3-Y4';
+
   static const int minTabletWidth = 600; // shortestSide for Editor mode
   static const int maxImageSizeKB = 50;
   static const int syncBatchSize = 10;
