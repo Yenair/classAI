@@ -1,4 +1,5 @@
 // lib/core/services/payment_service.dart
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
@@ -31,12 +32,39 @@ class PaymentService {
   final Dio _dio;
   final _uuid = const Uuid();
 
-  /// Paystack API base URL.
-  static const String _paystackBaseUrl = 'https://api.paystack.co';
+  /// Monnify sandbox base URL.
+  static const String _baseUrl = 'https://sandbox.monnify.com';
+
+  /// Monnify test API keys — replace with actual sandbox keys from the
+  /// Monnify dashboard (Settings ⇨ API Keys).
+  static const String _apiKey = 'MK_TEST_ZRD477KLNN';
+  static const String _secretKey = 'XYBJ75MD6WPXFUB17EAMJNRZGTXD5WCA';
+
+  /// Default contract code — replace with the one from the Monnify sandbox
+  /// dashboard (Settings ⇨ API Keys ⇨ Contract Code).
+  static const String _contractCode = '1855674442';
 
   PaymentService(this._db, this._dio);
 
-  /// Initialize a Paystack payment.
+  // ---------------------------------------------------------------------------
+  // Headers
+  // ---------------------------------------------------------------------------
+
+  Options _getOptions() {
+    final credentials = base64Encode(utf8.encode('$_apiKey:$_secretKey'));
+    return Options(
+      headers: {
+        'Authorization': 'Basic $credentials',
+        'Content-Type': 'application/json',
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Initialize payment
+  // ---------------------------------------------------------------------------
+
+  /// Initialize a Monnify payment.
   /// Returns a [PaymentInitResult] with the checkout URL and transaction reference.
   Future<PaymentInitResult> initializePayment({
     required String email,
@@ -46,21 +74,19 @@ class PaymentService {
   }) async {
     final reference = _uuid.v4();
     final response = await _dio.post(
-      '$_paystackBaseUrl/transaction/initialize',
+      '$_baseUrl/api/v1/merchant/transactions/init-transaction',
       data: {
-        'email': email,
-        'amount': amountNaira * 100, // Paystack uses kobo
-        'reference': reference,
-        'plan': plan,
-        'school_id': schoolId,
-        'currency': 'NGN',
+        'amount': amountNaira,
+        'customerName': 'School Name',
+        'customerEmail': email,
+        'paymentReference': reference,
+        'paymentDescription': 'ClassAI $plan subscription',
+        'currencyCode': 'NGN',
+        'contractCode': _contractCode,
+        'redirectUrl': 'classai://payment/complete',
+        'paymentMethods': ['CARD', 'ACCOUNT_TRANSFER'],
       },
-      options: Options(
-        headers: {
-          'Authorization': 'Bearer sk_REPLACE_WITH_SECRET_KEY',
-          'Content-Type': 'application/json',
-        },
-      ),
+      options: _getOptions(),
     );
 
     // Save pending payment event locally
@@ -73,25 +99,30 @@ class PaymentService {
     );
 
     return PaymentInitResult(
-      checkoutUrl: response.data['data']['authorization_url'],
+      checkoutUrl: response.data['responseBody']['checkoutUrl'],
       reference: reference,
     );
   }
 
-  /// Verify a payment with Paystack.
+  // ---------------------------------------------------------------------------
+  // Verify payment
+  // ---------------------------------------------------------------------------
+
+  /// Verify a payment with Monnify.
   Future<bool> verifyPayment(String reference) async {
     final response = await _dio.get(
-      '$_paystackBaseUrl/transaction/verify/$reference',
-      options: Options(
-        headers: {
-          'Authorization': 'Bearer sk_REPLACE_WITH_SECRET_KEY',
-          'Content-Type': 'application/json',
-        },
-      ),
+      '$_baseUrl/api/v1/merchant/transactions/query',
+      queryParameters: {'transactionReference': reference},
+      options: _getOptions(),
     );
-    final data = response.data['data'] as Map<String, dynamic>?;
-    final status = data?['status'] as String?;
-    if (status == 'success') {
+
+    final requestSuccessful =
+        response.data['requestSuccessful'] as bool? ?? false;
+    final responseBody =
+        response.data['responseBody'] as Map<String, dynamic>?;
+    final status = responseBody?['transactionStatus'] as String?;
+
+    if (requestSuccessful && status == 'SUCCESS') {
       await _db.paymentEventsDao.markConfirmed(reference);
       return true;
     }
@@ -109,7 +140,7 @@ class PaymentService {
 
   /// Confirm a successful payment by calling the confirm-payment Edge Function.
   ///
-  /// The Edge Function verifies the transaction with Paystack server-to-server,
+  /// The Edge Function verifies the transaction with Monnify server-to-server,
   /// generates an activation code, and updates the school's subscription tier
   /// and expiry date in Supabase.
   ///

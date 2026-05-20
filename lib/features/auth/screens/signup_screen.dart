@@ -117,6 +117,17 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           );
 
       if (!mounted) return;
+
+      // After signup completes, check if the auth provider has an error
+      final authState = ref.read(authProvider);
+      if (authState.errorMessage != null) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = authState.errorMessage;
+        });
+        return;
+      }
+
       Navigator.of(context).pop();
     } on AuthException catch (e) {
       if (!mounted) return;
@@ -126,10 +137,19 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Signup failed. $e';
-      });
+      // Check if the provider already has a more specific error message
+      final authState = ref.read(authProvider);
+      if (authState.errorMessage != null) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = authState.errorMessage;
+        });
+      } else {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Signup failed. $e';
+        });
+      }
     }
   }
 
@@ -141,7 +161,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     const v12 = SizedBox(height: 12);
     const v16 = SizedBox(height: 16);
     const v24 = SizedBox(height: 24);
-    const v32 = SizedBox(height: 32);
 
     return Scaffold(
       body: Container(
