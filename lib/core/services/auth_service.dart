@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
@@ -169,24 +170,31 @@ class SupabaseAuthService implements AuthService {
       rethrow;
     } on supabase_pkg.FunctionException catch (e) {
       debugPrint('[DEBUG] login() — FunctionException caught: status=${e.status}, details=${e.details}');
-      // Extract the real error message from the server response
-      final serverError = (e.details is Map && (e.details as Map)['error'] != null)
-          ? (e.details as Map)['error'] as String
-          : null;
-      final errorCode = e.status == 401
-          ? AuthErrorCode.invalidCredentials
-          : AuthErrorCode.networkError;
+
+      // Try to parse the response body and extract the error field
+      final serverError = _extractErrorFromResponse(e.details);
+
+      if (serverError != null) {
+        // Server returned a JSON body with an "error" field
+        throw AuthException(
+          code: AuthErrorCode.invalidCredentials,
+          message: serverError,
+          originalError: e,
+        );
+      }
+
+      // Body could not be parsed or has no "error" field
       throw AuthException(
-        code: errorCode,
-        message: serverError ?? 'Login failed (server error ${e.status}).',
+        code: AuthErrorCode.invalidCredentials,
+        message: 'Server error (status: ${e.status})',
         originalError: e,
       );
     } catch (e) {
       debugPrint('[DEBUG] login() — EXCEPTION CAUGHT: ${e.runtimeType}: $e');
-      // Only network-level errors (SocketException, etc.) reach here
+      // Show the raw exception message instead of a generic "Network error"
       throw AuthException(
         code: AuthErrorCode.networkError,
-        message: 'Network error. Please check your connection and try again.',
+        message: '${e.runtimeType}: $e',
         originalError: e,
       );
     }
@@ -608,6 +616,26 @@ class SupabaseAuthService implements AuthService {
     }
   }
 
+  /// Attempts to extract an `error` field from a [FunctionException.details].
+  ///
+  /// [details] can be a parsed JSON [Map] (when Content-Type was
+  /// `application/json`) or a raw [String] (for other content types).
+  /// Returns the error message string, or `null` if extraction fails.
+  String? _extractErrorFromResponse(dynamic details) {
+    try {
+      if (details is Map) {
+        return details['error'] as String?;
+      }
+      if (details is String) {
+        final body = jsonDecode(details) as Map<String, dynamic>;
+        return body['error'] as String?;
+      }
+    } catch (_) {
+      // Response body is not valid JSON or has unexpected structure
+    }
+    return null;
+  }
+
   /// Parses the edge function response map into an [AuthResult].
   ///
   /// Expected keys:
@@ -628,9 +656,14 @@ class SupabaseAuthService implements AuthService {
       );
     }
 
+    // Fallback: if the school object lacks an 'id', use the teacher's
+    // school_id (which the login edge function always includes).
+    final schoolId = schoolMap['id'] as String? ??
+        teacherMap['school_id'] as String?;
+
     final school = School(
       localId: 0,
-      serverId: schoolMap['id'] as String?,
+      serverId: schoolId,
       schoolName: schoolMap['name'] as String? ??
           schoolMap['school_name'] as String? ??
           '',
@@ -659,7 +692,7 @@ class SupabaseAuthService implements AuthService {
           '',
       role: teacherMap['role'] as String? ?? 'teacher',
       schoolLocalId: 0,
-      schoolServerId: schoolMap['id'] as String?,
+      schoolServerId: schoolId,
       isActive: true,
       forcePasswordReset: false,
       passwordHashVersion: data['password_hash_version'] as int? ?? 1,

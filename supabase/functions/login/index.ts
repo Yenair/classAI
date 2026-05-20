@@ -34,7 +34,7 @@ serve(async (req) => {
     // 1. Fetch teacher
     const { data: teacher, error: teacherError } = await supabase
       .from("teachers")
-      .select("*, schools(school_master_key_wrapped, subscription_tier)")
+      .select("*, schools(id, school_name, school_master_key_wrapped, subscription_tier)")
       .eq("email", email)
       .maybeSingle();
 
