@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:classai/main.dart';
 import 'package:classai/core/services/deep_link_service.dart';
 import 'package:classai/features/auth/screens/login_screen.dart';
 import 'package:classai/features/auth/screens/signup_screen.dart';
@@ -42,6 +43,7 @@ import 'package:classai/features/credit/screens/insufficient_credit_screen.dart'
 /// - `classai://activate?code=xxx` → SignupScreen
 /// - `classai://admin-recovery?token=xxx` → AdminRecoveryScreen
 final appRouter = GoRouter(
+  navigatorKey: navigatorKey,
   initialLocation: '/',
   debugLogDiagnostics: true,
   routes: [
@@ -156,24 +158,43 @@ final appRouter = GoRouter(
 /// outside of the GoRouter lifecycle (e.g., cold start, app links stream).
 ///
 /// Returns `true` if the URI was recognised and handled.
+/// Safely wraps [uiNavigation] inside [WidgetsBinding.instance.addPostFrameCallback]
+/// so it never runs during the widget build phase, preventing the
+/// "!_debugLocked" navigator assertion.
+void _runAfterBuildFrame(VoidCallback uiNavigation) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    uiNavigation();
+  });
+}
+
 Future<bool> handleDeepLink(BuildContext context, String uriString) async {
+  debugPrint('[DBG] handleDeepLink called with URI: $uriString');
   final parsed = DeepLinkService.parse(uriString);
   if (parsed == null) return false;
 
   switch (parsed.type) {
     case DeepLinkType.resetPassword:
-      showDialog(
-        context: context,
-        builder: (_) => const TeacherRecoveryDialog(),
-      );
+      debugPrint('[DBG] handleDeepLink -> showDialog (resetPassword)');
+      _runAfterBuildFrame(() {
+        showDialog(
+          context: context,
+          builder: (_) => const TeacherRecoveryDialog(),
+        );
+      });
       return true;
 
     case DeepLinkType.activate:
-      context.push('/signup');
+      debugPrint('[DBG] handleDeepLink -> context.push(/signup)');
+      _runAfterBuildFrame(() {
+        context.push('/signup');
+      });
       return true;
 
     case DeepLinkType.adminRecovery:
-      context.push('/admin-recovery');
+      debugPrint('[DBG] handleDeepLink -> context.push(/admin-recovery)');
+      _runAfterBuildFrame(() {
+        context.push('/admin-recovery');
+      });
       return true;
   }
 }

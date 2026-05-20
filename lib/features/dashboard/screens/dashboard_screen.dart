@@ -1,8 +1,8 @@
 import 'dart:io' show Platform;
+import 'dart:ui'; // BackdropFilter
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/core/widgets/sync_indicator.dart';
 import 'package:classai/core/widgets/credit_counter.dart';
@@ -18,27 +18,50 @@ import 'package:classai/features/dashboard/providers/unresolved_conflicts_provid
 /// [EditorLayout] since those platforms have large screens that benefit
 /// from the wider layout. The mobile layout decision (width-based
 /// EditorLayout/ReaderLayout switch) is only used on Android and iOS.
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  /// null = still loading, true = EditorLayout, false = ReaderLayout
+  bool? _isEditorMode;
+
+  @override
+  void initState() {
+    super.initState();
+    // Defer the async platform-mode check to after the first frame so it
+    // never runs during the widget build phase (which could trigger a
+    // navigator transition while the navigator is still locked from a
+    // previous push/pop animation).
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final isEditor = await PlatformHelper.isEditorMode(context);
+      if (mounted) {
+        setState(() => _isEditorMode = isEditor);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     // Platform gate: non-mobile platforms always use the editor layout
     if (!Platform.isAndroid && !Platform.isIOS) {
       return const EditorLayout();
     }
 
-    return FutureBuilder<bool>(
-      future: PlatformHelper.isEditorMode(context),
-      builder: (context, snap) {
-        if (!snap.hasData) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        return snap.data! ? const EditorLayout() : const ReaderLayout();
-      },
-    );
+    // Still loading editor mode — show a simple loading indicator.
+    // This runs synchronously during build and never creates an async
+    // Future in the build method, so it cannot trigger a navigation
+    // call while the navigator is locked.
+    if (_isEditorMode == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return _isEditorMode! ? const EditorLayout() : const ReaderLayout();
   }
 }
 
@@ -58,18 +81,18 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
 
   static const _destinations = <NavigationDestination>[
     NavigationDestination(
-      icon: FaIcon(FontAwesomeIcons.school),
-      selectedIcon: FaIcon(FontAwesomeIcons.school),
+      icon: Icon(Icons.school_rounded),
+      selectedIcon: Icon(Icons.school_rounded),
       label: 'Dashboard',
     ),
     NavigationDestination(
-      icon: FaIcon(FontAwesomeIcons.bookOpen),
-      selectedIcon: FaIcon(FontAwesomeIcons.bookOpen),
+      icon: Icon(Icons.menu_book_rounded),
+      selectedIcon: Icon(Icons.menu_book_rounded),
       label: 'Lessons',
     ),
     NavigationDestination(
-      icon: FaIcon(FontAwesomeIcons.fileLines),
-      selectedIcon: FaIcon(FontAwesomeIcons.fileLines),
+      icon: Icon(Icons.description_rounded),
+      selectedIcon: Icon(Icons.description_rounded),
       label: 'Exams',
     ),
     NavigationDestination(
@@ -78,8 +101,8 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
       label: 'Vault',
     ),
     NavigationDestination(
-      icon: FaIcon(FontAwesomeIcons.gear),
-      selectedIcon: FaIcon(FontAwesomeIcons.gear),
+      icon: Icon(Icons.settings_rounded),
+      selectedIcon: Icon(Icons.settings_rounded),
       label: 'More',
     ),
   ];
@@ -127,38 +150,46 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
             child: Row(
               children: [
                 // ── Navigation Rail ──────────────────────────────
-                Container(
-                  decoration: BoxDecoration(
-                    color: cs.surfaceContainerLow.withValues(alpha: 0.5),
-                    border: const Border(
-                      right: BorderSide(color: Color(0xFFC1C7D2)),
+                ClipRect(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerLow.withAlpha(128),
+                        border: const Border(
+                          right: BorderSide(
+                            color: Color(0xFFC1C7D2),
+                            width: 1,
+                          ),
+                        ),
+                      ),
+                      child: NavigationRail(
+                        selectedIndex: _selectedIndex,
+                        onDestinationSelected: (index) {
+                          setState(() => _selectedIndex = index);
+                          _onNavDestination(context, index);
+                        },
+                        extended: true,
+                        minExtendedWidth: 200,
+                        backgroundColor: Colors.transparent,
+                        indicatorColor: cs.secondaryContainer,
+                        destinations: _destinations
+                            .map((d) => NavigationRailDestination(
+                                  icon: d.icon,
+                                  selectedIcon: d.selectedIcon,
+                                  label: Text(
+                                    d.label,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelLarge
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                  ),
+                                ))
+                            .toList(),
+                      ),
                     ),
-                  ),
-                  child: NavigationRail(
-                    selectedIndex: _selectedIndex,
-                    onDestinationSelected: (index) {
-                      setState(() => _selectedIndex = index);
-                      _onNavDestination(context, index);
-                    },
-                    extended: true,
-                    minExtendedWidth: 200,
-                    backgroundColor: Colors.transparent,
-                    indicatorColor: cs.secondaryContainer,
-                    destinations: _destinations
-                        .map((d) => NavigationRailDestination(
-                              icon: d.icon,
-                              selectedIcon: d.selectedIcon,
-                              label: Text(
-                                d.label,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelLarge
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                              ),
-                            ))
-                        .toList(),
                   ),
                 ),
                 // ── Content ───────────────────────────────────────
@@ -214,7 +245,7 @@ class _EditorContent extends ConsumerWidget {
                 Text(
                   'Welcome to ClassAI',
                   style: theme.textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
                     letterSpacing: -0.3,
                     color: cs.onSurface,
                   ),
@@ -287,42 +318,49 @@ class _QuickActionCard extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: cs.outlineVariant.withValues(alpha: 0.6),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: cs.onSurface.withValues(alpha: 0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: cs.primary.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(14),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLowest.withValues(alpha: 0.85),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.2),
               ),
-              child: Icon(icon, size: 24, color: cs.primary),
+              boxShadow: [
+                BoxShadow(
+                  color: cs.onSurface.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
-            const SizedBox(height: 14),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: cs.onSurface,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: cs.primary.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(14),
                   ),
+                  child: Icon(icon, size: 24, color: cs.primary),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: cs.onSurface,
+                      ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -345,23 +383,23 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
 
   static const _destinations = <BottomNavigationBarItem>[
     BottomNavigationBarItem(
-      icon: FaIcon(FontAwesomeIcons.school),
-      activeIcon: FaIcon(FontAwesomeIcons.school),
+      icon: Icon(Icons.school_rounded),
+      activeIcon: Icon(Icons.school_rounded),
       label: 'Home',
     ),
     BottomNavigationBarItem(
-      icon: FaIcon(FontAwesomeIcons.bookOpen),
-      activeIcon: FaIcon(FontAwesomeIcons.bookOpen),
+      icon: Icon(Icons.menu_book_rounded),
+      activeIcon: Icon(Icons.menu_book_rounded),
       label: 'Lessons',
     ),
     BottomNavigationBarItem(
-      icon: FaIcon(FontAwesomeIcons.fileLines),
-      activeIcon: FaIcon(FontAwesomeIcons.fileLines),
+      icon: Icon(Icons.description_rounded),
+      activeIcon: Icon(Icons.description_rounded),
       label: 'Exams',
     ),
     BottomNavigationBarItem(
-      icon: FaIcon(FontAwesomeIcons.gear),
-      activeIcon: FaIcon(FontAwesomeIcons.gear),
+      icon: Icon(Icons.settings_rounded),
+      activeIcon: Icon(Icons.settings_rounded),
       label: 'More',
     ),
   ];
