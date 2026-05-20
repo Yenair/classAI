@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
+import 'package:classai/core/constants/app_constants.dart';
 import 'package:classai/core/database/database.dart';
 
 /// Result of a login, activation, signup or password recovery operation.
@@ -123,7 +125,8 @@ abstract class AuthService {
 /// Uses [Supabase.instance.client] for authentication and calls Supabase Edge
 /// Functions for activation, admin recovery, and teacher recovery flows.
 class SupabaseAuthService implements AuthService {
-  supabase_pkg.GoTrueClient get _auth => supabase_pkg.Supabase.instance.client.auth;
+  supabase_pkg.GoTrueClient get _auth =>
+      supabase_pkg.Supabase.instance.client.auth;
 
   @override
   Future<AuthResult> login(
@@ -131,105 +134,59 @@ class SupabaseAuthService implements AuthService {
     String password,
     String deviceId,
   ) async {
-    final response = await _auth.signInWithPassword(
-      email: email,
-      password: password,
-    );
-
-    final user = response.user;
-    if (user == null) {
-      throw AuthException(
-        code: AuthErrorCode.invalidCredentials,
-        message: 'Invalid email or password.',
-      );
-    }
-
-    // Fetch teacher profile and school from the database
+    // Uses the custom JWT auth Edge Function, not Supabase Auth's
+    // built-in provider. Passwords are validated server-side with bcrypt+pepper.
     final client = supabase_pkg.Supabase.instance.client;
+    final url = '${AppConstants.supabaseUrl}/functions/v1/login';
+    debugPrint('[DEBUG] login() — Full Edge Function URL: $url');
+    debugPrint('[DEBUG] login() — Request body: email=$email, device_id=$deviceId');
     try {
-      final teacherData = await client
-          .from('teachers')
-          .select('*, schools(*)')
-          .eq('id', user.id)
-          .single();
-
-      final schoolData = teacherData['schools'] as Map<String, dynamic>;
-
-      final school = School(
-        localId: 0,
-        serverId: schoolData['id'] as String?,
-        schoolName: schoolData['school_name'] as String,
-        shortCode: schoolData['short_code'] as String? ?? '',
-        logoUrl: schoolData['logo_url'] as String?,
-        subscriptionTier:
-            schoolData['subscription_tier'] as String? ?? 'free',
-        activeCurriculum:
-            schoolData['active_curriculum'] as String? ?? 'nerdc',
-        activeCurriculumVersion:
-            schoolData['active_curriculum_version'] as String?,
-        totalSeats: schoolData['total_seats'] as int? ?? 5,
-        schoolMasterKeyWrapped:
-            schoolData['school_master_key_wrapped'] as String?,
-        adminRecoveryEmail: schoolData['admin_recovery_email'] as String?,
-        adminRecoveryEmailVerified:
-            schoolData['admin_recovery_email_verified'] as bool? ?? false,
-        createdAt: DateTime.parse(schoolData['created_at'] as String),
-        updatedAt: DateTime.parse(schoolData['updated_at'] as String),
-        updateCounter: schoolData['update_counter'] as int? ?? 0,
-        isDeleted: schoolData['is_deleted'] as bool? ?? false,
-        lastModifiedBy: schoolData['last_modified_by'] as String?,
+      final response = await client.functions.invoke(
+        'login',
+        body: {
+          'email': email,
+          'password': password,
+          'device_id': deviceId,
+        },
       );
 
-      final teacher = Teacher(
-        localId: 0,
-        serverId: teacherData['id'] as String?,
-        email: teacherData['email'] as String,
-        teacherName: teacherData['teacher_name'] as String,
-        role: teacherData['role'] as String? ?? 'teacher',
-        schoolLocalId: 0,
-        schoolServerId: schoolData['id'] as String?,
-        isActive: teacherData['is_active'] as bool? ?? true,
-        forcePasswordReset:
-            teacherData['force_password_reset'] as bool? ?? false,
-        passwordHashVersion:
-            teacherData['password_hash_version'] as int? ?? 1,
-        schoolKeyWrapped: teacherData['school_key_wrapped'] as String?,
-        lastCreditRefillDate: teacherData['last_credit_refill_date'] != null
-            ? DateTime.parse(
-                teacherData['last_credit_refill_date'] as String)
-            : null,
-        createdAt: DateTime.parse(teacherData['created_at'] as String),
-        updatedAt: DateTime.parse(teacherData['updated_at'] as String),
-        updateCounter: teacherData['update_counter'] as int? ?? 0,
-        isDeleted: teacherData['is_deleted'] as bool? ?? false,
-        salt: teacherData['salt'] as String?,
-        lastModifiedBy: teacherData['last_modified_by'] as String?,
-      );
+      // Debug: print response status and data
+      debugPrint('[DEBUG] login() — Response status: ${response.status}');
+      debugPrint('[DEBUG] login() — Response data: ${response.data}');
 
-      final forcePwdReset =
-          teacherData['force_password_reset'] as bool? ?? false;
+      final data = response.data as Map<String, dynamic>?;
+      if (data == null || data['error'] != null) {
+        debugPrint('[DEBUG] login() — Error in response data: ${data?['error']}');
+        throw AuthException(
+          code: AuthErrorCode.networkError,
+          message: (data?['error'] as String?) ??
+              'Login failed. Please check your credentials.',
+        );
+      }
 
-      return AuthResult(
-        teacher: teacher,
-        school: school,
-        wrappedSchoolKey:
-            schoolData['school_master_key_wrapped'] as String?,
-        passwordHashVersion:
-            teacherData['password_hash_version'] as int? ?? 1,
-        offlineCredits: 3, // placeholder
-        lastCreditRefillServerTime:
-            teacherData['last_credit_refill_date'] != null
-                ? DateTime.parse(
-                    teacherData['last_credit_refill_date'] as String)
-                : DateTime.now(),
-        forcePasswordReset: forcePwdReset,
-      );
+      return _parseAuthResult(data);
     } on AuthException {
       rethrow;
+    } on supabase_pkg.FunctionException catch (e) {
+      debugPrint('[DEBUG] login() — FunctionException caught: status=${e.status}, details=${e.details}');
+      // Extract the real error message from the server response
+      final serverError = (e.details is Map && (e.details as Map)['error'] != null)
+          ? (e.details as Map)['error'] as String
+          : null;
+      final errorCode = e.status == 401
+          ? AuthErrorCode.invalidCredentials
+          : AuthErrorCode.networkError;
+      throw AuthException(
+        code: errorCode,
+        message: serverError ?? 'Login failed (server error ${e.status}).',
+        originalError: e,
+      );
     } catch (e) {
+      debugPrint('[DEBUG] login() — EXCEPTION CAUGHT: ${e.runtimeType}: $e');
+      // Only network-level errors (SocketException, etc.) reach here
       throw AuthException(
         code: AuthErrorCode.networkError,
-        message: 'Failed to fetch teacher profile.',
+        message: 'Network error. Please check your connection and try again.',
         originalError: e,
       );
     }
@@ -274,11 +231,21 @@ class SupabaseAuthService implements AuthService {
         );
       }
       return _parseAuthResult(data);
+    } on AuthException {
+      rethrow;
+    } on supabase_pkg.FunctionException catch (e) {
+      final serverError = (e.details is Map && (e.details as Map)['error'] != null)
+          ? (e.details as Map)['error'] as String
+          : null;
+      throw AuthException(
+        code: AuthErrorCode.invalidActivationCode,
+        message: serverError ?? 'Activation failed (server error ${e.status}).',
+        originalError: e,
+      );
     } catch (e) {
-      if (e is AuthException) rethrow;
       throw AuthException(
         code: AuthErrorCode.networkError,
-        message: 'Activation failed. Please try again.',
+        message: 'Network error. Please check your connection and try again.',
         originalError: e,
       );
     }
@@ -311,10 +278,19 @@ class SupabaseAuthService implements AuthService {
       );
     } on AuthException {
       rethrow;
+    } on supabase_pkg.FunctionException catch (e) {
+      final serverError = (e.details is Map && (e.details as Map)['error'] != null)
+          ? (e.details as Map)['error'] as String
+          : null;
+      throw AuthException(
+        code: AuthErrorCode.notFound,
+        message: serverError ?? 'Request failed (server error ${e.status}).',
+        originalError: e,
+      );
     } catch (e) {
       throw AuthException(
         code: AuthErrorCode.networkError,
-        message: 'Network error. Please try again.',
+        message: 'Network error. Please check your connection and try again.',
         originalError: e,
       );
     }
@@ -347,10 +323,19 @@ class SupabaseAuthService implements AuthService {
       return _parseAuthResult(data);
     } on AuthException {
       rethrow;
+    } on supabase_pkg.FunctionException catch (e) {
+      final serverError = (e.details is Map && (e.details as Map)['error'] != null)
+          ? (e.details as Map)['error'] as String
+          : null;
+      throw AuthException(
+        code: AuthErrorCode.invalidOtp,
+        message: serverError ?? 'Verification failed (server error ${e.status}).',
+        originalError: e,
+      );
     } catch (e) {
       throw AuthException(
         code: AuthErrorCode.networkError,
-        message: 'Verification failed. Please try again.',
+        message: 'Network error. Please check your connection and try again.',
         originalError: e,
       );
     }
@@ -387,10 +372,19 @@ class SupabaseAuthService implements AuthService {
       );
     } on AuthException {
       rethrow;
+    } on supabase_pkg.FunctionException catch (e) {
+      final serverError = (e.details is Map && (e.details as Map)['error'] != null)
+          ? (e.details as Map)['error'] as String
+          : null;
+      throw AuthException(
+        code: AuthErrorCode.networkError,
+        message: serverError ?? 'Recovery code generation failed (server error ${e.status}).',
+        originalError: e,
+      );
     } catch (e) {
       throw AuthException(
         code: AuthErrorCode.networkError,
-        message: 'Network error. Please try again.',
+        message: 'Network error. Please check your connection and try again.',
         originalError: e,
       );
     }
@@ -423,10 +417,19 @@ class SupabaseAuthService implements AuthService {
       return _parseAuthResult(data);
     } on AuthException {
       rethrow;
+    } on supabase_pkg.FunctionException catch (e) {
+      final serverError = (e.details is Map && (e.details as Map)['error'] != null)
+          ? (e.details as Map)['error'] as String
+          : null;
+      throw AuthException(
+        code: AuthErrorCode.invalidRecoveryCode,
+        message: serverError ?? 'Password recovery failed (server error ${e.status}).',
+        originalError: e,
+      );
     } catch (e) {
       throw AuthException(
         code: AuthErrorCode.networkError,
-        message: 'Password recovery failed. Please try again.',
+        message: 'Network error. Please check your connection and try again.',
         originalError: e,
       );
     }
@@ -450,6 +453,9 @@ class SupabaseAuthService implements AuthService {
     String? recoveryEmail,
   ) async {
     final client = supabase_pkg.Supabase.instance.client;
+    final url = '${AppConstants.supabaseUrl}/functions/v1/signup';
+    debugPrint('[DEBUG] signup() — Full Edge Function URL: $url');
+    debugPrint('[DEBUG] signup() — Request body: school_name=$schoolName, admin_email=$adminEmail');
     try {
       final response = await client.functions.invoke(
         'signup',
@@ -461,9 +467,13 @@ class SupabaseAuthService implements AuthService {
         },
       );
 
+      debugPrint('[DEBUG] signup() — Response status: ${response.status}');
+      debugPrint('[DEBUG] signup() — Response data: ${response.data}');
+
       final data = response.data as Map<String, dynamic>;
       final errorResponse = data['error'] as String?;
       if (errorResponse != null) {
+        debugPrint('[DEBUG] signup() — Error in response data: $errorResponse');
         throw AuthException(
           code: AuthErrorCode.validationError,
           message: errorResponse,
@@ -472,13 +482,23 @@ class SupabaseAuthService implements AuthService {
       return _parseAuthResult(data);
     } on AuthException {
       rethrow;
+    } on supabase_pkg.FunctionException catch (e) {
+      debugPrint('[DEBUG] signup() — FunctionException caught: status=${e.status}, details=${e.details}');
+      final serverError = (e.details is Map && (e.details as Map)['error'] != null)
+          ? (e.details as Map)['error'] as String
+          : null;
+      throw AuthException(
+        code: AuthErrorCode.validationError,
+        message: serverError ?? 'Signup failed (server error ${e.status}).',
+        originalError: e,
+      );
     } catch (e) {
-      // Capture full error details in Sentry for diagnosis
+      debugPrint('[DEBUG] signup() — EXCEPTION CAUGHT: ${e.runtimeType}: $e');
+      // Only network-level errors reach here
       await Sentry.captureException(e);
-      final detail = e.toString();
       throw AuthException(
         code: AuthErrorCode.networkError,
-        message: 'Signup failed. $detail',
+        message: 'Network error. Please check your connection and try again.',
         originalError: e,
       );
     }
@@ -521,10 +541,19 @@ class SupabaseAuthService implements AuthService {
       }
     } on AuthException {
       rethrow;
+    } on supabase_pkg.FunctionException catch (e) {
+      final serverError = (e.details is Map && (e.details as Map)['error'] != null)
+          ? (e.details as Map)['error'] as String
+          : null;
+      throw AuthException(
+        code: AuthErrorCode.validationError,
+        message: serverError ?? 'Failed to add teacher (server error ${e.status}).',
+        originalError: e,
+      );
     } catch (e) {
       throw AuthException(
         code: AuthErrorCode.networkError,
-        message: 'Failed to add teacher. Please try again.',
+        message: 'Network error. Please check your connection and try again.',
         originalError: e,
       );
     }
@@ -561,10 +590,19 @@ class SupabaseAuthService implements AuthService {
       }
     } on AuthException {
       rethrow;
+    } on supabase_pkg.FunctionException catch (e) {
+      final serverError = (e.details is Map && (e.details as Map)['error'] != null)
+          ? (e.details as Map)['error'] as String
+          : null;
+      throw AuthException(
+        code: AuthErrorCode.validationError,
+        message: serverError ?? 'Failed to change password (server error ${e.status}).',
+        originalError: e,
+      );
     } catch (e) {
       throw AuthException(
         code: AuthErrorCode.networkError,
-        message: 'Failed to change password. Please try again.',
+        message: 'Network error. Please check your connection and try again.',
         originalError: e,
       );
     }
@@ -593,7 +631,9 @@ class SupabaseAuthService implements AuthService {
     final school = School(
       localId: 0,
       serverId: schoolMap['id'] as String?,
-      schoolName: schoolMap['name'] as String? ?? schoolMap['school_name'] as String? ?? '',
+      schoolName: schoolMap['name'] as String? ??
+          schoolMap['school_name'] as String? ??
+          '',
       shortCode: '',
       logoUrl: null,
       subscriptionTier: schoolMap['subscription_tier'] as String? ?? 'free',
@@ -614,7 +654,9 @@ class SupabaseAuthService implements AuthService {
       localId: 0,
       serverId: teacherMap['id'] as String?,
       email: teacherMap['email'] as String? ?? '',
-      teacherName: teacherMap['name'] as String? ?? teacherMap['teacher_name'] as String? ?? '',
+      teacherName: teacherMap['name'] as String? ??
+          teacherMap['teacher_name'] as String? ??
+          '',
       role: teacherMap['role'] as String? ?? 'teacher',
       schoolLocalId: 0,
       schoolServerId: schoolMap['id'] as String?,
