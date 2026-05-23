@@ -229,6 +229,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
         offlineLoginAttempts: 0,
       );
     } on AuthException catch (e) {
+      debugPrint(
+          '[DEBUG] loginOnline() — AUTH EXCEPTION: code=${e.code}, message=${e.message}');
       switch (e.code) {
         case AuthErrorCode.accountDeactivated:
           state = state.copyWith(
@@ -250,7 +252,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
       }
     } catch (e) {
       debugPrint(
-          '[DEBUG] loginOnline() — UNEXPECTED EXCEPTION: ${e.runtimeType}: $e');
+          '[DEBUG] loginOnline() — UNEXPECTED EXCEPTION TYPE: ${e.runtimeType}');
+      debugPrint('[DEBUG] loginOnline() — UNEXPECTED EXCEPTION MESSAGE: $e');
       state = state.copyWith(
         state: AuthState.onlineLoginRequired,
         errorMessage:

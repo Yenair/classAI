@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
@@ -14,6 +16,7 @@ class AuthResult {
   final int offlineCredits;
   final DateTime lastCreditRefillServerTime;
   final bool? forcePasswordReset;
+  final bool emailVerified;
 
   AuthResult({
     required this.teacher,
@@ -23,6 +26,7 @@ class AuthResult {
     required this.offlineCredits,
     required this.lastCreditRefillServerTime,
     this.forcePasswordReset,
+    this.emailVerified = false,
   });
 }
 
@@ -140,7 +144,8 @@ class SupabaseAuthService implements AuthService {
     final client = supabase_pkg.Supabase.instance.client;
     final url = '${AppConstants.supabaseUrl}/functions/v1/login';
     debugPrint('[DEBUG] login() — Full Edge Function URL: $url');
-    debugPrint('[DEBUG] login() — Request body: email=$email, device_id=$deviceId');
+    debugPrint(
+        '[DEBUG] login() — Request body: email=$email, device_id=$deviceId');
     try {
       final response = await client.functions.invoke(
         'login',
@@ -157,7 +162,8 @@ class SupabaseAuthService implements AuthService {
 
       final data = response.data as Map<String, dynamic>?;
       if (data == null || data['error'] != null) {
-        debugPrint('[DEBUG] login() — Error in response data: ${data?['error']}');
+        debugPrint(
+            '[DEBUG] login() — Error in response data: ${data?['error']}');
         throw AuthException(
           code: AuthErrorCode.networkError,
           message: (data?['error'] as String?) ??
@@ -169,7 +175,8 @@ class SupabaseAuthService implements AuthService {
     } on AuthException {
       rethrow;
     } on supabase_pkg.FunctionException catch (e) {
-      debugPrint('[DEBUG] login() — FunctionException caught: status=${e.status}, details=${e.details}');
+      debugPrint(
+          '[DEBUG] login() — FunctionException caught: status=${e.status}, details=${e.details}');
 
       // Try to parse the response body and extract the error field
       final serverError = _extractErrorFromResponse(e.details);
@@ -190,8 +197,18 @@ class SupabaseAuthService implements AuthService {
         originalError: e,
       );
     } catch (e) {
+      debugPrint('[DEBUG] login() — RAW EXCEPTION TYPE: ${e.runtimeType}');
+      debugPrint('[DEBUG] login() — RAW EXCEPTION MESSAGE: $e');
       debugPrint('[DEBUG] login() — EXCEPTION CAUGHT: ${e.runtimeType}: $e');
-      // Show the raw exception message instead of a generic "Network error"
+      // Detect connectivity-related exceptions and return a user-friendly message
+      if (_isConnectivityException(e)) {
+        throw AuthException(
+          code: AuthErrorCode.networkError,
+          message:
+              'No internet connection. Please check your connection and try again.',
+          originalError: e,
+        );
+      }
       throw AuthException(
         code: AuthErrorCode.networkError,
         message: '${e.runtimeType}: $e',
@@ -242,9 +259,10 @@ class SupabaseAuthService implements AuthService {
     } on AuthException {
       rethrow;
     } on supabase_pkg.FunctionException catch (e) {
-      final serverError = (e.details is Map && (e.details as Map)['error'] != null)
-          ? (e.details as Map)['error'] as String
-          : null;
+      final serverError =
+          (e.details is Map && (e.details as Map)['error'] != null)
+              ? (e.details as Map)['error'] as String
+              : null;
       throw AuthException(
         code: AuthErrorCode.invalidActivationCode,
         message: serverError ?? 'Activation failed (server error ${e.status}).',
@@ -287,9 +305,10 @@ class SupabaseAuthService implements AuthService {
     } on AuthException {
       rethrow;
     } on supabase_pkg.FunctionException catch (e) {
-      final serverError = (e.details is Map && (e.details as Map)['error'] != null)
-          ? (e.details as Map)['error'] as String
-          : null;
+      final serverError =
+          (e.details is Map && (e.details as Map)['error'] != null)
+              ? (e.details as Map)['error'] as String
+              : null;
       throw AuthException(
         code: AuthErrorCode.notFound,
         message: serverError ?? 'Request failed (server error ${e.status}).',
@@ -332,12 +351,14 @@ class SupabaseAuthService implements AuthService {
     } on AuthException {
       rethrow;
     } on supabase_pkg.FunctionException catch (e) {
-      final serverError = (e.details is Map && (e.details as Map)['error'] != null)
-          ? (e.details as Map)['error'] as String
-          : null;
+      final serverError =
+          (e.details is Map && (e.details as Map)['error'] != null)
+              ? (e.details as Map)['error'] as String
+              : null;
       throw AuthException(
         code: AuthErrorCode.invalidOtp,
-        message: serverError ?? 'Verification failed (server error ${e.status}).',
+        message:
+            serverError ?? 'Verification failed (server error ${e.status}).',
         originalError: e,
       );
     } catch (e) {
@@ -381,12 +402,14 @@ class SupabaseAuthService implements AuthService {
     } on AuthException {
       rethrow;
     } on supabase_pkg.FunctionException catch (e) {
-      final serverError = (e.details is Map && (e.details as Map)['error'] != null)
-          ? (e.details as Map)['error'] as String
-          : null;
+      final serverError =
+          (e.details is Map && (e.details as Map)['error'] != null)
+              ? (e.details as Map)['error'] as String
+              : null;
       throw AuthException(
         code: AuthErrorCode.networkError,
-        message: serverError ?? 'Recovery code generation failed (server error ${e.status}).',
+        message: serverError ??
+            'Recovery code generation failed (server error ${e.status}).',
         originalError: e,
       );
     } catch (e) {
@@ -426,12 +449,14 @@ class SupabaseAuthService implements AuthService {
     } on AuthException {
       rethrow;
     } on supabase_pkg.FunctionException catch (e) {
-      final serverError = (e.details is Map && (e.details as Map)['error'] != null)
-          ? (e.details as Map)['error'] as String
-          : null;
+      final serverError =
+          (e.details is Map && (e.details as Map)['error'] != null)
+              ? (e.details as Map)['error'] as String
+              : null;
       throw AuthException(
         code: AuthErrorCode.invalidRecoveryCode,
-        message: serverError ?? 'Password recovery failed (server error ${e.status}).',
+        message: serverError ??
+            'Password recovery failed (server error ${e.status}).',
         originalError: e,
       );
     } catch (e) {
@@ -463,7 +488,8 @@ class SupabaseAuthService implements AuthService {
     final client = supabase_pkg.Supabase.instance.client;
     final url = '${AppConstants.supabaseUrl}/functions/v1/signup';
     debugPrint('[DEBUG] signup() — Full Edge Function URL: $url');
-    debugPrint('[DEBUG] signup() — Request body: school_name=$schoolName, admin_email=$adminEmail');
+    debugPrint(
+        '[DEBUG] signup() — Request body: school_name=$schoolName, admin_email=$adminEmail');
     try {
       final response = await client.functions.invoke(
         'signup',
@@ -491,19 +517,32 @@ class SupabaseAuthService implements AuthService {
     } on AuthException {
       rethrow;
     } on supabase_pkg.FunctionException catch (e) {
-      debugPrint('[DEBUG] signup() — FunctionException caught: status=${e.status}, details=${e.details}');
-      final serverError = (e.details is Map && (e.details as Map)['error'] != null)
-          ? (e.details as Map)['error'] as String
-          : null;
+      debugPrint(
+          '[DEBUG] signup() — FunctionException caught: status=${e.status}, details=${e.details}');
+      final serverError =
+          (e.details is Map && (e.details as Map)['error'] != null)
+              ? (e.details as Map)['error'] as String
+              : null;
       throw AuthException(
         code: AuthErrorCode.validationError,
         message: serverError ?? 'Signup failed (server error ${e.status}).',
         originalError: e,
       );
     } catch (e) {
+      debugPrint('[DEBUG] signup() — RAW EXCEPTION TYPE: ${e.runtimeType}');
+      debugPrint('[DEBUG] signup() — RAW EXCEPTION MESSAGE: $e');
       debugPrint('[DEBUG] signup() — EXCEPTION CAUGHT: ${e.runtimeType}: $e');
       // Only network-level errors reach here
       await Sentry.captureException(e);
+      // Detect connectivity-related exceptions and return a user-friendly message
+      if (_isConnectivityException(e)) {
+        throw AuthException(
+          code: AuthErrorCode.networkError,
+          message:
+              'No internet connection. Please check your connection and try again.',
+          originalError: e,
+        );
+      }
       throw AuthException(
         code: AuthErrorCode.networkError,
         message: 'Network error. Please check your connection and try again.',
@@ -550,12 +589,14 @@ class SupabaseAuthService implements AuthService {
     } on AuthException {
       rethrow;
     } on supabase_pkg.FunctionException catch (e) {
-      final serverError = (e.details is Map && (e.details as Map)['error'] != null)
-          ? (e.details as Map)['error'] as String
-          : null;
+      final serverError =
+          (e.details is Map && (e.details as Map)['error'] != null)
+              ? (e.details as Map)['error'] as String
+              : null;
       throw AuthException(
         code: AuthErrorCode.validationError,
-        message: serverError ?? 'Failed to add teacher (server error ${e.status}).',
+        message:
+            serverError ?? 'Failed to add teacher (server error ${e.status}).',
         originalError: e,
       );
     } catch (e) {
@@ -599,12 +640,14 @@ class SupabaseAuthService implements AuthService {
     } on AuthException {
       rethrow;
     } on supabase_pkg.FunctionException catch (e) {
-      final serverError = (e.details is Map && (e.details as Map)['error'] != null)
-          ? (e.details as Map)['error'] as String
-          : null;
+      final serverError =
+          (e.details is Map && (e.details as Map)['error'] != null)
+              ? (e.details as Map)['error'] as String
+              : null;
       throw AuthException(
         code: AuthErrorCode.validationError,
-        message: serverError ?? 'Failed to change password (server error ${e.status}).',
+        message: serverError ??
+            'Failed to change password (server error ${e.status}).',
         originalError: e,
       );
     } catch (e) {
@@ -658,8 +701,8 @@ class SupabaseAuthService implements AuthService {
 
     // Fallback: if the school object lacks an 'id', use the teacher's
     // school_id (which the login edge function always includes).
-    final schoolId = schoolMap['id'] as String? ??
-        teacherMap['school_id'] as String?;
+    final schoolId =
+        schoolMap['id'] as String? ?? teacherMap['school_id'] as String?;
 
     final school = School(
       localId: 0,
@@ -719,7 +762,40 @@ class SupabaseAuthService implements AuthService {
       offlineCredits: data['offline_credits'] as int? ?? 3,
       lastCreditRefillServerTime: serverTime,
       forcePasswordReset: data['force_password_reset'] as bool?,
+      emailVerified: data['email_verified'] as bool? ?? false,
     );
+  }
+
+  /// Returns `true` if [e] is a connectivity-related exception.
+  ///
+  /// Checks for [SocketException], [DioException] with connection error types,
+  /// and generic exceptions whose message contains "Failed host lookup" or
+  /// "Connection refused".
+  bool _isConnectivityException(Object e) {
+    if (e is SocketException) return true;
+    if (e is DioException) {
+      switch (e.type) {
+        case DioExceptionType.connectionTimeout:
+        case DioExceptionType.sendTimeout:
+        case DioExceptionType.receiveTimeout:
+        case DioExceptionType.connectionError:
+        case DioExceptionType.unknown:
+          // unknown may include DNS resolution failures; check message too
+          final msg = e.message?.toLowerCase() ?? '';
+          if (msg.contains('failed host lookup') ||
+              msg.contains('connection refused') ||
+              msg.contains('socketexception') ||
+              msg.contains('network is unreachable')) {
+            return true;
+          }
+          return false;
+        default:
+          return false;
+      }
+    }
+    final msg = e.toString().toLowerCase();
+    return msg.contains('failed host lookup') ||
+        msg.contains('connection refused');
   }
 }
 
