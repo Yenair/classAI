@@ -3,17 +3,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verify } from "https://deno.land/x/djwt@v2.8/mod.ts";
 import nodemailer from "npm:nodemailer";
 
-// Convert a plain string secret into a CryptoKey for HS256 JWT verification.
-function getHmacKey(secret: string): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["verify"],
-  );
-}
-
 serve(async (req) => {
   // ── a) Parse JWT and extract teacher_id, email ─────────────────────────────
   let teacherId: string | null = null;
@@ -28,6 +17,9 @@ serve(async (req) => {
       );
     }
 
+    const token = authHeader.replace("Bearer ", "");
+    console.log("Received token:", token.substring(0, 30) + "...");
+
     const jwtSecret = Deno.env.get("JWT_SECRET");
     if (!jwtSecret) {
       return new Response(
@@ -36,12 +28,20 @@ serve(async (req) => {
       );
     }
 
-    const token = authHeader.replace("Bearer ", "");
-    const cryptoKey = await getHmacKey(jwtSecret);
-    const claims = await verify(token, cryptoKey, "HS256");
+    let payload;
+    try {
+      payload = await verify(token, jwtSecret, "HS256");
+    } catch (error: any) {
+      return new Response(
+        JSON.stringify({ error: "Invalid JWT", detail: error.message }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      );
+    }
 
-    teacherId = (claims as Record<string, unknown>).teacher_id as string;
-    emailFromToken = (claims as Record<string, unknown>).sub as string;
+    console.log("JWT verified for teacher:", (payload as Record<string, unknown>).teacher_id);
+
+    teacherId = (payload as Record<string, unknown>).teacher_id as string;
+    emailFromToken = (payload as Record<string, unknown>).sub as string;
 
     if (!teacherId || !emailFromToken) {
       return new Response(
@@ -49,9 +49,9 @@ serve(async (req) => {
         { status: 401, headers: { "Content-Type": "application/json" } }
       );
     }
-  } catch {
+  } catch (error: any) {
     return new Response(
-      JSON.stringify({ error: "Invalid or expired token." }),
+      JSON.stringify({ error: "Invalid or expired token.", detail: error.message }),
       { status: 401, headers: { "Content-Type": "application/json" } }
     );
   }

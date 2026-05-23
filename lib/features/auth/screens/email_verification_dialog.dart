@@ -32,8 +32,9 @@ class _EmailVerificationDialogState
   @override
   void initState() {
     super.initState();
-    // Auto-send verification email when the dialog appears
+    // Clear any previous error message when the dialog opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(authProvider.notifier).clearError();
       _autoResend();
     });
   }
@@ -85,7 +86,7 @@ class _EmailVerificationDialogState
       _resendCooldown = 30;
     });
 
-    // Start cooldown timer
+    // Start cooldown timer with proper state management
     _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
@@ -112,7 +113,14 @@ class _EmailVerificationDialogState
   Future<void> _cancel() async {
     // Log the user out, which transitions to uninitialized state.
     // The parent listener will detect the state change and pop the dialog.
-    await ref.read(authProvider.notifier).manualLogout();
+    try {
+      await ref.read(authProvider.notifier).manualLogout();
+    } catch (e) {
+      // If logout fails, still try to navigate back
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
   }
 
   @override
@@ -265,33 +273,38 @@ class _EmailVerificationDialogState
               // ── Resend Code button ─────────────────────────────
               SizedBox(
                 height: 44,
-                child: TextButton(
-                  onPressed:
-                      (_isResending || _isVerifying || _resendCooldown > 0)
+                child: ValueListenableBuilder<int>(
+                  valueListenable: ValueNotifier(_resendCooldown),
+                  builder: (context, cooldown, child) {
+                    return TextButton(
+                      onPressed: (_isResending || _isVerifying || cooldown > 0)
                           ? null
                           : _resend,
-                  child: _resendCooldown > 0
-                      ? Text(
-                          'Resend in ${_resendCooldown}s',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: cs.onSurfaceVariant,
-                          ),
-                        )
-                      : _isResending
-                          ? const SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text(
-                              'Resend Code',
+                      child: cooldown > 0
+                          ? Text(
+                              'Resend in ${cooldown}s',
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
+                                color: cs.onSurfaceVariant,
                               ),
-                            ),
+                            )
+                          : _isResending
+                              ? const SizedBox(
+                                  height: 18,
+                                  width: 18,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Text(
+                                  'Resend Code',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                    );
+                  },
                 ),
               ),
               const SizedBox(height: 4),
