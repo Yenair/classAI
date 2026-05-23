@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' show ClientException;
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
 import 'package:classai/core/database/database.dart';
@@ -101,6 +104,7 @@ class AuthStateData {
 /// Notifier implementing the Auth State Machine defined in phase_03_auth.md.
 class AuthNotifier extends Notifier<AuthStateData> {
   static const int maxOfflineAttempts = 3;
+  bool _isResending = false;
 
   @override
   AuthStateData build() {
@@ -309,7 +313,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
   /// Perform a manual logout (clean).
   Future<void> manualLogout() async {
-    await _performLogout(isForced: false);
+    await _performLogout(
+        isForced: false, targetState: AuthState.onlineLoginRequired);
   }
 
   /// Perform a forced logout (triggers emergency save).
@@ -317,7 +322,9 @@ class AuthNotifier extends Notifier<AuthStateData> {
     await _performLogout(isForced: true);
   }
 
-  Future<void> _performLogout({required bool isForced}) async {
+  Future<void> _performLogout(
+      {required bool isForced,
+      AuthState targetState = AuthState.uninitialized}) async {
     if (isForced) {
       state = state.copyWith(state: AuthState.emergencySaving);
 
@@ -344,7 +351,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
     await _securityService.clearAll();
 
-    state = const AuthStateData(state: AuthState.uninitialized);
+    state = AuthStateData(state: targetState);
   }
 
   /// Request OTP for admin password recovery.
@@ -565,6 +572,10 @@ class AuthNotifier extends Notifier<AuthStateData> {
   ///
   /// Remains in [AuthState.emailVerificationRequired].
   Future<void> resendVerificationCode() async {
+    if (_isResending) {
+      return;
+    }
+
     final jwt = _authService.currentJwt;
     final email = state.currentTeacher?.email;
     if (email == null || email.isEmpty) {
@@ -587,6 +598,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
     final Map<String, dynamic> body = {'email': email};
 
+    _isResending = true;
     try {
       final client = supabase_pkg.Supabase.instance.client;
 
@@ -608,17 +620,55 @@ class AuthNotifier extends Notifier<AuthStateData> {
           errorMessage: null,
         );
       } else {
+        debugPrint(
+          '[AuthNotifier] resendVerificationCode response body: ${response.data}',
+        );
         final error = data['error'] as String? ?? 'Failed to resend code.';
-        state = state.copyWith(errorMessage: error, clearError: false);
+        final step = data['step'] as String?;
+        final stack = data['stack'] as String?;
+        final detailedError = step == null ? error : '$error (step: $step)';
+        debugPrint(
+          '[AuthNotifier] resendVerificationCode server error: $detailedError',
+        );
+        if (stack != null && stack.isNotEmpty) {
+          debugPrint('[AuthNotifier] resendVerificationCode stack:\n$stack');
+        }
+        state = state.copyWith(
+          errorMessage: detailedError,
+          clearError: false,
+        );
       }
+    } on TimeoutException {
+      state = state.copyWith(
+        errorMessage:
+            'The verification email is taking too long to send. Please try again in a moment.',
+        clearError: false,
+      );
+    } on ClientException {
+      state = state.copyWith(
+        errorMessage:
+            'Could not reach the verification service. Please check your connection and try again.',
+        clearError: false,
+      );
     } on supabase_pkg.FunctionException catch (e) {
       // Server returned an error response – extract the actual message
       final details = e.details;
+      debugPrint(
+        '[AuthNotifier] resendVerificationCode FunctionException: status=${e.status}, details=$details',
+      );
       String errorMessage;
       if (details is Map<String, dynamic>) {
         errorMessage = details['error'] as String? ??
             details['message'] as String? ??
             'Failed to resend code.';
+        final step = details['step'] as String?;
+        if (step != null && step.isNotEmpty) {
+          errorMessage = '$errorMessage (step: $step)';
+        }
+        final stack = details['stack'] as String?;
+        if (stack != null && stack.isNotEmpty) {
+          debugPrint('[AuthNotifier] resendVerificationCode stack:\n$stack');
+        }
       } else if (details is String) {
         errorMessage = details;
       } else {
@@ -627,6 +677,9 @@ class AuthNotifier extends Notifier<AuthStateData> {
       state = state.copyWith(errorMessage: errorMessage, clearError: false);
     } catch (e) {
       debugPrint('[AuthNotifier] resendVerificationCode error: $e');
+      debugPrint(
+        '[AuthNotifier] resendVerificationCode raw exception type: ${e.runtimeType}',
+      );
       // Check if this is actually a connectivity issue
       final isOnline = await PlatformHelper.isOnline();
       if (!isOnline) {
@@ -642,6 +695,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
           clearError: false,
         );
       }
+    } finally {
+      _isResending = false;
     }
   }
 

@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart' hide isNull, isNotNull;
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mocktail/mocktail.dart';
@@ -18,6 +19,21 @@ class MockAuthService extends Mock implements AuthService {}
 
 class MockSecurityService extends Mock implements SecurityService {}
 
+/// Sets up a mock for the connectivity_plus method channel so that
+/// [PlatformHelper.isOnline] returns `false` (offline) in tests.
+void _mockConnectivityChannel({bool isOnline = false}) {
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+    const MethodChannel('dev.fluttercommunity.plus/connectivity'),
+    (MethodCall methodCall) async {
+      if (methodCall.method == 'check') {
+        return isOnline ? <String>['wifi'] : <String>['none'];
+      }
+      return null;
+    },
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -29,8 +45,7 @@ Future<ProviderContainer> createContainer({
   required SecurityService securityService,
   EmergencyFlushService? emergencyFlushService,
 }) async {
-  final flushService =
-      emergencyFlushService ?? EmergencyFlushService();
+  final flushService = emergencyFlushService ?? EmergencyFlushService();
 
   final container = ProviderContainer(
     overrides: [
@@ -53,6 +68,8 @@ void main() {
   late MockSecurityService mockSecurity;
 
   setUp(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    _mockConnectivityChannel(isOnline: false);
     db = AppDatabase.forTesting();
     await db.initialize();
     mockAuth = MockAuthService();
@@ -77,7 +94,8 @@ void main() {
   });
 
   group('checkLocalAuth', () {
-    test('transitions to onlineLoginRequired when stored hash exists (offline login disabled)',
+    test(
+        'transitions to onlineLoginRequired when stored hash exists (offline login disabled)',
         () async {
       when(() => mockSecurity.getPasswordHash())
           .thenAnswer((_) async => 'stored_hash');
@@ -92,12 +110,12 @@ void main() {
 
       final state = container.read(authProvider);
       expect(state.state, equals(AuthState.onlineLoginRequired));
-      expect(state.errorMessage, contains('Offline login unavailable'));
+      // checkLocalAuth now silently transitions without setting an error message
+      expect(state.errorMessage, isNull);
     });
 
     test('transitions to onlineLoginRequired when no stored hash', () async {
-      when(() => mockSecurity.getPasswordHash())
-          .thenAnswer((_) async => null);
+      when(() => mockSecurity.getPasswordHash()).thenAnswer((_) async => null);
 
       final container = await createContainer(
         db: db,
@@ -164,18 +182,17 @@ void main() {
     setUp(() async {
       // Insert a school record so teacher foreign key references work
       await db.into(db.schools).insert(
-        SchoolsCompanion.insert(
-          serverId: Value('00000000-0000-0000-0000-000000000010'),
-          schoolName: 'Test School',
-          shortCode: 'TST',
-          subscriptionTier: Value('free'),
-          activeCurriculum: Value('nerdc'),
-          activeCurriculumVersion: Value('2024'),
-          totalSeats: Value(5),
-          schoolMasterKeyWrapped:
-              Value('bW9ja193cmFwcGVkX21hc3Rlcl9rZXk='),
-        ),
-      );
+            SchoolsCompanion.insert(
+              serverId: Value('00000000-0000-0000-0000-000000000010'),
+              schoolName: 'Test School',
+              shortCode: 'TST',
+              subscriptionTier: Value('free'),
+              activeCurriculum: Value('nerdc'),
+              activeCurriculumVersion: Value('2024'),
+              totalSeats: Value(5),
+              schoolMasterKeyWrapped: Value('bW9ja193cmFwcGVkX21hc3Rlcl9rZXk='),
+            ),
+          );
     });
 
     test('transitions to authenticated on success', () async {
@@ -225,12 +242,11 @@ void main() {
         lastCreditRefillServerTime: now,
       );
 
-      when(() => mockAuth.login(
-          any(), any(), any())).thenAnswer((_) async => authResult);
+      when(() => mockAuth.login(any(), any(), any()))
+          .thenAnswer((_) async => authResult);
       when(() => mockSecurity.storePasswordHash(any()))
           .thenAnswer((_) async => {});
-      when(() => mockSecurity.getPasswordHash())
-          .thenAnswer((_) async => null);
+      when(() => mockSecurity.getPasswordHash()).thenAnswer((_) async => null);
 
       final container = await createContainer(
         db: db,
@@ -259,8 +275,7 @@ void main() {
           message: 'Account deactivated',
         ),
       );
-      when(() => mockSecurity.getPasswordHash())
-          .thenAnswer((_) async => null);
+      when(() => mockSecurity.getPasswordHash()).thenAnswer((_) async => null);
 
       final container = await createContainer(
         db: db,
@@ -287,8 +302,7 @@ void main() {
           message: 'Invalid email or password',
         ),
       );
-      when(() => mockSecurity.getPasswordHash())
-          .thenAnswer((_) async => null);
+      when(() => mockSecurity.getPasswordHash()).thenAnswer((_) async => null);
 
       final container = await createContainer(
         db: db,
@@ -311,8 +325,7 @@ void main() {
         () async {
       when(() => mockAuth.login(any(), any(), any()))
           .thenThrow(Exception('Network error'));
-      when(() => mockSecurity.getPasswordHash())
-          .thenAnswer((_) async => null);
+      when(() => mockSecurity.getPasswordHash()).thenAnswer((_) async => null);
 
       final container = await createContainer(
         db: db,
@@ -333,13 +346,11 @@ void main() {
   });
 
   group('manualLogout', () {
-    test('resets to uninitialized state', () async {
-      when(() => mockSecurity.getPasswordHash())
-          .thenAnswer((_) async => null);
-      when(() => mockAuth.logout())
-          .thenAnswer((_) async => {});
-      when(() => mockSecurity.clearAll())
-          .thenAnswer((_) async => {});
+    test('resets to onlineLoginRequired state (skips local auth check)',
+        () async {
+      when(() => mockSecurity.getPasswordHash()).thenAnswer((_) async => null);
+      when(() => mockAuth.logout()).thenAnswer((_) async => {});
+      when(() => mockSecurity.clearAll()).thenAnswer((_) async => {});
 
       final container = await createContainer(
         db: db,
@@ -350,7 +361,7 @@ void main() {
       await container.read(authProvider.notifier).manualLogout();
 
       final state = container.read(authProvider);
-      expect(state.state, equals(AuthState.uninitialized));
+      expect(state.state, equals(AuthState.onlineLoginRequired));
       expect(state.currentTeacher, isNull);
       expect(state.currentSchool, isNull);
     });
@@ -358,12 +369,9 @@ void main() {
 
   group('forceLogout', () {
     test('triggers emergency save and resets to uninitialized', () async {
-      when(() => mockSecurity.getPasswordHash())
-          .thenAnswer((_) async => null);
-      when(() => mockAuth.logout())
-          .thenAnswer((_) async => {});
-      when(() => mockSecurity.clearAll())
-          .thenAnswer((_) async => {});
+      when(() => mockSecurity.getPasswordHash()).thenAnswer((_) async => null);
+      when(() => mockAuth.logout()).thenAnswer((_) async => {});
+      when(() => mockSecurity.clearAll()).thenAnswer((_) async => {});
 
       bool flushCalled = false;
       final flushService = EmergencyFlushService();
@@ -388,8 +396,7 @@ void main() {
 
   group('clearError', () {
     test('clears error message', () async {
-      when(() => mockSecurity.getPasswordHash())
-          .thenAnswer((_) async => null);
+      when(() => mockSecurity.getPasswordHash()).thenAnswer((_) async => null);
 
       final container = await createContainer(
         db: db,
@@ -421,8 +428,7 @@ void main() {
 
   group('requestAdminOtp', () {
     test('delegates to auth service and returns AdminRecoveryResult', () async {
-      when(() => mockSecurity.getPasswordHash())
-          .thenAnswer((_) async => null);
+      when(() => mockSecurity.getPasswordHash()).thenAnswer((_) async => null);
 
       final expiry = DateTime.now().add(const Duration(minutes: 10));
       when(() => mockAuth.requestAdminOtp('admin@test.com')).thenAnswer(
@@ -435,8 +441,9 @@ void main() {
         securityService: mockSecurity,
       );
 
-      final result =
-          await container.read(authProvider.notifier).requestAdminOtp('admin@test.com');
+      final result = await container
+          .read(authProvider.notifier)
+          .requestAdminOtp('admin@test.com');
 
       expect(result.otpSent, isTrue);
       expect(result.otpExpiry, equals(expiry));
@@ -446,24 +453,22 @@ void main() {
   group('verifyAdminOtp', () {
     setUp(() async {
       await db.into(db.schools).insert(
-        SchoolsCompanion.insert(
-          serverId: Value('00000000-0000-0000-0000-000000000010'),
-          schoolName: 'Test School',
-          shortCode: 'TST',
-          subscriptionTier: Value('free'),
-          activeCurriculum: Value('nerdc'),
-          activeCurriculumVersion: Value('2024'),
-          totalSeats: Value(5),
-          schoolMasterKeyWrapped:
-              Value('bW9ja193cmFwcGVkX21hc3Rlcl9rZXk='),
-        ),
-      );
+            SchoolsCompanion.insert(
+              serverId: Value('00000000-0000-0000-0000-000000000010'),
+              schoolName: 'Test School',
+              shortCode: 'TST',
+              subscriptionTier: Value('free'),
+              activeCurriculum: Value('nerdc'),
+              activeCurriculumVersion: Value('2024'),
+              totalSeats: Value(5),
+              schoolMasterKeyWrapped: Value('bW9ja193cmFwcGVkX21hc3Rlcl9rZXk='),
+            ),
+          );
     });
 
     test('transitions to authenticated on successful OTP verification',
         () async {
-      when(() => mockSecurity.getPasswordHash())
-          .thenAnswer((_) async => null);
+      when(() => mockSecurity.getPasswordHash()).thenAnswer((_) async => null);
 
       final now = DateTime.now();
       final authResult = AuthResult(
@@ -535,8 +540,7 @@ void main() {
     });
 
     test('stays in onlineLoginRequired on invalid OTP', () async {
-      when(() => mockSecurity.getPasswordHash())
-          .thenAnswer((_) async => null);
+      when(() => mockSecurity.getPasswordHash()).thenAnswer((_) async => null);
       when(() => mockAuth.verifyAdminOtp(any(), any(), any())).thenThrow(
         AuthException(
           code: AuthErrorCode.invalidOtp,
@@ -564,8 +568,7 @@ void main() {
 
   group('generateTeacherRecoveryCode', () {
     test('delegates to auth service and returns recovery code', () async {
-      when(() => mockSecurity.getPasswordHash())
-          .thenAnswer((_) async => null);
+      when(() => mockSecurity.getPasswordHash()).thenAnswer((_) async => null);
       when(() => mockAuth.generateTeacherRecoveryCode(any(), any()))
           .thenAnswer((_) async => 'RCV-ABCD1234');
 
@@ -586,23 +589,21 @@ void main() {
   group('recoverTeacherPassword', () {
     setUp(() async {
       await db.into(db.schools).insert(
-        SchoolsCompanion.insert(
-          serverId: Value('00000000-0000-0000-0000-000000000010'),
-          schoolName: 'Test School',
-          shortCode: 'TST',
-          subscriptionTier: Value('free'),
-          activeCurriculum: Value('nerdc'),
-          activeCurriculumVersion: Value('2024'),
-          totalSeats: Value(5),
-          schoolMasterKeyWrapped:
-              Value('bW9ja193cmFwcGVkX21hc3Rlcl9rZXk='),
-        ),
-      );
+            SchoolsCompanion.insert(
+              serverId: Value('00000000-0000-0000-0000-000000000010'),
+              schoolName: 'Test School',
+              shortCode: 'TST',
+              subscriptionTier: Value('free'),
+              activeCurriculum: Value('nerdc'),
+              activeCurriculumVersion: Value('2024'),
+              totalSeats: Value(5),
+              schoolMasterKeyWrapped: Value('bW9ja193cmFwcGVkX21hc3Rlcl9rZXk='),
+            ),
+          );
     });
 
     test('transitions to authenticated on successful recovery', () async {
-      when(() => mockSecurity.getPasswordHash())
-          .thenAnswer((_) async => null);
+      when(() => mockSecurity.getPasswordHash()).thenAnswer((_) async => null);
 
       final now = DateTime.now();
       final authResult = AuthResult(
@@ -674,8 +675,7 @@ void main() {
     });
 
     test('stays in onlineLoginRequired on invalid recovery code', () async {
-      when(() => mockSecurity.getPasswordHash())
-          .thenAnswer((_) async => null);
+      when(() => mockSecurity.getPasswordHash()).thenAnswer((_) async => null);
       when(() => mockAuth.recoverTeacherPassword(any(), any(), any()))
           .thenThrow(
         AuthException(

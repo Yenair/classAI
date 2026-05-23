@@ -1,6 +1,7 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' hide AuthState;
 import 'package:classai/core/constants/app_constants.dart';
 import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/core/services/emergency_flush_service.dart';
@@ -10,6 +11,7 @@ import 'package:classai/features/auth/screens/change_password_screen.dart';
 import 'package:classai/features/auth/screens/forgot_password_dialog.dart';
 import 'package:classai/features/auth/screens/admin_recovery_screen.dart';
 import 'package:classai/features/auth/screens/teacher_recovery_dialog.dart';
+import 'package:classai/features/auth/screens/email_verification_dialog.dart';
 
 /// Material Design login screen with email/password fields,
 /// forgot password links, account activation, error states, and loading.
@@ -38,6 +40,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   /// Must be the same object for both register and unregister calls.
   SaveCallback? _flushCallback;
 
+  /// Keeps the auth listener alive without re-registering it on rebuilds.
+  ProviderSubscription<AuthStateData>? _authStateSubscription;
+
   /// Cached reference to avoid `ref.read()` during disposal (Riverpod guard).
   late final EmergencyFlushService _emergencyFlush =
       ref.read(emergencyFlushServiceProvider);
@@ -55,10 +60,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
     };
     _emergencyFlush.register(_flushCallback!);
+
+    _authStateSubscription = ref.listenManual<AuthStateData>(
+      authProvider,
+      (previous, next) {
+        if (previous?.state != AuthState.emailVerificationRequired &&
+            next.state == AuthState.emailVerificationRequired &&
+            mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (_) => const EmailVerificationDialog(),
+          );
+        }
+
+        if (previous?.state == AuthState.emailVerificationRequired &&
+            (next.state == AuthState.authenticated ||
+                next.state == AuthState.uninitialized ||
+                next.state == AuthState.onlineLoginRequired) &&
+            mounted) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+      },
+    );
   }
 
   @override
   void dispose() {
+    _authStateSubscription?.close();
     if (_flushCallback != null) {
       _emergencyFlush.unregister(_flushCallback!);
     }
@@ -119,6 +148,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authData = ref.watch(authProvider);
+
+    // ── Watch for emailVerificationRequired state ─────────────────
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
@@ -185,124 +216,133 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   v24,
 
                   // ── Form card ──────────────────────────────────────
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-                    decoration: BoxDecoration(
-                      color: cs.surfaceContainerLowest,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(
-                        color: cs.outlineVariant.withValues(alpha: 0.45),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: cs.onSurface.withValues(alpha: 0.05),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // ── Error banner ─────────────────────────────
-                          if (authData.errorMessage != null) ...[
-                            _ErrorBanner(
-                              message: authData.errorMessage!,
-                              cs: cs,
-                              onDismiss: () =>
-                                  ref.read(authProvider.notifier).clearError(),
-                            ),
-                            v16,
-                          ],
-
-                          // ── Account deactivated notice ───────────────
-                          if (authData.state ==
-                              AuthState.accountDeactivated) ...[
-                            _DeactivatedNotice(cs: cs),
-                            v16,
-                          ],
-
-                          // ── Email field ─────────────────────────────
-                          TextFormField(
-                            controller: _emailController,
-                            keyboardType: TextInputType.emailAddress,
-                            textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(
-                              labelText: 'Email',
-                              prefixIcon: Icon(Icons.email_outlined),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
-                                return 'Please enter your email';
-                              }
-                              if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
-                                  .hasMatch(value.trim())) {
-                                return 'Please enter a valid email';
-                              }
-                              return null;
-                            },
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+                        decoration: BoxDecoration(
+                          color:
+                              cs.surfaceContainerLowest.withValues(alpha: 0.85),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: cs.outlineVariant.withValues(alpha: 0.45),
                           ),
-                          v16,
-
-                          // ── Password field ──────────────────────────
-                          TextFormField(
-                            controller: _passwordController,
-                            obscureText: _obscurePassword,
-                            textInputAction: TextInputAction.done,
-                            onFieldSubmitted: (_) => _handleLogin(),
-                            decoration: InputDecoration(
-                              labelText: 'Password',
-                              prefixIcon: const Icon(Icons.lock_outlined),
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _obscurePassword
-                                      ? Icons.visibility_off_outlined
-                                      : Icons.visibility_outlined,
+                          boxShadow: [
+                            BoxShadow(
+                              color: cs.onSurface.withValues(alpha: 0.05),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // ── Error banner ─────────────────────────────
+                              if (authData.errorMessage != null) ...[
+                                _ErrorBanner(
+                                  message: authData.errorMessage!,
+                                  cs: cs,
+                                  onDismiss: () => ref
+                                      .read(authProvider.notifier)
+                                      .clearError(),
                                 ),
-                                onPressed: () => setState(
-                                  () => _obscurePassword = !_obscurePassword,
+                                v16,
+                              ],
+
+                              // ── Account deactivated notice ───────────────
+                              if (authData.state ==
+                                  AuthState.accountDeactivated) ...[
+                                _DeactivatedNotice(cs: cs),
+                                v16,
+                              ],
+
+                              // ── Email field ─────────────────────────────
+                              TextFormField(
+                                controller: _emailController,
+                                keyboardType: TextInputType.emailAddress,
+                                textInputAction: TextInputAction.next,
+                                decoration: const InputDecoration(
+                                  labelText: 'Email',
+                                  prefixIcon: Icon(Icons.email_outlined),
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.trim().isEmpty) {
+                                    return 'Please enter your email';
+                                  }
+                                  if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
+                                      .hasMatch(value.trim())) {
+                                    return 'Please enter a valid email';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              v16,
+
+                              // ── Password field ──────────────────────────
+                              TextFormField(
+                                controller: _passwordController,
+                                obscureText: _obscurePassword,
+                                textInputAction: TextInputAction.done,
+                                onFieldSubmitted: (_) => _handleLogin(),
+                                decoration: InputDecoration(
+                                  labelText: 'Password',
+                                  prefixIcon: const Icon(Icons.lock_outlined),
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _obscurePassword
+                                          ? Icons.visibility_off_outlined
+                                          : Icons.visibility_outlined,
+                                    ),
+                                    onPressed: () => setState(
+                                      () =>
+                                          _obscurePassword = !_obscurePassword,
+                                    ),
+                                  ),
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Please enter your password';
+                                  }
+                                  if (value.length < 6) {
+                                    return 'Password must be at least 6 characters';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              v8,
+
+                              // ── Sign In button ──────────────────────────
+                              SizedBox(
+                                height: 56,
+                                child: FilledButton(
+                                  onPressed: _isLoggingIn ? null : _handleLogin,
+                                  child: _isLoggingIn
+                                      ? SizedBox(
+                                          height: 22,
+                                          width: 22,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.5,
+                                            color: cs.onPrimary,
+                                          ),
+                                        )
+                                      : const Text(
+                                          'Sign In',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
                                 ),
                               ),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your password';
-                              }
-                              if (value.length < 6) {
-                                return 'Password must be at least 6 characters';
-                              }
-                              return null;
-                            },
+                            ],
                           ),
-                          v8,
-
-                          // ── Sign In button ──────────────────────────
-                          SizedBox(
-                            height: 56,
-                            child: FilledButton(
-                              onPressed: _isLoggingIn ? null : _handleLogin,
-                              child: _isLoggingIn
-                                  ? SizedBox(
-                                      height: 22,
-                                      width: 22,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2.5,
-                                        color: cs.onPrimary,
-                                      ),
-                                    )
-                                  : const Text(
-                                      'Sign In',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -313,12 +353,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   _SecondaryLink(
                     label: 'Forgot Password?',
                     onPressed: _isLoggingIn ? null : _showForgotPasswordFlow,
-                    cs: cs,
-                  ),
-                  const SizedBox(height: 8),
-                  _SecondaryLink(
-                    label: 'Resend Verification Email',
-                    onPressed: _isLoggingIn ? null : _resendVerificationEmail,
                     cs: cs,
                   ),
                   const SizedBox(height: 8),
@@ -352,46 +386,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         context: context,
         builder: (_) => const TeacherRecoveryDialog(),
       );
-    }
-  }
-
-  /// Resend verification email by calling the verify-email edge function.
-  Future<void> _resendVerificationEmail() async {
-    final email = _emailController.text.trim();
-    if (email.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your email address first')),
-      );
-      return;
-    }
-
-    setState(() => _isLoggingIn = true);
-
-    try {
-      final supabase = Supabase.instance.client;
-      await supabase.functions.invoke('verify-email', body: {
-        'email': email,
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Verification email sent! Please check your inbox.'),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to send verification email: $e'),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoggingIn = false);
-      }
     }
   }
 
