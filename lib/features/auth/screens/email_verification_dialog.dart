@@ -39,27 +39,8 @@ class _EmailVerificationDialogState
   }
 
   void _autoResend() {
-    // Start the 30-second cooldown and send the email
-    _startCooldown();
+    // Send the email automatically - the _resend method handles cooldown
     _resend();
-  }
-
-  void _startCooldown() {
-    _cooldownTimer?.cancel();
-    setState(() => _resendCooldown = 30);
-    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      setState(() {
-        _resendCooldown--;
-        if (_resendCooldown <= 0) {
-          _cooldownTimer?.cancel();
-          _cooldownTimer = null;
-        }
-      });
-    });
   }
 
   @override
