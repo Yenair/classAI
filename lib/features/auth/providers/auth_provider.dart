@@ -1,11 +1,14 @@
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/core/services/auth_service.dart';
 import 'package:classai/core/services/emergency_flush_service.dart';
 import 'package:classai/core/services/security_service.dart';
+import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
 // ---------------------------------------------------------------------------
@@ -52,6 +55,10 @@ enum AuthState {
   /// Server requires the user to change their password before proceeding.
   /// The UI should show a password-change screen.
   forcePasswordResetRequired,
+
+  /// Login/signup succeeded but the teacher's email is not yet verified.
+  /// The UI should show a non-dismissible email verification popup.
+  emailVerificationRequired,
 }
 
 /// Holds the current [AuthState] plus any associated data from transitions.
@@ -118,21 +125,20 @@ class AuthNotifier extends Notifier<AuthStateData> {
     );
 
     try {
-      final storedHash = await _securityService.getPasswordHash();
-      if (storedHash != null && storedHash.isNotEmpty) {
-        // Offline login is disabled because the server uses bcrypt+pepper
-        // while the client stored a SHA-256 hash that will never match.
-        // Require online login to use the server's bcrypt verification.
-        state = state.copyWith(
-          state: AuthState.onlineLoginRequired,
-          errorMessage:
-              'Offline login unavailable — connect to the internet to sign in.',
-        );
-      } else {
-        state = state.copyWith(state: AuthState.onlineLoginRequired);
-      }
+      // Offline login is disabled: the server uses bcrypt+pepper for
+      // password verification while the client only stored a SHA-256 hash
+      // that will never match. In both cases the user must log in online.
+      // Transition silently — no error banner should appear just because
+      // the app started.
+      state = state.copyWith(
+        state: AuthState.onlineLoginRequired,
+        clearError: true,
+      );
     } catch (e) {
-      state = state.copyWith(state: AuthState.onlineLoginRequired);
+      state = state.copyWith(
+        state: AuthState.onlineLoginRequired,
+        clearError: true,
+      );
     }
   }
 
@@ -141,13 +147,24 @@ class AuthNotifier extends Notifier<AuthStateData> {
   Future<bool> attemptOfflineLogin(String password) async {
     // Offline login is disabled — the server uses bcrypt+pepper for
     // password verification while the client stored a SHA-256 hash that
-    // will never match. Require online login for all authentication.
-    state = state.copyWith(
-      state: AuthState.onlineLoginRequired,
-      errorMessage:
-          'Offline login unavailable — connect to the internet to sign in.',
-      offlineLoginAttempts: 0,
-    );
+    // will never match. Only surface the "connect to the internet" message
+    // when the device is actually offline; otherwise silently return false
+    // so the caller can proceed to online login without a scary banner.
+    final isOnline = await PlatformHelper.isOnline();
+    if (!isOnline) {
+      state = state.copyWith(
+        state: AuthState.onlineLoginRequired,
+        errorMessage:
+            'Offline login unavailable — connect to the internet to sign in.',
+        offlineLoginAttempts: 0,
+      );
+    } else {
+      state = state.copyWith(
+        state: AuthState.onlineLoginRequired,
+        clearError: true,
+        offlineLoginAttempts: 0,
+      );
+    }
     return false;
   }
 
@@ -161,6 +178,17 @@ class AuthNotifier extends Notifier<AuthStateData> {
       state: AuthState.onlineLoginRequired,
       clearError: true,
     );
+
+    // Check connectivity before making the API call
+    final isOnline = await PlatformHelper.isOnline();
+    if (!isOnline) {
+      state = state.copyWith(
+        state: AuthState.onlineLoginRequired,
+        errorMessage:
+            'No internet connection. Please check your connection and try again.',
+      );
+      return;
+    }
 
     try {
       final result = await _authService.login(email, password, deviceId);
@@ -176,6 +204,17 @@ class AuthNotifier extends Notifier<AuthStateData> {
         // Transition to a dedicated state so the UI shows the change-password screen.
         state = state.copyWith(
           state: AuthState.forcePasswordResetRequired,
+          currentTeacher: result.teacher,
+          currentSchool: result.school,
+          offlineLoginAttempts: 0,
+        );
+        return;
+      }
+
+      if (!result.emailVerified) {
+        // Email not yet verified — show the verification popup.
+        state = state.copyWith(
+          state: AuthState.emailVerificationRequired,
           currentTeacher: result.teacher,
           currentSchool: result.school,
           offlineLoginAttempts: 0,
@@ -210,10 +249,12 @@ class AuthNotifier extends Notifier<AuthStateData> {
           );
       }
     } catch (e) {
+      debugPrint(
+          '[DEBUG] loginOnline() — UNEXPECTED EXCEPTION: ${e.runtimeType}: $e');
       state = state.copyWith(
         state: AuthState.onlineLoginRequired,
         errorMessage:
-            'Network error. Please check your connection and try again.',
+            'No internet connection. Please check your connection and try again.',
       );
     }
   }
@@ -407,6 +448,17 @@ class AuthNotifier extends Notifier<AuthStateData> {
       clearError: true,
     );
 
+    // Check connectivity before making the API call
+    final isOnline = await PlatformHelper.isOnline();
+    if (!isOnline) {
+      state = state.copyWith(
+        state: AuthState.onlineLoginRequired,
+        errorMessage:
+            'No internet connection. Please check your connection and try again.',
+      );
+      return;
+    }
+
     try {
       final result = await _authService.signup(
         schoolName,
@@ -417,6 +469,15 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
       await _securityService.storePasswordHash(adminPassword);
       await _saveAuthResultToLocalDb(result);
+
+      if (!result.emailVerified) {
+        state = state.copyWith(
+          state: AuthState.emailVerificationRequired,
+          currentTeacher: result.teacher,
+          currentSchool: result.school,
+        );
+        return;
+      }
 
       state = state.copyWith(
         state: AuthState.authenticated,
@@ -433,8 +494,151 @@ class AuthNotifier extends Notifier<AuthStateData> {
       await Sentry.captureException(e);
       state = state.copyWith(
         state: AuthState.onlineLoginRequired,
-        errorMessage: 'Signup failed: ${e.toString()}',
+        errorMessage:
+            'No internet connection. Please check your connection and try again.',
       );
+    }
+  }
+
+  /// Verify the 6-digit email verification code by calling the verify-code
+  /// edge function with the current JWT.
+  ///
+  /// On success, transitions to [AuthState.authenticated].
+  Future<void> verifyEmailCode(String code) async {
+    final client = supabase_pkg.Supabase.instance.client;
+    final session = client.auth.currentSession;
+    final jwt = session?.accessToken;
+
+    try {
+      if (jwt == null || jwt.isEmpty) {
+        // If there is no Supabase session, obtain a JWT from the stored teacher id.
+        // Fallback: invoke without auth header — the edge function will use
+        // the body-based email if JWT is missing (only works in DEBUG).
+        final response = await client.functions.invoke(
+          'verify-code',
+          body: {'code': code},
+        );
+        final data = response.data as Map<String, dynamic>;
+        if (data['success'] == true) {
+          state = state.copyWith(
+            state: AuthState.authenticated,
+            clearError: true,
+          );
+        } else {
+          final error = data['error'] as String? ?? 'Verification failed.';
+          state = state.copyWith(errorMessage: error, clearError: false);
+        }
+        return;
+      }
+
+      final response = await client.functions.invoke(
+        'verify-code',
+        headers: {'Authorization': 'Bearer $jwt'},
+        body: {'code': code},
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        state = state.copyWith(
+          state: AuthState.authenticated,
+          clearError: true,
+        );
+      } else {
+        final error = data['error'] as String? ?? 'Verification failed.';
+        state = state.copyWith(errorMessage: error, clearError: false);
+      }
+    } on supabase_pkg.FunctionException catch (e) {
+      // Server returned an error response – extract the actual message
+      final details = e.details;
+      String errorMessage;
+      if (details is Map<String, dynamic>) {
+        errorMessage = details['error'] as String? ??
+            details['message'] as String? ??
+            'Verification failed.';
+      } else if (details is String) {
+        errorMessage = details;
+      } else {
+        errorMessage = 'Verification failed.';
+      }
+      state = state.copyWith(errorMessage: errorMessage, clearError: false);
+    } catch (e) {
+      debugPrint('[AuthNotifier] verifyEmailCode error: $e');
+      state = state.copyWith(
+        errorMessage: 'Failed to verify code. Please try again.',
+        clearError: false,
+      );
+    }
+  }
+
+  /// Resend the email verification code by calling the send-verification-code
+  /// edge function.
+  ///
+  /// Remains in [AuthState.emailVerificationRequired].
+  Future<void> resendVerificationCode() async {
+    final client = supabase_pkg.Supabase.instance.client;
+    final email = state.currentTeacher?.email;
+    if (email == null || email.isEmpty) {
+      state = state.copyWith(
+        errorMessage: 'No email associated with this account.',
+        clearError: false,
+      );
+      return;
+    }
+
+    final session = client.auth.currentSession;
+    final jwt = session?.accessToken;
+
+    final Map<String, dynamic> body = {'email': email};
+
+    try {
+      final response = await client.functions.invoke(
+        'send-verification-code',
+        headers: jwt != null && jwt.isNotEmpty
+            ? {'Authorization': 'Bearer $jwt'}
+            : null,
+        body: body,
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        state = state.copyWith(
+          clearError: true,
+          errorMessage: null,
+        );
+      } else {
+        final error = data['error'] as String? ?? 'Failed to resend code.';
+        state = state.copyWith(errorMessage: error, clearError: false);
+      }
+    } on supabase_pkg.FunctionException catch (e) {
+      // Server returned an error response – extract the actual message
+      final details = e.details;
+      String errorMessage;
+      if (details is Map<String, dynamic>) {
+        errorMessage = details['error'] as String? ??
+            details['message'] as String? ??
+            'Failed to resend code.';
+      } else if (details is String) {
+        errorMessage = details;
+      } else {
+        errorMessage = 'Failed to resend code.';
+      }
+      state = state.copyWith(errorMessage: errorMessage, clearError: false);
+    } catch (e) {
+      debugPrint('[AuthNotifier] resendVerificationCode error: $e');
+      // Check if this is actually a connectivity issue
+      final isOnline = await PlatformHelper.isOnline();
+      if (!isOnline) {
+        state = state.copyWith(
+          errorMessage:
+              'No internet connection. Please check your connection and try again.',
+          clearError: false,
+        );
+      } else {
+        state = state.copyWith(
+          errorMessage: 'Failed to resend code. Please try again.',
+          clearError: false,
+        );
+      }
     }
   }
 
@@ -514,57 +718,25 @@ class AuthNotifier extends Notifier<AuthStateData> {
   // -----------------------------------------------------------------------
 
   Future<void> _saveAuthResultToLocalDb(AuthResult result) async {
-    // First, upsert school record to get a valid localId for the foreign key
-    int schoolLocalIdToUse = 0;
-    if (result.school.serverId != null) {
-      final existingSchools = await (_db.select(_db.schools)
-            ..where((s) => s.serverId.equals(result.school.serverId!)))
-          .get();
+    // Guaranteed to return a School row with a valid non-zero localId.
+    // `upsertByServerId` SELECTs by serverId, UPDATEs the existing row, or
+    // INSERTs a new one — in all cases the returned School has the correct
+    // persistent localId that can safely be used as the teacher's foreign key.
+    final schoolRow = await _db.schoolsDao.upsertByServerId(
+      serverId: result.school.serverId!,
+      schoolName: result.school.schoolName,
+      shortCode: result.school.shortCode,
+      subscriptionTier: result.school.subscriptionTier,
+      activeCurriculum: result.school.activeCurriculum,
+      activeCurriculumVersion: result.school.activeCurriculumVersion,
+      totalSeats: result.school.totalSeats,
+      schoolMasterKeyWrapped: result.school.schoolMasterKeyWrapped,
+      adminRecoveryEmail: result.school.adminRecoveryEmail,
+      adminRecoveryEmailVerified: result.school.adminRecoveryEmailVerified,
+    );
+    final schoolLocalIdToUse = schoolRow.localId;
 
-      if (existingSchools.isNotEmpty) {
-        final existing = existingSchools.first;
-        schoolLocalIdToUse = existing.localId;
-        await (_db.update(_db.schools)
-              ..where((s) => s.localId.equals(existing.localId)))
-            .write(
-          SchoolsCompanion(
-            schoolName: Value(result.school.schoolName),
-            shortCode: Value(result.school.shortCode),
-            subscriptionTier: Value(result.school.subscriptionTier),
-            activeCurriculum: Value(result.school.activeCurriculum),
-            activeCurriculumVersion:
-                Value(result.school.activeCurriculumVersion),
-            totalSeats: Value(result.school.totalSeats),
-            schoolMasterKeyWrapped: Value(result.school.schoolMasterKeyWrapped),
-            adminRecoveryEmail: Value(result.school.adminRecoveryEmail),
-            adminRecoveryEmailVerified:
-                Value(result.school.adminRecoveryEmailVerified),
-            updatedAt: Value(DateTime.now()),
-            updateCounter: Value(existing.updateCounter + 1),
-          ),
-        );
-      } else {
-        final schoolId = await (_db.into(_db.schools)).insert(
-          SchoolsCompanion.insert(
-            serverId: Value(result.school.serverId),
-            schoolName: result.school.schoolName,
-            shortCode: result.school.shortCode,
-            subscriptionTier: Value(result.school.subscriptionTier),
-            activeCurriculum: Value(result.school.activeCurriculum),
-            activeCurriculumVersion:
-                Value(result.school.activeCurriculumVersion),
-            totalSeats: Value(result.school.totalSeats),
-            schoolMasterKeyWrapped: Value(result.school.schoolMasterKeyWrapped),
-            adminRecoveryEmail: Value(result.school.adminRecoveryEmail),
-            adminRecoveryEmailVerified:
-                Value(result.school.adminRecoveryEmailVerified),
-          ),
-        );
-        schoolLocalIdToUse = schoolId;
-      }
-    }
-
-    // Upsert teacher record - now we have a valid school localId
+    // Upsert teacher record - schoolLocalIdToUse is guaranteed non-zero
     if (result.teacher.serverId != null) {
       final existingTeachers = await (_db.select(_db.teachers)
             ..where((t) => t.serverId.equals(result.teacher.serverId!)))
@@ -572,6 +744,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
       if (existingTeachers.isNotEmpty) {
         final existing = existingTeachers.first;
+
         await (_db.update(_db.teachers)
               ..where((t) => t.localId.equals(existing.localId)))
             .write(
@@ -580,9 +753,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
             teacherName: Value(result.teacher.teacherName),
             role: Value(result.teacher.role),
             schoolServerId: Value(result.teacher.schoolServerId),
-            schoolLocalId: Value(schoolLocalIdToUse != 0
-                ? schoolLocalIdToUse
-                : result.teacher.schoolLocalId),
+            schoolLocalId: Value(schoolLocalIdToUse),
             isActive: Value(result.teacher.isActive),
             forcePasswordReset: Value(result.teacher.forcePasswordReset),
             passwordHashVersion: Value(result.passwordHashVersion),
@@ -592,7 +763,6 @@ class AuthNotifier extends Notifier<AuthStateData> {
             updateCounter: Value(existing.updateCounter + 1),
           ),
         );
-        return;
       }
     }
 
@@ -603,9 +773,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
         email: result.teacher.email,
         teacherName: result.teacher.teacherName,
         role: Value(result.teacher.role),
-        schoolLocalId: schoolLocalIdToUse != 0
-            ? schoolLocalIdToUse
-            : result.teacher.schoolLocalId,
+        schoolLocalId: schoolLocalIdToUse,
         schoolServerId: Value(result.teacher.schoolServerId),
         isActive: Value(result.teacher.isActive),
         forcePasswordReset: Value(result.teacher.forcePasswordReset),
