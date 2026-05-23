@@ -24,7 +24,9 @@ CREATE INDEX IF NOT EXISTS idx_verification_codes_email
 ALTER TABLE public.verification_codes ENABLE ROW LEVEL SECURITY;
 
 -- 5. Service role policy (full access, used by edge functions)
-CREATE POLICY IF NOT EXISTS service_role_all ON public.verification_codes
+-- Drop the policy if it already exists, then create it
+DROP POLICY IF EXISTS service_role_all ON public.verification_codes;
+CREATE POLICY service_role_all ON public.verification_codes
   FOR ALL
   USING (auth.role() = 'service_role')
   WITH CHECK (auth.role() = 'service_role');

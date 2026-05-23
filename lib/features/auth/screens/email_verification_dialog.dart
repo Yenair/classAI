@@ -26,6 +26,8 @@ class _EmailVerificationDialogState
   final _formKey = GlobalKey<FormState>();
   bool _isVerifying = false;
   bool _isResending = false;
+  bool _hasSentInitial = false;
+  bool _hasEverAttemptedSend = false;
   int _resendCooldown = 0;
   Timer? _cooldownTimer;
 
@@ -34,13 +36,18 @@ class _EmailVerificationDialogState
     super.initState();
     // Clear any previous error message when the dialog opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _hasSentInitial) return;
+      _hasSentInitial = true;
       ref.read(authProvider.notifier).clearError();
       _autoResend();
     });
   }
 
   void _autoResend() {
-    // Send the email automatically - the _resend method handles cooldown
+    // Only send automatically once per dialog session to prevent retry loops
+    // when the server returns errors.
+    if (_hasEverAttemptedSend) return;
+    _hasEverAttemptedSend = true;
     _resend();
   }
 
@@ -78,31 +85,59 @@ class _EmailVerificationDialogState
   }
 
   Future<void> _resend() async {
-    // Don't resend if cooldown is active
-    if (_resendCooldown > 0) return;
+    // Don't resend if cooldown is active or already sending
+    if (_resendCooldown > 0 || _isResending) return;
 
-    setState(() {
-      _isResending = true;
-      _resendCooldown = 30;
-    });
-
-    // Start cooldown timer with proper state management
-    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      setState(() {
-        _resendCooldown--;
-        if (_resendCooldown <= 0) {
-          _cooldownTimer?.cancel();
-          _cooldownTimer = null;
-        }
-      });
-    });
+    setState(() => _isResending = true);
 
     try {
       await ref.read(authProvider.notifier).resendVerificationCode();
+
+      if (!mounted) return;
+
+      final errorMessage = ref.read(authProvider).errorMessage;
+      final resendSucceeded = errorMessage == null || errorMessage.isEmpty;
+
+      if (resendSucceeded) {
+        setState(() {
+          _resendCooldown = 30;
+        });
+
+        _cooldownTimer?.cancel();
+        _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+          if (!mounted) {
+            timer.cancel();
+            return;
+          }
+          setState(() {
+            _resendCooldown--;
+            if (_resendCooldown <= 0) {
+              _cooldownTimer?.cancel();
+              _cooldownTimer = null;
+            }
+          });
+        });
+      } else {
+        // On failure, set a minimum cooldown to prevent error flood
+        setState(() {
+          _resendCooldown = 5; // 5 second minimum before retry
+        });
+
+        _cooldownTimer?.cancel();
+        _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+          if (!mounted) {
+            timer.cancel();
+            return;
+          }
+          setState(() {
+            _resendCooldown--;
+            if (_resendCooldown <= 0) {
+              _cooldownTimer?.cancel();
+              _cooldownTimer = null;
+            }
+          });
+        });
+      }
     } finally {
       if (mounted) {
         setState(() => _isResending = false);
