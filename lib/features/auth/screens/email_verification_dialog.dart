@@ -147,15 +147,9 @@ class _EmailVerificationDialogState
 
   Future<void> _cancel() async {
     // Log the user out, which transitions to uninitialized state.
-    // The parent listener will detect the state change and pop the dialog.
-    try {
-      await ref.read(authProvider.notifier).manualLogout();
-    } catch (e) {
-      // If logout fails, still try to navigate back
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-    }
+    // The parent listener in LoginScreen will detect the state change
+    // and pop the dialog.
+    await ref.read(authProvider.notifier).manualLogout();
   }
 
   @override
@@ -165,7 +159,14 @@ class _EmailVerificationDialogState
     final cs = theme.colorScheme;
 
     return PopScope(
-      canPop: false,
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        // Prevent dismissal via back button or tapping outside
+        if (!didPop) {
+          // User tried to dismiss via back button - ignore it
+          return;
+        }
+      },
       child: AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         backgroundColor: cs.surfaceContainerLowest,
