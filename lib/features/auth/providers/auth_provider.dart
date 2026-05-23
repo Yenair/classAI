@@ -508,32 +508,19 @@ class AuthNotifier extends Notifier<AuthStateData> {
   ///
   /// On success, transitions to [AuthState.authenticated].
   Future<void> verifyEmailCode(String code) async {
-    final client = supabase_pkg.Supabase.instance.client;
-    final session = client.auth.currentSession;
-    final jwt = session?.accessToken;
+    final jwt = _authService.currentJwt;
 
     try {
       if (jwt == null || jwt.isEmpty) {
-        // If there is no Supabase session, obtain a JWT from the stored teacher id.
-        // Fallback: invoke without auth header — the edge function will use
-        // the body-based email if JWT is missing (only works in DEBUG).
-        final response = await client.functions.invoke(
-          'verify-code',
-          body: {'code': code},
+        // No JWT available — show an error
+        state = state.copyWith(
+          errorMessage: 'No active session. Please login again.',
+          clearError: false,
         );
-        final data = response.data as Map<String, dynamic>;
-        if (data['success'] == true) {
-          state = state.copyWith(
-            state: AuthState.authenticated,
-            clearError: true,
-          );
-        } else {
-          final error = data['error'] as String? ?? 'Verification failed.';
-          state = state.copyWith(errorMessage: error, clearError: false);
-        }
         return;
       }
 
+      final client = supabase_pkg.Supabase.instance.client;
       final response = await client.functions.invoke(
         'verify-code',
         headers: {'Authorization': 'Bearer $jwt'},
@@ -578,7 +565,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
   ///
   /// Remains in [AuthState.emailVerificationRequired].
   Future<void> resendVerificationCode() async {
-    final client = supabase_pkg.Supabase.instance.client;
+    final jwt = _authService.currentJwt;
     final email = state.currentTeacher?.email;
     if (email == null || email.isEmpty) {
       state = state.copyWith(
@@ -587,9 +574,6 @@ class AuthNotifier extends Notifier<AuthStateData> {
       );
       return;
     }
-
-    final session = client.auth.currentSession;
-    final jwt = session?.accessToken;
 
     // The send-verification-code edge function requires a valid JWT.
     // If there's no active session, show an error instead of calling the function.
@@ -604,6 +588,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
     final Map<String, dynamic> body = {'email': email};
 
     try {
+      final client = supabase_pkg.Supabase.instance.client;
       final response = await client.functions.invoke(
         'send-verification-code',
         headers: {'Authorization': 'Bearer $jwt'},

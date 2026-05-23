@@ -42,6 +42,9 @@ class AdminRecoveryResult {
 ///
 /// All server-interacting methods work against a real Supabase client.
 abstract class AuthService {
+  /// Returns the currently stored JWT, or null if not authenticated.
+  String? get currentJwt;
+
   /// Authenticate a teacher with email + password + deviceId.
   Future<AuthResult> login(
     String email,
@@ -130,6 +133,14 @@ abstract class AuthService {
 /// Uses [Supabase.instance.client] for authentication and calls Supabase Edge
 /// Functions for activation, admin recovery, and teacher recovery flows.
 class SupabaseAuthService implements AuthService {
+  // Stores the JWT returned by custom auth Edge Functions.
+  // This is needed because the custom JWT has no refresh token and cannot
+  // be used with Supabase's built-in session management.
+  static String? _currentJwt;
+
+  /// Returns the currently stored JWT, or null if not authenticated.
+  String? get currentJwt => _currentJwt;
+
   supabase_pkg.GoTrueClient get _auth =>
       supabase_pkg.Supabase.instance.client.auth;
 
@@ -169,6 +180,12 @@ class SupabaseAuthService implements AuthService {
           message: (data?['error'] as String?) ??
               'Login failed. Please check your credentials.',
         );
+      }
+
+      // Store the JWT returned by the Edge Function for later use
+      final jwt = data['jwt'] as String?;
+      if (jwt != null && jwt.isNotEmpty) {
+        _currentJwt = jwt;
       }
 
       return _parseAuthResult(data);
@@ -255,6 +272,13 @@ class SupabaseAuthService implements AuthService {
           message: errorResponse,
         );
       }
+
+      // Store the JWT returned by the Edge Function for later use
+      final jwt = data['jwt'] as String?;
+      if (jwt != null && jwt.isNotEmpty) {
+        _currentJwt = jwt;
+      }
+
       return _parseAuthResult(data);
     } on AuthException {
       rethrow;
@@ -279,6 +303,7 @@ class SupabaseAuthService implements AuthService {
 
   @override
   Future<void> logout() async {
+    _currentJwt = null;
     await _auth.signOut();
   }
 
@@ -347,6 +372,13 @@ class SupabaseAuthService implements AuthService {
           message: errorResponse,
         );
       }
+
+      // Store the JWT returned by the Edge Function for later use
+      final jwt = data['jwt'] as String?;
+      if (jwt != null && jwt.isNotEmpty) {
+        _currentJwt = jwt;
+      }
+
       return _parseAuthResult(data);
     } on AuthException {
       rethrow;
@@ -513,6 +545,13 @@ class SupabaseAuthService implements AuthService {
           message: errorResponse,
         );
       }
+
+      // Store the JWT returned by the Edge Function for later use
+      final jwt = data['jwt'] as String?;
+      if (jwt != null && jwt.isNotEmpty) {
+        _currentJwt = jwt;
+      }
+
       return _parseAuthResult(data);
     } on AuthException {
       rethrow;
@@ -557,9 +596,7 @@ class SupabaseAuthService implements AuthService {
     String teacherName,
     String role,
   ) async {
-    final client = supabase_pkg.Supabase.instance.client;
-    final session = client.auth.currentSession;
-    final jwt = session?.accessToken;
+    final jwt = _currentJwt;
     if (jwt == null || jwt.isEmpty) {
       throw AuthException(
         code: AuthErrorCode.validationError,
@@ -567,6 +604,7 @@ class SupabaseAuthService implements AuthService {
       );
     }
 
+    final client = supabase_pkg.Supabase.instance.client;
     try {
       final response = await client.functions.invoke(
         'add-teacher',
@@ -610,9 +648,7 @@ class SupabaseAuthService implements AuthService {
 
   @override
   Future<void> changePassword(String newPassword) async {
-    final client = supabase_pkg.Supabase.instance.client;
-    final session = client.auth.currentSession;
-    final jwt = session?.accessToken;
+    final jwt = _currentJwt;
     if (jwt == null || jwt.isEmpty) {
       throw AuthException(
         code: AuthErrorCode.validationError,
@@ -620,6 +656,7 @@ class SupabaseAuthService implements AuthService {
       );
     }
 
+    final client = supabase_pkg.Supabase.instance.client;
     try {
       final response = await client.functions.invoke(
         'change-password',
@@ -657,6 +694,11 @@ class SupabaseAuthService implements AuthService {
         originalError: e,
       );
     }
+  }
+
+  /// Clears the stored JWT. Called on logout.
+  void clearJwt() {
+    _currentJwt = null;
   }
 
   /// Attempts to extract an `error` field from a [FunctionException.details].
