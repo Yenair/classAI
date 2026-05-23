@@ -589,11 +589,17 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
     try {
       final client = supabase_pkg.Supabase.instance.client;
-      final response = await client.functions.invoke(
-        'send-verification-code',
-        headers: {'Authorization': 'Bearer $jwt'},
-        body: body,
-      );
+
+      // Add 15-second timeout to prevent UI hanging
+      final response = await client.functions
+          .invoke(
+            'send-verification-code',
+            headers: {'Authorization': 'Bearer $jwt'},
+            body: body,
+          )
+          .timeout(
+            const Duration(seconds: 15),
+          );
 
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
@@ -631,7 +637,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
         );
       } else {
         state = state.copyWith(
-          errorMessage: 'Failed to resend code. Please try again.',
+          errorMessage:
+              'Verification email could not be sent. Please try again later.',
           clearError: false,
         );
       }
