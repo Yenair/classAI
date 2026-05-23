@@ -591,14 +591,22 @@ class AuthNotifier extends Notifier<AuthStateData> {
     final session = client.auth.currentSession;
     final jwt = session?.accessToken;
 
+    // The send-verification-code edge function requires a valid JWT.
+    // If there's no active session, show an error instead of calling the function.
+    if (jwt == null || jwt.isEmpty) {
+      state = state.copyWith(
+        errorMessage: 'No active session. Please login again.',
+        clearError: false,
+      );
+      return;
+    }
+
     final Map<String, dynamic> body = {'email': email};
 
     try {
       final response = await client.functions.invoke(
         'send-verification-code',
-        headers: jwt != null && jwt.isNotEmpty
-            ? {'Authorization': 'Bearer $jwt'}
-            : null,
+        headers: {'Authorization': 'Bearer $jwt'},
         body: body,
       );
 
