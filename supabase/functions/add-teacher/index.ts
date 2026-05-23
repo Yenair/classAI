@@ -4,7 +4,16 @@ import bcrypt from "npm:bcryptjs";
 import { verify } from "https://deno.land/x/djwt@v2.8/mod.ts";
 import nodemailer from "npm:nodemailer";
 
-const JWT_SECRET = Deno.env.get("JWT_SECRET")!;
+// Convert a plain string secret into a CryptoKey for HS256 JWT verification.
+function getHmacKey(secret: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["verify"],
+  );
+}
 
 serve(async (req) => {
   try {
@@ -17,10 +26,19 @@ serve(async (req) => {
       );
     }
 
+    const jwtSecret = Deno.env.get("JWT_SECRET");
+    if (!jwtSecret) {
+      return new Response(
+        JSON.stringify({ error: "Server misconfiguration: JWT_SECRET not set" }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
     const token = authHeader.replace("Bearer ", "");
     let claims: Record<string, unknown>;
     try {
-      claims = await verify(token, JWT_SECRET, "HS256");
+      const cryptoKey = await getHmacKey(jwtSecret);
+      claims = await verify(token, cryptoKey, "HS256");
     } catch {
       return new Response(
         JSON.stringify({ error: "Invalid or expired JWT" }),

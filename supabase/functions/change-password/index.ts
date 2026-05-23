@@ -3,8 +3,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import bcrypt from "npm:bcryptjs";
 import { verify } from "https://deno.land/x/djwt@v2.8/mod.ts";
 
-const JWT_SECRET = Deno.env.get("JWT_SECRET")!;
-
 /** Convert a plain string secret into a CryptoKey for HS256 JWT verification. */
 function getHmacVerifyKey(secret: string): Promise<CryptoKey> {
   return crypto.subtle.importKey(
@@ -27,10 +25,18 @@ serve(async (req) => {
       );
     }
 
+    const jwtSecret = Deno.env.get("JWT_SECRET");
+    if (!jwtSecret) {
+      return new Response(
+        JSON.stringify({ error: "Server misconfiguration: JWT_SECRET not set" }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
     const token = authHeader.replace("Bearer ", "");
     let claims: Record<string, unknown>;
     try {
-      const cryptoKey = await getHmacVerifyKey(JWT_SECRET);
+      const cryptoKey = await getHmacVerifyKey(jwtSecret);
       claims = await verify(token, cryptoKey);
     } catch {
       return new Response(
