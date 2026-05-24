@@ -25,6 +25,7 @@ import 'tables/scheme_generation_queue.dart';
 import 'tables/pdf_cache.dart';
 import 'tables/teacher_subjects.dart';
 import 'tables/terms.dart';
+import 'tables/audit_logs.dart';
 
 import 'daos/security_config_dao.dart';
 import 'daos/sync_queue_dao.dart';
@@ -41,6 +42,7 @@ import 'daos/teachers_dao.dart';
 import 'daos/lessons_dao.dart';
 import 'daos/exams_dao.dart';
 import 'daos/progress_logs_dao.dart';
+import 'daos/audit_logs_dao.dart';
 
 part 'database.g.dart'; // generated
 
@@ -66,6 +68,7 @@ part 'database.g.dart'; // generated
   PdfCache,
   TeacherSubjects,
   Terms,
+  AuditLogs,
 ])
 class AppDatabase extends _$AppDatabase {
   SecurityConfigDao get securityConfigDao => SecurityConfigDao(this);
@@ -76,19 +79,21 @@ class AppDatabase extends _$AppDatabase {
   TeacherSubjectsDao get teacherSubjectsDao => TeacherSubjectsDao(this);
   TeacherDevicesDao get teacherDevicesDao => TeacherDevicesDao(this);
   SubjectsDao get subjectsDao => SubjectsDao(this);
-  PendingRecoveryRequestsDao get pendingRecoveryRequestsDao => PendingRecoveryRequestsDao(this);
+  PendingRecoveryRequestsDao get pendingRecoveryRequestsDao =>
+      PendingRecoveryRequestsDao(this);
   SchoolsDao get schoolsDao => SchoolsDao(this);
   TeachersDao get teachersDao => TeachersDao(this);
   LessonsDao get lessonsDao => LessonsDao(this);
   ExamsDao get examsDao => ExamsDao(this);
   ProgressLogsDao get progressLogsDao => ProgressLogsDao(this);
   TermsDao get termsDao => TermsDao(this);
+  AuditLogsDao get auditLogsDao => AuditLogsDao(this);
 
   AppDatabase() : super(_openConnection());
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   static QueryExecutor _openConnection() {
     return LazyDatabase(() async {
@@ -389,6 +394,36 @@ class AppDatabase extends _$AppDatabase {
             await customStatement(
               'ALTER TABLE scheme_generation_queue ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP',
             );
+          }
+          if (from < 13) {
+            // Add columns to teachers table for device tracking
+            await customStatement(
+              'ALTER TABLE teachers ADD COLUMN current_device_id TEXT',
+            );
+            // Add columns to security_config table for daily counters
+            await customStatement(
+              'ALTER TABLE security_config ADD COLUMN daily_generations INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              'ALTER TABLE security_config ADD COLUMN daily_generation_date TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE security_config ADD COLUMN daily_pdf_exports INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              'ALTER TABLE security_config ADD COLUMN daily_pdf_export_date TEXT',
+            );
+            // Create audit_logs table
+            await customStatement('''
+              CREATE TABLE IF NOT EXISTS audit_logs (
+                id TEXT NOT NULL PRIMARY KEY,
+                teacher_id TEXT,
+                school_id TEXT,
+                action TEXT NOT NULL,
+                metadata TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+              )
+            ''');
           }
         },
         beforeOpen: (details) async {

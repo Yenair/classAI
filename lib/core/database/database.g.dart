@@ -1081,6 +1081,12 @@ class $TeachersTable extends Teachers with TableInfo<$TeachersTable, Teacher> {
   late final GeneratedColumn<String> lastModifiedBy = GeneratedColumn<String>(
       'last_modified_by', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _currentDeviceIdMeta =
+      const VerificationMeta('currentDeviceId');
+  @override
+  late final GeneratedColumn<String> currentDeviceId = GeneratedColumn<String>(
+      'current_device_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         localId,
@@ -1100,7 +1106,8 @@ class $TeachersTable extends Teachers with TableInfo<$TeachersTable, Teacher> {
         updateCounter,
         isDeleted,
         salt,
-        lastModifiedBy
+        lastModifiedBy,
+        currentDeviceId
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1208,6 +1215,12 @@ class $TeachersTable extends Teachers with TableInfo<$TeachersTable, Teacher> {
           lastModifiedBy.isAcceptableOrUnknown(
               data['last_modified_by']!, _lastModifiedByMeta));
     }
+    if (data.containsKey('current_device_id')) {
+      context.handle(
+          _currentDeviceIdMeta,
+          currentDeviceId.isAcceptableOrUnknown(
+              data['current_device_id']!, _currentDeviceIdMeta));
+    }
     return context;
   }
 
@@ -1254,6 +1267,8 @@ class $TeachersTable extends Teachers with TableInfo<$TeachersTable, Teacher> {
           .read(DriftSqlType.string, data['${effectivePrefix}salt']),
       lastModifiedBy: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}last_modified_by']),
+      currentDeviceId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}current_device_id']),
     );
   }
 
@@ -1282,6 +1297,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
   final bool isDeleted;
   final String? salt;
   final String? lastModifiedBy;
+  final String? currentDeviceId;
   const Teacher(
       {required this.localId,
       this.serverId,
@@ -1300,7 +1316,8 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       required this.updateCounter,
       required this.isDeleted,
       this.salt,
-      this.lastModifiedBy});
+      this.lastModifiedBy,
+      this.currentDeviceId});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1333,6 +1350,9 @@ class Teacher extends DataClass implements Insertable<Teacher> {
     }
     if (!nullToAbsent || lastModifiedBy != null) {
       map['last_modified_by'] = Variable<String>(lastModifiedBy);
+    }
+    if (!nullToAbsent || currentDeviceId != null) {
+      map['current_device_id'] = Variable<String>(currentDeviceId);
     }
     return map;
   }
@@ -1367,6 +1387,9 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       lastModifiedBy: lastModifiedBy == null && nullToAbsent
           ? const Value.absent()
           : Value(lastModifiedBy),
+      currentDeviceId: currentDeviceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(currentDeviceId),
     );
   }
 
@@ -1394,6 +1417,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       salt: serializer.fromJson<String?>(json['salt']),
       lastModifiedBy: serializer.fromJson<String?>(json['lastModifiedBy']),
+      currentDeviceId: serializer.fromJson<String?>(json['currentDeviceId']),
     );
   }
   @override
@@ -1419,6 +1443,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'salt': serializer.toJson<String?>(salt),
       'lastModifiedBy': serializer.toJson<String?>(lastModifiedBy),
+      'currentDeviceId': serializer.toJson<String?>(currentDeviceId),
     };
   }
 
@@ -1440,7 +1465,8 @@ class Teacher extends DataClass implements Insertable<Teacher> {
           int? updateCounter,
           bool? isDeleted,
           Value<String?> salt = const Value.absent(),
-          Value<String?> lastModifiedBy = const Value.absent()}) =>
+          Value<String?> lastModifiedBy = const Value.absent(),
+          Value<String?> currentDeviceId = const Value.absent()}) =>
       Teacher(
         localId: localId ?? this.localId,
         serverId: serverId.present ? serverId.value : this.serverId,
@@ -1466,6 +1492,9 @@ class Teacher extends DataClass implements Insertable<Teacher> {
         salt: salt.present ? salt.value : this.salt,
         lastModifiedBy:
             lastModifiedBy.present ? lastModifiedBy.value : this.lastModifiedBy,
+        currentDeviceId: currentDeviceId.present
+            ? currentDeviceId.value
+            : this.currentDeviceId,
       );
   Teacher copyWithCompanion(TeachersCompanion data) {
     return Teacher(
@@ -1504,6 +1533,9 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       lastModifiedBy: data.lastModifiedBy.present
           ? data.lastModifiedBy.value
           : this.lastModifiedBy,
+      currentDeviceId: data.currentDeviceId.present
+          ? data.currentDeviceId.value
+          : this.currentDeviceId,
     );
   }
 
@@ -1527,7 +1559,8 @@ class Teacher extends DataClass implements Insertable<Teacher> {
           ..write('updateCounter: $updateCounter, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('salt: $salt, ')
-          ..write('lastModifiedBy: $lastModifiedBy')
+          ..write('lastModifiedBy: $lastModifiedBy, ')
+          ..write('currentDeviceId: $currentDeviceId')
           ..write(')'))
         .toString();
   }
@@ -1551,7 +1584,8 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       updateCounter,
       isDeleted,
       salt,
-      lastModifiedBy);
+      lastModifiedBy,
+      currentDeviceId);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1573,7 +1607,8 @@ class Teacher extends DataClass implements Insertable<Teacher> {
           other.updateCounter == this.updateCounter &&
           other.isDeleted == this.isDeleted &&
           other.salt == this.salt &&
-          other.lastModifiedBy == this.lastModifiedBy);
+          other.lastModifiedBy == this.lastModifiedBy &&
+          other.currentDeviceId == this.currentDeviceId);
 }
 
 class TeachersCompanion extends UpdateCompanion<Teacher> {
@@ -1595,6 +1630,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
   final Value<bool> isDeleted;
   final Value<String?> salt;
   final Value<String?> lastModifiedBy;
+  final Value<String?> currentDeviceId;
   const TeachersCompanion({
     this.localId = const Value.absent(),
     this.serverId = const Value.absent(),
@@ -1614,6 +1650,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
     this.isDeleted = const Value.absent(),
     this.salt = const Value.absent(),
     this.lastModifiedBy = const Value.absent(),
+    this.currentDeviceId = const Value.absent(),
   });
   TeachersCompanion.insert({
     this.localId = const Value.absent(),
@@ -1634,6 +1671,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
     this.isDeleted = const Value.absent(),
     this.salt = const Value.absent(),
     this.lastModifiedBy = const Value.absent(),
+    this.currentDeviceId = const Value.absent(),
   })  : email = Value(email),
         teacherName = Value(teacherName),
         schoolLocalId = Value(schoolLocalId);
@@ -1656,6 +1694,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
     Expression<bool>? isDeleted,
     Expression<String>? salt,
     Expression<String>? lastModifiedBy,
+    Expression<String>? currentDeviceId,
   }) {
     return RawValuesInsertable({
       if (localId != null) 'local_id': localId,
@@ -1679,6 +1718,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (salt != null) 'salt': salt,
       if (lastModifiedBy != null) 'last_modified_by': lastModifiedBy,
+      if (currentDeviceId != null) 'current_device_id': currentDeviceId,
     });
   }
 
@@ -1700,7 +1740,8 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
       Value<int>? updateCounter,
       Value<bool>? isDeleted,
       Value<String?>? salt,
-      Value<String?>? lastModifiedBy}) {
+      Value<String?>? lastModifiedBy,
+      Value<String?>? currentDeviceId}) {
     return TeachersCompanion(
       localId: localId ?? this.localId,
       serverId: serverId ?? this.serverId,
@@ -1720,6 +1761,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
       isDeleted: isDeleted ?? this.isDeleted,
       salt: salt ?? this.salt,
       lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,
+      currentDeviceId: currentDeviceId ?? this.currentDeviceId,
     );
   }
 
@@ -1781,6 +1823,9 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
     if (lastModifiedBy.present) {
       map['last_modified_by'] = Variable<String>(lastModifiedBy.value);
     }
+    if (currentDeviceId.present) {
+      map['current_device_id'] = Variable<String>(currentDeviceId.value);
+    }
     return map;
   }
 
@@ -1804,7 +1849,8 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
           ..write('updateCounter: $updateCounter, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('salt: $salt, ')
-          ..write('lastModifiedBy: $lastModifiedBy')
+          ..write('lastModifiedBy: $lastModifiedBy, ')
+          ..write('currentDeviceId: $currentDeviceId')
           ..write(')'))
         .toString();
   }
@@ -5562,6 +5608,34 @@ class $SecurityConfigTable extends SecurityConfig
   late final GeneratedColumn<String> currentDeviceId = GeneratedColumn<String>(
       'current_device_id', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _dailyGenerationsMeta =
+      const VerificationMeta('dailyGenerations');
+  @override
+  late final GeneratedColumn<int> dailyGenerations = GeneratedColumn<int>(
+      'daily_generations', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _dailyGenerationDateMeta =
+      const VerificationMeta('dailyGenerationDate');
+  @override
+  late final GeneratedColumn<String> dailyGenerationDate =
+      GeneratedColumn<String>('daily_generation_date', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _dailyPdfExportsMeta =
+      const VerificationMeta('dailyPdfExports');
+  @override
+  late final GeneratedColumn<int> dailyPdfExports = GeneratedColumn<int>(
+      'daily_pdf_exports', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _dailyPdfExportDateMeta =
+      const VerificationMeta('dailyPdfExportDate');
+  @override
+  late final GeneratedColumn<String> dailyPdfExportDate =
+      GeneratedColumn<String>('daily_pdf_export_date', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _pendingDbReplacementMeta =
       const VerificationMeta('pendingDbReplacement');
   @override
@@ -5605,6 +5679,10 @@ class $SecurityConfigTable extends SecurityConfig
         sessionKeyExpiry,
         syncPendingAfterBiometricTimeout,
         currentDeviceId,
+        dailyGenerations,
+        dailyGenerationDate,
+        dailyPdfExports,
+        dailyPdfExportDate,
         pendingDbReplacement,
         vacuumedDbPath
       ];
@@ -5769,6 +5847,30 @@ class $SecurityConfigTable extends SecurityConfig
     } else if (isInserting) {
       context.missing(_currentDeviceIdMeta);
     }
+    if (data.containsKey('daily_generations')) {
+      context.handle(
+          _dailyGenerationsMeta,
+          dailyGenerations.isAcceptableOrUnknown(
+              data['daily_generations']!, _dailyGenerationsMeta));
+    }
+    if (data.containsKey('daily_generation_date')) {
+      context.handle(
+          _dailyGenerationDateMeta,
+          dailyGenerationDate.isAcceptableOrUnknown(
+              data['daily_generation_date']!, _dailyGenerationDateMeta));
+    }
+    if (data.containsKey('daily_pdf_exports')) {
+      context.handle(
+          _dailyPdfExportsMeta,
+          dailyPdfExports.isAcceptableOrUnknown(
+              data['daily_pdf_exports']!, _dailyPdfExportsMeta));
+    }
+    if (data.containsKey('daily_pdf_export_date')) {
+      context.handle(
+          _dailyPdfExportDateMeta,
+          dailyPdfExportDate.isAcceptableOrUnknown(
+              data['daily_pdf_export_date']!, _dailyPdfExportDateMeta));
+    }
     if (data.containsKey('pending_db_replacement')) {
       context.handle(
           _pendingDbReplacementMeta,
@@ -5849,6 +5951,14 @@ class $SecurityConfigTable extends SecurityConfig
           data['${effectivePrefix}sync_pending_after_biometric_timeout'])!,
       currentDeviceId: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}current_device_id'])!,
+      dailyGenerations: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}daily_generations'])!,
+      dailyGenerationDate: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}daily_generation_date']),
+      dailyPdfExports: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}daily_pdf_exports'])!,
+      dailyPdfExportDate: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}daily_pdf_export_date']),
       pendingDbReplacement: attachedDatabase.typeMapping.read(
           DriftSqlType.bool, data['${effectivePrefix}pending_db_replacement'])!,
       vacuumedDbPath: attachedDatabase.typeMapping.read(
@@ -5889,6 +5999,10 @@ class SecurityConfigData extends DataClass
   final DateTime? sessionKeyExpiry;
   final bool syncPendingAfterBiometricTimeout;
   final String currentDeviceId;
+  final int dailyGenerations;
+  final String? dailyGenerationDate;
+  final int dailyPdfExports;
+  final String? dailyPdfExportDate;
   final bool pendingDbReplacement;
   final String? vacuumedDbPath;
   const SecurityConfigData(
@@ -5917,6 +6031,10 @@ class SecurityConfigData extends DataClass
       this.sessionKeyExpiry,
       required this.syncPendingAfterBiometricTimeout,
       required this.currentDeviceId,
+      required this.dailyGenerations,
+      this.dailyGenerationDate,
+      required this.dailyPdfExports,
+      this.dailyPdfExportDate,
       required this.pendingDbReplacement,
       this.vacuumedDbPath});
   @override
@@ -5977,6 +6095,14 @@ class SecurityConfigData extends DataClass
     map['sync_pending_after_biometric_timeout'] =
         Variable<bool>(syncPendingAfterBiometricTimeout);
     map['current_device_id'] = Variable<String>(currentDeviceId);
+    map['daily_generations'] = Variable<int>(dailyGenerations);
+    if (!nullToAbsent || dailyGenerationDate != null) {
+      map['daily_generation_date'] = Variable<String>(dailyGenerationDate);
+    }
+    map['daily_pdf_exports'] = Variable<int>(dailyPdfExports);
+    if (!nullToAbsent || dailyPdfExportDate != null) {
+      map['daily_pdf_export_date'] = Variable<String>(dailyPdfExportDate);
+    }
     map['pending_db_replacement'] = Variable<bool>(pendingDbReplacement);
     if (!nullToAbsent || vacuumedDbPath != null) {
       map['vacuumed_db_path'] = Variable<String>(vacuumedDbPath);
@@ -6038,6 +6164,14 @@ class SecurityConfigData extends DataClass
           : Value(sessionKeyExpiry),
       syncPendingAfterBiometricTimeout: Value(syncPendingAfterBiometricTimeout),
       currentDeviceId: Value(currentDeviceId),
+      dailyGenerations: Value(dailyGenerations),
+      dailyGenerationDate: dailyGenerationDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dailyGenerationDate),
+      dailyPdfExports: Value(dailyPdfExports),
+      dailyPdfExportDate: dailyPdfExportDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dailyPdfExportDate),
       pendingDbReplacement: Value(pendingDbReplacement),
       vacuumedDbPath: vacuumedDbPath == null && nullToAbsent
           ? const Value.absent()
@@ -6092,6 +6226,12 @@ class SecurityConfigData extends DataClass
       syncPendingAfterBiometricTimeout:
           serializer.fromJson<bool>(json['syncPendingAfterBiometricTimeout']),
       currentDeviceId: serializer.fromJson<String>(json['currentDeviceId']),
+      dailyGenerations: serializer.fromJson<int>(json['dailyGenerations']),
+      dailyGenerationDate:
+          serializer.fromJson<String?>(json['dailyGenerationDate']),
+      dailyPdfExports: serializer.fromJson<int>(json['dailyPdfExports']),
+      dailyPdfExportDate:
+          serializer.fromJson<String?>(json['dailyPdfExportDate']),
       pendingDbReplacement:
           serializer.fromJson<bool>(json['pendingDbReplacement']),
       vacuumedDbPath: serializer.fromJson<String?>(json['vacuumedDbPath']),
@@ -6131,6 +6271,10 @@ class SecurityConfigData extends DataClass
       'syncPendingAfterBiometricTimeout':
           serializer.toJson<bool>(syncPendingAfterBiometricTimeout),
       'currentDeviceId': serializer.toJson<String>(currentDeviceId),
+      'dailyGenerations': serializer.toJson<int>(dailyGenerations),
+      'dailyGenerationDate': serializer.toJson<String?>(dailyGenerationDate),
+      'dailyPdfExports': serializer.toJson<int>(dailyPdfExports),
+      'dailyPdfExportDate': serializer.toJson<String?>(dailyPdfExportDate),
       'pendingDbReplacement': serializer.toJson<bool>(pendingDbReplacement),
       'vacuumedDbPath': serializer.toJson<String?>(vacuumedDbPath),
     };
@@ -6162,6 +6306,10 @@ class SecurityConfigData extends DataClass
           Value<DateTime?> sessionKeyExpiry = const Value.absent(),
           bool? syncPendingAfterBiometricTimeout,
           String? currentDeviceId,
+          int? dailyGenerations,
+          Value<String?> dailyGenerationDate = const Value.absent(),
+          int? dailyPdfExports,
+          Value<String?> dailyPdfExportDate = const Value.absent(),
           bool? pendingDbReplacement,
           Value<String?> vacuumedDbPath = const Value.absent()}) =>
       SecurityConfigData(
@@ -6216,6 +6364,14 @@ class SecurityConfigData extends DataClass
         syncPendingAfterBiometricTimeout: syncPendingAfterBiometricTimeout ??
             this.syncPendingAfterBiometricTimeout,
         currentDeviceId: currentDeviceId ?? this.currentDeviceId,
+        dailyGenerations: dailyGenerations ?? this.dailyGenerations,
+        dailyGenerationDate: dailyGenerationDate.present
+            ? dailyGenerationDate.value
+            : this.dailyGenerationDate,
+        dailyPdfExports: dailyPdfExports ?? this.dailyPdfExports,
+        dailyPdfExportDate: dailyPdfExportDate.present
+            ? dailyPdfExportDate.value
+            : this.dailyPdfExportDate,
         pendingDbReplacement: pendingDbReplacement ?? this.pendingDbReplacement,
         vacuumedDbPath:
             vacuumedDbPath.present ? vacuumedDbPath.value : this.vacuumedDbPath,
@@ -6293,6 +6449,18 @@ class SecurityConfigData extends DataClass
       currentDeviceId: data.currentDeviceId.present
           ? data.currentDeviceId.value
           : this.currentDeviceId,
+      dailyGenerations: data.dailyGenerations.present
+          ? data.dailyGenerations.value
+          : this.dailyGenerations,
+      dailyGenerationDate: data.dailyGenerationDate.present
+          ? data.dailyGenerationDate.value
+          : this.dailyGenerationDate,
+      dailyPdfExports: data.dailyPdfExports.present
+          ? data.dailyPdfExports.value
+          : this.dailyPdfExports,
+      dailyPdfExportDate: data.dailyPdfExportDate.present
+          ? data.dailyPdfExportDate.value
+          : this.dailyPdfExportDate,
       pendingDbReplacement: data.pendingDbReplacement.present
           ? data.pendingDbReplacement.value
           : this.pendingDbReplacement,
@@ -6332,6 +6500,10 @@ class SecurityConfigData extends DataClass
           ..write(
               'syncPendingAfterBiometricTimeout: $syncPendingAfterBiometricTimeout, ')
           ..write('currentDeviceId: $currentDeviceId, ')
+          ..write('dailyGenerations: $dailyGenerations, ')
+          ..write('dailyGenerationDate: $dailyGenerationDate, ')
+          ..write('dailyPdfExports: $dailyPdfExports, ')
+          ..write('dailyPdfExportDate: $dailyPdfExportDate, ')
           ..write('pendingDbReplacement: $pendingDbReplacement, ')
           ..write('vacuumedDbPath: $vacuumedDbPath')
           ..write(')'))
@@ -6365,6 +6537,10 @@ class SecurityConfigData extends DataClass
         sessionKeyExpiry,
         syncPendingAfterBiometricTimeout,
         currentDeviceId,
+        dailyGenerations,
+        dailyGenerationDate,
+        dailyPdfExports,
+        dailyPdfExportDate,
         pendingDbReplacement,
         vacuumedDbPath
       ]);
@@ -6399,6 +6575,10 @@ class SecurityConfigData extends DataClass
           other.syncPendingAfterBiometricTimeout ==
               this.syncPendingAfterBiometricTimeout &&
           other.currentDeviceId == this.currentDeviceId &&
+          other.dailyGenerations == this.dailyGenerations &&
+          other.dailyGenerationDate == this.dailyGenerationDate &&
+          other.dailyPdfExports == this.dailyPdfExports &&
+          other.dailyPdfExportDate == this.dailyPdfExportDate &&
           other.pendingDbReplacement == this.pendingDbReplacement &&
           other.vacuumedDbPath == this.vacuumedDbPath);
 }
@@ -6429,6 +6609,10 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
   final Value<DateTime?> sessionKeyExpiry;
   final Value<bool> syncPendingAfterBiometricTimeout;
   final Value<String> currentDeviceId;
+  final Value<int> dailyGenerations;
+  final Value<String?> dailyGenerationDate;
+  final Value<int> dailyPdfExports;
+  final Value<String?> dailyPdfExportDate;
   final Value<bool> pendingDbReplacement;
   final Value<String?> vacuumedDbPath;
   const SecurityConfigCompanion({
@@ -6457,6 +6641,10 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
     this.sessionKeyExpiry = const Value.absent(),
     this.syncPendingAfterBiometricTimeout = const Value.absent(),
     this.currentDeviceId = const Value.absent(),
+    this.dailyGenerations = const Value.absent(),
+    this.dailyGenerationDate = const Value.absent(),
+    this.dailyPdfExports = const Value.absent(),
+    this.dailyPdfExportDate = const Value.absent(),
     this.pendingDbReplacement = const Value.absent(),
     this.vacuumedDbPath = const Value.absent(),
   });
@@ -6486,6 +6674,10 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
     this.sessionKeyExpiry = const Value.absent(),
     this.syncPendingAfterBiometricTimeout = const Value.absent(),
     required String currentDeviceId,
+    this.dailyGenerations = const Value.absent(),
+    this.dailyGenerationDate = const Value.absent(),
+    this.dailyPdfExports = const Value.absent(),
+    this.dailyPdfExportDate = const Value.absent(),
     this.pendingDbReplacement = const Value.absent(),
     this.vacuumedDbPath = const Value.absent(),
   }) : currentDeviceId = Value(currentDeviceId);
@@ -6515,6 +6707,10 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
     Expression<DateTime>? sessionKeyExpiry,
     Expression<bool>? syncPendingAfterBiometricTimeout,
     Expression<String>? currentDeviceId,
+    Expression<int>? dailyGenerations,
+    Expression<String>? dailyGenerationDate,
+    Expression<int>? dailyPdfExports,
+    Expression<String>? dailyPdfExportDate,
     Expression<bool>? pendingDbReplacement,
     Expression<String>? vacuumedDbPath,
   }) {
@@ -6558,6 +6754,12 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
         'sync_pending_after_biometric_timeout':
             syncPendingAfterBiometricTimeout,
       if (currentDeviceId != null) 'current_device_id': currentDeviceId,
+      if (dailyGenerations != null) 'daily_generations': dailyGenerations,
+      if (dailyGenerationDate != null)
+        'daily_generation_date': dailyGenerationDate,
+      if (dailyPdfExports != null) 'daily_pdf_exports': dailyPdfExports,
+      if (dailyPdfExportDate != null)
+        'daily_pdf_export_date': dailyPdfExportDate,
       if (pendingDbReplacement != null)
         'pending_db_replacement': pendingDbReplacement,
       if (vacuumedDbPath != null) 'vacuumed_db_path': vacuumedDbPath,
@@ -6590,6 +6792,10 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
       Value<DateTime?>? sessionKeyExpiry,
       Value<bool>? syncPendingAfterBiometricTimeout,
       Value<String>? currentDeviceId,
+      Value<int>? dailyGenerations,
+      Value<String?>? dailyGenerationDate,
+      Value<int>? dailyPdfExports,
+      Value<String?>? dailyPdfExportDate,
       Value<bool>? pendingDbReplacement,
       Value<String?>? vacuumedDbPath}) {
     return SecurityConfigCompanion(
@@ -6622,6 +6828,10 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
       syncPendingAfterBiometricTimeout: syncPendingAfterBiometricTimeout ??
           this.syncPendingAfterBiometricTimeout,
       currentDeviceId: currentDeviceId ?? this.currentDeviceId,
+      dailyGenerations: dailyGenerations ?? this.dailyGenerations,
+      dailyGenerationDate: dailyGenerationDate ?? this.dailyGenerationDate,
+      dailyPdfExports: dailyPdfExports ?? this.dailyPdfExports,
+      dailyPdfExportDate: dailyPdfExportDate ?? this.dailyPdfExportDate,
       pendingDbReplacement: pendingDbReplacement ?? this.pendingDbReplacement,
       vacuumedDbPath: vacuumedDbPath ?? this.vacuumedDbPath,
     );
@@ -6714,6 +6924,19 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
     if (currentDeviceId.present) {
       map['current_device_id'] = Variable<String>(currentDeviceId.value);
     }
+    if (dailyGenerations.present) {
+      map['daily_generations'] = Variable<int>(dailyGenerations.value);
+    }
+    if (dailyGenerationDate.present) {
+      map['daily_generation_date'] =
+          Variable<String>(dailyGenerationDate.value);
+    }
+    if (dailyPdfExports.present) {
+      map['daily_pdf_exports'] = Variable<int>(dailyPdfExports.value);
+    }
+    if (dailyPdfExportDate.present) {
+      map['daily_pdf_export_date'] = Variable<String>(dailyPdfExportDate.value);
+    }
     if (pendingDbReplacement.present) {
       map['pending_db_replacement'] =
           Variable<bool>(pendingDbReplacement.value);
@@ -6754,6 +6977,10 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
           ..write(
               'syncPendingAfterBiometricTimeout: $syncPendingAfterBiometricTimeout, ')
           ..write('currentDeviceId: $currentDeviceId, ')
+          ..write('dailyGenerations: $dailyGenerations, ')
+          ..write('dailyGenerationDate: $dailyGenerationDate, ')
+          ..write('dailyPdfExports: $dailyPdfExports, ')
+          ..write('dailyPdfExportDate: $dailyPdfExportDate, ')
           ..write('pendingDbReplacement: $pendingDbReplacement, ')
           ..write('vacuumedDbPath: $vacuumedDbPath')
           ..write(')'))
@@ -11503,6 +11730,353 @@ class TermsCompanion extends UpdateCompanion<Term> {
   }
 }
 
+class $AuditLogsTable extends AuditLogs
+    with TableInfo<$AuditLogsTable, AuditLog> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AuditLogsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
+  static const VerificationMeta _teacherIdMeta =
+      const VerificationMeta('teacherId');
+  @override
+  late final GeneratedColumn<String> teacherId = GeneratedColumn<String>(
+      'teacher_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _schoolIdMeta =
+      const VerificationMeta('schoolId');
+  @override
+  late final GeneratedColumn<String> schoolId = GeneratedColumn<String>(
+      'school_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _actionMeta = const VerificationMeta('action');
+  @override
+  late final GeneratedColumn<String> action = GeneratedColumn<String>(
+      'action', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
+  static const VerificationMeta _metadataMeta =
+      const VerificationMeta('metadata');
+  @override
+  late final GeneratedColumn<String> metadata = GeneratedColumn<String>(
+      'metadata', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, teacherId, schoolId, action, metadata, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'audit_logs';
+  @override
+  VerificationContext validateIntegrity(Insertable<AuditLog> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('teacher_id')) {
+      context.handle(_teacherIdMeta,
+          teacherId.isAcceptableOrUnknown(data['teacher_id']!, _teacherIdMeta));
+    }
+    if (data.containsKey('school_id')) {
+      context.handle(_schoolIdMeta,
+          schoolId.isAcceptableOrUnknown(data['school_id']!, _schoolIdMeta));
+    }
+    if (data.containsKey('action')) {
+      context.handle(_actionMeta,
+          action.isAcceptableOrUnknown(data['action']!, _actionMeta));
+    }
+    if (data.containsKey('metadata')) {
+      context.handle(_metadataMeta,
+          metadata.isAcceptableOrUnknown(data['metadata']!, _metadataMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AuditLog map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AuditLog(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      teacherId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}teacher_id']),
+      schoolId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}school_id']),
+      action: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}action'])!,
+      metadata: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}metadata']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+    );
+  }
+
+  @override
+  $AuditLogsTable createAlias(String alias) {
+    return $AuditLogsTable(attachedDatabase, alias);
+  }
+}
+
+class AuditLog extends DataClass implements Insertable<AuditLog> {
+  final String id;
+  final String? teacherId;
+  final String? schoolId;
+  final String action;
+  final String? metadata;
+  final DateTime createdAt;
+  const AuditLog(
+      {required this.id,
+      this.teacherId,
+      this.schoolId,
+      required this.action,
+      this.metadata,
+      required this.createdAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    if (!nullToAbsent || teacherId != null) {
+      map['teacher_id'] = Variable<String>(teacherId);
+    }
+    if (!nullToAbsent || schoolId != null) {
+      map['school_id'] = Variable<String>(schoolId);
+    }
+    map['action'] = Variable<String>(action);
+    if (!nullToAbsent || metadata != null) {
+      map['metadata'] = Variable<String>(metadata);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  AuditLogsCompanion toCompanion(bool nullToAbsent) {
+    return AuditLogsCompanion(
+      id: Value(id),
+      teacherId: teacherId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(teacherId),
+      schoolId: schoolId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(schoolId),
+      action: Value(action),
+      metadata: metadata == null && nullToAbsent
+          ? const Value.absent()
+          : Value(metadata),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory AuditLog.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AuditLog(
+      id: serializer.fromJson<String>(json['id']),
+      teacherId: serializer.fromJson<String?>(json['teacherId']),
+      schoolId: serializer.fromJson<String?>(json['schoolId']),
+      action: serializer.fromJson<String>(json['action']),
+      metadata: serializer.fromJson<String?>(json['metadata']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'teacherId': serializer.toJson<String?>(teacherId),
+      'schoolId': serializer.toJson<String?>(schoolId),
+      'action': serializer.toJson<String>(action),
+      'metadata': serializer.toJson<String?>(metadata),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  AuditLog copyWith(
+          {String? id,
+          Value<String?> teacherId = const Value.absent(),
+          Value<String?> schoolId = const Value.absent(),
+          String? action,
+          Value<String?> metadata = const Value.absent(),
+          DateTime? createdAt}) =>
+      AuditLog(
+        id: id ?? this.id,
+        teacherId: teacherId.present ? teacherId.value : this.teacherId,
+        schoolId: schoolId.present ? schoolId.value : this.schoolId,
+        action: action ?? this.action,
+        metadata: metadata.present ? metadata.value : this.metadata,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  AuditLog copyWithCompanion(AuditLogsCompanion data) {
+    return AuditLog(
+      id: data.id.present ? data.id.value : this.id,
+      teacherId: data.teacherId.present ? data.teacherId.value : this.teacherId,
+      schoolId: data.schoolId.present ? data.schoolId.value : this.schoolId,
+      action: data.action.present ? data.action.value : this.action,
+      metadata: data.metadata.present ? data.metadata.value : this.metadata,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AuditLog(')
+          ..write('id: $id, ')
+          ..write('teacherId: $teacherId, ')
+          ..write('schoolId: $schoolId, ')
+          ..write('action: $action, ')
+          ..write('metadata: $metadata, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, teacherId, schoolId, action, metadata, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AuditLog &&
+          other.id == this.id &&
+          other.teacherId == this.teacherId &&
+          other.schoolId == this.schoolId &&
+          other.action == this.action &&
+          other.metadata == this.metadata &&
+          other.createdAt == this.createdAt);
+}
+
+class AuditLogsCompanion extends UpdateCompanion<AuditLog> {
+  final Value<String> id;
+  final Value<String?> teacherId;
+  final Value<String?> schoolId;
+  final Value<String> action;
+  final Value<String?> metadata;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const AuditLogsCompanion({
+    this.id = const Value.absent(),
+    this.teacherId = const Value.absent(),
+    this.schoolId = const Value.absent(),
+    this.action = const Value.absent(),
+    this.metadata = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AuditLogsCompanion.insert({
+    this.id = const Value.absent(),
+    this.teacherId = const Value.absent(),
+    this.schoolId = const Value.absent(),
+    this.action = const Value.absent(),
+    this.metadata = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  static Insertable<AuditLog> custom({
+    Expression<String>? id,
+    Expression<String>? teacherId,
+    Expression<String>? schoolId,
+    Expression<String>? action,
+    Expression<String>? metadata,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (teacherId != null) 'teacher_id': teacherId,
+      if (schoolId != null) 'school_id': schoolId,
+      if (action != null) 'action': action,
+      if (metadata != null) 'metadata': metadata,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AuditLogsCompanion copyWith(
+      {Value<String>? id,
+      Value<String?>? teacherId,
+      Value<String?>? schoolId,
+      Value<String>? action,
+      Value<String?>? metadata,
+      Value<DateTime>? createdAt,
+      Value<int>? rowid}) {
+    return AuditLogsCompanion(
+      id: id ?? this.id,
+      teacherId: teacherId ?? this.teacherId,
+      schoolId: schoolId ?? this.schoolId,
+      action: action ?? this.action,
+      metadata: metadata ?? this.metadata,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (teacherId.present) {
+      map['teacher_id'] = Variable<String>(teacherId.value);
+    }
+    if (schoolId.present) {
+      map['school_id'] = Variable<String>(schoolId.value);
+    }
+    if (action.present) {
+      map['action'] = Variable<String>(action.value);
+    }
+    if (metadata.present) {
+      map['metadata'] = Variable<String>(metadata.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AuditLogsCompanion(')
+          ..write('id: $id, ')
+          ..write('teacherId: $teacherId, ')
+          ..write('schoolId: $schoolId, ')
+          ..write('action: $action, ')
+          ..write('metadata: $metadata, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -11531,6 +12105,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $TeacherSubjectsTable teacherSubjects =
       $TeacherSubjectsTable(this);
   late final $TermsTable terms = $TermsTable(this);
+  late final $AuditLogsTable auditLogs = $AuditLogsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -11556,7 +12131,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         schemeGenerationQueue,
         pdfCache,
         teacherSubjects,
-        terms
+        terms,
+        auditLogs
       ];
 }
 
@@ -12122,6 +12698,7 @@ typedef $$TeachersTableCreateCompanionBuilder = TeachersCompanion Function({
   Value<bool> isDeleted,
   Value<String?> salt,
   Value<String?> lastModifiedBy,
+  Value<String?> currentDeviceId,
 });
 typedef $$TeachersTableUpdateCompanionBuilder = TeachersCompanion Function({
   Value<int> localId,
@@ -12142,6 +12719,7 @@ typedef $$TeachersTableUpdateCompanionBuilder = TeachersCompanion Function({
   Value<bool> isDeleted,
   Value<String?> salt,
   Value<String?> lastModifiedBy,
+  Value<String?> currentDeviceId,
 });
 
 final class $$TeachersTableReferences
@@ -12298,6 +12876,10 @@ class $$TeachersTableFilterComposer
 
   ColumnFilters<String> get lastModifiedBy => $composableBuilder(
       column: $table.lastModifiedBy,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get currentDeviceId => $composableBuilder(
+      column: $table.currentDeviceId,
       builder: (column) => ColumnFilters(column));
 
   $$SchoolsTableFilterComposer get schoolLocalId {
@@ -12474,6 +13056,10 @@ class $$TeachersTableOrderingComposer
       column: $table.lastModifiedBy,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get currentDeviceId => $composableBuilder(
+      column: $table.currentDeviceId,
+      builder: (column) => ColumnOrderings(column));
+
   $$SchoolsTableOrderingComposer get schoolLocalId {
     final $$SchoolsTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -12554,6 +13140,9 @@ class $$TeachersTableAnnotationComposer
 
   GeneratedColumn<String> get lastModifiedBy => $composableBuilder(
       column: $table.lastModifiedBy, builder: (column) => column);
+
+  GeneratedColumn<String> get currentDeviceId => $composableBuilder(
+      column: $table.currentDeviceId, builder: (column) => column);
 
   $$SchoolsTableAnnotationComposer get schoolLocalId {
     final $$SchoolsTableAnnotationComposer composer = $composerBuilder(
@@ -12708,6 +13297,7 @@ class $$TeachersTableTableManager extends RootTableManager<
             Value<bool> isDeleted = const Value.absent(),
             Value<String?> salt = const Value.absent(),
             Value<String?> lastModifiedBy = const Value.absent(),
+            Value<String?> currentDeviceId = const Value.absent(),
           }) =>
               TeachersCompanion(
             localId: localId,
@@ -12728,6 +13318,7 @@ class $$TeachersTableTableManager extends RootTableManager<
             isDeleted: isDeleted,
             salt: salt,
             lastModifiedBy: lastModifiedBy,
+            currentDeviceId: currentDeviceId,
           ),
           createCompanionCallback: ({
             Value<int> localId = const Value.absent(),
@@ -12748,6 +13339,7 @@ class $$TeachersTableTableManager extends RootTableManager<
             Value<bool> isDeleted = const Value.absent(),
             Value<String?> salt = const Value.absent(),
             Value<String?> lastModifiedBy = const Value.absent(),
+            Value<String?> currentDeviceId = const Value.absent(),
           }) =>
               TeachersCompanion.insert(
             localId: localId,
@@ -12768,6 +13360,7 @@ class $$TeachersTableTableManager extends RootTableManager<
             isDeleted: isDeleted,
             salt: salt,
             lastModifiedBy: lastModifiedBy,
+            currentDeviceId: currentDeviceId,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) =>
@@ -14628,6 +15221,10 @@ typedef $$SecurityConfigTableCreateCompanionBuilder = SecurityConfigCompanion
   Value<DateTime?> sessionKeyExpiry,
   Value<bool> syncPendingAfterBiometricTimeout,
   required String currentDeviceId,
+  Value<int> dailyGenerations,
+  Value<String?> dailyGenerationDate,
+  Value<int> dailyPdfExports,
+  Value<String?> dailyPdfExportDate,
   Value<bool> pendingDbReplacement,
   Value<String?> vacuumedDbPath,
 });
@@ -14658,6 +15255,10 @@ typedef $$SecurityConfigTableUpdateCompanionBuilder = SecurityConfigCompanion
   Value<DateTime?> sessionKeyExpiry,
   Value<bool> syncPendingAfterBiometricTimeout,
   Value<String> currentDeviceId,
+  Value<int> dailyGenerations,
+  Value<String?> dailyGenerationDate,
+  Value<int> dailyPdfExports,
+  Value<String?> dailyPdfExportDate,
   Value<bool> pendingDbReplacement,
   Value<String?> vacuumedDbPath,
 });
@@ -14766,6 +15367,22 @@ class $$SecurityConfigTableFilterComposer
 
   ColumnFilters<String> get currentDeviceId => $composableBuilder(
       column: $table.currentDeviceId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get dailyGenerations => $composableBuilder(
+      column: $table.dailyGenerations,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get dailyGenerationDate => $composableBuilder(
+      column: $table.dailyGenerationDate,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get dailyPdfExports => $composableBuilder(
+      column: $table.dailyPdfExports,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get dailyPdfExportDate => $composableBuilder(
+      column: $table.dailyPdfExportDate,
       builder: (column) => ColumnFilters(column));
 
   ColumnFilters<bool> get pendingDbReplacement => $composableBuilder(
@@ -14885,6 +15502,22 @@ class $$SecurityConfigTableOrderingComposer
       column: $table.currentDeviceId,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get dailyGenerations => $composableBuilder(
+      column: $table.dailyGenerations,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get dailyGenerationDate => $composableBuilder(
+      column: $table.dailyGenerationDate,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get dailyPdfExports => $composableBuilder(
+      column: $table.dailyPdfExports,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get dailyPdfExportDate => $composableBuilder(
+      column: $table.dailyPdfExportDate,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<bool> get pendingDbReplacement => $composableBuilder(
       column: $table.pendingDbReplacement,
       builder: (column) => ColumnOrderings(column));
@@ -14982,6 +15615,18 @@ class $$SecurityConfigTableAnnotationComposer
   GeneratedColumn<String> get currentDeviceId => $composableBuilder(
       column: $table.currentDeviceId, builder: (column) => column);
 
+  GeneratedColumn<int> get dailyGenerations => $composableBuilder(
+      column: $table.dailyGenerations, builder: (column) => column);
+
+  GeneratedColumn<String> get dailyGenerationDate => $composableBuilder(
+      column: $table.dailyGenerationDate, builder: (column) => column);
+
+  GeneratedColumn<int> get dailyPdfExports => $composableBuilder(
+      column: $table.dailyPdfExports, builder: (column) => column);
+
+  GeneratedColumn<String> get dailyPdfExportDate => $composableBuilder(
+      column: $table.dailyPdfExportDate, builder: (column) => column);
+
   GeneratedColumn<bool> get pendingDbReplacement => $composableBuilder(
       column: $table.pendingDbReplacement, builder: (column) => column);
 
@@ -15041,6 +15686,10 @@ class $$SecurityConfigTableTableManager extends RootTableManager<
             Value<DateTime?> sessionKeyExpiry = const Value.absent(),
             Value<bool> syncPendingAfterBiometricTimeout = const Value.absent(),
             Value<String> currentDeviceId = const Value.absent(),
+            Value<int> dailyGenerations = const Value.absent(),
+            Value<String?> dailyGenerationDate = const Value.absent(),
+            Value<int> dailyPdfExports = const Value.absent(),
+            Value<String?> dailyPdfExportDate = const Value.absent(),
             Value<bool> pendingDbReplacement = const Value.absent(),
             Value<String?> vacuumedDbPath = const Value.absent(),
           }) =>
@@ -15070,6 +15719,10 @@ class $$SecurityConfigTableTableManager extends RootTableManager<
             sessionKeyExpiry: sessionKeyExpiry,
             syncPendingAfterBiometricTimeout: syncPendingAfterBiometricTimeout,
             currentDeviceId: currentDeviceId,
+            dailyGenerations: dailyGenerations,
+            dailyGenerationDate: dailyGenerationDate,
+            dailyPdfExports: dailyPdfExports,
+            dailyPdfExportDate: dailyPdfExportDate,
             pendingDbReplacement: pendingDbReplacement,
             vacuumedDbPath: vacuumedDbPath,
           ),
@@ -15099,6 +15752,10 @@ class $$SecurityConfigTableTableManager extends RootTableManager<
             Value<DateTime?> sessionKeyExpiry = const Value.absent(),
             Value<bool> syncPendingAfterBiometricTimeout = const Value.absent(),
             required String currentDeviceId,
+            Value<int> dailyGenerations = const Value.absent(),
+            Value<String?> dailyGenerationDate = const Value.absent(),
+            Value<int> dailyPdfExports = const Value.absent(),
+            Value<String?> dailyPdfExportDate = const Value.absent(),
             Value<bool> pendingDbReplacement = const Value.absent(),
             Value<String?> vacuumedDbPath = const Value.absent(),
           }) =>
@@ -15128,6 +15785,10 @@ class $$SecurityConfigTableTableManager extends RootTableManager<
             sessionKeyExpiry: sessionKeyExpiry,
             syncPendingAfterBiometricTimeout: syncPendingAfterBiometricTimeout,
             currentDeviceId: currentDeviceId,
+            dailyGenerations: dailyGenerations,
+            dailyGenerationDate: dailyGenerationDate,
+            dailyPdfExports: dailyPdfExports,
+            dailyPdfExportDate: dailyPdfExportDate,
             pendingDbReplacement: pendingDbReplacement,
             vacuumedDbPath: vacuumedDbPath,
           ),
@@ -18146,6 +18807,186 @@ typedef $$TermsTableProcessedTableManager = ProcessedTableManager<
     (Term, $$TermsTableReferences),
     Term,
     PrefetchHooks Function({bool schoolLocalId})>;
+typedef $$AuditLogsTableCreateCompanionBuilder = AuditLogsCompanion Function({
+  Value<String> id,
+  Value<String?> teacherId,
+  Value<String?> schoolId,
+  Value<String> action,
+  Value<String?> metadata,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+typedef $$AuditLogsTableUpdateCompanionBuilder = AuditLogsCompanion Function({
+  Value<String> id,
+  Value<String?> teacherId,
+  Value<String?> schoolId,
+  Value<String> action,
+  Value<String?> metadata,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+
+class $$AuditLogsTableFilterComposer
+    extends Composer<_$AppDatabase, $AuditLogsTable> {
+  $$AuditLogsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get teacherId => $composableBuilder(
+      column: $table.teacherId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get schoolId => $composableBuilder(
+      column: $table.schoolId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get action => $composableBuilder(
+      column: $table.action, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get metadata => $composableBuilder(
+      column: $table.metadata, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$AuditLogsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AuditLogsTable> {
+  $$AuditLogsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get teacherId => $composableBuilder(
+      column: $table.teacherId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get schoolId => $composableBuilder(
+      column: $table.schoolId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get action => $composableBuilder(
+      column: $table.action, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get metadata => $composableBuilder(
+      column: $table.metadata, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$AuditLogsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AuditLogsTable> {
+  $$AuditLogsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get teacherId =>
+      $composableBuilder(column: $table.teacherId, builder: (column) => column);
+
+  GeneratedColumn<String> get schoolId =>
+      $composableBuilder(column: $table.schoolId, builder: (column) => column);
+
+  GeneratedColumn<String> get action =>
+      $composableBuilder(column: $table.action, builder: (column) => column);
+
+  GeneratedColumn<String> get metadata =>
+      $composableBuilder(column: $table.metadata, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$AuditLogsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $AuditLogsTable,
+    AuditLog,
+    $$AuditLogsTableFilterComposer,
+    $$AuditLogsTableOrderingComposer,
+    $$AuditLogsTableAnnotationComposer,
+    $$AuditLogsTableCreateCompanionBuilder,
+    $$AuditLogsTableUpdateCompanionBuilder,
+    (AuditLog, BaseReferences<_$AppDatabase, $AuditLogsTable, AuditLog>),
+    AuditLog,
+    PrefetchHooks Function()> {
+  $$AuditLogsTableTableManager(_$AppDatabase db, $AuditLogsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AuditLogsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AuditLogsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AuditLogsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String?> teacherId = const Value.absent(),
+            Value<String?> schoolId = const Value.absent(),
+            Value<String> action = const Value.absent(),
+            Value<String?> metadata = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              AuditLogsCompanion(
+            id: id,
+            teacherId: teacherId,
+            schoolId: schoolId,
+            action: action,
+            metadata: metadata,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String?> teacherId = const Value.absent(),
+            Value<String?> schoolId = const Value.absent(),
+            Value<String> action = const Value.absent(),
+            Value<String?> metadata = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              AuditLogsCompanion.insert(
+            id: id,
+            teacherId: teacherId,
+            schoolId: schoolId,
+            action: action,
+            metadata: metadata,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$AuditLogsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $AuditLogsTable,
+    AuditLog,
+    $$AuditLogsTableFilterComposer,
+    $$AuditLogsTableOrderingComposer,
+    $$AuditLogsTableAnnotationComposer,
+    $$AuditLogsTableCreateCompanionBuilder,
+    $$AuditLogsTableUpdateCompanionBuilder,
+    (AuditLog, BaseReferences<_$AppDatabase, $AuditLogsTable, AuditLog>),
+    AuditLog,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -18193,4 +19034,6 @@ class $AppDatabaseManager {
       $$TeacherSubjectsTableTableManager(_db, _db.teacherSubjects);
   $$TermsTableTableManager get terms =>
       $$TermsTableTableManager(_db, _db.terms);
+  $$AuditLogsTableTableManager get auditLogs =>
+      $$AuditLogsTableTableManager(_db, _db.auditLogs);
 }
