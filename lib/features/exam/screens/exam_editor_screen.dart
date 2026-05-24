@@ -1,10 +1,15 @@
 import 'dart:convert';
+import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/providers/emergency_flush_provider.dart';
+import 'package:classai/core/services/ai_service.dart';
 import 'package:classai/core/services/credit_service.dart';
 import 'package:classai/core/constants/prompt_templates.dart';
+import 'package:classai/core/widgets/app_toast.dart';
+import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
 enum QuestionType { mcq, theory, both }
@@ -32,8 +37,12 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   String _difficulty = 'medium';
   bool _isGenerating = false;
   bool _hasGenerated = false;
+  bool _isUnlocked = false;
   int _creditBalance = 3;
   QuestionType _questionType = QuestionType.both;
+  String? _teacherId;
+  String? _schoolId;
+  String _subscriptionTier = 'free';
 
   // Generated MCQ data
   List<Map<String, dynamic>> _mcqs = [];
@@ -73,19 +82,44 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   @override
   void initState() {
     super.initState();
+    debugPrint('[DBG] ExamEditorScreen.initState');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _registerWithEmergencyFlush();
       _loadCreditBalance();
+      _loadAuthInfo();
     });
   }
 
   void _registerWithEmergencyFlush() {
     final flushService = ref.read(emergencyFlushServiceProvider);
     flushService.register(() async {
-      if (_hasGenerated && _formKey.currentState!.validate()) {
+      if (_hasGenerated && _isUnlocked && _formKey.currentState!.validate()) {
         await _saveExam(notify: false);
       }
     });
+  }
+
+  Future<void> _loadAuthInfo() async {
+    try {
+      final authData = ref.read(authProvider);
+      if (authData.currentTeacher?.serverId != null) {
+        _teacherId = authData.currentTeacher!.serverId;
+      }
+      if (authData.currentSchool != null) {
+        _schoolId = authData.currentSchool!.serverId;
+        _subscriptionTier = authData.currentSchool!.subscriptionTier;
+      }
+      // Fallback: read from DB if auth provider has null data
+      if (_teacherId == null || _schoolId == null) {
+        final db = ref.read(databaseProvider);
+        final school = await db.schoolsDao.get();
+        if (school != null) {
+          _schoolId ??= school.serverId;
+          _subscriptionTier = school.subscriptionTier;
+        }
+      }
+      if (mounted) setState(() {});
+    } catch (_) {}
   }
 
   Future<void> _loadCreditBalance() async {
@@ -102,27 +136,35 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     if (_creditBalance < 1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Insufficient credits')),
-      );
+      showErrorToast(context: context, message: 'Insufficient credits');
       return;
     }
 
     setState(() => _isGenerating = true);
 
     try {
+      final db = ref.read(databaseProvider);
+      final aiService = AiService(db: db);
       final topic = _topicController.text.trim();
       final generateMcq = _questionType != QuestionType.theory;
       final generateTheory = _questionType != QuestionType.mcq;
 
-      // Spend credit (1 credit for the entire exam generation)
-      final creditService = CreditService(ref.read(databaseProvider));
-      final topicId = _topicController.text.trim();
-      await creditService.spendCredits(
-        amount: 1,
-        contentIds: ['exam_$_subject\$$topicId'],
-      );
+      // Check daily generation limit before generating
+      try {
+        await aiService.checkDailyLimit(_subscriptionTier);
+      } on AiGenerationException catch (e) {
+        if (mounted) {
+          setState(() => _isGenerating = false);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            showErrorToast(context: context, message: e.message);
+          });
+        }
+        return;
+      }
 
+      // Generate MCQ and Theory questions
+      // NOTE: No credit is spent on AI generation - credit is spent on unlock
       _mcqs = [];
       _theoryQuestions = [];
 
@@ -136,6 +178,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         Map<String, dynamic> mcqResult = {};
         if (widget.generateCallback != null) {
           mcqResult = await widget.generateCallback!(mcqPrompt);
+        } else {
+          mcqResult = await aiService.generate(mcqPrompt);
         }
         final mcqRaw = mcqResult['raw'] as Map<String, dynamic>? ?? mcqResult;
         final mcqList = mcqRaw['questions'] as List<dynamic>? ?? [];
@@ -152,6 +196,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         Map<String, dynamic> theoryResult = {};
         if (widget.generateCallback != null) {
           theoryResult = await widget.generateCallback!(theoryPrompt);
+        } else {
+          theoryResult = await aiService.generate(theoryPrompt);
         }
         final theoryRaw =
             theoryResult['raw'] as Map<String, dynamic>? ?? theoryResult;
@@ -160,29 +206,128 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
             theoryList.map((q) => Map<String, dynamic>.from(q as Map)).toList();
       }
 
+      // Audit log the generation
+      await aiService.logGeneration(
+        teacherId: _teacherId,
+        schoolId: _schoolId,
+        topic: topic,
+      );
+
       setState(() {
         _hasGenerated = true;
-        _creditBalance = _creditBalance - 1;
+        _isUnlocked = false;
         _isGenerating = false;
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Generated ${_mcqs.length} MCQs and ${_theoryQuestions.length} theory questions',
-            ),
-          ),
-        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          showInfoToast(
+            context: context,
+            message:
+                'Generated ${_mcqs.length} MCQs and ${_theoryQuestions.length} theory questions',
+          );
+        });
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isGenerating = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Generation failed: $e')),
-        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          showErrorToast(context: context, message: 'Generation failed: $e');
+        });
       }
     }
+  }
+
+  Future<void> _handleUnlock() async {
+    if (_creditBalance < 1) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        AppToast.instance.showToast(
+          context: context,
+          message: 'Out of credits. Connect to internet and sync to refill.',
+          icon: Icons.warning,
+        );
+        _showSyncBottomSheet();
+      });
+      return;
+    }
+
+    try {
+      final creditService = CreditService(ref.read(databaseProvider));
+      final topicId = _topicController.text.trim();
+      await creditService.spendCredits(
+        amount: 1,
+        contentIds: ['exam_$_subject\$$topicId'],
+      );
+
+      // Audit log the unlock
+      await ref.read(databaseProvider).auditLogsDao.insert(
+        AuditLogsCompanion.insert(
+          id: Value(const Uuid().v4()),
+          teacherId: Value(_teacherId),
+          schoolId: Value(_schoolId),
+          action: Value('unlock'),
+          metadata: Value(jsonEncode({
+            'type': 'exam',
+            'subject': _subject,
+            'topic': topicId,
+            'timestamp': DateTime.now().toIso8601String(),
+          })),
+        ),
+      );
+
+      setState(() {
+        _isUnlocked = true;
+        _creditBalance = _creditBalance - 1;
+      });
+
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          showInfoToast(context: context, message: 'Exam unlocked!');
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          showErrorToast(context: context, message: 'Failed to unlock: $e');
+        });
+      }
+    }
+  }
+
+  void _showSyncBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Sync Credits', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 16),
+            Text('Tap below to sync with the server and refill your credits.'),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(context);
+                // Refresh credit state
+                final db = ref.read(databaseProvider);
+                db.securityConfigDao.get().then((config) {
+                  if (mounted) {
+                    setState(() => _creditBalance = config.offlineCredits);
+                  }
+                });
+              },
+              child: const Text('Sync Now'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _updateMcq(int index, String field, String value) {
@@ -225,15 +370,17 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
           );
 
       if (notify && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Exam saved (id=$id)')),
-        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          showInfoToast(context: context, message: 'Exam saved (id=$id)');
+        });
       }
     } catch (e) {
       if (notify && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Save failed: $e')),
-        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          showErrorToast(context: context, message: 'Save failed: $e');
+        });
       }
     }
   }
@@ -259,6 +406,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('[DBG] ExamEditorScreen.build()');
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
 
@@ -509,8 +657,58 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                       ),
                       v24,
 
+                      // ── Locked preview ─────────────────────────────────
+                      if (_hasGenerated && !_isUnlocked) ...[
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: cs.tertiary.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: cs.tertiary.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.lock_rounded,
+                                      color: cs.tertiary, size: 20),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Locked — Unlock for 1 credit',
+                                    style: theme.textTheme.titleSmall?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: cs.tertiary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Generated ${_mcqs.length} MCQs and ${_theoryQuestions.length} theory questions',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          height: 48,
+                          child: FilledButton.icon(
+                            onPressed: _handleUnlock,
+                            icon: const Icon(Icons.lock_open_rounded),
+                            label: const Text('Unlock for 1 Credit'),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+
                       // ── MCQ preview cards ───────────────────────────
-                      if (_hasGenerated && _mcqs.isNotEmpty) ...[
+                      if (_hasGenerated && _mcqs.isNotEmpty && _isUnlocked) ...[
                         _SectionHeader(
                           icon: Icons.check_circle_rounded,
                           label: 'MCQs (${_mcqs.length})',
@@ -524,7 +722,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                       ],
 
                       // ── Theory preview cards ────────────────────────
-                      if (_hasGenerated && _theoryQuestions.isNotEmpty) ...[
+                      if (_hasGenerated &&
+                          _theoryQuestions.isNotEmpty &&
+                          _isUnlocked) ...[
                         _SectionHeader(
                           icon: Icons.article_rounded,
                           label:
