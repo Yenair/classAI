@@ -10,6 +10,8 @@ import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/features/dashboard/providers/unresolved_conflicts_provider.dart';
 import 'package:classai/features/settings/providers/theme_provider.dart';
+import 'package:classai/core/database/database.dart';
+import 'package:classai/main.dart' show databaseProvider;
 
 /// Root dashboard screen that routes to either [EditorLayout] or [ReaderLayout]
 /// based on [PlatformHelper.isEditorMode].
@@ -254,10 +256,10 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                       ),
                       const Spacer(),
                       // Sync indicator (Stitch green dot style)
-                      _SyncChip(cs: cs),
+                      const _SyncChip(),
                       const SizedBox(width: 16),
                       // Credit chip
-                      _CreditChip(cs: cs, theme: theme),
+                      const _CreditChip(),
                       const SizedBox(width: 12),
                       // Profile popup
                       PopupMenuButton<String>(
@@ -521,16 +523,25 @@ class _NavItem {
   final String? route;
 }
 
-class _SyncChip extends StatelessWidget {
-  const _SyncChip({required this.cs});
-  final ColorScheme cs;
+class _SyncChip extends ConsumerWidget {
+  const _SyncChip();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final syncData = ref.watch(syncStatusProvider);
+    final cs = Theme.of(context).colorScheme;
+
+    final (Color dotColor, String label) = switch (syncData.status) {
+      SyncStatus.synced => (const Color(0xFF008751), 'Online'),
+      SyncStatus.syncing => (cs.primary, 'Syncing…'),
+      SyncStatus.error => (cs.error, 'Sync error'),
+      SyncStatus.offline => (cs.onSurfaceVariant, 'Offline'),
+    };
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFF008751).withValues(alpha: 0.1),
+        color: dotColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(AppTheme.radiusFull),
       ),
       child: Row(
@@ -539,16 +550,16 @@ class _SyncChip extends StatelessWidget {
           Container(
             width: 8,
             height: 8,
-            decoration: const BoxDecoration(
-              color: Color(0xFF008751),
+            decoration: BoxDecoration(
+              color: dotColor,
               shape: BoxShape.circle,
             ),
           ),
           const SizedBox(width: 8),
           Text(
-            'Synced',
+            label,
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: const Color(0xFF008751),
+                  color: dotColor,
                   fontWeight: FontWeight.w500,
                 ),
           ),
@@ -558,13 +569,15 @@ class _SyncChip extends StatelessWidget {
   }
 }
 
-class _CreditChip extends StatelessWidget {
-  const _CreditChip({required this.cs, required this.theme});
-  final ColorScheme cs;
-  final ThemeData theme;
+class _CreditChip extends ConsumerWidget {
+  const _CreditChip();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final creditData = ref.watch(creditStateProvider);
+    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
@@ -575,13 +588,13 @@ class _CreditChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            Icons.account_balance_wallet_rounded,
+            Icons.lock_open_rounded,
             size: 20,
             color: cs.primary,
           ),
           const SizedBox(width: 8),
           Text(
-            '₦1,250',
+            creditData.loading ? '…' : '${creditData.currentCredits}',
             style: theme.textTheme.labelLarge?.copyWith(
               fontWeight: FontWeight.w700,
               color: cs.primary,
@@ -1148,6 +1161,12 @@ class _ScheduleItem extends StatelessWidget {
 //  Matches stitch_design_v2/dashboard_reader_phone/code.html
 // ═══════════════════════════════════════════════════════════════════════════
 
+/// Provider that fetches the most recent lessons for the phone dashboard.
+final recentLessonsProvider = FutureProvider<List<Lesson>>((ref) async {
+  final db = ref.read(databaseProvider);
+  return db.lessonsDao.getRecentLessons(limit: 5);
+});
+
 class ReaderLayout extends ConsumerStatefulWidget {
   const ReaderLayout({super.key});
 
@@ -1174,6 +1193,8 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
     final theme = Theme.of(context);
     final authData = ref.watch(authProvider);
     final themeMode = ref.watch(themeProvider);
+    final syncData = ref.watch(syncStatusProvider);
+    final creditData = ref.watch(creditStateProvider);
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -1314,21 +1335,32 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
                   ),
                 ),
                 const Spacer(),
-                // Offline indicator
+                // Sync status indicator (live from syncStatusProvider)
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
                       width: 12,
                       height: 12,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF9E9E9E),
+                      decoration: BoxDecoration(
+                        color: syncData.status == SyncStatus.synced
+                            ? const Color(0xFF008751)
+                            : syncData.status == SyncStatus.syncing
+                                ? const Color(0xFF2196F3)
+                                : syncData.status == SyncStatus.error
+                                    ? const Color(0xFFBA1A1A)
+                                    : const Color(0xFF9E9E9E),
                         shape: BoxShape.circle,
                       ),
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Offline',
+                      switch (syncData.status) {
+                        SyncStatus.synced => 'Online',
+                        SyncStatus.syncing => 'Syncing…',
+                        SyncStatus.error => 'Sync error',
+                        SyncStatus.offline => 'Offline',
+                      },
                       style: theme.textTheme.labelLarge?.copyWith(
                         color: cs.outline,
                       ),
@@ -1336,7 +1368,7 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
                   ],
                 ),
                 const SizedBox(width: 12),
-                // Credit chip
+                // Credit chip (live from creditStateProvider)
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -1349,7 +1381,9 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
                     ),
                   ),
                   child: Text(
-                    '₦1,250',
+                    creditData.loading
+                        ? '…'
+                        : '${creditData.currentCredits}',
                     style: theme.textTheme.labelLarge?.copyWith(
                       color: cs.onPrimaryContainer,
                       fontWeight: FontWeight.w500,
@@ -1381,30 +1415,8 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
               ),
             ),
             const SizedBox(height: 24),
-            // Lesson cards
-            _ReaderLessonCard(
-              classLabel: 'SS1',
-              title: 'Mathematics',
-              icon: Icons.calculate_rounded,
-              description:
-                  'Algebraic expressions, factoring polynomials, and solving quadratic equations. Review the examples from yesterday\'s session before starting the practice set.',
-              duration: '45 mins',
-              buttonText: 'Resume Reading',
-              cs: cs,
-              theme: theme,
-            ),
-            const SizedBox(height: 16),
-            _ReaderLessonCard(
-              classLabel: 'JSS3',
-              title: 'English Language',
-              icon: Icons.menu_book_rounded,
-              description:
-                  'Comprehension passages: "The Market Square". Focus on identifying the main idea and supporting details in paragraphs 2 and 3.',
-              duration: '30 mins',
-              buttonText: 'Start Lesson',
-              cs: cs,
-              theme: theme,
-            ),
+            // Recent lesson cards (live from lessons database)
+            _RecentLessonsList(cs: cs, theme: theme),
           ],
         ),
       ),
@@ -1434,6 +1446,67 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
         context.push('/settings');
         break;
     }
+  }
+}
+
+/// Renders a list of recent lesson cards from the lessons database.
+class _RecentLessonsList extends ConsumerWidget {
+  const _RecentLessonsList({required this.cs, required this.theme});
+
+  final ColorScheme cs;
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final lessonsAsync = ref.watch(recentLessonsProvider);
+
+    return lessonsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, _) => Text(
+        'Could not load lessons.',
+        style: theme.textTheme.bodyMedium?.copyWith(color: cs.error),
+      ),
+      data: (lessons) {
+        if (lessons.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 32),
+            child: Center(
+              child: Text(
+                'No lessons yet',
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ),
+          );
+        }
+
+        return Column(
+          children: [
+            for (int i = 0; i < lessons.length; i++) ...[
+              if (i > 0) const SizedBox(height: 16),
+              _ReaderLessonCard(
+                classLabel: lessons[i].classLevel,
+                title: lessons[i].topic.isNotEmpty
+                    ? lessons[i].topic
+                    : lessons[i].subject,
+                icon: Icons.menu_book_rounded,
+                description: lessons[i].content.isNotEmpty
+                    ? lessons[i].content.substring(
+                        0, lessons[i].content.length > 120
+                            ? 120
+                            : lessons[i].content.length)
+                    : 'No description available.',
+                duration: '',
+                buttonText: 'View Lesson',
+                cs: cs,
+                theme: theme,
+              ),
+            ],
+          ],
+        );
+      },
+    );
   }
 }
 

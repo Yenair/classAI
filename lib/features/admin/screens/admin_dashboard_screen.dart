@@ -236,7 +236,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      Icons.account_balance_wallet_rounded,
+                      Icons.lock_open_rounded,
                       size: 18,
                       color: cs.onSurfaceVariant,
                     ),
@@ -281,7 +281,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     case 'settings':
                       context.push('/settings');
                     case 'logout':
-                      ref.read(authProvider.notifier).manualLogout();
+                      _showLogoutConfirmation(context, ref);
                     case 'theme_light':
                       ref.read(themeProvider.notifier).setTheme(ThemeMode.light);
                     case 'theme_dark':
@@ -487,9 +487,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
                 border: isActive
-                    ? const Border(
+                    ? Border(
                         bottom: BorderSide(
-                          color: Color(0xFF115B9B),
+                          color: cs.primary,
                           width: 2,
                         ),
                       )
@@ -583,6 +583,33 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
             ),
           );
         }).toList(),
+      ),
+    );
+  }
+
+  void _showLogoutConfirmation(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        title: const Text('Confirm Logout'),
+        content: const Text('Are you sure you want to log out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              ref.read(authProvider.notifier).manualLogout();
+            },
+            child: const Text('Logout'),
+          ),
+        ],
       ),
     );
   }
@@ -867,7 +894,7 @@ class _AddTeacherDialogState extends ConsumerState<_AddTeacherDialog> {
 // Teacher Management Tab
 // ---------------------------------------------------------------------------
 
-class _TeacherManagementTab extends ConsumerWidget {
+class _TeacherManagementTab extends ConsumerStatefulWidget {
   final List<TeacherAdminData> teachers;
   final AuthStateData authData;
   final bool isWide;
@@ -879,12 +906,43 @@ class _TeacherManagementTab extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_TeacherManagementTab> createState() =>
+      _TeacherManagementTabState();
+}
+
+class _TeacherManagementTabState
+    extends ConsumerState<_TeacherManagementTab> {
+  String _filterStatus = 'all';
+
+  List<TeacherAdminData> get _filteredTeachers {
+    if (_filterStatus == 'all') return widget.teachers;
+    return widget.teachers
+        .where((t) => t.statusColor == _filterStatus)
+        .toList();
+  }
+
+  String get _filterLabel {
+    switch (_filterStatus) {
+      case 'green':
+        return 'Synced';
+      case 'yellow':
+        return 'Syncing';
+      case 'red':
+        return 'Error';
+      case 'gray':
+        return 'Offline';
+      default:
+        return 'All';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
     // Empty state
-    if (teachers.isEmpty) {
+    if (widget.teachers.isEmpty) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -916,11 +974,11 @@ class _TeacherManagementTab extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Roster card with #F5F7F9 background
+          // Roster card
           Container(
             width: double.infinity,
             decoration: BoxDecoration(
-              color: const Color(0xFFF5F7F9),
+              color: cs.surfaceContainerLow,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: cs.outlineVariant.withValues(alpha: 0.2),
@@ -961,33 +1019,47 @@ class _TeacherManagementTab extends ConsumerWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         // Filter button
-                        Container(
-                          height: 48,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          decoration: BoxDecoration(
-                            color: cs.surface,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: cs.outlineVariant.withValues(alpha: 0.3),
+                        InkWell(
+                          onTap: () => _showFilterMenu(context, cs, textTheme),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Container(
+                            height: 48,
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: cs.surface,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: _filterStatus != 'all'
+                                    ? cs.primary
+                                    : cs.outlineVariant.withValues(alpha: 0.3),
+                              ),
                             ),
-                          ),
-                          child: Center(
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.filter_list_rounded,
-                                  size: 18,
-                                  color: cs.onSurfaceVariant,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Filter',
-                                  style: textTheme.labelMedium?.copyWith(
-                                    color: cs.onSurfaceVariant,
+                            child: Center(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.filter_list_rounded,
+                                    size: 18,
+                                    color: _filterStatus != 'all'
+                                        ? cs.primary
+                                        : cs.onSurfaceVariant,
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    _filterLabel,
+                                    style: textTheme.labelMedium?.copyWith(
+                                      color: _filterStatus != 'all'
+                                          ? cs.primary
+                                          : cs.onSurfaceVariant,
+                                      fontWeight: _filterStatus != 'all'
+                                          ? FontWeight.w600
+                                          : FontWeight.normal,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -1011,8 +1083,8 @@ class _TeacherManagementTab extends ConsumerWidget {
                 ),
                 const SizedBox(height: 24),
 
-                // Teacher cards list
-                ...teachers.map((teacher) {
+                // Filtered teacher cards list
+                ..._filteredTeachers.map((teacher) {
                   return _TeacherCardWidget(
                     teacher: teacher,
                     cs: cs,
@@ -1028,6 +1100,96 @@ class _TeacherManagementTab extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  void _showFilterMenu(
+      BuildContext context, ColorScheme cs, TextTheme textTheme) {
+    final RenderBox? button = context.findRenderObject() as RenderBox?;
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+
+    final buttonRect = button != null
+        ? button.localToGlobal(Offset.zero) & button.size
+        : Offset.zero & const Size(200, 48);
+    final overlayRect =
+        overlay != null ? Offset.zero & overlay.size : Offset.zero & Size.zero;
+
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(buttonRect, overlayRect),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      items: [
+        PopupMenuItem<String>(
+          value: 'all',
+          child: _buildFilterItem('All', 'all', cs, textTheme),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem<String>(
+          value: 'green',
+          child: _buildFilterItem('Synced', 'green', cs, textTheme),
+        ),
+        PopupMenuItem<String>(
+          value: 'yellow',
+          child: _buildFilterItem('Syncing', 'yellow', cs, textTheme),
+        ),
+        PopupMenuItem<String>(
+          value: 'red',
+          child: _buildFilterItem('Error', 'red', cs, textTheme),
+        ),
+        PopupMenuItem<String>(
+          value: 'gray',
+          child: _buildFilterItem('Offline', 'gray', cs, textTheme),
+        ),
+      ],
+    ).then((value) {
+      if (value != null && mounted) {
+        setState(() => _filterStatus = value);
+      }
+    });
+  }
+
+  Widget _buildFilterItem(
+      String label, String value, ColorScheme cs, TextTheme textTheme) {
+    final isSelected = _filterStatus == value;
+    return Row(
+      children: [
+        if (value != 'all')
+          Container(
+            width: 10,
+            height: 10,
+            margin: const EdgeInsets.only(right: 10),
+            decoration: BoxDecoration(
+              color: _statusDotColor(value),
+              shape: BoxShape.circle,
+            ),
+          ),
+        Text(
+          label,
+          style: textTheme.labelLarge?.copyWith(
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            color: isSelected ? cs.primary : cs.onSurface,
+          ),
+        ),
+        const Spacer(),
+        if (isSelected)
+          Icon(Icons.check, size: 18, color: cs.primary),
+      ],
+    );
+  }
+
+  Color _statusDotColor(String status) {
+    switch (status) {
+      case 'green':
+        return const Color(0xFF008751);
+      case 'yellow':
+        return const Color(0xFF2196F3);
+      case 'red':
+        return const Color(0xFFB71C1C);
+      default:
+        return Colors.grey;
+    }
   }
 
   void _showAddTeacherDialog(BuildContext context, WidgetRef ref) {
@@ -1145,7 +1307,7 @@ class _TeacherCardWidget extends StatelessWidget {
                   child: Text(
                     'Action Required',
                     style: textTheme.labelMedium?.copyWith(
-                      color: const Color(0xFFB71C1C),
+                      color: cs.error,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -1478,7 +1640,7 @@ class _SyncHealthTab extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFFF5F7F9),
+            color: cs.surfaceContainerLow,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: cs.outlineVariant.withValues(alpha: 0.2),
@@ -1522,7 +1684,7 @@ class _SyncHealthTab extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFFF5F7F9),
+            color: cs.surfaceContainerLow,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: cs.outlineVariant.withValues(alpha: 0.2),
@@ -1566,7 +1728,7 @@ class _SyncHealthTab extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F7F9),
+        color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: cs.outlineVariant.withValues(alpha: 0.2),
