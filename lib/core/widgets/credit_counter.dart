@@ -16,8 +16,9 @@ class CreditCounter extends ConsumerWidget {
     final creditData = ref.watch(creditStateProvider);
     final cs = Theme.of(context).colorScheme;
 
-    final isPositive = creditData.currentCredits > 0;
-    final labelColor = isPositive ? cs.primary : cs.error;
+    final hasError = creditData.errorMessage != null;
+    final isPositive = !hasError && creditData.currentCredits > 0;
+    final labelColor = hasError ? cs.error : (isPositive ? cs.primary : cs.error);
 
     return ActionChip(
       backgroundColor: labelColor.withValues(alpha: isPositive ? 0.10 : 0.12),
@@ -39,13 +40,13 @@ class CreditCounter extends ConsumerWidget {
         ),
         alignment: Alignment.center,
         child: Icon(
-          Icons.lock_open_rounded,
+          hasError ? Icons.error_outline_rounded : Icons.lock_open_rounded,
           size: 11,
           color: labelColor,
         ),
       ),
       label: Text(
-        creditData.loading ? '…' : '${creditData.currentCredits}',
+        hasError ? '—' : (creditData.loading ? '…' : '${creditData.currentCredits}'),
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
               fontWeight: FontWeight.w700,
               color: labelColor,
@@ -93,12 +94,12 @@ class _CreditDetailsDialog extends StatelessWidget {
           Container(
             width: 34,
             height: 34,
-            decoration: const BoxDecoration(
-              color: Color(0xFF3674B5),
-              borderRadius: BorderRadius.all(Radius.circular(10)),
+            decoration: BoxDecoration(
+              color: cs.primaryContainer,
+              borderRadius: const BorderRadius.all(Radius.circular(10)),
             ),
-            child: const Icon(Icons.account_balance_rounded,
-                color: Colors.white, size: 18),
+            child: Icon(Icons.account_balance_rounded,
+                color: cs.onPrimaryContainer, size: 18),
           ),
           const SizedBox(width: 12),
           Text(

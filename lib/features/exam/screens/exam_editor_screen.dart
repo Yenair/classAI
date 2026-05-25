@@ -45,6 +45,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   String? _schoolId;
   String _subscriptionTier = 'free';
 
+  /// Loaded from subjectsDao, falls back to [_subjects] if empty.
+  List<String> _loadedSubjects = [];
+
   // Generated MCQ data
   List<Map<String, dynamic>> _mcqs = [];
 
@@ -87,7 +90,22 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       _registerWithEmergencyFlush();
       _loadCreditBalance();
       _loadAuthInfo();
+      _loadSubjects();
     });
+  }
+
+  Future<void> _loadSubjects() async {
+    try {
+      final db = ref.read(databaseProvider);
+      final subjects = await db.subjectsDao.getAll();
+      if (mounted) {
+        setState(() {
+          _loadedSubjects = subjects.map((s) => s.name).toList();
+        });
+      }
+    } catch (_) {
+      // Fall back to hardcoded _subjects
+    }
   }
 
   void _registerWithEmergencyFlush() {
@@ -475,7 +493,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                         difficulty: _difficulty,
                                         isGenerating: _isGenerating,
                                         creditBalance: _creditBalance,
-                                        subjects: _subjects,
+                                        subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
                                         classLevels: _classLevels,
                                         difficulties: _difficulties,
                                         onSubjectChanged: (v) => setState(
@@ -520,7 +538,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                       difficulty: _difficulty,
                                       isGenerating: _isGenerating,
                                       creditBalance: _creditBalance,
-                                      subjects: _subjects,
+                                      subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
                                       classLevels: _classLevels,
                                       difficulties: _difficulties,
                                       onSubjectChanged: (v) => setState(
@@ -777,7 +795,7 @@ class _TopBar extends StatelessWidget {
                 Icon(Icons.stars_rounded, size: 20, color: cs.primary),
                 const SizedBox(width: 6),
                 Text(
-                  '₦$creditBalance',
+                  '$creditBalance',
                   style: theme.textTheme.labelLarge?.copyWith(
                     fontWeight: FontWeight.w700,
                     color: cs.primary,
@@ -841,7 +859,7 @@ class _ConfigPanel extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFFF5F7F9),
+            color: cs.surfaceContainerLow,
             borderRadius: BorderRadius.circular(AppTheme.radiusXl),
             border: Border.all(
               color: cs.outlineVariant.withValues(alpha: 0.3),
@@ -1538,7 +1556,7 @@ class _PreviewPanel extends StatelessWidget {
                 ),
               ),
               contentPadding: const EdgeInsets.all(12),
-              fillColor: const Color(0xFFF5F7F9),
+              fillColor: cs.surfaceContainerLow,
               filled: true,
             ),
             onChanged: (v) => onUpdateTheory(index, 'modelAnswer', v),

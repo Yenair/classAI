@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/main.dart' show databaseProvider;
 import 'package:classai/core/theme/app_theme.dart';
+import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/features/vault/screens/vault_item_detail_screen.dart';
 
@@ -32,6 +33,11 @@ class _VaultBrowserScreenState extends ConsumerState<VaultBrowserScreen> {
   // Search query
   String _searchQuery = '';
 
+  // Dynamic filter options (populated from loaded items)
+  List<String> _subjectOptions = [];
+  List<String> _classLevelOptions = [];
+  List<String> _curriculumOptions = [];
+
   @override
   void initState() {
     super.initState();
@@ -47,9 +53,17 @@ class _VaultBrowserScreenState extends ConsumerState<VaultBrowserScreen> {
         classLevel: _filterClassLevel,
         curriculum: _filterCurriculum,
       );
+      // Derive distinct filter options from all approved items
+      final allItems = await dao.getApprovedItems();
+      final subjects = allItems.map((e) => e.subject).toSet().toList()..sort();
+      final classLevels = allItems.map((e) => e.classLevel).toSet().toList()..sort();
+      final curriculums = allItems.map((e) => e.curriculum).toSet().toList()..sort();
       setState(() {
         _items = items;
         _errorMessage = null;
+        _subjectOptions = subjects;
+        _classLevelOptions = classLevels;
+        _curriculumOptions = curriculums;
       });
     } catch (e) {
       setState(() => _errorMessage = 'Failed to load vault items: $e');
@@ -80,6 +94,9 @@ class _VaultBrowserScreenState extends ConsumerState<VaultBrowserScreen> {
     final tt = Theme.of(context).textTheme;
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth >= 768;
+    final authData = ref.watch(authProvider);
+    final teacherName = authData.currentTeacher?.teacherName ?? 'Educator Profile';
+    final teacherInitials = _getInitials(teacherName);
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -90,7 +107,7 @@ class _VaultBrowserScreenState extends ConsumerState<VaultBrowserScreen> {
             // Navigation Drawer (Tablet/Desktop)
             // -------------------------------------------------------
             if (isDesktop)
-              _NavDrawer(cs: cs, tt: tt),
+              _NavDrawer(cs: cs, tt: tt, teacherName: teacherName, teacherInitials: teacherInitials),
 
             // -------------------------------------------------------
             // Main Content Area
@@ -100,7 +117,7 @@ class _VaultBrowserScreenState extends ConsumerState<VaultBrowserScreen> {
                 children: [
                   // TopAppBar (Mobile only)
                   if (!isDesktop)
-                    _MobileHeader(cs: cs, tt: tt, ref: ref),
+                    _MobileHeader(cs: cs, tt: tt, ref: ref, teacherName: teacherName, teacherInitials: teacherInitials),
 
                   // Scrollable main canvas
                   Expanded(
@@ -134,6 +151,9 @@ class _VaultBrowserScreenState extends ConsumerState<VaultBrowserScreen> {
                                         setState(
                                             () => _filterCurriculum = v),
                                     onApplyFilters: _loadItems,
+                                    subjectOptions: _subjectOptions,
+                                    classLevelOptions: _classLevelOptions,
+                                    curriculumOptions: _curriculumOptions,
                                     onOpenDetail: _openDetail,
                                     getInitials: _getInitials,
                                   ),
@@ -158,8 +178,15 @@ class _VaultBrowserScreenState extends ConsumerState<VaultBrowserScreen> {
 class _NavDrawer extends StatelessWidget {
   final ColorScheme cs;
   final TextTheme tt;
+  final String teacherName;
+  final String teacherInitials;
 
-  const _NavDrawer({required this.cs, required this.tt});
+  const _NavDrawer({
+    required this.cs,
+    required this.tt,
+    required this.teacherName,
+    required this.teacherInitials,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -267,7 +294,7 @@ class _NavDrawer extends StatelessWidget {
                       ),
                       child: Center(
                         child: Text(
-                          'EP',
+                          teacherInitials,
                           style: tt.bodyLarge?.copyWith(
                             fontWeight: FontWeight.bold,
                             color: cs.onPrimary,
@@ -281,7 +308,7 @@ class _NavDrawer extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Educator Profile',
+                            teacherName,
                             style: tt.labelLarge?.copyWith(
                               color: cs.onSurface,
                             ),
@@ -292,8 +319,8 @@ class _NavDrawer extends StatelessWidget {
                               Container(
                                 width: 8,
                                 height: 8,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF008751),
+                                decoration: BoxDecoration(
+                                  color: cs.primary,
                                   shape: BoxShape.circle,
                                 ),
                               ),
@@ -378,11 +405,15 @@ class _MobileHeader extends StatelessWidget {
   final ColorScheme cs;
   final TextTheme tt;
   final WidgetRef ref;
+  final String teacherName;
+  final String teacherInitials;
 
   const _MobileHeader({
     required this.cs,
     required this.tt,
     required this.ref,
+    required this.teacherName,
+    required this.teacherInitials,
   });
 
   @override
@@ -411,7 +442,7 @@ class _MobileHeader extends StatelessWidget {
             ),
             child: Center(
               child: Text(
-                'EP',
+                teacherInitials,
                 style: tt.labelMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: cs.onPrimary,
@@ -557,6 +588,9 @@ class _VaultContent extends StatelessWidget {
   final String? filterSubject;
   final String? filterClassLevel;
   final String? filterCurriculum;
+  final List<String> subjectOptions;
+  final List<String> classLevelOptions;
+  final List<String> curriculumOptions;
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<String?> onFilterSubjectChanged;
   final ValueChanged<String?> onFilterClassLevelChanged;
@@ -573,6 +607,9 @@ class _VaultContent extends StatelessWidget {
     required this.filterSubject,
     required this.filterClassLevel,
     required this.filterCurriculum,
+    required this.subjectOptions,
+    required this.classLevelOptions,
+    required this.curriculumOptions,
     required this.onSearchChanged,
     required this.onFilterSubjectChanged,
     required this.onFilterClassLevelChanged,
@@ -619,6 +656,9 @@ class _VaultContent extends StatelessWidget {
                 filterSubject: filterSubject,
                 filterClassLevel: filterClassLevel,
                 filterCurriculum: filterCurriculum,
+                subjectOptions: subjectOptions,
+                classLevelOptions: classLevelOptions,
+                curriculumOptions: curriculumOptions,
                 onFilterSubjectChanged: onFilterSubjectChanged,
                 onFilterClassLevelChanged: onFilterClassLevelChanged,
                 onFilterCurriculumChanged: onFilterCurriculumChanged,
@@ -771,6 +811,9 @@ class _FilterChipsRow extends StatelessWidget {
   final String? filterSubject;
   final String? filterClassLevel;
   final String? filterCurriculum;
+  final List<String> subjectOptions;
+  final List<String> classLevelOptions;
+  final List<String> curriculumOptions;
   final ValueChanged<String?> onFilterSubjectChanged;
   final ValueChanged<String?> onFilterClassLevelChanged;
   final ValueChanged<String?> onFilterCurriculumChanged;
@@ -782,6 +825,9 @@ class _FilterChipsRow extends StatelessWidget {
     required this.filterSubject,
     required this.filterClassLevel,
     required this.filterCurriculum,
+    required this.subjectOptions,
+    required this.classLevelOptions,
+    required this.curriculumOptions,
     required this.onFilterSubjectChanged,
     required this.onFilterClassLevelChanged,
     required this.onFilterCurriculumChanged,
@@ -820,7 +866,7 @@ class _FilterChipsRow extends StatelessWidget {
             tt: tt,
             hint: 'Subject: All',
             value: filterSubject,
-            options: const ['Physics', 'Mathematics', 'English Language', 'Chemistry'],
+            options: subjectOptions,
             onChanged: (v) {
               onFilterSubjectChanged(v);
               onApplyFilters();
@@ -833,7 +879,7 @@ class _FilterChipsRow extends StatelessWidget {
             tt: tt,
             hint: 'Class: All',
             value: filterClassLevel,
-            options: const ['SS3', 'SS2', 'SS1', 'JSS3'],
+            options: classLevelOptions,
             onChanged: (v) {
               onFilterClassLevelChanged(v);
               onApplyFilters();
@@ -846,7 +892,7 @@ class _FilterChipsRow extends StatelessWidget {
             tt: tt,
             hint: 'Curriculum: All',
             value: filterCurriculum,
-            options: const ['Nigerian National', 'WAEC Prep', 'NECO Prep'],
+            options: curriculumOptions,
             onChanged: (v) {
               onFilterCurriculumChanged(v);
               onApplyFilters();

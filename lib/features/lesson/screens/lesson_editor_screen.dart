@@ -53,6 +53,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   String? _schoolId;
   String _subscriptionTier = 'free';
 
+  /// Loaded from subjectsDao, falls back to [_subjects] if empty.
+  List<String> _loadedSubjects = [];
+
   // Generated content (editable after generation)
   String _objectivesText = '';
   String _vocabularyText = '';
@@ -106,7 +109,22 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       _registerWithEmergencyFlush();
       _loadCreditBalance();
       _loadAuthInfo();
+      _loadSubjects();
     });
+  }
+
+  Future<void> _loadSubjects() async {
+    try {
+      final db = ref.read(databaseProvider);
+      final subjects = await db.subjectsDao.getAll();
+      if (mounted) {
+        setState(() {
+          _loadedSubjects = subjects.map((s) => s.name).toList();
+        });
+      }
+    } catch (_) {
+      // Fall back to hardcoded _subjects
+    }
   }
 
   void _registerWithEmergencyFlush() {
@@ -464,7 +482,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                               selectedBlooms: _selectedBlooms,
                                               isGenerating: _isGenerating,
                                               hasGenerated: _hasGenerated,
-                                              subjects: _subjects,
+                                              subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
                                               classLevels: _classLevels,
                                               difficulties: _difficulties,
                                               bloomVerbs: _bloomVerbs,
@@ -550,7 +568,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                             selectedBlooms: _selectedBlooms,
                                             isGenerating: _isGenerating,
                                             hasGenerated: _hasGenerated,
-                                            subjects: _subjects,
+                                            subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
                                             classLevels: _classLevels,
                                             difficulties: _difficulties,
                                             bloomVerbs: _bloomVerbs,
@@ -832,7 +850,7 @@ class _MobileHeader extends StatelessWidget {
               ),
               const Spacer(),
               Text(
-                '₦$creditBalance',
+                '$creditBalance',
                 style: theme.textTheme.labelLarge?.copyWith(
                   fontWeight: FontWeight.w500,
                   color: cs.onSurfaceVariant,
@@ -1294,7 +1312,7 @@ class _PreviewColumn extends StatelessWidget {
                 Text(
                   'Ready to Save',
                   style: theme.textTheme.labelMedium?.copyWith(
-                    color: const Color(0xFF4B53BA),
+                    color: cs.secondary,
                     fontWeight: FontWeight.w500,
                   ),
                 ),

@@ -16,11 +16,12 @@ class SyncIndicator extends ConsumerWidget {
     final syncData = ref.watch(syncStatusProvider);
     final cs = Theme.of(context).colorScheme;
 
-    final (IconData icon, Color tint, String label) = switch (syncData.status) {
-      SyncStatus.offline => (Icons.cloud_off, cs.error, 'Offline'),
-      SyncStatus.syncing => (Icons.cloud_sync, cs.primary, 'Syncing…'),
-      SyncStatus.synced => (Icons.cloud_done, cs.primary, 'Synced'),
-      SyncStatus.error => (Icons.cloud_off, cs.error, 'Sync error'),
+    final label = statusLabel(syncData.status);
+    final (IconData icon, Color tint) = switch (syncData.status) {
+      SyncStatus.offline => (Icons.cloud_off, cs.error),
+      SyncStatus.syncing => (Icons.cloud_sync, cs.primary),
+      SyncStatus.synced => (Icons.cloud_done, cs.primary),
+      SyncStatus.error => (Icons.cloud_off, cs.error),
     };
 
     return IconButton(
@@ -105,7 +106,7 @@ class _SyncDetailsSheet extends ConsumerWidget {
             const SizedBox(height: 24),
 
             // Stat rows
-            _StatRow(label: 'Status', value: _statusLabel(data.status), cs: cs),
+            _StatRow(label: 'Status', value: statusLabel(data.status), cs: cs),
             const SizedBox(height: 12),
             _StatRow(
                 label: 'Network',
@@ -194,9 +195,9 @@ class _StatRow extends StatelessWidget {
   }
 }
 
-String _statusLabel(SyncStatus s) => switch (s) {
+String statusLabel(SyncStatus s) => switch (s) {
       SyncStatus.offline => 'Offline',
       SyncStatus.syncing => 'Syncing…',
-      SyncStatus.synced => 'Synced',
-      SyncStatus.error => 'Error',
+      SyncStatus.synced => 'Online',
+      SyncStatus.error => 'Sync error',
     };

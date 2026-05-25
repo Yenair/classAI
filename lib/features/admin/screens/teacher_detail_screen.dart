@@ -269,8 +269,8 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.person_off_rounded,
-                    size: 64, color: Colors.grey),
+                Icon(Icons.person_off_rounded,
+                    size: 64, color: cs.onSurfaceVariant),
                 const SizedBox(height: 16),
                 Text(
                   'Teacher not found.',
@@ -351,14 +351,14 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
                             horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
                           color: teacher.isActive
-                              ? Colors.green.withValues(alpha: 0.12)
+                              ? cs.primary.withValues(alpha: 0.12)
                               : cs.error.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
                           teacher.isActive ? 'Active' : 'Inactive',
                           style: TextStyle(
-                            color: teacher.isActive ? Colors.green : cs.error,
+                            color: teacher.isActive ? cs.primary : cs.error,
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
                           ),
@@ -578,7 +578,7 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
                             onPressed: _reactivateTeacher,
                             icon: const Icon(Icons.check_circle_rounded),
                             style: FilledButton.styleFrom(
-                              backgroundColor: Colors.green,
+                              backgroundColor: cs.primary,
                             ),
                             label: const Text('Reactivate Account'),
                           ),

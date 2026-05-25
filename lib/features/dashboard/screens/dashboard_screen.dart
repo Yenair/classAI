@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/widgets/conflict_banner.dart';
+import 'package:classai/core/widgets/sync_indicator.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
@@ -94,6 +95,33 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
       ref.read(creditStateProvider.notifier).refresh();
       ref.read(unresolvedConflictsProvider.notifier).refresh();
     });
+  }
+
+  void _showLogoutConfirmation() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        title: const Text('Confirm Logout'),
+        content: const Text('Are you sure you want to log out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              ref.read(authProvider.notifier).manualLogout();
+            },
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -268,7 +296,7 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                             case 'settings':
                               context.push('/settings');
                             case 'logout':
-                              ref.read(authProvider.notifier).manualLogout();
+                              _showLogoutConfirmation();
                             case 'theme_light':
                               ref.read(themeProvider.notifier).setTheme(ThemeMode.light);
                             case 'theme_dark':
@@ -531,11 +559,12 @@ class _SyncChip extends ConsumerWidget {
     final syncData = ref.watch(syncStatusProvider);
     final cs = Theme.of(context).colorScheme;
 
-    final (Color dotColor, String label) = switch (syncData.status) {
-      SyncStatus.synced => (const Color(0xFF008751), 'Online'),
-      SyncStatus.syncing => (cs.primary, 'Syncing…'),
-      SyncStatus.error => (cs.error, 'Sync error'),
-      SyncStatus.offline => (cs.onSurfaceVariant, 'Offline'),
+    final label = statusLabel(syncData.status);
+    final Color dotColor = switch (syncData.status) {
+      SyncStatus.synced => cs.primary,
+      SyncStatus.syncing => cs.primary,
+      SyncStatus.error => cs.error,
+      SyncStatus.offline => cs.onSurfaceVariant,
     };
 
     return Container(
@@ -673,13 +702,15 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
-class _RecentLessonsSection extends StatelessWidget {
+class _RecentLessonsSection extends ConsumerWidget {
   const _RecentLessonsSection({required this.cs, required this.theme});
   final ColorScheme cs;
   final ThemeData theme;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final lessonsAsync = ref.watch(recentLessonsProvider);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -710,80 +741,116 @@ class _RecentLessonsSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final twoColumns = constraints.maxWidth >= 600;
-            if (twoColumns) {
-              return Row(
-                children: [
-                  Expanded(
-                    child: _LessonCard(
-                      icon: Icons.science_rounded,
-                      iconColor: cs.tertiaryContainer,
-                      title: 'Introduction to Photosynthesis',
-                      subtitle: 'JSS 2 • Biology',
-                      status: 'Draft',
-                      statusColor: cs.onSurfaceVariant,
-                      statusBg: cs.surfaceContainerHighest,
-                      timeAgo: 'Last edited 2h ago',
-                      cs: cs,
-                      theme: theme,
+        lessonsAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (err, _) => Text(
+            'Could not load lessons.',
+            style: theme.textTheme.bodyMedium?.copyWith(color: cs.error),
+          ),
+          data: (lessons) {
+            if (lessons.isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 32),
+                child: Center(
+                  child: Text(
+                    'No lessons yet',
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: cs.onSurfaceVariant,
                     ),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _LessonCard(
-                      icon: Icons.calculate_rounded,
-                      iconColor: cs.onSecondaryContainer,
-                      iconBg: cs.secondaryContainer.withValues(alpha: 0.2),
-                      title: 'Algebraic Expressions',
-                      subtitle: 'SS 1 • Mathematics',
-                      status: 'Published',
-                      statusColor: const Color(0xFF008751),
-                      statusBg: const Color(0xFF008751).withValues(alpha: 0.1),
-                      timeAgo: 'Last edited yesterday',
-                      cs: cs,
-                      theme: theme,
-                    ),
-                  ),
-                ],
-              );
-            } else {
-              return Column(
-                children: [
-                  _LessonCard(
-                    icon: Icons.science_rounded,
-                    iconColor: cs.tertiaryContainer,
-                    title: 'Introduction to Photosynthesis',
-                    subtitle: 'JSS 2 • Biology',
-                    status: 'Draft',
-                    statusColor: cs.onSurfaceVariant,
-                    statusBg: cs.surfaceContainerHighest,
-                    timeAgo: 'Last edited 2h ago',
-                    cs: cs,
-                    theme: theme,
-                  ),
-                  const SizedBox(height: 16),
-                  _LessonCard(
-                    icon: Icons.calculate_rounded,
-                    iconColor: cs.onSecondaryContainer,
-                    iconBg: cs.secondaryContainer.withValues(alpha: 0.2),
-                    title: 'Algebraic Expressions',
-                    subtitle: 'SS 1 • Mathematics',
-                    status: 'Published',
-                    statusColor: const Color(0xFF008751),
-                    statusBg: const Color(0xFF008751).withValues(alpha: 0.1),
-                    timeAgo: 'Last edited yesterday',
-                    cs: cs,
-                    theme: theme,
-                  ),
-                ],
+                ),
               );
             }
+
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                final twoColumns = constraints.maxWidth >= 600;
+                final displayed = lessons.take(4).toList();
+                if (twoColumns) {
+                  final row1 = displayed.take(2).toList();
+                  final row2 = displayed.length > 2 ? displayed.skip(2).take(2).toList() : <Lesson>[];
+                  return Column(
+                    children: [
+                      Row(
+                        children: row1.map((lesson) => Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                              right: row1.last == lesson ? 0 : 8,
+                            ),
+                            child: _LessonCard(
+                              icon: Icons.menu_book_rounded,
+                              iconColor: cs.primary,
+                              title: lesson.topic.isNotEmpty ? lesson.topic : lesson.subject,
+                              subtitle: '${lesson.classLevel} \u2022 ${lesson.subject}',
+                              status: lesson.difficulty,
+                              statusColor: cs.primary,
+                              statusBg: cs.primary.withValues(alpha: 0.1),
+                              timeAgo: 'Updated ${_timeAgo(lesson.updatedAt)}',
+                              cs: cs,
+                              theme: theme,
+                            ),
+                          ),
+                        )).toList(),
+                      ),
+                      if (row2.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        Row(
+                          children: row2.map((lesson) => Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.only(
+                                right: row2.last == lesson ? 0 : 8,
+                              ),
+                              child: _LessonCard(
+                                icon: Icons.menu_book_rounded,
+                                iconColor: cs.tertiary,
+                                title: lesson.topic.isNotEmpty ? lesson.topic : lesson.subject,
+                                subtitle: '${lesson.classLevel} \u2022 ${lesson.subject}',
+                                status: lesson.difficulty,
+                                statusColor: cs.onSurfaceVariant,
+                                statusBg: cs.surfaceContainerHighest,
+                                timeAgo: 'Updated ${_timeAgo(lesson.updatedAt)}',
+                                cs: cs,
+                                theme: theme,
+                              ),
+                            ),
+                          )).toList(),
+                        ),
+                      ],
+                    ],
+                  );
+                } else {
+                  return Column(
+                    children: displayed.map((lesson) => Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: _LessonCard(
+                        icon: Icons.menu_book_rounded,
+                        iconColor: cs.primary,
+                        title: lesson.topic.isNotEmpty ? lesson.topic : lesson.subject,
+                        subtitle: '${lesson.classLevel} \u2022 ${lesson.subject}',
+                        status: lesson.difficulty,
+                        statusColor: cs.primary,
+                        statusBg: cs.primary.withValues(alpha: 0.1),
+                        timeAgo: 'Updated ${_timeAgo(lesson.updatedAt)}',
+                        cs: cs,
+                        theme: theme,
+                      ),
+                    )).toList(),
+                  );
+                }
+              },
+            );
           },
         ),
       ],
     );
+  }
+
+  String _timeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
   }
 }
 
@@ -791,7 +858,6 @@ class _LessonCard extends StatelessWidget {
   const _LessonCard({
     required this.icon,
     required this.iconColor,
-    this.iconBg,
     required this.title,
     required this.subtitle,
     required this.status,
@@ -804,7 +870,6 @@ class _LessonCard extends StatelessWidget {
 
   final IconData icon;
   final Color iconColor;
-  final Color? iconBg;
   final String title;
   final String subtitle;
   final String status;
@@ -836,7 +901,7 @@ class _LessonCard extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: iconBg ?? iconColor.withValues(alpha: 0.1),
+                  color: iconColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(AppTheme.radiusLg),
                 ),
                 child: Icon(icon, color: iconColor, size: 24),
@@ -921,13 +986,19 @@ class _LessonCard extends StatelessWidget {
   }
 }
 
-class _RightColumn extends StatelessWidget {
+class _RightColumn extends ConsumerWidget {
   const _RightColumn({required this.cs, required this.theme});
   final ColorScheme cs;
   final ThemeData theme;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final lessonCountAsync = ref.watch(lessonCountProvider);
+    final examCountAsync = ref.watch(examCountProvider);
+
+    final lessonCount = lessonCountAsync.asData?.value ?? 0;
+    final examCount = examCountAsync.asData?.value ?? 0;
+
     return Column(
       children: [
         // Stats Card
@@ -973,25 +1044,9 @@ class _RightColumn extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '12',
+                          lessonCountAsync.isLoading ? '...' : '$lessonCount',
                           style: theme.textTheme.headlineMedium?.copyWith(
                             color: cs.onPrimary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.trending_up_rounded,
-                          size: 16,
-                          color: cs.secondaryFixed,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '+2',
-                          style: theme.textTheme.labelMedium?.copyWith(
-                            color: cs.secondaryFixed,
                           ),
                         ),
                       ],
@@ -1017,7 +1072,7 @@ class _RightColumn extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '4',
+                        examCountAsync.isLoading ? '...' : '$examCount',
                         style: theme.textTheme.headlineMedium?.copyWith(
                           color: cs.onPrimary,
                         ),
@@ -1027,128 +1082,6 @@ class _RightColumn extends StatelessWidget {
                 ],
               ),
             ],
-          ),
-        ),
-
-        const SizedBox(height: 24),
-
-        // Upcoming Schedule
-        Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: cs.surfaceContainerLowest,
-            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-            border: Border.all(
-              color: cs.outlineVariant.withValues(alpha: 0.3),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Upcoming Schedule',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  color: cs.primary,
-                ),
-              ),
-              const SizedBox(height: 16),
-              _ScheduleItem(
-                time: '10:00 AM',
-                title: 'JSS 2 Biology Class',
-                subtitle: 'Room 4B • 45 Students',
-                borderColor: cs.tertiaryContainer,
-                cs: cs,
-                theme: theme,
-              ),
-              const SizedBox(height: 12),
-              _ScheduleItem(
-                time: '11:30 AM',
-                title: 'SS 1 Math Exam',
-                subtitle: 'Main Hall • Invigilation',
-                borderColor: cs.secondary,
-                cs: cs,
-                theme: theme,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ScheduleItem extends StatelessWidget {
-  const _ScheduleItem({
-    required this.time,
-    required this.title,
-    required this.subtitle,
-    required this.borderColor,
-    required this.cs,
-    required this.theme,
-  });
-
-  final String time;
-  final String title;
-  final String subtitle;
-  final Color borderColor;
-  final ColorScheme cs;
-  final ThemeData theme;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 40,
-          child: Column(
-            children: [
-              Text(
-                time.split(' ').first,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: cs.outline,
-                ),
-              ),
-              Text(
-                time.split(' ').last,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: cs.outline,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainer,
-              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-              border: Border(
-                left: BorderSide(color: borderColor, width: 4),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: cs.primary,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: cs.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       ],
@@ -1165,6 +1098,20 @@ class _ScheduleItem extends StatelessWidget {
 final recentLessonsProvider = FutureProvider<List<Lesson>>((ref) async {
   final db = ref.read(databaseProvider);
   return db.lessonsDao.getRecentLessons(limit: 5);
+});
+
+/// Provider that fetches the total count of lessons.
+final lessonCountProvider = FutureProvider<int>((ref) async {
+  final db = ref.read(databaseProvider);
+  final lessons = await db.lessonsDao.getAll();
+  return lessons.length;
+});
+
+/// Provider that fetches the total count of exams.
+final examCountProvider = FutureProvider<int>((ref) async {
+  final db = ref.read(databaseProvider);
+  final exams = await db.examsDao.getAll();
+  return exams.length;
 });
 
 class ReaderLayout extends ConsumerStatefulWidget {
@@ -1185,6 +1132,33 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
       ref.read(creditStateProvider.notifier).refresh();
       ref.read(unresolvedConflictsProvider.notifier).refresh();
     });
+  }
+
+  void _showLogoutConfirmation() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        title: const Text('Confirm Logout'),
+        content: const Text('Are you sure you want to log out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              ref.read(authProvider.notifier).manualLogout();
+            },
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -1224,7 +1198,7 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
                       case 'settings':
                         context.push('/settings');
                       case 'logout':
-                        ref.read(authProvider.notifier).manualLogout();
+                        _showLogoutConfirmation();
                       case 'theme_light':
                         ref.read(themeProvider.notifier).setTheme(ThemeMode.light);
                       case 'theme_dark':
@@ -1344,23 +1318,18 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
                       height: 12,
                       decoration: BoxDecoration(
                         color: syncData.status == SyncStatus.synced
-                            ? const Color(0xFF008751)
+                            ? cs.primary
                             : syncData.status == SyncStatus.syncing
-                                ? const Color(0xFF2196F3)
+                                ? cs.primary
                                 : syncData.status == SyncStatus.error
-                                    ? const Color(0xFFBA1A1A)
-                                    : const Color(0xFF9E9E9E),
+                                    ? cs.error
+                                    : cs.onSurfaceVariant,
                         shape: BoxShape.circle,
                       ),
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      switch (syncData.status) {
-                        SyncStatus.synced => 'Online',
-                        SyncStatus.syncing => 'Syncing…',
-                        SyncStatus.error => 'Sync error',
-                        SyncStatus.offline => 'Offline',
-                      },
+                      statusLabel(syncData.status),
                       style: theme.textTheme.labelLarge?.copyWith(
                         color: cs.outline,
                       ),
@@ -1486,6 +1455,7 @@ class _RecentLessonsList extends ConsumerWidget {
             for (int i = 0; i < lessons.length; i++) ...[
               if (i > 0) const SizedBox(height: 16),
               _ReaderLessonCard(
+                lessonId: lessons[i].id,
                 classLabel: lessons[i].classLevel,
                 title: lessons[i].topic.isNotEmpty
                     ? lessons[i].topic
@@ -1512,6 +1482,7 @@ class _RecentLessonsList extends ConsumerWidget {
 
 class _ReaderLessonCard extends StatelessWidget {
   const _ReaderLessonCard({
+    required this.lessonId,
     required this.classLabel,
     required this.title,
     required this.icon,
@@ -1522,6 +1493,7 @@ class _ReaderLessonCard extends StatelessWidget {
     required this.theme,
   });
 
+  final int lessonId;
   final String classLabel;
   final String title;
   final IconData icon;
@@ -1536,7 +1508,7 @@ class _ReaderLessonCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F7F9),
+        color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(AppTheme.radiusXl),
         border: Border.all(
           color: cs.outlineVariant.withValues(alpha: 0.2),
@@ -1626,7 +1598,7 @@ class _ReaderLessonCard extends StatelessWidget {
               SizedBox(
                 height: AppTheme.touchTarget,
                 child: FilledButton(
-                  onPressed: () {},
+                  onPressed: () => context.push('/lessons/$lessonId'),
                   child: Text(
                     buttonText,
                     style: theme.textTheme.labelLarge?.copyWith(

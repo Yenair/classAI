@@ -197,13 +197,13 @@ class _ConflictResolutionScreenState
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.10),
+                color: cs.primary.withValues(alpha: 0.10),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.check_circle_outline_rounded,
                 size: 36,
-                color: Colors.green,
+                color: cs.primary,
               ),
             ),
             const SizedBox(height: 16),

@@ -795,7 +795,7 @@ class _FormContent extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F7F9),
+        color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(AppTheme.radiusXl),
       ),
       padding: const EdgeInsets.all(24),
@@ -1188,7 +1188,7 @@ class _RecentSubmissionsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F7F9),
+        color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(AppTheme.radiusXl),
       ),
       padding: const EdgeInsets.all(24),

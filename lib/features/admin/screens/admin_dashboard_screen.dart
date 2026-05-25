@@ -6,7 +6,6 @@ import 'package:classai/features/admin/providers/admin_provider.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/core/services/auth_service.dart';
 import 'package:classai/core/theme/app_theme.dart';
-import 'package:classai/core/utils/currency_formatter.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/features/settings/providers/theme_provider.dart';
@@ -103,13 +102,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 Container(
                   width: 48,
                   height: 48,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF3674B5),
+                  decoration: BoxDecoration(
+                    color: cs.primaryContainer,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.school_rounded,
-                    color: Colors.white,
+                    color: cs.onPrimaryContainer,
                     size: 24,
                   ),
                 ),
@@ -244,8 +243,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     Text(
                       creditData.loading
                           ? '…'
-                          : CurrencyFormatter.formatNairaCompact(
-                              creditData.currentCredits),
+                          : '${creditData.currentCredits}',
                       style: textTheme.labelLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: cs.primary,
@@ -653,7 +651,7 @@ class _NavItem extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
           color: isActive
-              ? const Color(0xFFE0E0FF)
+              ? cs.secondaryContainer
               : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
@@ -666,7 +664,7 @@ class _NavItem extends StatelessWidget {
               icon,
               size: 22,
               color: isActive
-                  ? const Color(0xFF00026C)
+                  ? cs.onSecondaryContainer
                   : cs.onSurfaceVariant,
             ),
             const SizedBox(width: 16),
@@ -675,7 +673,7 @@ class _NavItem extends StatelessWidget {
               style: Theme.of(context).textTheme.labelLarge?.copyWith(
                     fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
                     color: isActive
-                        ? const Color(0xFF00026C)
+                        ? cs.onSecondaryContainer
                         : cs.onSurfaceVariant,
                   ),
             ),
@@ -1180,15 +1178,16 @@ class _TeacherManagementTabState
   }
 
   Color _statusDotColor(String status) {
+    final cs = Theme.of(context).colorScheme;
     switch (status) {
       case 'green':
-        return const Color(0xFF008751);
+        return cs.primary;
       case 'yellow':
-        return const Color(0xFF2196F3);
+        return cs.tertiary;
       case 'red':
-        return const Color(0xFFB71C1C);
+        return cs.error;
       default:
-        return Colors.grey;
+        return cs.onSurfaceVariant;
     }
   }
 
@@ -1350,22 +1349,22 @@ class _TeacherCardWidget extends StatelessWidget {
   Color _statusColor(String status) {
     switch (status) {
       case 'green':
-        return const Color(0xFF008751);
+        return cs.primary;
       case 'yellow':
-        return const Color(0xFF2196F3); // blue for syncing per stitch
+        return cs.tertiary;
       case 'red':
-        return const Color(0xFFB71C1C);
+        return cs.error;
       default:
-        return Colors.grey;
+        return cs.onSurfaceVariant;
     }
   }
 
   Color _avatarBgColor(String status) {
     switch (status) {
       case 'green':
-        return const Color(0xFF3674B5).withValues(alpha: 0.2);
+        return cs.primaryContainer.withValues(alpha: 0.3);
       case 'yellow':
-        return const Color(0xFF5068D9).withValues(alpha: 0.2);
+        return cs.tertiaryContainer.withValues(alpha: 0.3);
       default:
         return cs.surfaceContainerHighest;
     }
@@ -1374,9 +1373,9 @@ class _TeacherCardWidget extends StatelessWidget {
   Color _avatarTextColor(String status) {
     switch (status) {
       case 'green':
-        return const Color(0xFF3674B5);
+        return cs.primary;
       case 'yellow':
-        return const Color(0xFF5068D9);
+        return cs.tertiary;
       default:
         return cs.onSurfaceVariant;
     }
@@ -1439,7 +1438,7 @@ class _VaultApprovalTab extends ConsumerWidget {
                 Icon(
                   Icons.check_circle_outline_rounded,
                   size: 64,
-                  color: Colors.green.withValues(alpha: 0.6),
+                  color: cs.primary.withValues(alpha: 0.6),
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -1459,7 +1458,7 @@ class _VaultApprovalTab extends ConsumerWidget {
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
-                color: const Color(0xFFF5F7F9),
+                color: cs.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: cs.outlineVariant.withValues(alpha: 0.2),
@@ -1634,32 +1633,11 @@ class _SyncHealthTab extends StatelessWidget {
     int totalTeachers,
   ) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Placeholder message until real sync analytics are implemented
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: cs.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: cs.outlineVariant.withValues(alpha: 0.2),
-            ),
-          ),
-          child: Column(
-            children: [
-              Icon(Icons.sync_rounded, size: 40, color: cs.outlineVariant),
-              const SizedBox(height: 12),
-              Text(
-                'Sync health data will appear here after your first sync.',
-                textAlign: TextAlign.center,
-                style: textTheme.bodyLarge?.copyWith(
-                  color: cs.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
+        _buildSummaryCard(
+          cs, textTheme, greenCount, yellowCount, redCount,
+          grayCount, syncPercent, totalTeachers, isWide: true),
       ],
     );
   }
@@ -1679,31 +1657,9 @@ class _SyncHealthTab extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Placeholder message until real sync analytics are implemented
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: cs.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: cs.outlineVariant.withValues(alpha: 0.2),
-            ),
-          ),
-          child: Column(
-            children: [
-              Icon(Icons.sync_rounded, size: 40, color: cs.outlineVariant),
-              const SizedBox(height: 12),
-              Text(
-                'Sync health data will appear here after your first sync.',
-                textAlign: TextAlign.center,
-                style: textTheme.bodyLarge?.copyWith(
-                  color: cs.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
+        _buildSummaryCard(
+          cs, textTheme, greenCount, yellowCount, redCount,
+          grayCount, syncPercent, totalTeachers, isWide: false),
 
         // Per-teacher sync details
         const SizedBox(height: 16),
@@ -1711,6 +1667,150 @@ class _SyncHealthTab extends StatelessWidget {
               context, cs, textTheme, teacher,
             )),
       ],
+    );
+  }
+
+  Widget _buildSummaryCard(
+    ColorScheme cs,
+    TextTheme textTheme,
+    int greenCount,
+    int yellowCount,
+    int redCount,
+    int grayCount,
+    int syncPercent,
+    int totalTeachers, {
+    required bool isWide,
+  }) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Icon(Icons.sync_rounded, size: 22, color: cs.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Sync Health Summary',
+                style: textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Sync percentage bar
+          Row(
+            children: [
+              Text(
+                '$syncPercent%',
+                style: textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  color: cs.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: syncPercent / 100,
+                    minHeight: 8,
+                    backgroundColor: cs.surfaceContainerHighest,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      syncPercent >= 80
+                          ? cs.primary
+                          : syncPercent >= 50
+                              ? cs.tertiary
+                              : cs.error,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Status counts in a row
+          isWide
+              ? Row(
+                  children: [
+                    _statusCountChip(cs, textTheme, 'Synced', greenCount, cs.primary),
+                    const SizedBox(width: 16),
+                    _statusCountChip(cs, textTheme, 'Warning', yellowCount, cs.tertiary),
+                    const SizedBox(width: 16),
+                    _statusCountChip(cs, textTheme, 'Error', redCount, cs.error),
+                    const SizedBox(width: 16),
+                    _statusCountChip(cs, textTheme, 'Offline', grayCount, cs.onSurfaceVariant),
+                  ],
+                )
+              : Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    _statusCountChip(cs, textTheme, 'Synced', greenCount, cs.primary),
+                    _statusCountChip(cs, textTheme, 'Warning', yellowCount, cs.tertiary),
+                    _statusCountChip(cs, textTheme, 'Error', redCount, cs.error),
+                    _statusCountChip(cs, textTheme, 'Offline', grayCount, cs.onSurfaceVariant),
+                  ],
+                ),
+          const SizedBox(height: 12),
+          Text(
+            '$totalTeachers teacher${totalTeachers != 1 ? 's' : ''} tracked',
+            style: textTheme.bodySmall?.copyWith(
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusCountChip(
+    ColorScheme cs,
+    TextTheme textTheme,
+    String label,
+    int count,
+    Color dotColor,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: dotColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '$count $label',
+            style: textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1737,7 +1837,7 @@ class _SyncHealthTab extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _StatusDot(color: _statusColor(teacher.statusColor)),
+          _StatusDot(color: _statusColor(teacher.statusColor, cs)),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -1779,16 +1879,16 @@ class _SyncHealthTab extends StatelessWidget {
     return '${diff.inDays}d ago';
   }
 
-  Color _statusColor(String status) {
+  Color _statusColor(String status, ColorScheme cs) {
     switch (status) {
       case 'green':
-        return const Color(0xFF008751);
+        return cs.primary;
       case 'yellow':
-        return const Color(0xFF2196F3);
+        return cs.tertiary;
       case 'red':
-        return const Color(0xFFB71C1C);
+        return cs.error;
       default:
-        return Colors.grey;
+        return cs.onSurfaceVariant;
     }
   }
 }

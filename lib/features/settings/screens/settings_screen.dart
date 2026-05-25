@@ -21,15 +21,18 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   static const _subjectsKey = 'selected_subjects';
+  static const _interfaceModeKey = 'interface_mode';
   List<String> _selectedSubjects = List.from(defaultSubjects);
   bool _loadingSubjects = true;
   String _appVersion = '';
+  String _interfaceMode = 'auto';
 
   @override
   void initState() {
     super.initState();
     _loadSubjects();
     _loadAppVersion();
+    _loadInterfaceMode();
   }
 
   Future<void> _loadAppVersion() async {
@@ -43,7 +46,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } catch (_) {
       if (mounted) {
         setState(() {
-          _appVersion = '1.0.0';
+          _appVersion = '—';
         });
       }
     }
@@ -71,6 +74,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (mounted) {
         setState(() => _loadingSubjects = false);
       }
+    }
+  }
+
+  Future<void> _loadInterfaceMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final mode = prefs.getString(_interfaceModeKey) ?? 'auto';
+    if (mounted) {
+      setState(() => _interfaceMode = mode);
+    }
+  }
+
+  Future<void> _setInterfaceMode(String mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_interfaceModeKey, mode);
+    if (mounted) {
+      setState(() => _interfaceMode = mode);
     }
   }
 
@@ -124,6 +143,44 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (selected != null) {
       _addSubject(selected);
     }
+  }
+
+  void _showLogoutConfirmation() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        title: const Text('Confirm Logout'),
+        content: const Text('Are you sure you want to log out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              try {
+                await ref.read(authProvider.notifier).manualLogout();
+                if (context.mounted) {
+                  context.go('/login');
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Sign out failed: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -246,7 +303,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   child: Center(
                     child: Text(
                       _getInitials(
-                          authData.currentTeacher?.teacherName ?? 'E'),
+                          authData.currentTeacher?.teacherName ?? 'T'),
                       style: textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: cs.onPrimaryContainer,
@@ -256,7 +313,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 const SizedBox(width: 16),
                 Text(
-                  'Educator Profile',
+                  authData.currentTeacher?.teacherName ?? 'Educator Profile',
                   style: textTheme.labelLarge?.copyWith(
                     color: cs.primary,
                   ),
@@ -276,42 +333,48 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     label: 'Home',
                     isActive: false,
                     cs: cs,
-                    textTheme: textTheme),
+                    textTheme: textTheme,
+                    onTap: () => context.go('/')),
                 const SizedBox(height: 4),
                 _SettingsNavItem(
                     icon: Icons.menu_book_rounded,
                     label: 'Lessons',
                     isActive: false,
                     cs: cs,
-                    textTheme: textTheme),
+                    textTheme: textTheme,
+                    onTap: () => context.push('/lessons')),
                 const SizedBox(height: 4),
                 _SettingsNavItem(
                     icon: Icons.quiz_rounded,
                     label: 'Exams',
                     isActive: false,
                     cs: cs,
-                    textTheme: textTheme),
+                    textTheme: textTheme,
+                    onTap: () => context.push('/exams')),
                 const SizedBox(height: 4),
                 _SettingsNavItem(
                     icon: Icons.inventory_2_rounded,
                     label: 'Vault',
                     isActive: false,
                     cs: cs,
-                    textTheme: textTheme),
+                    textTheme: textTheme,
+                    onTap: () => context.push('/vault')),
                 const SizedBox(height: 4),
                 _SettingsNavItem(
                     icon: Icons.admin_panel_settings_rounded,
                     label: 'Admin',
                     isActive: false,
                     cs: cs,
-                    textTheme: textTheme),
+                    textTheme: textTheme,
+                    onTap: () => context.push('/admin')),
                 const SizedBox(height: 4),
                 _SettingsNavItem(
                     icon: Icons.settings_rounded,
                     label: 'Settings',
                     isActive: true,
                     cs: cs,
-                    textTheme: textTheme),
+                    textTheme: textTheme,
+                    onTap: null),
               ],
             ),
           ),
@@ -500,28 +563,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _ModeOption(
             label: 'Auto (System Default)',
             value: 'auto',
-            groupValue: 'auto',
+            groupValue: _interfaceMode,
             cs: cs,
             textTheme: textTheme,
-            onChanged: (_) {},
+            onChanged: (v) {
+              if (v != null) _setInterfaceMode(v);
+            },
           ),
           const SizedBox(height: 8),
           _ModeOption(
             label: 'Reader (Optimized for grading)',
             value: 'reader',
-            groupValue: 'auto',
+            groupValue: _interfaceMode,
             cs: cs,
             textTheme: textTheme,
-            onChanged: (_) {},
+            onChanged: (v) {
+              if (v != null) _setInterfaceMode(v);
+            },
           ),
           const SizedBox(height: 8),
           _ModeOption(
             label: 'Editor (Lesson planning focus)',
             value: 'editor',
-            groupValue: 'auto',
+            groupValue: _interfaceMode,
             cs: cs,
             textTheme: textTheme,
-            onChanged: (_) {},
+            onChanged: (v) {
+              if (v != null) _setInterfaceMode(v);
+            },
           ),
         ],
       ),
@@ -711,20 +780,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             width: double.infinity,
             height: 48,
             child: OutlinedButton.icon(
-              onPressed: () async {
-                try {
-                  await ref.read(authProvider.notifier).manualLogout();
-                  if (context.mounted) {
-                    context.go('/login');
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Sign out failed: $e')),
-                    );
-                  }
-                }
-              },
+              onPressed: () => _showLogoutConfirmation(),
               icon: const Icon(Icons.logout_rounded),
               label: const Text('Sign Out'),
               style: OutlinedButton.styleFrom(
@@ -804,11 +860,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             width: double.infinity,
             height: 48,
             child: FilledButton.icon(
-              onPressed: () {
-                showInfoToast(
-                    context: context,
-                    message: 'Purchase Credits \u2014 coming soon');
-              },
+              onPressed: () => context.push('/payment'),
               icon: const Icon(Icons.shopping_cart_outlined),
               label: const Text('Purchase Credits'),
             ),
@@ -863,7 +915,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ? Icons.wifi_rounded
                 : Icons.wifi_off_rounded,
             iconColor:
-                syncData.isOnline ? Colors.green : cs.onSurfaceVariant,
+                syncData.isOnline ? cs.primary : cs.onSurfaceVariant,
             cs: cs,
             textTheme: textTheme,
           ),
@@ -1031,7 +1083,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
               Text(
-                _appVersion.isEmpty ? '1.0.0' : _appVersion,
+                _appVersion.isEmpty ? '—' : _appVersion,
                 style: textTheme.bodyMedium?.copyWith(
                   color: cs.onSurfaceVariant,
                 ),
@@ -1048,10 +1100,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           // Privacy Policy
           InkWell(
             onTap: () {
-              showInfoToast(
-                  context: context,
-                  message:
-                      'Privacy Policy \u2014 coming soon');
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  backgroundColor: cs.surface,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  title: const Text('Privacy Policy'),
+                  content: const Text(
+                    'Privacy Policy details will be available in a future update.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('Close'),
+                    ),
+                  ],
+                ),
+              );
             },
             child: Row(
               children: [
@@ -1093,10 +1160,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 Expanded(
                   child: InkWell(
                     onTap: () {
-                      showInfoToast(
-                          context: context,
-                          message:
-                              'About ClassAI \u2014 coming soon');
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          backgroundColor: cs.surface,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          title: const Text('About ClassAI'),
+                          content: const Text(
+                            'ClassAI helps Nigerian educators create lesson plans, '
+                            'generate exams, and share teaching resources.\n\n'
+                            'Version information is available in the About card above.',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(),
+                              child: const Text('Close'),
+                            ),
+                          ],
+                        ),
+                      );
                     },
                     borderRadius: BorderRadius.circular(8),
                     child: Container(
@@ -1131,25 +1215,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 // Logout button
                 Expanded(
                   child: InkWell(
-                    onTap: () async {
-                      try {
-                        await ref
-                            .read(authProvider.notifier)
-                            .manualLogout();
-                        if (context.mounted) {
-                          context.go('/login');
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context)
-                              .showSnackBar(
-                            SnackBar(
-                                content: Text(
-                                    'Sign out failed: $e')),
-                          );
-                        }
-                      }
-                    },
+                    onTap: () => _showLogoutConfirmation(),
                     borderRadius: BorderRadius.circular(8),
                     child: Container(
                       height: 48,
@@ -1187,10 +1253,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // ---------------------------------------------------------------
   Widget _buildBottomNav(ColorScheme cs, TextTheme textTheme) {
     final items = [
-      (icon: Icons.home_rounded, label: 'Home'),
-      (icon: Icons.menu_book_rounded, label: 'Lessons'),
-      (icon: Icons.quiz_rounded, label: 'Exams'),
-      (icon: Icons.more_horiz_rounded, label: 'More'),
+      _NavItem(icon: Icons.home_rounded, label: 'Home', route: '/'),
+      _NavItem(icon: Icons.menu_book_rounded, label: 'Lessons', route: '/lessons'),
+      _NavItem(icon: Icons.quiz_rounded, label: 'Exams', route: '/exams'),
+      _NavItem(icon: Icons.more_horiz_rounded, label: 'More', route: null),
     ];
 
     return Container(
@@ -1228,7 +1294,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 item.icon,
                 color: isActive ? cs.onSecondaryContainer : cs.onSurfaceVariant,
               ),
-              onPressed: () {},
+              onPressed: item.route != null
+                  ? () => context.push(item.route!)
+                  : null,
             ),
           );
         }).toList(),
@@ -1274,15 +1342,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Color _syncStatusColor(SyncStatus status) {
+    final cs = Theme.of(context).colorScheme;
     switch (status) {
       case SyncStatus.offline:
-        return Colors.grey;
+        return cs.onSurfaceVariant;
       case SyncStatus.syncing:
-        return Colors.blue;
+        return cs.primary;
       case SyncStatus.synced:
-        return Colors.green;
+        return cs.primary;
       case SyncStatus.error:
-        return Colors.red;
+        return cs.error;
     }
   }
 
@@ -1294,6 +1363,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     return '${diff.inDays}d ago';
   }
+}
+
+/// Nav item data class for bottom navigation bar.
+class _NavItem {
+  final IconData icon;
+  final String label;
+  final String? route;
+  const _NavItem({required this.icon, required this.label, this.route});
 }
 
 // ---------------------------------------------------------------------------
@@ -1331,6 +1408,7 @@ class _SettingsNavItem extends StatelessWidget {
   final bool isActive;
   final ColorScheme cs;
   final TextTheme textTheme;
+  final VoidCallback? onTap;
 
   const _SettingsNavItem({
     required this.icon,
@@ -1338,42 +1416,47 @@ class _SettingsNavItem extends StatelessWidget {
     required this.isActive,
     required this.cs,
     required this.textTheme,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      margin: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: isActive
-            ? const Color(0xFFE0E0FF)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      transform: isActive
-          ? Matrix4.translationValues(4.0, 0.0, 0.0)
-          : Matrix4.identity(),
-      child: Row(
-        children: [
-          Icon(
-            icon,
-            size: 22,
-            color: isActive
-                ? const Color(0xFF00026C)
-                : cs.onSurfaceVariant,
-          ),
-          const SizedBox(width: 16),
-          Text(
-            label,
-            style: textTheme.labelLarge?.copyWith(
-              fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        margin: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: isActive
+              ? cs.secondaryContainer
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        transform: isActive
+            ? Matrix4.translationValues(4.0, 0.0, 0.0)
+            : Matrix4.identity(),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 22,
               color: isActive
-                  ? const Color(0xFF00026C)
+                  ? cs.onSecondaryContainer
                   : cs.onSurfaceVariant,
             ),
-          ),
-        ],
+            const SizedBox(width: 16),
+            Text(
+              label,
+              style: textTheme.labelLarge?.copyWith(
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                color: isActive
+                    ? cs.onSecondaryContainer
+                    : cs.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -182,7 +182,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           title: Row(
             children: [
               Icon(Icons.check_circle_rounded,
-                  color: Colors.green.withValues(alpha: 0.9)),
+                  color: cs.primary.withValues(alpha: 0.9)),
               const SizedBox(width: 8),
               const Text('Payment Successful!'),
             ],
@@ -310,7 +310,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               children: [
                 // Mobile TopAppBar (Stitch style)
                 if (!isWide)
-                  _buildMobileHeader(context, cs, textTheme),
+                  _buildMobileHeader(context, cs, textTheme, selectedPlan),
 
                 // Main Canvas
                 Expanded(
@@ -378,23 +378,25 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
           // Processing overlay
           if (_isProcessing)
-            ColoredBox(
-              color: Colors.black.withValues(alpha: 0.32),
-              child: const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text(
-                      'Processing payment\u2026',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
+            Positioned.fill(
+              child: ColoredBox(
+                color: cs.scrim,
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Processing payment\u2026',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -407,7 +409,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   // Mobile Header (Stitch)
   // ---------------------------------------------------------------
   Widget _buildMobileHeader(
-      BuildContext context, ColorScheme cs, TextTheme textTheme) {
+      BuildContext context, ColorScheme cs, TextTheme textTheme, _PlanDef selectedPlan) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
@@ -446,7 +448,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               borderRadius: BorderRadius.circular(24),
             ),
             child: Text(
-              '\u20A6500',
+              selectedPlan.price,
               style: textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.w500,
               ),
@@ -529,11 +531,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF4B53BA),
+                        color: cs.primaryContainer,
                         borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
+                            color: cs.shadow.withValues(alpha: 0.1),
                             blurRadius: 4,
                           ),
                         ],
@@ -544,13 +546,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                           Icon(
                             Icons.star_rounded,
                             size: 14,
-                            color: const Color(0xFFFFFFFF),
+                            color: cs.onPrimaryContainer,
                           ),
                           const SizedBox(width: 4),
                           Text(
                             'Best Value',
                             style: textTheme.labelMedium?.copyWith(
-                              color: const Color(0xFFFFFFFF),
+                              color: cs.onPrimaryContainer,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -595,9 +597,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                                 child: Container(
                                   width: 12,
                                   height: 12,
-                                  decoration: const BoxDecoration(
+                                  decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: Colors.white,
+                                    color: cs.onPrimary,
                                   ),
                                 ),
                               )
