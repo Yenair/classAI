@@ -6,6 +6,8 @@ import 'package:dio/dio.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:classai/core/services/payment_service.dart';
 import 'package:classai/core/widgets/app_toast.dart';
+import 'package:classai/core/constants/app_constants.dart';
+import 'package:classai/core/utils/currency_formatter.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
@@ -256,16 +258,14 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   static const _plans = [
     _PlanDef(
       name: 'Basic',
-      price: '\u20A649,999/yr',
-      amountNaira: 49999,
+      amountNaira: AppConstants.basicPlanPriceNaira,
       tier: 'basic',
       description: 'Essential tools for small classrooms. Up to 30 students.',
       features: ['50 credits per month', 'Access to basic vault items'],
     ),
     _PlanDef(
       name: 'Standard',
-      price: '\u20A699,999/yr',
-      amountNaira: 99999,
+      amountNaira: AppConstants.standardPlanPriceNaira,
       tier: 'standard',
       description:
           'Advanced analytics and resources. Up to 100 students.',
@@ -278,8 +278,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     ),
     _PlanDef(
       name: 'Elite',
-      price: '\u20A6249,999/yr',
-      amountNaira: 249999,
+      amountNaira: AppConstants.elitePlanPriceNaira,
       tier: 'elite',
       description:
           'Unlimited students, priority support, and custom modules.',
@@ -876,7 +875,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 /// Internal plan definition.
 class _PlanDef {
   final String name;
-  final String price;
   final int amountNaira;
   final String tier;
   final String description;
@@ -885,11 +883,14 @@ class _PlanDef {
 
   const _PlanDef({
     required this.name,
-    required this.price,
     required this.amountNaira,
     required this.tier,
     required this.description,
     this.features = const [],
     this.isBestValue = false,
   });
+
+  /// Computed price string using the shared currency formatter.
+  String get price =>
+      '${CurrencyFormatter.formatNairaCompact(amountNaira)}/yr';
 }

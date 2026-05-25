@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:classai/core/constants/curriculum_types.dart';
 import 'package:classai/core/widgets/app_toast.dart';
@@ -22,11 +23,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   static const _subjectsKey = 'selected_subjects';
   List<String> _selectedSubjects = List.from(defaultSubjects);
   bool _loadingSubjects = true;
+  String _appVersion = '';
 
   @override
   void initState() {
     super.initState();
     _loadSubjects();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() {
+          _appVersion = '${info.version}+${info.buildNumber}';
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _appVersion = '1.0.0';
+        });
+      }
+    }
   }
 
   Future<void> _loadSubjects() async {
@@ -1011,7 +1031,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
               Text(
-                '1.0.0',
+                _appVersion.isEmpty ? '1.0.0' : _appVersion,
                 style: textTheme.bodyMedium?.copyWith(
                   color: cs.onSurfaceVariant,
                 ),

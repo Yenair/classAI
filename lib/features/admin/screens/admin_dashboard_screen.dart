@@ -6,7 +6,9 @@ import 'package:classai/features/admin/providers/admin_provider.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/core/services/auth_service.dart';
 import 'package:classai/core/theme/app_theme.dart';
+import 'package:classai/core/utils/currency_formatter.dart';
 import 'package:classai/core/widgets/app_toast.dart';
+import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/features/settings/providers/theme_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
@@ -35,6 +37,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   Widget build(BuildContext context) {
     final dashboardData = ref.watch(adminDashboardProvider);
     final authData = ref.watch(authProvider);
+    final creditData = ref.watch(creditStateProvider);
     final cs = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final isWide = MediaQuery.of(context).size.width >= 768;
@@ -54,7 +57,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               child: Column(
                 children: [
                   // === TopAppBar (desktop only) ===
-                  if (isWide) _buildTopAppBar(cs, textTheme, authData, themeMode),
+                  if (isWide) _buildTopAppBar(cs, textTheme, authData, creditData, themeMode),
 
                   // === Main canvas ===
                   Expanded(
@@ -190,8 +193,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   // ---------------------------------------------------------------
   // Top App Bar (Desktop)
   // ---------------------------------------------------------------
-  Widget _buildTopAppBar(
-      ColorScheme cs, TextTheme textTheme, AuthStateData authData, ThemeMode themeMode) {
+  Widget _buildTopAppBar(ColorScheme cs, TextTheme textTheme,
+      AuthStateData authData, CreditStateData creditData, ThemeMode themeMode) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       decoration: BoxDecoration(
@@ -218,7 +221,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Credit chip
+              // Credit chip (live from creditStateProvider)
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -239,7 +242,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      '\u20A6500',
+                      creditData.loading
+                          ? '…'
+                          : CurrencyFormatter.formatNairaCompact(
+                              creditData.currentCredits),
                       style: textTheme.labelLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: cs.primary,
@@ -371,7 +377,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   ),
                   child: Center(
                     child: Text(
-                      'SA',
+                      _initialsFromName(authData.currentTeacher?.teacherName),
                       style: textTheme.labelMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: cs.onPrimaryContainer,
@@ -579,6 +585,18 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         }).toList(),
       ),
     );
+  }
+
+  String _initialsFromName(String? name) {
+    if (name == null || name.trim().isEmpty) return 'AD';
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length >= 2) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+    final single = parts[0].trim();
+    return single.length >= 2
+        ? single.substring(0, 2).toUpperCase()
+        : '${single[0]}D'.toUpperCase();
   }
 }
 
@@ -1455,14 +1473,31 @@ class _SyncHealthTab extends StatelessWidget {
   ) {
     return Column(
       children: [
-        // -- Sync Health Overview (gradient card) --
-        _buildSyncOverviewCard(
-            context, cs, textTheme, syncPercent, greenCount, redCount),
-
-        const SizedBox(height: 24),
-
-        // -- Regional Status card --
-        _buildRegionalStatusCard(context, cs, textTheme),
+        // Placeholder message until real sync analytics are implemented
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF5F7F9),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: cs.outlineVariant.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(Icons.sync_rounded, size: 40, color: cs.outlineVariant),
+              const SizedBox(height: 12),
+              Text(
+                'Sync health data will appear here after your first sync.',
+                textAlign: TextAlign.center,
+                style: textTheme.bodyLarge?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -1482,16 +1517,10 @@ class _SyncHealthTab extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Sync Overview summary
-        _buildSyncOverviewCard(
-            context, cs, textTheme, syncPercent, greenCount, redCount),
-
-        const SizedBox(height: 16),
-
-        // Sync stats list
+        // Placeholder message until real sync analytics are implemented
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             color: const Color(0xFFF5F7F9),
             borderRadius: BorderRadius.circular(8),
@@ -1500,355 +1529,25 @@ class _SyncHealthTab extends StatelessWidget {
             ),
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Sync Overview',
-                style: textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+              Icon(Icons.sync_rounded, size: 40, color: cs.outlineVariant),
               const SizedBox(height: 12),
-              _SyncStatRow(
-                label: 'Online (last hour)',
-                count: greenCount,
-                color: const Color(0xFF008751),
-              ),
-              _SyncStatRow(
-                label: 'Recent (1-24 hrs)',
-                count: yellowCount,
-                color: const Color(0xFF2196F3),
-              ),
-              _SyncStatRow(
-                label: 'Stale (>24 hrs)',
-                count: redCount,
-                color: const Color(0xFFB71C1C),
-              ),
-              _SyncStatRow(
-                label: 'Inactive (>7 days)',
-                count: grayCount,
-                color: Colors.grey,
-              ),
-              const Divider(height: 24),
-              _SyncStatRow(
-                label: 'Pending sync entries',
-                count: dashboardData.teachers.isNotEmpty
-                    ? dashboardData.teachers.first.pendingSyncCount
-                    : 0,
-                color: const Color(0xFF2196F3),
-              ),
-              _SyncStatRow(
-                label: 'Unresolved conflicts',
-                count: dashboardData.teachers.isNotEmpty
-                    ? dashboardData.teachers.first.conflictCount
-                    : 0,
-                color: const Color(0xFFB71C1C),
+              Text(
+                'Sync health data will appear here after your first sync.',
+                textAlign: TextAlign.center,
+                style: textTheme.bodyLarge?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
               ),
             ],
           ),
         ),
-
-        const SizedBox(height: 16),
-
-        // Regional Status card
-        _buildRegionalStatusCard(context, cs, textTheme),
 
         // Per-teacher sync details
         const SizedBox(height: 16),
         ...teachers.map((teacher) => _buildTeacherSyncCard(
               context, cs, textTheme, teacher,
             )),
-      ],
-    );
-  }
-
-  // ---------------------------------------------------------------
-  // Sync Health Overview Card (gradient bg)
-  // ---------------------------------------------------------------
-  Widget _buildSyncOverviewCard(
-    BuildContext context,
-    ColorScheme cs,
-    TextTheme textTheme,
-    int syncPercent,
-    int greenCount,
-    int redCount,
-  ) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            cs.surfaceContainerLow,
-            cs.surfaceContainerLow,
-          ],
-        ),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.3),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Sync Health Overview',
-            style: textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: cs.onSurface,
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Percentage display
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '$syncPercent%',
-                style: textTheme.displaySmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: cs.onSurface,
-                  fontSize: 48,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.arrow_upward_rounded,
-                      size: 16,
-                      color: const Color(0xFF008751),
-                    ),
-                    Text(
-                      ' 2.1%',
-                      style: textTheme.labelLarge?.copyWith(
-                        color: const Color(0xFF008751),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Bar chart (simplified)
-          SizedBox(
-            height: 96,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                _buildBar(0.6, greenCount > 0 ? cs.secondary : cs.outlineVariant),
-                _buildBar(0.7, greenCount > 5 ? cs.secondary : cs.outlineVariant),
-                _buildBar(0.85, greenCount > 10 ? cs.secondary : cs.outlineVariant),
-                _buildBar(0.65, greenCount > 3 ? cs.secondary : cs.outlineVariant),
-                _buildErrorBar(0.4, 'Lag'),
-                _buildBar(0.95, cs.secondary),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // Day labels
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _dayLabel('Mon', cs, context),
-              _dayLabel('Tue', cs, context),
-              _dayLabel('Wed', cs, context),
-              _dayLabel('Thu', cs, context),
-              _dayLabel('Fri', cs, context),
-              _dayLabel('Today', cs, context),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Legend
-          Row(
-            children: [
-              _legendDot(cs.secondary, 'Success', cs, context),
-              const SizedBox(width: 16),
-              _legendDot(cs.error, 'Errors', cs, context),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBar(double heightFraction, Color color) {
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2),
-        child: Container(
-          height: 96 * heightFraction,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.8),
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(2),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildErrorBar(double heightFraction, String label) {
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Container(
-              height: 96 * heightFraction,
-              decoration: BoxDecoration(
-                color: const Color(0xFFBA1A1A).withValues(alpha: 0.9),
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(2),
-                ),
-              ),
-            ),
-            Positioned(
-              top: -24,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFDAD6),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                  child: Text(
-                    label,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFFBA1A1A),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _dayLabel(String label, ColorScheme cs, BuildContext context) {
-    return Text(
-      label,
-      style: Theme.of(context)
-          .textTheme
-          .labelMedium
-          ?.copyWith(color: cs.onSurfaceVariant),
-    );
-  }
-
-  Widget _legendDot(Color color, String label, ColorScheme cs, BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          label,
-          style: Theme.of(context)
-              .textTheme
-              .labelMedium
-              ?.copyWith(color: cs.onSurfaceVariant),
-        ),
-      ],
-    );
-  }
-
-  // ---------------------------------------------------------------
-  // Regional Status Card
-  // ---------------------------------------------------------------
-  Widget _buildRegionalStatusCard(BuildContext context, ColorScheme cs, TextTheme textTheme) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5F7F9),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.2),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Regional Status',
-            style: textTheme.labelLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: cs.onSurface,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _regionalRow(context, 'Lagos Hub', '98%', const Color(0xFF008751)),
-          const SizedBox(height: 12),
-          _regionalRow(context, 'Abuja Hub', 'Syncing', const Color(0xFF2196F3)),
-          const SizedBox(height: 12),
-          _regionalRow(context, 'Enugu Hub', '82%', const Color(0xFFB71C1C)),
-        ],
-      ),
-    );
-  }
-
-  Widget _regionalRow(BuildContext context, String hubName, String status, Color dotColor) {
-    final cs = Theme.of(context).colorScheme;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          hubName,
-          style: Theme.of(context)
-              .textTheme
-              .bodyMedium
-              ?.copyWith(color: cs.onSurface),
-        ),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              status,
-              style: Theme.of(context)
-                  .textTheme
-                  .labelMedium
-                  ?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: dotColor,
-                  ),
-            ),
-            const SizedBox(width: 6),
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                color: dotColor,
-                shape: BoxShape.circle,
-              ),
-            ),
-          ],
-        ),
       ],
     );
   }
@@ -1954,41 +1653,3 @@ class _StatusDot extends StatelessWidget {
   }
 }
 
-class _SyncStatRow extends StatelessWidget {
-  final String label;
-  final int count;
-  final Color color;
-
-  const _SyncStatRow({
-    required this.label,
-    required this.count,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ),
-          Text(
-            '$count',
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
-    );
-  }
-}
