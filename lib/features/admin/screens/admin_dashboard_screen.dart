@@ -56,7 +56,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               child: Column(
                 children: [
                   // === TopAppBar (desktop only) ===
-                  if (isWide) _buildTopAppBar(cs, textTheme, authData, creditData, themeMode),
+                  if (isWide)
+                    _buildTopAppBar(
+                        cs, textTheme, authData, creditData, themeMode),
 
                   // === Main canvas ===
                   Expanded(
@@ -241,9 +243,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      creditData.loading
-                          ? '…'
-                          : '${creditData.currentCredits}',
+                      creditData.loading ? '…' : '${creditData.currentCredits}',
                       style: textTheme.labelLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: cs.primary,
@@ -281,11 +281,15 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     case 'logout':
                       _showLogoutConfirmation(context, ref);
                     case 'theme_light':
-                      ref.read(themeProvider.notifier).setTheme(ThemeMode.light);
+                      ref
+                          .read(themeProvider.notifier)
+                          .setTheme(ThemeMode.light);
                     case 'theme_dark':
                       ref.read(themeProvider.notifier).setTheme(ThemeMode.dark);
                     case 'theme_system':
-                      ref.read(themeProvider.notifier).setTheme(ThemeMode.system);
+                      ref
+                          .read(themeProvider.notifier)
+                          .setTheme(ThemeMode.system);
                   }
                 },
                 offset: const Offset(0, 48),
@@ -481,8 +485,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           return GestureDetector(
             onTap: () => setState(() => _selectedTabIndex = index),
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
                 border: isActive
                     ? Border(
@@ -650,9 +653,7 @@ class _NavItem extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         margin: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
-          color: isActive
-              ? cs.secondaryContainer
-              : Colors.transparent,
+          color: isActive ? cs.secondaryContainer : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         transform: isActive
@@ -663,9 +664,7 @@ class _NavItem extends StatelessWidget {
             Icon(
               icon,
               size: 22,
-              color: isActive
-                  ? cs.onSecondaryContainer
-                  : cs.onSurfaceVariant,
+              color: isActive ? cs.onSecondaryContainer : cs.onSurfaceVariant,
             ),
             const SizedBox(width: 16),
             Text(
@@ -731,6 +730,8 @@ class _AddTeacherDialogState extends ConsumerState<_AddTeacherDialog> {
         context: context,
         message: 'Teacher added. A temporary password has been emailed.',
       );
+      // Refresh the admin dashboard to show the new teacher
+      ref.read(adminDashboardProvider.notifier).refresh();
     } on AuthException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -908,8 +909,7 @@ class _TeacherManagementTab extends ConsumerStatefulWidget {
       _TeacherManagementTabState();
 }
 
-class _TeacherManagementTabState
-    extends ConsumerState<_TeacherManagementTab> {
+class _TeacherManagementTabState extends ConsumerState<_TeacherManagementTab> {
   String _filterStatus = 'all';
 
   List<TeacherAdminData> get _filteredTeachers {
@@ -957,8 +957,7 @@ class _TeacherManagementTabState
             ),
             const SizedBox(height: 8),
             FilledButton(
-              onPressed: () =>
-                  _showAddTeacherDialog(context, ref),
+              onPressed: () => _showAddTeacherDialog(context, ref),
               child: const Text('Add Teacher'),
             ),
           ],
@@ -1022,8 +1021,7 @@ class _TeacherManagementTabState
                           borderRadius: BorderRadius.circular(4),
                           child: Container(
                             height: 48,
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 16),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
                             decoration: BoxDecoration(
                               color: cs.surface,
                               borderRadius: BorderRadius.circular(4),
@@ -1064,8 +1062,7 @@ class _TeacherManagementTabState
                         const SizedBox(width: 8),
                         // Add Teacher button
                         FilledButton.icon(
-                          onPressed: () =>
-                              _showAddTeacherDialog(context, ref),
+                          onPressed: () => _showAddTeacherDialog(context, ref),
                           icon: const Icon(Icons.person_add_rounded, size: 20),
                           label: const Text('Add Teacher'),
                           style: FilledButton.styleFrom(
@@ -1171,8 +1168,7 @@ class _TeacherManagementTabState
           ),
         ),
         const Spacer(),
-        if (isSelected)
-          Icon(Icons.check, size: 18, color: cs.primary),
+        if (isSelected) Icon(Icons.check, size: 18, color: cs.primary),
       ],
     );
   }
@@ -1181,7 +1177,7 @@ class _TeacherManagementTabState
     final cs = Theme.of(context).colorScheme;
     switch (status) {
       case 'green':
-        return cs.primary;
+        return Colors.green;
       case 'yellow':
         return cs.tertiary;
       case 'red':
@@ -1413,8 +1409,8 @@ class _VaultApprovalTab extends ConsumerWidget {
             Text(
               'Vault approval queue requires a Standard or Elite subscription.',
               textAlign: TextAlign.center,
-              style: textTheme.titleMedium
-                  ?.copyWith(color: cs.onSurfaceVariant),
+              style:
+                  textTheme.titleMedium?.copyWith(color: cs.onSurfaceVariant),
             ),
           ],
         ),
@@ -1491,8 +1487,7 @@ class _VaultApprovalTab extends ConsumerWidget {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       OutlinedButton(
-                        onPressed: () =>
-                            _rejectItem(context, ref, item.id),
+                        onPressed: () => _rejectItem(context, ref, item.id),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: cs.error,
                         ),
@@ -1500,8 +1495,7 @@ class _VaultApprovalTab extends ConsumerWidget {
                       ),
                       const SizedBox(width: 8),
                       FilledButton(
-                        onPressed: () =>
-                            _approveItem(context, ref, item.id),
+                        onPressed: () => _approveItem(context, ref, item.id),
                         child: const Text('Approve'),
                       ),
                     ],
@@ -1595,28 +1589,21 @@ class _SyncHealthTab extends StatelessWidget {
     }
 
     // Summary counts
-    final greenCount =
-        teachers.where((t) => t.statusColor == 'green').length;
-    final yellowCount =
-        teachers.where((t) => t.statusColor == 'yellow').length;
-    final redCount =
-        teachers.where((t) => t.statusColor == 'red').length;
-    final grayCount =
-        teachers.where((t) => t.statusColor == 'gray').length;
+    final greenCount = teachers.where((t) => t.statusColor == 'green').length;
+    final yellowCount = teachers.where((t) => t.statusColor == 'yellow').length;
+    final redCount = teachers.where((t) => t.statusColor == 'red').length;
+    final grayCount = teachers.where((t) => t.statusColor == 'gray').length;
     final totalTeachers = teachers.length;
-    final syncPercent = totalTeachers > 0
-        ? ((greenCount / totalTeachers) * 100).round()
-        : 0;
+    final syncPercent =
+        totalTeachers > 0 ? ((greenCount / totalTeachers) * 100).round() : 0;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.only(bottom: 80),
       child: isWide
-          ? _buildWideLayout(
-              context, cs, textTheme, greenCount, yellowCount, redCount,
-              grayCount, syncPercent, totalTeachers)
-          : _buildNarrowLayout(
-              context, cs, textTheme, greenCount, yellowCount, redCount,
-              grayCount, syncPercent, totalTeachers),
+          ? _buildWideLayout(context, cs, textTheme, greenCount, yellowCount,
+              redCount, grayCount, syncPercent, totalTeachers)
+          : _buildNarrowLayout(context, cs, textTheme, greenCount, yellowCount,
+              redCount, grayCount, syncPercent, totalTeachers),
     );
   }
 
@@ -1635,9 +1622,9 @@ class _SyncHealthTab extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSummaryCard(
-          cs, textTheme, greenCount, yellowCount, redCount,
-          grayCount, syncPercent, totalTeachers, isWide: true),
+        _buildSummaryCard(cs, textTheme, greenCount, yellowCount, redCount,
+            grayCount, syncPercent, totalTeachers,
+            isWide: true),
       ],
     );
   }
@@ -1657,14 +1644,17 @@ class _SyncHealthTab extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSummaryCard(
-          cs, textTheme, greenCount, yellowCount, redCount,
-          grayCount, syncPercent, totalTeachers, isWide: false),
+        _buildSummaryCard(cs, textTheme, greenCount, yellowCount, redCount,
+            grayCount, syncPercent, totalTeachers,
+            isWide: false),
 
         // Per-teacher sync details
         const SizedBox(height: 16),
         ...teachers.map((teacher) => _buildTeacherSyncCard(
-              context, cs, textTheme, teacher,
+              context,
+              cs,
+              textTheme,
+              teacher,
             )),
       ],
     );
@@ -1744,23 +1734,31 @@ class _SyncHealthTab extends StatelessWidget {
           isWide
               ? Row(
                   children: [
-                    _statusCountChip(cs, textTheme, 'Synced', greenCount, cs.primary),
+                    _statusCountChip(
+                        cs, textTheme, 'Synced', greenCount, cs.primary),
                     const SizedBox(width: 16),
-                    _statusCountChip(cs, textTheme, 'Warning', yellowCount, cs.tertiary),
+                    _statusCountChip(
+                        cs, textTheme, 'Warning', yellowCount, cs.tertiary),
                     const SizedBox(width: 16),
-                    _statusCountChip(cs, textTheme, 'Error', redCount, cs.error),
+                    _statusCountChip(
+                        cs, textTheme, 'Error', redCount, cs.error),
                     const SizedBox(width: 16),
-                    _statusCountChip(cs, textTheme, 'Offline', grayCount, cs.onSurfaceVariant),
+                    _statusCountChip(cs, textTheme, 'Offline', grayCount,
+                        cs.onSurfaceVariant),
                   ],
                 )
               : Wrap(
                   spacing: 12,
                   runSpacing: 12,
                   children: [
-                    _statusCountChip(cs, textTheme, 'Synced', greenCount, cs.primary),
-                    _statusCountChip(cs, textTheme, 'Warning', yellowCount, cs.tertiary),
-                    _statusCountChip(cs, textTheme, 'Error', redCount, cs.error),
-                    _statusCountChip(cs, textTheme, 'Offline', grayCount, cs.onSurfaceVariant),
+                    _statusCountChip(
+                        cs, textTheme, 'Synced', greenCount, cs.primary),
+                    _statusCountChip(
+                        cs, textTheme, 'Warning', yellowCount, cs.tertiary),
+                    _statusCountChip(
+                        cs, textTheme, 'Error', redCount, cs.error),
+                    _statusCountChip(cs, textTheme, 'Offline', grayCount,
+                        cs.onSurfaceVariant),
                   ],
                 ),
           const SizedBox(height: 12),
@@ -1871,7 +1869,6 @@ class _SyncHealthTab extends StatelessWidget {
     );
   }
 
-
   String _formatTime(DateTime dt) {
     final diff = DateTime.now().difference(dt);
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
@@ -1914,4 +1911,3 @@ class _StatusDot extends StatelessWidget {
     );
   }
 }
-

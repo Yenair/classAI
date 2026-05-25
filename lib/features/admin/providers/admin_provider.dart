@@ -2,6 +2,7 @@
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:classai/core/database/database.dart';
+import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
 /// Data for a single teacher in the admin dashboard list.
@@ -87,7 +88,10 @@ class AdminDashboardNotifier extends Notifier<AdminDashboardData> {
     state = const AdminDashboardData(loading: true);
 
     try {
-      final teachers = await _db.select(_db.teachers).get();
+      // Only load teachers belonging to the current admin's school
+      final authState = ref.read(authProvider);
+      final schoolLocalId = authState.currentSchool?.localId ?? 0;
+      final teachers = await _db.teachersDao.getBySchool(schoolLocalId);
       final pendingItems = await _db.vaultItemsDao.getPendingApproval();
 
       // Build teacher data with real device counts, sync counts, conflicts
