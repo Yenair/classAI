@@ -1,0 +1,303 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>ClassAI - Vault Browser</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;700&amp;family=Albert+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">tailwind.config = {darkMode: "class", theme: {extend: {colors: {"surface-dim": "#d9dae0", "secondary-fixed": "#e0e0ff", "on-secondary-container": "#1e258f", "surface-container-low": "#f2f3f9", "primary-fixed-dim": "#a1c9ff", "inverse-primary": "#a1c9ff", "tertiary-container": "#5068d9", "secondary-container": "#8c94ff", secondary: "#4b53ba", "on-secondary-fixed": "#00026c", "secondary-fixed-dim": "#bec2ff", "on-primary-fixed-variant": "#004880", "on-background": "#191c20", "on-surface": "#191c20", outline: "#727781", "surface-container": "#ededf3", "on-primary": "#ffffff", "outline-variant": "#c1c7d2", "surface-tint": "#1b61a0", tertiary: "#344ebf", "inverse-on-surface": "#eff0f6", "primary-fixed": "#d2e4ff", "on-error-container": "#93000a", "inverse-surface": "#2e3035", "on-tertiary": "#ffffff", "surface-container-lowest": "#ffffff", error: "#ba1a1a", surface: "#f8f9ff", "surface-variant": "#e1e2e8", "surface-bright": "#f8f9ff", "on-surface-variant": "#414750", "on-primary-container": "#f5f7ff", "on-secondary-fixed-variant": "#323aa1", "on-tertiary-container": "#f8f6ff", "surface-container-high": "#e7e8ee", "tertiary-fixed": "#dde1ff", "error-container": "#ffdad6", "surface-container-highest": "#e1e2e8", background: "#f8f9ff", "on-secondary": "#ffffff", "on-primary-fixed": "#001c37", "tertiary-fixed-dim": "#b9c3ff", "on-error": "#ffffff", primary: "#115b9b", "primary-container": "#3674b5", "on-tertiary-fixed": "#001257", "on-tertiary-fixed-variant": "#1d3aac"}, borderRadius: {DEFAULT: "0.125rem", lg: "0.25rem", xl: "0.5rem", full: "0.75rem"}, spacing: {gutter: "16px", "margin-mobile": "16px", "margin-tablet": "24px", "touch-target": "48px", base: "8px"}, fontFamily: {"headline-lg": ["Inter"], "title-lg": ["Inter"], "label-lg": ["Inter"], "display-lg": ["Inter"], "headline-lg-mobile": ["Inter"], "body-lg": ["Inter"], "body-md": ["Inter"], "label-md": ["Inter"], headline: ["Open Sans"], display: ["Open Sans"], body: ["Albert Sans"], label: ["Open Sans"]}, fontSize: {"headline-lg": ["32px", {lineHeight: "40px", fontWeight: "600"}], "title-lg": ["22px", {lineHeight: "28px", fontWeight: "500"}], "label-lg": ["14px", {lineHeight: "20px", letterSpacing: "0.1px", fontWeight: "500"}], "display-lg": ["48px", {lineHeight: "56px", letterSpacing: "-0.02em", fontWeight: "700"}], "headline-lg-mobile": ["28px", {lineHeight: "36px", fontWeight: "600"}], "body-lg": ["18px", {lineHeight: "28px", fontWeight: "400"}], "body-md": ["16px", {lineHeight: "24px", fontWeight: "400"}], "label-md": ["12px", {lineHeight: "16px", fontWeight: "500"}]}}}};</script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background antialiased md:flex h-screen overflow-hidden">
+<!-- NavigationDrawer (Tablet/Desktop) -->
+<nav class="hidden md:flex flex-col h-full border-r border-outline-variant/30 py-margin-tablet bg-surface-container-low dark:bg-surface-container-high w-72 flex-shrink-0 z-40">
+<div class="px-margin-tablet mb-8">
+<h1 class="text-headline-lg font-headline-lg font-black text-primary dark:text-primary-fixed">ClassAI</h1>
+<p class="text-body-md font-body-md text-on-surface-variant mt-1">Nigerian Academic Partner</p>
+</div>
+<div class="flex-1 overflow-y-auto space-y-2">
+<a class="flex items-center gap-4 text-on-surface-variant dark:text-outline-variant px-4 py-3 mx-3 hover:bg-surface-variant dark:hover:bg-surface-dim rounded-full transition-colors h-touch-target" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">home</span>
+<span class="text-label-lg font-label-lg">Home</span>
+</a>
+<a class="flex items-center gap-4 text-on-surface-variant dark:text-outline-variant px-4 py-3 mx-3 hover:bg-surface-variant dark:hover:bg-surface-dim rounded-full transition-colors h-touch-target" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">menu_book</span>
+<span class="text-label-lg font-label-lg">Lessons</span>
+</a>
+<a class="flex items-center gap-4 text-on-surface-variant dark:text-outline-variant px-4 py-3 mx-3 hover:bg-surface-variant dark:hover:bg-surface-dim rounded-full transition-colors h-touch-target" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">quiz</span>
+<span class="text-label-lg font-label-lg">Exams</span>
+</a>
+<a class="flex items-center gap-4 bg-secondary-fixed dark:bg-on-secondary-fixed-variant text-on-secondary-fixed dark:text-secondary-fixed-dim rounded-full px-4 py-3 mx-3 translate-x-1 transition-transform h-touch-target" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">inventory_2</span>
+<span class="text-label-lg font-label-lg">Vault</span>
+</a>
+<a class="flex items-center gap-4 text-on-surface-variant dark:text-outline-variant px-4 py-3 mx-3 hover:bg-surface-variant dark:hover:bg-surface-dim rounded-full transition-colors h-touch-target" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">admin_panel_settings</span>
+<span class="text-label-lg font-label-lg">Admin</span>
+</a>
+</div>
+<div class="px-margin-tablet mt-auto pt-4 border-t border-outline-variant/30 flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-bold text-lg">
+                EP
+            </div>
+<div>
+<p class="text-label-lg font-label-lg text-on-surface">Educator Profile</p>
+<div class="flex items-center gap-2 mt-1">
+<div class="w-2 h-2 rounded-full bg-[#008751]"></div>
+<span class="text-label-md font-label-md text-on-surface-variant">Synced</span>
+</div>
+</div>
+</div>
+</nav>
+<!-- Main Content Area -->
+<div class="flex-1 flex flex-col h-full overflow-hidden relative">
+<!-- TopAppBar (Mobile) -->
+<header class="md:hidden flex justify-between items-center w-full px-margin-mobile py-2 bg-surface dark:bg-surface-container-high text-primary dark:text-primary-fixed z-30 sticky top-0 bg-surface-container dark:bg-surface-container-high h-[64px]">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-bold text-label-md" style="opacity: 0;">EP</div>
+<h1 class="text-headline-lg-mobile font-headline-lg-mobile md:text-headline-lg md:font-headline-lg font-bold">ClassAI</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-1 bg-surface-variant px-3 py-1 rounded-full">
+<div class="w-2 h-2 rounded-full bg-[#008751]"></div>
+</div>
+<span class="text-body-md font-body-md font-semibold text-secondary dark:text-secondary-fixed">₦500</span>
+</div>
+</header>
+<!-- Main Canvas -->
+<main class="flex-1 overflow-y-auto pb-[90px] md:pb-0 px-margin-mobile md:px-margin-tablet py-gutter bg-surface">
+<!-- Page Header & Global Search -->
+<div class="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
+<div>
+<h2 class="text-display-lg font-display-lg text-on-surface">Resource Vault</h2>
+<p class="text-body-lg font-body-lg text-on-surface-variant mt-2 max-w-2xl">Access premium Nigerian National Curriculum aligned teaching materials, lesson plans, and exam preparatory content.</p>
+</div>
+<div class="relative w-full md:w-80">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" style="font-variation-settings: 'FILL' 0;">search</span>
+<input class="w-full pl-10 pr-4 py-3 bg-surface-container-low border border-outline-variant rounded-full text-body-md font-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent h-touch-target" placeholder="Search resources..." type="text">
+</div>
+</div>
+<!-- Filter Bar -->
+<div class="flex overflow-x-auto pb-4 mb-6 gap-3 snap-x hide-scrollbar">
+<div class="flex items-center bg-primary text-on-primary px-4 py-2 rounded-full whitespace-nowrap h-touch-target flex-shrink-0 cursor-pointer snap-start">
+<span class="material-symbols-outlined mr-2 text-[18px]">tune</span>
+<span class="text-label-lg font-label-lg">All Filters</span>
+</div>
+<div class="relative flex-shrink-0 snap-start">
+<select class="appearance-none bg-surface border border-outline-variant text-on-surface px-4 py-2 pr-10 rounded-full h-touch-target text-label-lg font-label-lg focus:outline-none focus:ring-2 focus:ring-primary">
+<option>Subject: All</option>
+<option>Physics</option>
+<option>Mathematics</option>
+<option>English Language</option>
+<option>Chemistry</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant">expand_more</span>
+</div>
+<div class="relative flex-shrink-0 snap-start">
+<select class="appearance-none bg-surface border border-outline-variant text-on-surface px-4 py-2 pr-10 rounded-full h-touch-target text-label-lg font-label-lg focus:outline-none focus:ring-2 focus:ring-primary">
+<option>Class: SS3</option>
+<option>SS2</option>
+<option>SS1</option>
+<option>JSS3</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant">expand_more</span>
+</div>
+<div class="relative flex-shrink-0 snap-start">
+<select class="appearance-none bg-surface border border-outline-variant text-on-surface px-4 py-2 pr-10 rounded-full h-touch-target text-label-lg font-label-lg focus:outline-none focus:ring-2 focus:ring-primary">
+<option>Curriculum: Nigerian National</option>
+<option>WAEC Prep</option>
+<option>NECO Prep</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant">expand_more</span>
+</div>
+</div>
+<!-- Bento Grid - Resource Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+<!-- Card 1 (Premium) -->
+<div class="group bg-surface-container-lowest border border-outline-variant/30 rounded-xl overflow-hidden hover:shadow-lg transition-shadow duration-300 flex flex-col h-full cursor-pointer relative">
+<div class="h-48 w-full bg-surface-variant relative overflow-hidden">
+<img alt="Physics blackboard" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A detailed digital illustration showing a blackboard covered in complex modern physics equations, diagrams of atomic structures, and wave-particle duality concepts. The lighting is soft and focused on the board, creating a scholarly and academic mood. The color palette features deep chalkboard greens contrasting with bright white chalk lines, aligning with a high-end educational aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBu4I66O9LKors6jof2kr_ZKAhQohqSDQp60DeXJwb_dnetTehyhMGT4y-B-X23m4kGie3PblwaoQxXDdQ2HMnkiNnzndxp5KnLmVdmmx83Trp_Vq88o6TclO9yBYE7YcRDVyw4c5t-UNVLV1q_tYbKBgWYCsnPW-5NTYmdYO_C29SsTMw_CPKnOb3SdDH2vYc58Ua-noZ5-XVr-jtNGhAy3HIDHUecTpcYzsxvV6oP4IfRIdRYQYSpc-8eAmGjtu5cipflJF1A9P8">
+<div class="absolute top-3 right-3 bg-secondary-container text-on-secondary-container px-2 py-1 rounded text-label-md font-label-md font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">workspace_premium</span>
+                            Premium
+                        </div>
+</div>
+<div class="p-4 flex flex-col flex-1">
+<div class="flex justify-between items-start mb-2">
+<span class="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider">Physics • SS3</span>
+<span class="text-label-md font-label-md font-bold text-primary flex items-center gap-1 bg-primary/10 px-2 py-0.5 rounded">
+<span class="material-symbols-outlined text-[14px]">toll</span>
+                                50 Credits
+                            </span>
+</div>
+<h3 class="text-title-lg font-title-lg text-on-surface mb-2 line-clamp-2">Modern Physics &amp; Quantum Mechanics</h3>
+<p class="text-body-md font-body-md text-on-surface-variant mb-4 flex-1 line-clamp-2">Complete SS3 lesson plan covering photoelectric effect, x-rays, and radioactivity with WAEC past questions.</p>
+<div class="flex items-center gap-3 pt-4 border-t border-outline-variant/20 mt-auto">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-bold text-xs">
+                                OA
+                            </div>
+<span class="text-label-lg font-label-lg text-on-surface">Oluwaseun Adebayo</span>
+</div>
+</div>
+</div>
+<!-- Card 2 (Free) -->
+<div class="group bg-surface-container-lowest border border-outline-variant/30 rounded-xl overflow-hidden hover:shadow-lg transition-shadow duration-300 flex flex-col h-full cursor-pointer relative">
+<div class="h-48 w-full bg-surface-variant relative overflow-hidden">
+<img alt="Math notebook" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A top-down view of a neatly organized mathematics notebook filled with calculus problems, lying on a light wooden desk next to a modern silver pen and a calculator. The lighting is bright and natural, suggesting a productive morning study session. The aesthetic is clean and minimal, using whites, soft greys, and natural wood tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBDqTxK7hUvVyu3i1hw47tATg9HVIBK8jK9ayr55ubsOBF6qW7qR-MTXKNT0fKSvCqagVtaPYjMVQCfCAqhCW3m0WvHrA2q9k6rsT6VFsmbuFJSjbV8BDJtntRbJHSMvb2PL0KrFp6mY39wnzZxZOVbm-gmgeMkYvSRCT01YDjMHpVLyqYb43zqE5llrBb6cMJlqh78x_3oA7twypLTZ85rDazxL5Lnlrcgmpr9ECb9jwQ86GS40fC1Hwbw7B5aUf724YdhlzR0mZY">
+<div class="absolute top-3 right-3 bg-surface text-on-surface px-2 py-1 rounded text-label-md font-label-md font-bold shadow-sm">
+                            Free
+                        </div>
+</div>
+<div class="p-4 flex flex-col flex-1">
+<div class="flex justify-between items-start mb-2">
+<span class="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider">Mathematics • SS3</span>
+</div>
+<h3 class="text-title-lg font-title-lg text-on-surface mb-2 line-clamp-2">Introduction to Calculus: Limits</h3>
+<p class="text-body-md font-body-md text-on-surface-variant mb-4 flex-1 line-clamp-2">Foundational concepts of limits and continuity, designed for the Nigerian National Curriculum.</p>
+<div class="flex items-center gap-3 pt-4 border-t border-outline-variant/20 mt-auto">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-bold text-xs">
+                                CN
+                            </div>
+<span class="text-label-lg font-label-lg text-on-surface">Chukwuemeka Nwachukwu</span>
+</div>
+</div>
+</div>
+<!-- Card 3 (Premium) -->
+<div class="group bg-surface-container-lowest border border-outline-variant/30 rounded-xl overflow-hidden hover:shadow-lg transition-shadow duration-300 flex flex-col h-full cursor-pointer relative">
+<div class="h-48 w-full bg-surface-variant relative overflow-hidden">
+<img alt="Chemistry lab" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A close-up shot of chemistry lab equipment featuring glass beakers and flasks filled with brightly colored liquids (blue, yellow, pink) against a crisp white background. The lighting is high-key and scientific, highlighting the clarity of the glassware and the vibrancy of the chemicals. The mood is analytical and precise." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD5iXRypvNXTMY4n_XMGY_UUar11AMDZmpFXoZbtOjOqaY0OwuRcXDTO6WCwWKGBshjv_SuhkWE4WTVtHP2BadAs0p-pUNK9l25oFOY4PjIknZswBGQVtnjX62QB2Dd5deV6zgggoOlGAmOqIABnPa9x1ozov_hAlU-A_cAvZTtkg7R2KKV5OrO1s6SC0NAFqy6zpMaqYlX3A8bHxXRIO0hfqxe6sxDK55TEMgPa7FZxx9ddpBC636gkjmP_LBtAnXoStVUwjYVWro">
+<div class="absolute top-3 right-3 bg-secondary-container text-on-secondary-container px-2 py-1 rounded text-label-md font-label-md font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">workspace_premium</span>
+                            Premium
+                        </div>
+</div>
+<div class="p-4 flex flex-col flex-1">
+<div class="flex justify-between items-start mb-2">
+<span class="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider">Chemistry • SS2</span>
+<span class="text-label-md font-label-md font-bold text-primary flex items-center gap-1 bg-primary/10 px-2 py-0.5 rounded">
+<span class="material-symbols-outlined text-[14px]">toll</span>
+                                35 Credits
+                            </span>
+</div>
+<h3 class="text-title-lg font-title-lg text-on-surface mb-2 line-clamp-2">Organic Chemistry: Alkanes &amp; Alkenes</h3>
+<p class="text-body-md font-body-md text-on-surface-variant mb-4 flex-1 line-clamp-2">Comprehensive slides and worksheet on hydrocarbons, nomenclature, and reactions.</p>
+<div class="flex items-center gap-3 pt-4 border-t border-outline-variant/20 mt-auto">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-bold text-xs">
+                                IA
+                            </div>
+<span class="text-label-lg font-label-lg text-on-surface">Ibrahim Aliyu</span>
+</div>
+</div>
+</div>
+<!-- Card 4 (Free) -->
+<div class="group bg-surface-container-lowest border border-outline-variant/30 rounded-xl overflow-hidden hover:shadow-lg transition-shadow duration-300 flex flex-col h-full cursor-pointer relative">
+<div class="h-48 w-full bg-surface-variant relative overflow-hidden flex items-center justify-center bg-primary-container/5">
+<span class="material-symbols-outlined text-6xl text-primary/20" style="font-variation-settings: 'FILL' 1;">description</span>
+<div class="absolute top-3 right-3 bg-surface text-on-surface px-2 py-1 rounded text-label-md font-label-md font-bold shadow-sm">
+                            Free
+                        </div>
+</div>
+<div class="p-4 flex flex-col flex-1">
+<div class="flex justify-between items-start mb-2">
+<span class="text-label-md font-label-md text-on-surface-variant uppercase tracking-wider">English • JSS3</span>
+</div>
+<h3 class="text-title-lg font-title-lg text-on-surface mb-2 line-clamp-2">Summary Writing Techniques</h3>
+<p class="text-body-md font-body-md text-on-surface-variant mb-4 flex-1 line-clamp-2">Step-by-step guide for teaching summary writing skills for junior secondary exams.</p>
+<div class="flex items-center gap-3 pt-4 border-t border-outline-variant/20 mt-auto">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary flex items-center justify-center font-bold text-xs">
+                                FE
+                            </div>
+<span class="text-label-lg font-label-lg text-on-surface">Folake Emmanuel</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+<!-- BottomNavBar (Mobile) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-[80px] px-2 pb-2 md:hidden bg-surface-container-low dark:bg-surface-container-lowest border-t border-outline-variant/20">
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline w-16 h-16 hover:bg-surface-variant/50 rounded-xl" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 0;">home</span>
+<span class="text-label-md font-label-md">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline w-16 h-16 hover:bg-surface-variant/50 rounded-xl" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 0;">menu_book</span>
+<span class="text-label-md font-label-md">Lessons</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline w-16 h-16 hover:bg-surface-variant/50 rounded-xl" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 0;">quiz</span>
+<span class="text-label-md font-label-md">Exams</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-secondary-container dark:bg-secondary text-on-secondary-container dark:text-on-secondary rounded-full px-6 py-1 w-20 h-16 scale-90 transition-all" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">inventory_2</span>
+<span class="text-label-md font-label-md font-bold">Vault</span>
+</a>
+</nav>
+<style>
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+
+
+</body></html>

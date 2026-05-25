@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ClassAI - Dashboard Editor Mode</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;700&amp;family=Albert+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">tailwind.config = {darkMode: "class", theme: {extend: {colors: {"surface-dim": "#d9dae0", "secondary-fixed": "#e0e0ff", "on-secondary-container": "#1e258f", "surface-container-low": "#f2f3f9", "primary-fixed-dim": "#a1c9ff", "inverse-primary": "#a1c9ff", "tertiary-container": "#5068d9", "secondary-container": "#8c94ff", secondary: "#4b53ba", "on-secondary-fixed": "#00026c", "secondary-fixed-dim": "#bec2ff", "on-primary-fixed-variant": "#004880", "on-background": "#191c20", "on-surface": "#191c20", outline: "#727781", "surface-container": "#ededf3", "on-primary": "#ffffff", "outline-variant": "#c1c7d2", "surface-tint": "#1b61a0", tertiary: "#344ebf", "inverse-on-surface": "#eff0f6", "primary-fixed": "#d2e4ff", "on-error-container": "#93000a", "inverse-surface": "#2e3035", "on-tertiary": "#ffffff", "surface-container-lowest": "#ffffff", error: "#ba1a1a", surface: "#f8f9ff", "surface-variant": "#e1e2e8", "surface-bright": "#f8f9ff", "on-surface-variant": "#414750", "on-primary-container": "#f5f7ff", "on-secondary-fixed-variant": "#323aa1", "on-tertiary-container": "#f8f6ff", "surface-container-high": "#e7e8ee", "tertiary-fixed": "#dde1ff", "error-container": "#ffdad6", "surface-container-highest": "#e1e2e8", background: "#f8f9ff", "on-secondary": "#ffffff", "on-primary-fixed": "#001c37", "tertiary-fixed-dim": "#b9c3ff", "on-error": "#ffffff", primary: "#115b9b", "primary-container": "#3674b5", "on-tertiary-fixed": "#001257", "on-tertiary-fixed-variant": "#1d3aac"}, borderRadius: {DEFAULT: "0.125rem", lg: "0.25rem", xl: "0.5rem", full: "0.75rem"}, spacing: {gutter: "16px", "margin-mobile": "16px", "margin-tablet": "24px", "touch-target": "48px", base: "8px"}, fontFamily: {"headline-lg": ["Inter"], "title-lg": ["Inter"], "label-lg": ["Inter"], "display-lg": ["Inter"], "headline-lg-mobile": ["Inter"], "body-lg": ["Inter"], "body-md": ["Inter"], "label-md": ["Inter"], headline: ["Open Sans"], display: ["Open Sans"], body: ["Albert Sans"], label: ["Open Sans"]}, fontSize: {"headline-lg": ["32px", {lineHeight: "40px", fontWeight: "600"}], "title-lg": ["22px", {lineHeight: "28px", fontWeight: "500"}], "label-lg": ["14px", {lineHeight: "20px", letterSpacing: "0.1px", fontWeight: "500"}], "display-lg": ["48px", {lineHeight: "56px", letterSpacing: "-0.02em", fontWeight: "700"}], "headline-lg-mobile": ["28px", {lineHeight: "36px", fontWeight: "600"}], "body-lg": ["18px", {lineHeight: "28px", fontWeight: "400"}], "body-md": ["16px", {lineHeight: "24px", fontWeight: "400"}], "label-md": ["12px", {lineHeight: "16px", fontWeight: "500"}]}}}};</script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.fill {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background min-h-screen flex flex-col md:flex-row antialiased">
+<!-- NavigationDrawer (Tablet/Desktop) -->
+<nav class="hidden md:flex flex-col h-full border-r border-outline-variant/30 py-margin-tablet bg-surface-container-low dark:bg-surface-container-high text-primary dark:text-primary-fixed docked left-0 h-full w-72 flex-shrink-0 z-40 fixed">
+<div class="px-margin-tablet mb-8">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container">
+<span class="material-symbols-outlined fill">person</span>
+</div>
+<div>
+<h2 class="text-headline-lg font-headline-lg font-black text-primary dark:text-primary-fixed">ClassAI</h2>
+<p class="text-body-md font-body-md text-on-surface-variant">Nigerian Academic Partner</p>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-2 flex-grow">
+<!-- Active: Home -->
+<a class="flex items-center gap-4 bg-secondary-fixed dark:bg-on-secondary-fixed-variant text-on-secondary-fixed dark:text-secondary-fixed-dim rounded-full px-4 py-3 mx-3 translate-x-1 transition-transform" href="#">
+<span class="material-symbols-outlined fill" data-icon="home">home</span>
+<span class="text-label-lg font-label-lg">Home</span>
+</a>
+<a class="flex items-center gap-4 text-on-surface-variant dark:text-outline-variant px-4 py-3 mx-3 hover:bg-surface-variant dark:hover:bg-surface-dim rounded-full transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="menu_book">menu_book</span>
+<span class="text-label-lg font-label-lg">Lessons</span>
+</a>
+<a class="flex items-center gap-4 text-on-surface-variant dark:text-outline-variant px-4 py-3 mx-3 hover:bg-surface-variant dark:hover:bg-surface-dim rounded-full transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="quiz">quiz</span>
+<span class="text-label-lg font-label-lg">Exams</span>
+</a>
+<a class="flex items-center gap-4 text-on-surface-variant dark:text-outline-variant px-4 py-3 mx-3 hover:bg-surface-variant dark:hover:bg-surface-dim rounded-full transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+<span class="text-label-lg font-label-lg">Vault</span>
+</a>
+<a class="flex items-center gap-4 text-on-surface-variant dark:text-outline-variant px-4 py-3 mx-3 hover:bg-surface-variant dark:hover:bg-surface-dim rounded-full transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="admin_panel_settings">admin_panel_settings</span>
+<span class="text-label-lg font-label-lg">Admin</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Area -->
+<div class="flex-1 flex flex-col md:ml-72 min-h-screen">
+<!-- TopAppBar -->
+<header class="bg-surface dark:bg-surface-container-high flex justify-between items-center w-full px-margin-mobile md:px-margin-tablet py-2 docked full-width top-0 z-30 sticky border-b border-outline-variant/20">
+<div class="flex items-center gap-4">
+<span class="md:hidden text-title-lg font-title-lg font-bold text-primary dark:text-primary-fixed">ClassAI</span>
+<div class="hidden md:flex items-center gap-2">
+<span class="text-title-lg font-title-lg font-bold text-primary dark:text-primary-fixed">Dashboard</span>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<!-- Sync Indicator -->
+<div class="flex items-center gap-2 px-3 py-1.5 bg-[#008751]/10 text-[#008751] rounded-full text-label-md font-label-md font-medium">
+<div class="w-2 h-2 rounded-full bg-[#008751]"></div>
+                    Synced
+                </div>
+<!-- Credit Chip -->
+<div class="flex items-center gap-2 px-4 py-2 bg-surface-container text-primary rounded-full hover:bg-primary/8 dark:hover:bg-primary-fixed/8 transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-[20px]" data-icon="account_balance_wallet">account_balance_wallet</span>
+<span class="text-label-lg font-label-lg font-bold">₦1,250</span>
+</div>
+<div class="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center text-on-surface-variant overflow-hidden cursor-pointer hover:bg-primary/8 transition-colors">
+<img alt="Educator Profile" class="w-full h-full object-cover" data-alt="A close-up portrait of a professional Nigerian educator, looking confident and approachable. The lighting is bright and even, highlighting their professional attire. The background is a soft, out-of-focus modern classroom environment, establishing a professional and trustworthy academic partner aesthetic in a light-mode setting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCrrSUePodbbe9YgOUH4FpWGqbRRqe5Si9PIY3445YOnYmmF4zAxudHZ0rHTHFKoZkPGhBIuvGbRG2zaGEh7hNvfO8p1AqPIF-qEpseULgh66liH61cHVZ88JR5y4tmyQmwUdXN31lPiccjQcNMgE4ZCuYpGI0Yz6g2txqocJQZNERC66g5t4J19VcPSiZG0F0r4niBr8dzzilAVUX9waMoXje8FzM6DmNv8BSCd8gKv_Wz0cNERe_N3JE-QMV8Ci7pvPPF7kaNr8o"/>
+</div>
+</div>
+</header>
+<!-- Conflict MaterialBanner -->
+<div class="bg-error-container text-on-error-container px-margin-mobile md:px-margin-tablet py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-error/20">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-error" data-icon="sync_problem">sync_problem</span>
+<p class="text-body-md font-body-md">You have unsynced changes. Resolve now.</p>
+</div>
+<div class="flex gap-2">
+<button class="px-4 py-2 text-label-lg font-label-lg font-bold text-error hover:bg-error/10 rounded transition-colors">Dismiss</button>
+<button class="px-4 py-2 text-label-lg font-label-lg font-bold bg-error text-on-error rounded hover:bg-error/90 transition-colors">Resolve</button>
+</div>
+</div>
+<!-- Canvas -->
+<main class="flex-1 p-margin-mobile md:p-margin-tablet flex flex-col gap-8 max-w-[1400px] w-full mx-auto">
+<!-- Quick Actions Header -->
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+<div>
+<h1 class="text-headline-lg font-headline-lg text-primary">Good Morning, Educator</h1>
+<p class="text-body-lg font-body-lg text-on-surface-variant mt-1">Here's your academic overview for today.</p>
+</div>
+<div class="flex flex-wrap gap-3">
+<button class="flex items-center gap-2 h-touch-target px-6 bg-primary text-on-primary rounded-full hover:bg-primary/90 transition-colors shadow-sm">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+<span class="text-label-lg font-label-lg font-bold">Create Lesson</span>
+</button>
+<button class="flex items-center gap-2 h-touch-target px-6 bg-surface-container border border-outline-variant text-primary rounded-full hover:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined" data-icon="assignment">assignment</span>
+<span class="text-label-lg font-label-lg font-bold">Generate Exam</span>
+</button>
+</div>
+</div>
+<!-- Bento Grid Main Content -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<!-- Left Column (Span 2): Recent Lessons -->
+<div class="lg:col-span-2 flex flex-col gap-4">
+<div class="flex justify-between items-center">
+<h2 class="text-title-lg font-title-lg text-primary">Recent Lessons</h2>
+<button class="text-label-lg font-label-lg text-primary hover:text-primary/80 font-bold">View All</button>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+<!-- Lesson Card 1 -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant/30 p-5 flex flex-col gap-4 hover:shadow-sm transition-shadow">
+<div class="flex justify-between items-start">
+<div class="w-12 h-12 rounded bg-tertiary-container/10 flex items-center justify-center text-tertiary-container">
+<span class="material-symbols-outlined" data-icon="science">science</span>
+</div>
+<span class="px-2 py-1 bg-surface-variant text-on-surface-variant text-[10px] uppercase font-bold rounded-sm tracking-wider">Draft</span>
+</div>
+<div>
+<h3 class="text-title-lg font-title-lg text-primary leading-tight">Introduction to Photosynthesis</h3>
+<p class="text-label-md font-label-md text-outline mt-1">JSS 2 • Biology</p>
+</div>
+<div class="mt-auto pt-4 border-t border-outline-variant/20 flex justify-between items-center">
+<span class="text-label-md font-label-md text-on-surface-variant">Last edited 2h ago</span>
+<button class="w-8 h-8 rounded-full hover:bg-surface-variant flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]" data-icon="edit">edit</span>
+</button>
+</div>
+</div>
+<!-- Lesson Card 2 -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant/30 p-5 flex flex-col gap-4 hover:shadow-sm transition-shadow">
+<div class="flex justify-between items-start">
+<div class="w-12 h-12 rounded bg-secondary-container/20 flex items-center justify-center text-on-secondary-container">
+<span class="material-symbols-outlined" data-icon="calculate">calculate</span>
+</div>
+<span class="px-2 py-1 bg-[#008751]/10 text-[#008751] text-[10px] uppercase font-bold rounded-sm tracking-wider">Published</span>
+</div>
+<div>
+<h3 class="text-title-lg font-title-lg text-primary leading-tight">Algebraic Expressions</h3>
+<p class="text-label-md font-label-md text-outline mt-1">SS 1 • Mathematics</p>
+</div>
+<div class="mt-auto pt-4 border-t border-outline-variant/20 flex justify-between items-center">
+<span class="text-label-md font-label-md text-on-surface-variant">Last edited yesterday</span>
+<button class="w-8 h-8 rounded-full hover:bg-surface-variant flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]" data-icon="edit">edit</span>
+</button>
+</div>
+</div>
+<!-- Lesson Card 3 -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant/30 p-5 flex flex-col gap-4 hover:shadow-sm transition-shadow">
+<div class="flex justify-between items-start">
+<div class="w-12 h-12 rounded bg-primary-container/10 flex items-center justify-center text-primary-container">
+<span class="material-symbols-outlined" data-icon="history_edu">history_edu</span>
+</div>
+<span class="px-2 py-1 bg-[#008751]/10 text-[#008751] text-[10px] uppercase font-bold rounded-sm tracking-wider">Published</span>
+</div>
+<div>
+<h3 class="text-title-lg font-title-lg text-primary leading-tight">Pre-Colonial Nigeria</h3>
+<p class="text-label-md font-label-md text-outline mt-1">JSS 3 • History</p>
+</div>
+<div class="mt-auto pt-4 border-t border-outline-variant/20 flex justify-between items-center">
+<span class="text-label-md font-label-md text-on-surface-variant">Last edited 3 days ago</span>
+<button class="w-8 h-8 rounded-full hover:bg-surface-variant flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]" data-icon="edit">edit</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column: Stats & Activity -->
+<div class="flex flex-col gap-6">
+<!-- Stats Card -->
+<div class="bg-primary text-on-primary rounded-xl p-6 relative overflow-hidden">
+<div class="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-bl-full pointer-events-none"></div>
+<h3 class="text-title-lg font-title-lg mb-6 relative z-10">Weekly Overview</h3>
+<div class="flex flex-col gap-4 relative z-10">
+<div class="flex justify-between items-end border-b border-white/10 pb-3">
+<div>
+<p class="text-label-md font-label-md text-on-primary/70 uppercase tracking-wider">Lessons Created</p>
+<p class="text-headline-lg font-headline-lg mt-1">12</p>
+</div>
+<div class="flex items-center text-secondary-fixed">
+<span class="material-symbols-outlined text-[16px]" data-icon="trending_up">trending_up</span>
+<span class="text-label-md font-label-md ml-1">+2</span>
+</div>
+</div>
+<div class="flex justify-between items-end">
+<div>
+<p class="text-label-md font-label-md text-on-primary/70 uppercase tracking-wider">Exams Generated</p>
+<p class="text-headline-lg font-headline-lg mt-1">4</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Upcoming Activity -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant/30 p-6">
+<h3 class="text-title-lg font-title-lg text-primary mb-4">Upcoming Schedule</h3>
+<div class="flex flex-col gap-4">
+<div class="flex gap-4 items-start">
+<div class="flex flex-col items-center min-w-[40px]">
+<span class="text-label-md font-label-md text-outline font-bold">10:00</span>
+<span class="text-[10px] text-outline">AM</span>
+</div>
+<div class="flex-1 bg-surface-container px-4 py-3 rounded-lg border-l-4 border-tertiary-container">
+<p class="text-label-lg font-label-lg text-primary font-bold">JSS 2 Biology Class</p>
+<p class="text-label-md font-label-md text-on-surface-variant mt-1">Room 4B • 45 Students</p>
+</div>
+</div>
+<div class="flex gap-4 items-start">
+<div class="flex flex-col items-center min-w-[40px]">
+<span class="text-label-md font-label-md text-outline font-bold">11:30</span>
+<span class="text-[10px] text-outline">AM</span>
+</div>
+<div class="flex-1 bg-surface-container px-4 py-3 rounded-lg border-l-4 border-secondary">
+<p class="text-label-lg font-label-lg text-primary font-bold">SS 1 Math Exam</p>
+<p class="text-label-md font-label-md text-on-surface-variant mt-1">Main Hall • Invigilation</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

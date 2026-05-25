@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:classai/core/services/ai_service.dart';
+import 'package:classai/core/database/database.dart';
 
 class MockSupabaseClient extends Mock implements SupabaseClient {}
 class MockFunctionsClient extends Mock implements FunctionsClient {}
@@ -11,12 +12,16 @@ void main() {
     late MockSupabaseClient mockSupabase;
     late MockFunctionsClient mockFunctions;
     late AiService aiService;
+    late AppDatabase db;
 
-    setUp(() {
+    setUp(() async {
       mockSupabase = MockSupabaseClient();
       mockFunctions = MockFunctionsClient();
       when(() => mockSupabase.functions).thenReturn(mockFunctions);
-      aiService = AiService(supabase: mockSupabase);
+      db = AppDatabase.forTesting();
+      await db.initialize();
+      aiService = AiService(supabase: mockSupabase, db: db);
+      addTearDown(db.close);
     });
 
     test('generate with mock returns map', () async {

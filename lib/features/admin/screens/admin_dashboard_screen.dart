@@ -5,10 +5,13 @@ import 'package:go_router/go_router.dart';
 import 'package:classai/features/admin/providers/admin_provider.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/core/services/auth_service.dart';
+import 'package:classai/core/theme/app_theme.dart';
+import 'package:classai/core/widgets/app_toast.dart';
+import 'package:classai/features/settings/providers/theme_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
 /// Admin dashboard screen with teacher management, vault approval queue,
-/// and sync health overview.
+/// and sync health overview — redesigned to match Google Stitch.
 class AdminDashboardScreen extends ConsumerStatefulWidget {
   const AdminDashboardScreen({super.key});
 
@@ -17,23 +20,15 @@ class AdminDashboardScreen extends ConsumerStatefulWidget {
       _AdminDashboardScreenState();
 }
 
-class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
+class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
+  int _selectedTabIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(adminDashboardProvider.notifier).refresh();
     });
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   @override
@@ -41,86 +36,607 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
     final dashboardData = ref.watch(adminDashboardProvider);
     final authData = ref.watch(authProvider);
     final cs = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final isWide = MediaQuery.of(context).size.width >= 768;
+    final themeMode = ref.watch(themeProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Admin Dashboard'),
-        elevation: 0,
-        backgroundColor: cs.surface,
-        foregroundColor: cs.onSurface,
-        surfaceTintColor: cs.surface,
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: [
-            Tab(text: 'Teachers (${dashboardData.teachers.length})'),
-            Tab(
-              text: 'Vault Queue (${dashboardData.pendingVaultApprovals})',
+      backgroundColor: cs.surface,
+      body: SafeArea(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // === Desktop Nav Drawer ===
+            if (isWide) _buildNavDrawer(cs, textTheme),
+
+            // === Main Content Area ===
+            Expanded(
+              child: Column(
+                children: [
+                  // === TopAppBar (desktop only) ===
+                  if (isWide) _buildTopAppBar(cs, textTheme, authData, themeMode),
+
+                  // === Main canvas ===
+                  Expanded(
+                    child: dashboardData.loading
+                        ? const Center(child: CircularProgressIndicator())
+                        : dashboardData.errorMessage != null
+                            ? _buildErrorState(cs, textTheme, dashboardData)
+                            : _buildCanvas(context, cs, textTheme,
+                                dashboardData, authData),
+                  ),
+
+                  // === BottomNav (mobile only) ===
+                  if (!isWide) _buildBottomNav(cs, textTheme),
+                ],
+              ),
             ),
-            const Tab(text: 'Sync Health'),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddTeacherDialog(context),
-        icon: const Icon(Icons.person_add_alt_1_rounded),
-        label: const Text('Add Teacher'),
-      ),
-      body: dashboardData.loading
-          ? const Center(child: CircularProgressIndicator())
-          : dashboardData.errorMessage != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 32),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.error_outline_rounded,
-                          size: 56,
-                          color: cs.error,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Error: ${dashboardData.errorMessage}',
-                          textAlign: TextAlign.center,
-                          style:
-                              Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                    color: cs.error,
-                                  ),
-                        ),
-                        const SizedBox(height: 16),
-                        FilledButton(
-                          onPressed: () => ref
-                              .read(adminDashboardProvider.notifier)
-                              .refresh(),
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _TeacherManagementTab(
-                      teachers: dashboardData.teachers,
-                      authData: authData,
-                    ),
-                    _VaultApprovalTab(authData: authData),
-                    _SyncHealthTab(
-                      teachers: dashboardData.teachers,
-                      dashboardData: dashboardData,
-                    ),
-                  ],
-                ),
     );
   }
 
-  /// Shows the "Add Teacher" dialog.
-  void _showAddTeacherDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (_) => const _AddTeacherDialog(),
+  // ---------------------------------------------------------------
+  // Navigation Drawer (Desktop)
+  // ---------------------------------------------------------------
+  Widget _buildNavDrawer(ColorScheme cs, TextTheme textTheme) {
+    return Container(
+      width: 288,
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        border: Border(
+          right: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.3)),
+        ),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 24),
+          // Branding header
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF3674B5),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.school_rounded,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'ClassAI',
+                      style: textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        color: cs.primary,
+                        fontSize: 28,
+                      ),
+                    ),
+                    Text(
+                      'Nigerian Academic Partner',
+                      style: textTheme.labelSmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: cs.outlineVariant.withValues(alpha: 0.3),
+          ),
+          const SizedBox(height: 16),
+          // Navigation items
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              children: [
+                _NavItem(
+                  icon: Icons.home_rounded,
+                  label: 'Home',
+                  isActive: false,
+                  onTap: () {},
+                ),
+                const SizedBox(height: 4),
+                _NavItem(
+                  icon: Icons.menu_book_rounded,
+                  label: 'Lessons',
+                  isActive: false,
+                  onTap: () {},
+                ),
+                const SizedBox(height: 4),
+                _NavItem(
+                  icon: Icons.quiz_rounded,
+                  label: 'Exams',
+                  isActive: false,
+                  onTap: () {},
+                ),
+                const SizedBox(height: 4),
+                _NavItem(
+                  icon: Icons.inventory_2_rounded,
+                  label: 'Vault',
+                  isActive: false,
+                  onTap: () {},
+                ),
+                const SizedBox(height: 4),
+                _NavItem(
+                  icon: Icons.admin_panel_settings_rounded,
+                  label: 'Admin',
+                  isActive: true,
+                  onTap: () {},
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------
+  // Top App Bar (Desktop)
+  // ---------------------------------------------------------------
+  Widget _buildTopAppBar(
+      ColorScheme cs, TextTheme textTheme, AuthStateData authData, ThemeMode themeMode) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: cs.surfaceContainerHighest,
+          ),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Title
+          Text(
+            'Admin Dashboard',
+            style: textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: cs.primary,
+            ),
+          ),
+          const SizedBox(width: 24),
+          // Right side actions
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Credit chip
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: cs.outlineVariant.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.account_balance_wallet_rounded,
+                      size: 18,
+                      color: cs.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '\u20A6500',
+                      style: textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: cs.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Notifications
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  icon: Icon(
+                    Icons.notifications_rounded,
+                    color: cs.onPrimaryContainer,
+                    size: 20,
+                  ),
+                  onPressed: () {},
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Profile popup
+              PopupMenuButton<String>(
+                onSelected: (value) {
+                  switch (value) {
+                    case 'settings':
+                      context.push('/settings');
+                    case 'logout':
+                      ref.read(authProvider.notifier).manualLogout();
+                    case 'theme_light':
+                      ref.read(themeProvider.notifier).setTheme(ThemeMode.light);
+                    case 'theme_dark':
+                      ref.read(themeProvider.notifier).setTheme(ThemeMode.dark);
+                    case 'theme_system':
+                      ref.read(themeProvider.notifier).setTheme(ThemeMode.system);
+                  }
+                },
+                offset: const Offset(0, 48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                ),
+                itemBuilder: (context) {
+                  final teacher = authData.currentTeacher;
+                  return [
+                    PopupMenuItem<String>(
+                      enabled: false,
+                      child: SizedBox(
+                        width: 200,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              teacher?.teacherName ?? 'Admin',
+                              style: textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              teacher?.email ?? '',
+                              style: textTheme.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const PopupMenuDivider(),
+                    PopupMenuItem<String>(
+                      enabled: false,
+                      child: Text(
+                        'Theme',
+                        style: textTheme.labelMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    CheckedPopupMenuItem<String>(
+                      checked: themeMode == ThemeMode.light,
+                      value: 'theme_light',
+                      child: const Text('Light'),
+                    ),
+                    CheckedPopupMenuItem<String>(
+                      checked: themeMode == ThemeMode.dark,
+                      value: 'theme_dark',
+                      child: const Text('Dark'),
+                    ),
+                    CheckedPopupMenuItem<String>(
+                      checked: themeMode == ThemeMode.system,
+                      value: 'theme_system',
+                      child: const Text('System'),
+                    ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem<String>(
+                      value: 'settings',
+                      child: ListTile(
+                        leading: Icon(Icons.settings_rounded),
+                        title: Text('Settings'),
+                        contentPadding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'logout',
+                      child: ListTile(
+                        leading: Icon(Icons.logout_rounded),
+                        title: Text('Logout'),
+                        contentPadding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  ];
+                },
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: cs.surface, width: 2),
+                    color: cs.primaryContainer,
+                  ),
+                  child: Center(
+                    child: Text(
+                      'SA',
+                      style: textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: cs.onPrimaryContainer,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------
+  // Error State
+  // ---------------------------------------------------------------
+  Widget _buildErrorState(
+      ColorScheme cs, TextTheme textTheme, AdminDashboardData dashboardData) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.error_outline_rounded,
+              size: 56,
+              color: cs.error,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Error: ${dashboardData.errorMessage}',
+              textAlign: TextAlign.center,
+              style: textTheme.bodyLarge?.copyWith(color: cs.error),
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: () =>
+                  ref.read(adminDashboardProvider.notifier).refresh(),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------
+  // Main Canvas
+  // ---------------------------------------------------------------
+  Widget _buildCanvas(
+    BuildContext context,
+    ColorScheme cs,
+    TextTheme textTheme,
+    AdminDashboardData dashboardData,
+    AuthStateData authData,
+  ) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 900;
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // === Context Tabs ===
+              _buildContextTabs(cs, textTheme),
+
+              const SizedBox(height: 6),
+
+              // === Tab Content ===
+              Expanded(
+                child: _buildTabContent(
+                    context, cs, textTheme, dashboardData, authData, isWide),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------
+  // Context Tabs
+  // ---------------------------------------------------------------
+  Widget _buildContextTabs(ColorScheme cs, TextTheme textTheme) {
+    final tabs = [
+      'Teacher Management',
+      'Vault Approval Queue',
+      'Sync Health',
+    ];
+
+    return SizedBox(
+      height: 44,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: tabs.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 0),
+        itemBuilder: (context, index) {
+          final isActive = _selectedTabIndex == index;
+          return GestureDetector(
+            onTap: () => setState(() => _selectedTabIndex = index),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                border: isActive
+                    ? const Border(
+                        bottom: BorderSide(
+                          color: Color(0xFF115B9B),
+                          width: 2,
+                        ),
+                      )
+                    : null,
+              ),
+              child: Text(
+                tabs[index],
+                style: textTheme.labelLarge?.copyWith(
+                  fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                  color: isActive ? cs.primary : cs.onSurfaceVariant,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------
+  // Tab Content Dispatcher
+  // ---------------------------------------------------------------
+  Widget _buildTabContent(
+    BuildContext context,
+    ColorScheme cs,
+    TextTheme textTheme,
+    AdminDashboardData dashboardData,
+    AuthStateData authData,
+    bool isWide,
+  ) {
+    switch (_selectedTabIndex) {
+      case 0:
+        return _TeacherManagementTab(
+          teachers: dashboardData.teachers,
+          authData: authData,
+          isWide: isWide,
+        );
+      case 1:
+        return _VaultApprovalTab(authData: authData);
+      case 2:
+        return _SyncHealthTab(
+          teachers: dashboardData.teachers,
+          dashboardData: dashboardData,
+          isWide: isWide,
+        );
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // Bottom Navigation (Mobile)
+  // ---------------------------------------------------------------
+  Widget _buildBottomNav(ColorScheme cs, TextTheme textTheme) {
+    final items = [
+      (icon: Icons.home_rounded, label: 'Home'),
+      (icon: Icons.menu_book_rounded, label: 'Lessons'),
+      (icon: Icons.quiz_rounded, label: 'Exams'),
+      (icon: Icons.more_horiz_rounded, label: 'More'),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.only(top: 4, bottom: 4),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        border: Border(
+          top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.2)),
+        ),
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(12),
+          topRight: Radius.circular(12),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: items.map((item) {
+          final isActive = item.label == 'More';
+          return Container(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            decoration: BoxDecoration(
+              color: isActive ? cs.secondaryContainer : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: IconButton(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              icon: Icon(
+                item.icon,
+                color: isActive ? cs.onSecondaryContainer : cs.onSurfaceVariant,
+              ),
+              onPressed: () {},
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Navigation Item Helper
+// ---------------------------------------------------------------------------
+class _NavItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _NavItem({
+    required this.icon,
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        margin: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: isActive
+              ? const Color(0xFFE0E0FF)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        transform: isActive
+            ? Matrix4.translationValues(4.0, 0.0, 0.0)
+            : Matrix4.identity(),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 22,
+              color: isActive
+                  ? const Color(0xFF00026C)
+                  : cs.onSurfaceVariant,
+            ),
+            const SizedBox(width: 16),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                    color: isActive
+                        ? const Color(0xFF00026C)
+                        : cs.onSurfaceVariant,
+                  ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -168,12 +684,9 @@ class _AddTeacherDialogState extends ConsumerState<_AddTeacherDialog> {
 
       if (!mounted) return;
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Teacher added. A temporary password has been emailed.',
-          ),
-        ),
+      showInfoToast(
+        context: context,
+        message: 'Teacher added. A temporary password has been emailed.',
       );
     } on AuthException catch (e) {
       if (!mounted) return;
@@ -193,9 +706,16 @@ class _AddTeacherDialogState extends ConsumerState<_AddTeacherDialog> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
 
     return AlertDialog(
-      title: const Text('Add Teacher'),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+      ),
+      title: Text(
+        'Add Teacher',
+        style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+      ),
       content: Form(
         key: _formKey,
         child: SingleChildScrollView(
@@ -209,7 +729,7 @@ class _AddTeacherDialogState extends ConsumerState<_AddTeacherDialog> {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: cs.errorContainer.withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: cs.error.withValues(alpha: 0.25),
                     ),
@@ -332,14 +852,20 @@ class _AddTeacherDialogState extends ConsumerState<_AddTeacherDialog> {
 class _TeacherManagementTab extends ConsumerWidget {
   final List<TeacherAdminData> teachers;
   final AuthStateData authData;
+  final bool isWide;
 
   const _TeacherManagementTab({
     required this.teachers,
     required this.authData,
+    required this.isWide,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    // Empty state
     if (teachers.isEmpty) {
       return Center(
         child: Column(
@@ -348,65 +874,331 @@ class _TeacherManagementTab extends ConsumerWidget {
             Icon(
               Icons.people_outline_rounded,
               size: 64,
-              color: Theme.of(context)
-                  .colorScheme
-                  .onSurfaceVariant
-                  .withValues(alpha: 0.45),
+              color: cs.onSurfaceVariant.withValues(alpha: 0.45),
             ),
             const SizedBox(height: 16),
             Text(
               'No teachers found.',
-              style: Theme.of(context).textTheme.titleMedium,
+              style: textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            FilledButton(
+              onPressed: () =>
+                  _showAddTeacherDialog(context, ref),
+              child: const Text('Add Teacher'),
             ),
           ],
         ),
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: teachers.length,
-      itemBuilder: (context, index) {
-        final teacher = teachers[index];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () {
-              context.push('/admin/teachers/${teacher.localId}');
-            },
-            child: ListTile(
-              leading: _StatusDot(color: _statusColor(teacher.statusColor)),
-              title: Text(
-                teacher.teacherName,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
+    // -- Teacher Roster Card --
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(bottom: 80),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Roster card with #F5F7F9 background
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F7F9),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.2),
+              ),
+            ),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header row
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Teacher Roster',
+                            style: textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: cs.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Manage sync access and profile details.',
+                            style: textTheme.bodyMedium?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-              ),
-              subtitle: Text(
-                '${teacher.email} \u00b7 ${teacher.role}'
-                '${teacher.deviceCount > 0 ? ' \u00b7 ${teacher.deviceCount} device(s)' : ''}'
-                ' \u00b7 Last sync: ${teacher.formattedLastSync}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              trailing: const Icon(Icons.chevron_right_rounded),
+                    const SizedBox(width: 12),
+                    // Filter + Add Teacher buttons
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Filter button
+                        Container(
+                          height: 48,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: cs.surface,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: cs.outlineVariant.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Center(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.filter_list_rounded,
+                                  size: 18,
+                                  color: cs.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Filter',
+                                  style: textTheme.labelMedium?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Add Teacher button
+                        FilledButton.icon(
+                          onPressed: () =>
+                              _showAddTeacherDialog(context, ref),
+                          icon: const Icon(Icons.person_add_rounded, size: 20),
+                          label: const Text('Add Teacher'),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // Teacher cards list
+                ...teachers.map((teacher) {
+                  return _TeacherCardWidget(
+                    teacher: teacher,
+                    cs: cs,
+                    textTheme: textTheme,
+                    onDetailsTap: () {
+                      context.push('/admin/teachers/${teacher.localId}');
+                    },
+                  );
+                }),
+              ],
             ),
           ),
-        );
-      },
+        ],
+      ),
     );
+  }
+
+  void _showAddTeacherDialog(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (_) => const _AddTeacherDialog(),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Teacher Card Widget
+// ---------------------------------------------------------------------------
+
+class _TeacherCardWidget extends StatelessWidget {
+  final TeacherAdminData teacher;
+  final ColorScheme cs;
+  final TextTheme textTheme;
+  final VoidCallback onDetailsTap;
+
+  const _TeacherCardWidget({
+    required this.teacher,
+    required this.cs,
+    required this.textTheme,
+    required this.onDetailsTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = _getInitials(teacher.teacherName);
+    final statusColor = _statusColor(teacher.statusColor);
+    final isError = teacher.statusColor == 'red';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Avatar + status dot
+          Stack(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: _avatarBgColor(teacher.statusColor),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    initials,
+                    style: textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: _avatarTextColor(teacher.statusColor),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: cs.surface, width: 2),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 16),
+
+          // Name + info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  teacher.teacherName,
+                  style: textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: cs.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${teacher.email} \u00b7 ${teacher.role}'
+                  '${teacher.deviceCount > 0 ? ' \u00b7 ${teacher.deviceCount} device(s)' : ''}',
+                  style: textTheme.labelMedium?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          // Action text + Details button
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isError)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Text(
+                    'Action Required',
+                    style: textTheme.labelMedium?.copyWith(
+                      color: const Color(0xFFB71C1C),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              // Details button
+              OutlinedButton(
+                onPressed: onDetailsTap,
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 40),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    side: BorderSide(color: cs.outline),
+                  ),
+                ),
+                child: Text(
+                  'Details',
+                  style: textTheme.labelMedium?.copyWith(
+                    color: cs.primary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getInitials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length >= 2) {
+      return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+    }
+    return name.isNotEmpty ? name[0].toUpperCase() : '?';
   }
 
   Color _statusColor(String status) {
     switch (status) {
       case 'green':
-        return Colors.green;
+        return const Color(0xFF008751);
       case 'yellow':
-        return Colors.orange;
+        return const Color(0xFF2196F3); // blue for syncing per stitch
       case 'red':
-        return Colors.red;
+        return const Color(0xFFB71C1C);
       default:
         return Colors.grey;
+    }
+  }
+
+  Color _avatarBgColor(String status) {
+    switch (status) {
+      case 'green':
+        return const Color(0xFF3674B5).withValues(alpha: 0.2);
+      case 'yellow':
+        return const Color(0xFF5068D9).withValues(alpha: 0.2);
+      default:
+        return cs.surfaceContainerHighest;
+    }
+  }
+
+  Color _avatarTextColor(String status) {
+    switch (status) {
+      case 'green':
+        return const Color(0xFF3674B5);
+      case 'yellow':
+        return const Color(0xFF5068D9);
+      default:
+        return cs.onSurfaceVariant;
     }
   }
 }
@@ -423,6 +1215,7 @@ class _VaultApprovalTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
 
     // Tier gate: Standard+ required for vault approval queue visibility
     final tier = authData.currentSchool?.subscriptionTier ?? 'free';
@@ -441,9 +1234,7 @@ class _VaultApprovalTab extends ConsumerWidget {
             Text(
               'Vault approval queue requires a Standard or Elite subscription.',
               textAlign: TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
+              style: textTheme.titleMedium
                   ?.copyWith(color: cs.onSurfaceVariant),
             ),
           ],
@@ -473,7 +1264,7 @@ class _VaultApprovalTab extends ConsumerWidget {
                 const SizedBox(height: 16),
                 Text(
                   'No pending approvals',
-                  style: Theme.of(context).textTheme.titleMedium,
+                  style: textTheme.titleMedium,
                 ),
               ],
             ),
@@ -485,51 +1276,58 @@ class _VaultApprovalTab extends ConsumerWidget {
           itemCount: items.length,
           itemBuilder: (context, index) {
             final item = items[index];
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.title,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'By ${item.authorName} \u00b7 ${item.subject} \u00b7 ${item.classLevel}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      item.description,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        OutlinedButton(
-                          onPressed: () => _rejectItem(context, ref, item.id),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: cs.error,
-                          ),
-                          child: const Text('Reject'),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton(
-                          onPressed: () => _approveItem(context, ref, item.id),
-                          child: const Text('Approve'),
-                        ),
-                      ],
-                    ),
-                  ],
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F7F9),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: cs.outlineVariant.withValues(alpha: 0.2),
                 ),
+              ),
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.title,
+                    style: textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'By ${item.authorName} \u00b7 ${item.subject} \u00b7 ${item.classLevel}',
+                    style: textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    item.description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      OutlinedButton(
+                        onPressed: () =>
+                            _rejectItem(context, ref, item.id),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: cs.error,
+                        ),
+                        child: const Text('Reject'),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        onPressed: () =>
+                            _approveItem(context, ref, item.id),
+                        child: const Text('Approve'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             );
           },
@@ -542,9 +1340,7 @@ class _VaultApprovalTab extends ConsumerWidget {
       BuildContext context, WidgetRef ref, int itemId) async {
     await ref.read(databaseProvider).vaultItemsDao.approve(itemId);
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Item approved')),
-      );
+      showInfoToast(context: context, message: 'Item approved');
     }
   }
 
@@ -552,14 +1348,12 @@ class _VaultApprovalTab extends ConsumerWidget {
       BuildContext context, WidgetRef ref, int itemId) async {
     final reason = await showDialog<String>(
       context: context,
-      builder: (ctx) => _RejectionDialog(),
+      builder: (ctx) => const _RejectionDialog(),
     );
     if (reason != null && reason.isNotEmpty) {
       await ref.read(databaseProvider).vaultItemsDao.reject(itemId, reason);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Item rejected')),
-        );
+        showInfoToast(context: context, message: 'Item rejected');
       }
     }
   }
@@ -572,6 +1366,9 @@ class _RejectionDialog extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = TextEditingController();
     return AlertDialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+      ),
       title: const Text('Rejection Reason'),
       content: TextField(
         controller: controller,
@@ -601,124 +1398,518 @@ class _RejectionDialog extends ConsumerWidget {
 class _SyncHealthTab extends StatelessWidget {
   final List<TeacherAdminData> teachers;
   final AdminDashboardData dashboardData;
+  final bool isWide;
 
   const _SyncHealthTab({
     required this.teachers,
     required this.dashboardData,
+    required this.isWide,
   });
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     if (teachers.isEmpty) {
       return const Center(child: Text('No teacher data available.'));
     }
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
+    // Summary counts
+    final greenCount =
+        teachers.where((t) => t.statusColor == 'green').length;
+    final yellowCount =
+        teachers.where((t) => t.statusColor == 'yellow').length;
+    final redCount =
+        teachers.where((t) => t.statusColor == 'red').length;
+    final grayCount =
+        teachers.where((t) => t.statusColor == 'gray').length;
+    final totalTeachers = teachers.length;
+    final syncPercent = totalTeachers > 0
+        ? ((greenCount / totalTeachers) * 100).round()
+        : 0;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(bottom: 80),
+      child: isWide
+          ? _buildWideLayout(
+              context, cs, textTheme, greenCount, yellowCount, redCount,
+              grayCount, syncPercent, totalTeachers)
+          : _buildNarrowLayout(
+              context, cs, textTheme, greenCount, yellowCount, redCount,
+              grayCount, syncPercent, totalTeachers),
+    );
+  }
+
+  // Wide: two-column bento layout matching Stitch
+  Widget _buildWideLayout(
+    BuildContext context,
+    ColorScheme cs,
+    TextTheme textTheme,
+    int greenCount,
+    int yellowCount,
+    int redCount,
+    int grayCount,
+    int syncPercent,
+    int totalTeachers,
+  ) {
+    return Column(
       children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Sync Overview',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-                const SizedBox(height: 12),
-                _SyncStatRow(
-                  label: 'Online (last hour)',
-                  count: teachers.where((t) => t.statusColor == 'green').length,
-                  color: Colors.green,
-                ),
-                _SyncStatRow(
-                  label: 'Recent (1-24 hrs)',
-                  count:
-                      teachers.where((t) => t.statusColor == 'yellow').length,
-                  color: Colors.orange,
-                ),
-                _SyncStatRow(
-                  label: 'Stale (>24 hrs)',
-                  count: teachers.where((t) => t.statusColor == 'red').length,
-                  color: Colors.red,
-                ),
-                _SyncStatRow(
-                  label: 'Inactive (>7 days)',
-                  count: teachers.where((t) => t.statusColor == 'gray').length,
-                  color: Colors.grey,
-                ),
-                const Divider(height: 24),
-                _SyncStatRow(
-                  label: 'Pending sync entries',
-                  count: dashboardData.teachers.isNotEmpty
-                      ? dashboardData.teachers.first.pendingSyncCount
-                      : 0,
-                  color: Colors.orange,
-                ),
-                _SyncStatRow(
-                  label: 'Unresolved conflicts',
-                  count: dashboardData.teachers.isNotEmpty
-                      ? dashboardData.teachers.first.conflictCount
-                      : 0,
-                  color: Colors.red,
-                ),
-              ],
+        // -- Sync Health Overview (gradient card) --
+        _buildSyncOverviewCard(
+            context, cs, textTheme, syncPercent, greenCount, redCount),
+
+        const SizedBox(height: 24),
+
+        // -- Regional Status card --
+        _buildRegionalStatusCard(context, cs, textTheme),
+      ],
+    );
+  }
+
+  // Narrow: stacked layout
+  Widget _buildNarrowLayout(
+    BuildContext context,
+    ColorScheme cs,
+    TextTheme textTheme,
+    int greenCount,
+    int yellowCount,
+    int redCount,
+    int grayCount,
+    int syncPercent,
+    int totalTeachers,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Sync Overview summary
+        _buildSyncOverviewCard(
+            context, cs, textTheme, syncPercent, greenCount, redCount),
+
+        const SizedBox(height: 16),
+
+        // Sync stats list
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF5F7F9),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: cs.outlineVariant.withValues(alpha: 0.2),
             ),
           ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Sync Overview',
+                style: textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _SyncStatRow(
+                label: 'Online (last hour)',
+                count: greenCount,
+                color: const Color(0xFF008751),
+              ),
+              _SyncStatRow(
+                label: 'Recent (1-24 hrs)',
+                count: yellowCount,
+                color: const Color(0xFF2196F3),
+              ),
+              _SyncStatRow(
+                label: 'Stale (>24 hrs)',
+                count: redCount,
+                color: const Color(0xFFB71C1C),
+              ),
+              _SyncStatRow(
+                label: 'Inactive (>7 days)',
+                count: grayCount,
+                color: Colors.grey,
+              ),
+              const Divider(height: 24),
+              _SyncStatRow(
+                label: 'Pending sync entries',
+                count: dashboardData.teachers.isNotEmpty
+                    ? dashboardData.teachers.first.pendingSyncCount
+                    : 0,
+                color: const Color(0xFF2196F3),
+              ),
+              _SyncStatRow(
+                label: 'Unresolved conflicts',
+                count: dashboardData.teachers.isNotEmpty
+                    ? dashboardData.teachers.first.conflictCount
+                    : 0,
+                color: const Color(0xFFB71C1C),
+              ),
+            ],
+          ),
         ),
+
         const SizedBox(height: 16),
-        ...teachers.map((teacher) => Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: Padding(
-                padding: const EdgeInsets.all(14),
+
+        // Regional Status card
+        _buildRegionalStatusCard(context, cs, textTheme),
+
+        // Per-teacher sync details
+        const SizedBox(height: 16),
+        ...teachers.map((teacher) => _buildTeacherSyncCard(
+              context, cs, textTheme, teacher,
+            )),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------
+  // Sync Health Overview Card (gradient bg)
+  // ---------------------------------------------------------------
+  Widget _buildSyncOverviewCard(
+    BuildContext context,
+    ColorScheme cs,
+    TextTheme textTheme,
+    int syncPercent,
+    int greenCount,
+    int redCount,
+  ) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            cs.surfaceContainerLow,
+            cs.surfaceContainerLow,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Sync Health Overview',
+            style: textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: cs.onSurface,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Percentage display
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '$syncPercent%',
+                style: textTheme.displaySmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: cs.onSurface,
+                  fontSize: 48,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    _StatusDot(color: _statusColor(teacher.statusColor)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            teacher.teacherName,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleSmall
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Last sync: ${teacher.lastSyncTime != null ? _formatTime(teacher.lastSyncTime!) : "Never"}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Devices: ${teacher.deviceCount} \u00b7 '
-                            'Pending: ${teacher.pendingSyncCount} \u00b7 '
-                            'Conflicts: ${teacher.conflictCount}',
-                            style:
-                                Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant,
-                                    ),
-                          ),
-                        ],
+                    Icon(
+                      Icons.arrow_upward_rounded,
+                      size: 16,
+                      color: const Color(0xFF008751),
+                    ),
+                    Text(
+                      ' 2.1%',
+                      style: textTheme.labelLarge?.copyWith(
+                        color: const Color(0xFF008751),
                       ),
                     ),
                   ],
                 ),
               ),
-            )),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Bar chart (simplified)
+          SizedBox(
+            height: 96,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _buildBar(0.6, greenCount > 0 ? cs.secondary : cs.outlineVariant),
+                _buildBar(0.7, greenCount > 5 ? cs.secondary : cs.outlineVariant),
+                _buildBar(0.85, greenCount > 10 ? cs.secondary : cs.outlineVariant),
+                _buildBar(0.65, greenCount > 3 ? cs.secondary : cs.outlineVariant),
+                _buildErrorBar(0.4, 'Lag'),
+                _buildBar(0.95, cs.secondary),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Day labels
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _dayLabel('Mon', cs, context),
+              _dayLabel('Tue', cs, context),
+              _dayLabel('Wed', cs, context),
+              _dayLabel('Thu', cs, context),
+              _dayLabel('Fri', cs, context),
+              _dayLabel('Today', cs, context),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Legend
+          Row(
+            children: [
+              _legendDot(cs.secondary, 'Success', cs, context),
+              const SizedBox(width: 16),
+              _legendDot(cs.error, 'Errors', cs, context),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBar(double heightFraction, Color color) {
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: Container(
+          height: 96 * heightFraction,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.8),
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(2),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorBar(double heightFraction, String label) {
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              height: 96 * heightFraction,
+              decoration: BoxDecoration(
+                color: const Color(0xFFBA1A1A).withValues(alpha: 0.9),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(2),
+                ),
+              ),
+            ),
+            Positioned(
+              top: -24,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFDAD6),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFBA1A1A),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _dayLabel(String label, ColorScheme cs, BuildContext context) {
+    return Text(
+      label,
+      style: Theme.of(context)
+          .textTheme
+          .labelMedium
+          ?.copyWith(color: cs.onSurfaceVariant),
+    );
+  }
+
+  Widget _legendDot(Color color, String label, ColorScheme cs, BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: Theme.of(context)
+              .textTheme
+              .labelMedium
+              ?.copyWith(color: cs.onSurfaceVariant),
+        ),
       ],
     );
   }
+
+  // ---------------------------------------------------------------
+  // Regional Status Card
+  // ---------------------------------------------------------------
+  Widget _buildRegionalStatusCard(BuildContext context, ColorScheme cs, TextTheme textTheme) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F7F9),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Regional Status',
+            style: textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: cs.onSurface,
+            ),
+          ),
+          const SizedBox(height: 16),
+          _regionalRow(context, 'Lagos Hub', '98%', const Color(0xFF008751)),
+          const SizedBox(height: 12),
+          _regionalRow(context, 'Abuja Hub', 'Syncing', const Color(0xFF2196F3)),
+          const SizedBox(height: 12),
+          _regionalRow(context, 'Enugu Hub', '82%', const Color(0xFFB71C1C)),
+        ],
+      ),
+    );
+  }
+
+  Widget _regionalRow(BuildContext context, String hubName, String status, Color dotColor) {
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          hubName,
+          style: Theme.of(context)
+              .textTheme
+              .bodyMedium
+              ?.copyWith(color: cs.onSurface),
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              status,
+              style: Theme.of(context)
+                  .textTheme
+                  .labelMedium
+                  ?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: dotColor,
+                  ),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: dotColor,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------
+  // Teacher Sync Detail Card
+  // ---------------------------------------------------------------
+  Widget _buildTeacherSyncCard(
+    BuildContext context,
+    ColorScheme cs,
+    TextTheme textTheme,
+    TeacherAdminData teacher,
+  ) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F7F9),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _StatusDot(color: _statusColor(teacher.statusColor)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  teacher.teacherName,
+                  style: textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Last sync: ${teacher.lastSyncTime != null ? _formatTime(teacher.lastSyncTime!) : "Never"}',
+                  style: textTheme.bodySmall,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Devices: ${teacher.deviceCount} \u00b7 '
+                  'Pending: ${teacher.pendingSyncCount} \u00b7 '
+                  'Conflicts: ${teacher.conflictCount}',
+                  style: textTheme.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
 
   String _formatTime(DateTime dt) {
     final diff = DateTime.now().difference(dt);
@@ -730,14 +1921,36 @@ class _SyncHealthTab extends StatelessWidget {
   Color _statusColor(String status) {
     switch (status) {
       case 'green':
-        return Colors.green;
+        return const Color(0xFF008751);
       case 'yellow':
-        return Colors.orange;
+        return const Color(0xFF2196F3);
       case 'red':
-        return Colors.red;
+        return const Color(0xFFB71C1C);
       default:
         return Colors.grey;
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Shared Helpers
+// ---------------------------------------------------------------------------
+
+class _StatusDot extends StatelessWidget {
+  final Color color;
+
+  const _StatusDot({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+      ),
+    );
   }
 }
 
@@ -775,24 +1988,6 @@ class _SyncStatRow extends StatelessWidget {
             style: const TextStyle(fontWeight: FontWeight.w600),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _StatusDot extends StatelessWidget {
-  final Color color;
-
-  const _StatusDot({required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 10,
-      height: 10,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
       ),
     );
   }

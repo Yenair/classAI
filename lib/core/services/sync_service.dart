@@ -55,7 +55,8 @@ class SyncPullPage {
     final rawChanges = (json['changes'] as List? ?? const []);
     return SyncPullPage(
       changes: rawChanges
-          .map((item) => SyncChange.fromJson(Map<String, dynamic>.from(item as Map)))
+          .map((item) =>
+              SyncChange.fromJson(Map<String, dynamic>.from(item as Map)))
           .toList(),
       nextCursor: json['next_cursor'] as String?,
     );
@@ -154,7 +155,8 @@ class SyncRealtimePage {
     final rawEvents = (json['events'] as List? ?? const []);
     return SyncRealtimePage(
       events: rawEvents
-          .map((item) => SyncRealtimeEvent.fromJson(Map<String, dynamic>.from(item as Map)))
+          .map((item) => SyncRealtimeEvent.fromJson(
+              Map<String, dynamic>.from(item as Map)))
           .toList(),
       latestEventId: _readInt(json, 'latest_event_id') ?? 0,
     );
@@ -177,6 +179,10 @@ abstract class SyncRemoteApi {
     required String schoolId,
     required int sinceEventId,
   });
+
+  /// Fetches the current credit state from the server.
+  /// Returns a map with 'offlineCredits', 'creditServerCounter', and 'spentIds'.
+  Future<Map<String, dynamic>?> fetchCreditState();
 }
 
 class SupabaseSyncRemoteApi implements SyncRemoteApi {
@@ -195,7 +201,8 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
   SupabaseSyncRemoteApi({required this.schoolId})
       : client = Supabase.instance.client;
 
-  SupabaseSyncRemoteApi.withClient({required this.client, required this.schoolId});
+  SupabaseSyncRemoteApi.withClient(
+      {required this.client, required this.schoolId});
 
   @override
   Future<SyncPullPage> pullChanges({
@@ -235,11 +242,13 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
   }) async {
     try {
       final response = await client.functions.invoke('sync-push', body: {
-        'changes': batches.map((b) => {
-          'table': b.table,
-          'operation': b.operation,
-          'rowData': b.record,
-        }).toList(),
+        'changes': batches
+            .map((b) => {
+                  'table': b.table,
+                  'operation': b.operation,
+                  'rowData': b.record,
+                })
+            .toList(),
       });
       final data = response.data as Map<String, dynamic>?;
       if (data != null) {
@@ -298,7 +307,8 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
     required int sinceEventId,
   }) async {
     try {
-      final response = await client.functions.invoke('sync-realtime-events', body: {
+      final response =
+          await client.functions.invoke('sync-realtime-events', body: {
         'since_event_id': sinceEventId,
         'school_id': schoolId,
       });
@@ -323,6 +333,24 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
     // can continue without crashing. The next periodic pull cycle will
     // pick up any missed changes.
     return SyncRealtimePage(events: [], latestEventId: sinceEventId);
+  }
+
+  @override
+  Future<Map<String, dynamic>?> fetchCreditState() async {
+    try {
+      final response = await client.functions.invoke('sync-credits');
+      final data = response.data as Map<String, dynamic>?;
+      if (data != null) {
+        return {
+          'offlineCredits': data['offline_credits'] as int? ?? 3,
+          'creditServerCounter': data['credit_server_counter'] as int? ?? 0,
+          'spentIds': data['spent_ids'] as String? ?? '[]',
+        };
+      }
+    } catch (e) {
+      debugPrint('fetchCreditState failed: $e');
+    }
+    return null;
   }
 }
 
@@ -402,8 +430,7 @@ class DriftSyncRecordStore implements SyncRecordStore {
     final hash = _hashSnapshot(snapshotJson);
     await (db.delete(db.versionHashes)
           ..where((t) =>
-              t.table.equals(tableName) &
-              t.recordLocalId.equals(localId)))
+              t.table.equals(tableName) & t.recordLocalId.equals(localId)))
         .go();
     await db.into(db.versionHashes).insert(
           VersionHashesCompanion.insert(
@@ -478,7 +505,8 @@ class DriftSyncRecordStore implements SyncRecordStore {
     );
   }
 
-  Future<Map<String, dynamic>?> _loadSnapshot(String tableName, int localId) async {
+  Future<Map<String, dynamic>?> _loadSnapshot(
+      String tableName, int localId) async {
     final row = await (db.select(db.versionHashes)
           ..where((t) =>
               t.table.equals(tableName) & t.recordLocalId.equals(localId))
@@ -692,7 +720,8 @@ class SyncService {
     if (!accountActive) {
       _setState(SyncState.emergencySave);
       await securityService.clearSessionKey();
-      await (db.delete(db.syncQueue)..where((t) => t.isEmergency.equals(false))).go();
+      await (db.delete(db.syncQueue)..where((t) => t.isEmergency.equals(false)))
+          .go();
       _setState(SyncState.forcedLogout);
       _setState(SyncState.idle);
       return;
@@ -705,10 +734,30 @@ class SyncService {
       syncCooldownUntil: null,
     );
 
+    // Fetch credit state from server and reset local credits
+    await _syncCreditState();
+
     _setState(SyncState.replayingRealtime);
     final config = await store.loadSecurityConfig();
     await _replayRealtimeEvents(config.lastRealtimeEventId);
     _setState(SyncState.idle);
+  }
+
+  /// Fetches credit state from server and resets local credits.
+  Future<void> _syncCreditState() async {
+    try {
+      final response = await remoteApi.fetchCreditState();
+      if (response != null) {
+        await db.securityConfigDao.updateConfig(
+          offlineCredits: response['offlineCredits'] as int? ?? 3,
+          creditServerCounter: response['creditServerCounter'] as int? ?? 0,
+          creditSpentIdsLocal: response['spentIds'] as String? ?? '[]',
+        );
+      }
+    } catch (e) {
+      // Log but don't fail the sync cycle
+      debugPrint('Failed to sync credit state: $e');
+    }
   }
 
   Future<void> _replayRealtimeEvents(int lastEventId) async {
@@ -722,7 +771,8 @@ class SyncService {
       if (event.eventId <= lastEventId) {
         continue;
       }
-      latestEventId = event.eventId > latestEventId ? event.eventId : latestEventId;
+      latestEventId =
+          event.eventId > latestEventId ? event.eventId : latestEventId;
       await _handleRealtimeEvent(event);
     }
 
@@ -730,8 +780,7 @@ class SyncService {
   }
 
   Future<void> _handleRealtimeEvent(SyncRealtimeEvent event) async {
-    final recordId =
-        _readInt(event.payload, 'localId') ??
+    final recordId = _readInt(event.payload, 'localId') ??
         _readInt(event.payload, 'local_id') ??
         _readInt(event.payload, 'id');
     if (recordId == null) {
@@ -753,7 +802,8 @@ class SyncService {
         _readInt(remote, 'local_id') ??
         _readInt(remote, 'id') ??
         0;
-    final local = await store.loadLocalRecord(change.table, localId) ?? const {};
+    final local =
+        await store.loadLocalRecord(change.table, localId) ?? const {};
     final baseHash = await _loadBaseHash(change.table, localId);
     final result = await _threeWayMerge(local, remote, baseHash, change.table);
 

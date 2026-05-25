@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' show ClientException;
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
@@ -12,7 +14,7 @@ import 'package:classai/core/services/auth_service.dart';
 import 'package:classai/core/services/emergency_flush_service.dart';
 import 'package:classai/core/services/security_service.dart';
 import 'package:classai/core/utils/platform_helper.dart';
-import 'package:classai/main.dart' show databaseProvider;
+import 'package:classai/main.dart' show databaseProvider, navigatorKey;
 
 // ---------------------------------------------------------------------------
 // Dependency providers (to be overridden with real implementations later)
@@ -232,6 +234,15 @@ class AuthNotifier extends Notifier<AuthStateData> {
         currentSchool: result.school,
         offlineLoginAttempts: 0,
       );
+
+      // Navigate based on role — admin goes to /admin, teachers go to /
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctx = navigatorKey.currentContext;
+        if (ctx != null) {
+          final isAdmin = result.teacher.role == 'admin';
+          GoRouter.of(ctx).go(isAdmin ? '/admin' : '/');
+        }
+      });
     } on AuthException catch (e) {
       debugPrint(
           '[DEBUG] loginOnline() — AUTH EXCEPTION: code=${e.code}, message=${e.message}');

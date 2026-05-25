@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/services/credit_service.dart';
+import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/main.dart' show databaseProvider;
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 
@@ -29,177 +30,236 @@ class VaultItemDetailScreen extends ConsumerWidget {
         foregroundColor: cs.onSurface,
         surfaceTintColor: cs.surface,
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Thumbnail
-          if (item.thumbnailUrl != null && item.thumbnailUrl!.isNotEmpty)
-            Container(
-              height: 200,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerHighest.withValues(alpha: 0.65),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Image.network(
-                  item.thumbnailUrl!,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Icon(Icons.image_rounded,
-                      size: 64,
-                      color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+      body: Container(
+        decoration: item.approvalStatus == 'rejected'
+            ? BoxDecoration(
+                border: Border.all(
+                  color: cs.error.withValues(alpha: 0.2),
                 ),
-              ),
-            ),
-          if (item.thumbnailUrl != null && item.thumbnailUrl!.isNotEmpty)
-            const SizedBox(height: 16),
-
-          // Title
-          Text(
-            item.title,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
+              )
+            : null,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // Rejected banner
+            if (item.approvalStatus == 'rejected' &&
+                item.rejectionReason != null)
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: cs.error.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: cs.error.withValues(alpha: 0.3),
+                  ),
                 ),
-          ),
-          const SizedBox(height: 8),
-
-          // Author + Tier badge
-          Row(
-            children: [
-              Text(
-                'By ${item.authorName}',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: cs.onSurfaceVariant,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.error_outline_rounded,
+                      size: 20,
+                      color: cs.error,
                     ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Item Rejected',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: cs.error,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            item.rejectionReason!,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: cs.onSurface.withValues(alpha: 0.8),
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const Spacer(),
-              _TierBadge(tier: item.minTier),
-            ],
-          ),
-          const SizedBox(height: 8),
 
-          // Subject/Class/Curriculum chips
-          Wrap(
-            spacing: 8,
-            children: [
-              Chip(
-                label: Text(item.subject),
-                visualDensity: VisualDensity.compact,
+            // Thumbnail
+            if (item.thumbnailUrl != null && item.thumbnailUrl!.isNotEmpty)
+              Container(
+                height: 200,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.network(
+                    item.thumbnailUrl!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Icon(Icons.image_rounded,
+                        size: 64,
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+                  ),
+                ),
               ),
-              Chip(
-                label: Text(item.classLevel),
-                visualDensity: VisualDensity.compact,
-              ),
-              if (item.curriculum.isNotEmpty)
+            if (item.thumbnailUrl != null && item.thumbnailUrl!.isNotEmpty)
+              const SizedBox(height: 16),
+
+            // Title
+            Text(
+              item.title,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 8),
+
+            // Author + Tier badge
+            Row(
+              children: [
+                Text(
+                  'By ${item.authorName}',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                ),
+                const Spacer(),
+                _TierBadge(tier: item.minTier),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Subject/Class/Curriculum chips
+            Wrap(
+              spacing: 8,
+              children: [
                 Chip(
-                  label: Text(item.curriculum),
+                  label: Text(item.subject),
                   visualDensity: VisualDensity.compact,
                 ),
-            ],
-          ),
-          const SizedBox(height: 16),
+                Chip(
+                  label: Text(item.classLevel),
+                  visualDensity: VisualDensity.compact,
+                ),
+                if (item.curriculum.isNotEmpty)
+                  Chip(
+                    label: Text(item.curriculum),
+                    visualDensity: VisualDensity.compact,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
 
-          // Description
-          if (item.description.isNotEmpty) ...[
+            // Description
+            if (item.description.isNotEmpty) ...[
+              Text(
+                'Description',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                item.description,
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // Content preview
             Text(
-              'Description',
+              'Content',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
             ),
             const SizedBox(height: 8),
-            Text(
-              item.description,
-              style: Theme.of(context).textTheme.bodyLarge,
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: SelectableText(
+                item.content,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
             ),
             const SizedBox(height: 16),
-          ],
 
-          // Content preview
-          Text(
-            'Content',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: SelectableText(
-              item.content,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Credit cost
-          Row(
-            children: [
-              const Icon(
-                Icons.monetization_on_rounded,
-                size: 20,
-                color: Colors.amber,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                '${item.creditCost} credits',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: Colors.amber,
-                    ),
-              ),
-            ],
-          ),
-
-          if (item.acquisitionDate != null) ...[
-            const SizedBox(height: 8),
+            // Credit cost
             Row(
               children: [
-                const Icon(Icons.check_circle_rounded,
-                    size: 20, color: Colors.green),
+                const Icon(
+                  Icons.monetization_on_rounded,
+                  size: 20,
+                  color: Colors.amber,
+                ),
                 const SizedBox(width: 4),
                 Text(
-                  'Acquired on ${_formatDate(item.acquisitionDate!)}',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.green,
+                  '${item.creditCost} credits',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: Colors.amber,
                       ),
                 ),
               ],
             ),
+
+            if (item.acquisitionDate != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded,
+                      size: 20, color: Colors.green),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Acquired on ${_formatDate(item.acquisitionDate!)}',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.green,
+                        ),
+                  ),
+                ],
+              ),
+            ],
+
+            const SizedBox(height: 24),
+
+            // Acquire button
+            if (item.acquisitionDate == null)
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => _acquireItem(context, ref, item),
+                  icon: const Icon(Icons.shopping_cart_rounded),
+                  label: Text('Acquire for ${item.creditCost} credits'),
+                ),
+              ),
+
+            if (ref.watch(creditStateProvider).currentCredits < item.creditCost)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'You have ${ref.watch(creditStateProvider).currentCredits} credits. '
+                  'Purchase more to acquire this item.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: cs.error,
+                      ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
           ],
-
-          const SizedBox(height: 24),
-
-          // Acquire button
-          if (item.acquisitionDate == null)
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: () => _acquireItem(context, ref, item),
-                icon: const Icon(Icons.shopping_cart_rounded),
-                label: Text('Acquire for ${item.creditCost} credits'),
-              ),
-            ),
-
-          if (ref.watch(creditStateProvider).currentCredits < item.creditCost)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                'You have ${ref.watch(creditStateProvider).currentCredits} credits. '
-                'Purchase more to acquire this item.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: cs.error,
-                    ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-        ],
+        ),
       ),
     );
   }
@@ -274,17 +334,14 @@ class VaultItemDetailScreen extends ConsumerWidget {
         );
 
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('"${item.title}" acquired!')),
-          );
+          showInfoToast(context: context, message: '"${item.title}" acquired!');
           await ref.read(creditStateProvider.notifier).refresh();
           Navigator.of(context).pop(); // Go back to vault browser
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to acquire item: $e')),
-          );
+          showErrorToast(
+              context: context, message: 'Failed to acquire item: $e');
         }
       }
     }

@@ -1,0 +1,26 @@
+# ClassAI Product Requirements Document (PRD)
+
+## App Overview
+Offline-first AI teaching assistant for Nigerian schools. Flutter/Material 3.
+
+## Target Users
+Nigerian teachers and admins on low-end Android devices (2G/3G).
+
+## Key Screens
+1. **Login / Activation**: Email/password, role-based recovery (OTP/Admin instructions).
+2. **Dashboard (Editor - Tablet)**: NavRail, Sync AppBar, Conflict Banner, Recent Lessons.
+3. **Dashboard (Reader - Phone)**: BottomNav, Compact Cards, Sync AppBar.
+4. **Lesson Editor**: Subject/Class/Week/Topic inputs, Bloom's chips, Segmented question types, AI Generate, Preview cards.
+5. **Exam Editor**: Similar to Lesson Editor, MCQ/Theory generation.
+6. **Vault Browser**: Filtered grid of teaching resources, credit costs, acquisition flow.
+7. **Vault Publisher**: Submission form for resources, status tracker.
+8. **Admin Dashboard**: Tabs for Teacher Mgmt (sync status dots), Vault Approval, Sync Health.
+9. **Payment Screen**: ₦5k/₦10k/₦25k plans, Paystack flow.
+10. **Settings**: Mode override, Theme toggle, Term boundaries.
+
+## Technical Constraints
+- WCAG AAA Contrast (Primary #1A2B3C on White).
+- Offline-first sync indicators.
+- Large touch targets (≥16pt text).
+- EmergencyFlushService handling for forms.
+- Inter typography.

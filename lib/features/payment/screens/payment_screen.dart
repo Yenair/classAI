@@ -5,10 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:classai/core/services/payment_service.dart';
+import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
-/// Payment screen that shows plan selection options.
+/// Payment screen that shows plan selection options — Google Stitch design.
 ///
 /// Selecting a plan calls [PaymentService.initializePayment]
 /// and opens the returned Paystack checkout URL in a browser/WebView.
@@ -23,6 +24,7 @@ class PaymentScreen extends ConsumerStatefulWidget {
 
 class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   bool _isProcessing = false;
+  String _selectedPlan = 'standard';
 
   Future<void> _initializePayment(
       BuildContext context, WidgetRef ref, String plan, int amountNaira) async {
@@ -36,9 +38,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     if (teacher == null || school == null) {
       if (!context.mounted) return;
       setState(() => _isProcessing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You must be logged in to purchase.')),
-      );
+      showErrorToast(
+          context: context, message: 'You must be logged in to purchase.');
       return;
     }
 
@@ -86,9 +87,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Payment initialization failed: $e')),
-      );
+      showErrorToast(
+          context: context, message: 'Payment initialization failed: $e');
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
@@ -104,12 +104,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   ) async {
     // Show a snackbar indicating we're waiting for payment
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Waiting for payment confirmation\u2026'),
-        duration: Duration(seconds: 5),
-      ),
-    );
+    showInfoToast(
+        context: context, message: 'Waiting for payment confirmation\u2026');
 
     // Poll up to 10 times (30 seconds apart = 5 minutes total)
     for (int i = 0; i < 10; i++) {
@@ -136,14 +132,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
     // Polling timed out
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Payment confirmation timed out. Your payment may still have '
-          'processed. Please check your email for a receipt.',
-        ),
-        duration: Duration(seconds: 10),
-      ),
+    showErrorToast(
+      context: context,
+      message:
+          'Payment confirmation timed out. Your payment may still have processed. Please check your email for a receipt.',
     );
   }
 
@@ -169,12 +161,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       await _showActivationCodeDialog(context, confirmation.activationCode);
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to confirm payment: $e'),
-          duration: const Duration(seconds: 8),
-        ),
-      );
+      showErrorToast(
+          context: context, message: 'Failed to confirm payment: $e');
     }
   }
 
@@ -186,6 +174,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       barrierDismissible: false,
       builder: (dialogContext) {
         return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
           title: Row(
             children: [
               Icon(Icons.check_circle_rounded,
@@ -212,7 +203,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                 ),
                 decoration: BoxDecoration(
                   color: cs.surfaceContainerHighest.withValues(alpha: 0.65),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: cs.outlineVariant.withValues(alpha: 0.6),
                   ),
@@ -261,85 +252,132 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     );
   }
 
+  // Plan definitions
+  static const _plans = [
+    _PlanDef(
+      name: 'Basic',
+      price: '\u20A649,999/yr',
+      amountNaira: 49999,
+      tier: 'basic',
+      description: 'Essential tools for small classrooms. Up to 30 students.',
+      features: ['50 credits per month', 'Access to basic vault items'],
+    ),
+    _PlanDef(
+      name: 'Standard',
+      price: '\u20A699,999/yr',
+      amountNaira: 99999,
+      tier: 'standard',
+      description:
+          'Advanced analytics and resources. Up to 100 students.',
+      features: [
+        '120 credits per month',
+        'Access to standard vault items',
+        'Vault publishing',
+      ],
+      isBestValue: true,
+    ),
+    _PlanDef(
+      name: 'Elite',
+      price: '\u20A6249,999/yr',
+      amountNaira: 249999,
+      tier: 'elite',
+      description:
+          'Unlimited students, priority support, and custom modules.',
+      features: [
+        '350 credits per month',
+        'Full vault access',
+        'Priority support',
+      ],
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final isWide = MediaQuery.of(context).size.width >= 1024;
+
+    final selectedPlan =
+        _plans.firstWhere((p) => p.tier == _selectedPlan);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Upgrade Plan'),
-        elevation: 0,
-      ),
+      backgroundColor: cs.surface,
       body: Stack(
         children: [
-          ListView(
-            padding: const EdgeInsets.all(24),
-            children: [
-              Icon(
-                Icons.lock_outline_rounded,
-                size: 72,
-                color: cs.primary.withValues(alpha: 0.6),
-              ),
-              const SizedBox(height: 16),
-              Center(
-                child: Text(
-                  'Choose a plan to get more credits',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: cs.onSurfaceVariant,
-                      ),
+          // Main content
+          SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Mobile TopAppBar (Stitch style)
+                if (!isWide)
+                  _buildMobileHeader(context, cs, textTheme),
+
+                // Main Canvas
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(16, 24, 16, 100),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: 1280,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Header Section
+                              _buildHeader(context, cs, textTheme),
+
+                              const SizedBox(height: 32),
+
+                              // Plans + Summary grid
+                              isWide
+                                  ? Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        // Left: Pricing cards
+                                        Expanded(
+                                          flex: 7,
+                                          child: _buildPlansList(
+                                              cs, textTheme),
+                                        ),
+                                        const SizedBox(width: 32),
+                                        // Right: Order Summary
+                                        Expanded(
+                                          flex: 5,
+                                          child: _buildOrderSummary(
+                                              context, cs, textTheme,
+                                              selectedPlan),
+                                        ),
+                                      ],
+                                    )
+                                  : Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        // Pricing cards
+                                        _buildPlansList(cs, textTheme),
+                                        const SizedBox(height: 32),
+                                        // Order Summary
+                                        _buildOrderSummary(
+                                            context, cs, textTheme,
+                                            selectedPlan),
+                                      ],
+                                    ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
-              ),
-              const SizedBox(height: 32),
-              _PlanCard(
-                name: 'Basic',
-                price: '\u20A649,999/yr',
-                credits: 50,
-                tier: 'basic',
-                cs: cs,
-                features: [
-                  '50 credits per month',
-                  'Access to basic vault items',
-                ],
-                onSelect: _isProcessing
-                    ? null
-                    : () => _initializePayment(context, ref, 'basic', 49999),
-              ),
-              const SizedBox(height: 16),
-              _PlanCard(
-                name: 'Standard',
-                price: '\u20A699,999/yr',
-                credits: 120,
-                tier: 'standard',
-                cs: cs,
-                features: [
-                  '120 credits per month',
-                  'Access to standard vault items',
-                  'Vault publishing',
-                ],
-                isPopular: true,
-                onSelect: _isProcessing
-                    ? null
-                    : () => _initializePayment(context, ref, 'standard', 99999),
-              ),
-              const SizedBox(height: 16),
-              _PlanCard(
-                name: 'Elite',
-                price: '\u20A6249,999/yr',
-                credits: 350,
-                tier: 'elite',
-                cs: cs,
-                features: [
-                  '350 credits per month',
-                  'Full vault access',
-                  'Priority support',
-                ],
-                onSelect: _isProcessing
-                    ? null
-                    : () => _initializePayment(context, ref, 'elite', 249999),
-              ),
-            ],
+              ],
+            ),
           ),
+
+          // Processing overlay
           if (_isProcessing)
             ColoredBox(
               color: Colors.black.withValues(alpha: 0.32),
@@ -365,144 +403,493 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       ),
     );
   }
-}
 
-class _PlanCard extends StatelessWidget {
-  final String name;
-  final String price;
-  final int credits;
-  final String tier;
-  final ColorScheme cs;
-  final List<String> features;
-  final bool isPopular;
-  final VoidCallback? onSelect;
-
-  const _PlanCard({
-    required this.name,
-    required this.price,
-    required this.credits,
-    required this.tier,
-    required this.cs,
-    required this.features,
-    this.isPopular = false,
-    this.onSelect,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  // ---------------------------------------------------------------
+  // Mobile Header (Stitch)
+  // ---------------------------------------------------------------
+  Widget _buildMobileHeader(
+      BuildContext context, ColorScheme cs, TextTheme textTheme) {
     return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: cs.surfaceContainerHighest,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHigh,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.person_rounded, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'ClassAI',
+            style: textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: cs.primary,
+            ),
+          ),
+          const Spacer(),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Text(
+              '\u20A6500',
+              style: textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------
+  // Header Section
+  // ---------------------------------------------------------------
+  Widget _buildHeader(
+      BuildContext context, ColorScheme cs, TextTheme textTheme) {
+    return Row(
+      children: [
+        // Back button
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: cs.surface,
+            shape: BoxShape.circle,
+          ),
+          child: IconButton(
+            icon: Icon(
+              Icons.arrow_back_rounded,
+              color: cs.onSurface,
+            ),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Upgrade Your Plan',
+                style: (textTheme.headlineSmall ?? textTheme.titleLarge)
+                    ?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: cs.onSurface,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Select the package that best fits your classroom needs.',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------
+  // Plans List (Radio Card selection)
+  // ---------------------------------------------------------------
+  Widget _buildPlansList(ColorScheme cs, TextTheme textTheme) {
+    return Column(
+      children: _plans.map((plan) {
+        final isSelected = _selectedPlan == plan.tier;
+        return GestureDetector(
+          onTap: () => setState(() => _selectedPlan = plan.tier),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            child: Stack(
+              children: [
+                // Best Value badge
+                if (plan.isBestValue)
+                  Positioned(
+                    top: -12,
+                    right: 24,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF4B53BA),
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.star_rounded,
+                            size: 14,
+                            color: const Color(0xFFFFFFFF),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Best Value',
+                            style: textTheme.labelMedium?.copyWith(
+                              color: const Color(0xFFFFFFFF),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                // Card
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: cs.surface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isSelected
+                          ? cs.primary
+                          : cs.outlineVariant.withValues(alpha: 0.3),
+                      width: isSelected ? 2 : 1,
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Radio circle
+                      Container(
+                        width: 24,
+                        height: 24,
+                        margin: const EdgeInsets.only(top: 2),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isSelected
+                                ? cs.primary
+                                : cs.outlineVariant,
+                            width: 2,
+                          ),
+                          color: isSelected ? cs.primary : Colors.transparent,
+                        ),
+                        child: isSelected
+                            ? Center(
+                                child: Container(
+                                  width: 12,
+                                  height: 12,
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: 16),
+
+                      // Content
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              plan.name,
+                              style: textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: cs.onSurface,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              plan.description,
+                              style: textTheme.bodyMedium?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+
+                      // Price
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            plan.price,
+                            style: textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: cs.onSurface,
+                            ),
+                          ),
+                          Text(
+                            '/ term',
+                            style: textTheme.labelMedium?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // ---------------------------------------------------------------
+  // Order Summary
+  // ---------------------------------------------------------------
+  Widget _buildOrderSummary(BuildContext context, ColorScheme cs,
+      TextTheme textTheme, _PlanDef plan) {
+    return Container(
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: cs.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: isPopular
-              ? cs.primary.withValues(alpha: 0.45)
-              : cs.outlineVariant.withValues(alpha: 0.45),
-          width: isPopular ? 1.5 : 1,
+          color: cs.outlineVariant.withValues(alpha: 0.2),
         ),
         boxShadow: [
           BoxShadow(
             color: cs.onSurface.withValues(alpha: 0.04),
-            blurRadius: 12,
+            blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(22),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (isPopular)
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                decoration: BoxDecoration(
-                  color: cs.primaryContainer,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                margin: const EdgeInsets.only(bottom: 12),
-                child: Text(
-                  'MOST POPULAR',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: cs.onPrimaryContainer,
-                        letterSpacing: 0.6,
-                      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title
+          Text(
+            'Order Summary',
+            style: textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: cs.onSurface,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Divider(
+            height: 1,
+            color: cs.outlineVariant.withValues(alpha: 0.2),
+          ),
+          const SizedBox(height: 16),
+
+          // Selected Plan
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Selected Plan',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
                 ),
               ),
-            Row(
+              Text(
+                plan.name,
+                style: textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                  color: cs.onSurface,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // Duration
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Duration',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+              Text(
+                '1 Academic Term',
+                style: textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                  color: cs.onSurface,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          Divider(
+            height: 1,
+            color: cs.outlineVariant.withValues(alpha: 0.2),
+          ),
+          const SizedBox(height: 16),
+
+          // Total Due
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Total Due',
+                style: textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: cs.onSurface,
+                ),
+              ),
+              Text(
+                plan.price,
+                style: textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: cs.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // Paystack placeholder
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.5),
+                strokeAlign: BorderSide.strokeAlignInside,
+              ),
+            ),
+            child: Column(
               children: [
-                Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: cs.primary,
-                    shape: BoxShape.circle,
+                Icon(
+                  Icons.account_balance_wallet_rounded,
+                  size: 48,
+                  color: cs.outline,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Secure checkout powered by Paystack.',
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: cs.onSurfaceVariant,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(height: 4),
                 Text(
-                  name,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                  '(WebView Container)',
+                  style: textTheme.labelSmall?.copyWith(
+                    color: cs.outline,
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              price,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: cs.primary,
-                  ),
-            ),
-            Text(
-              '$credits credits per month',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: cs.onSurfaceVariant,
-                  ),
-            ),
-            const SizedBox(height: 14),
-            ...features.map(
-              (f) => Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.check_rounded,
-                      size: 18,
-                      color: Colors.green,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        f,
-                        style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 24),
+
+          // Proceed to Checkout button
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: FilledButton(
+              onPressed: _isProcessing
+                  ? null
+                  : () => _initializePayment(
+                        context,
+                        ref,
+                        plan.tier,
+                        plan.amountNaira,
                       ),
-                    ),
-                  ],
+              style: FilledButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
                 ),
               ),
-            ),
-            const SizedBox(height: 18),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: onSelect,
-                style: isPopular
-                    ? FilledButton.styleFrom(
-                        backgroundColor: cs.primary,
-                      )
-                    : null,
-                child: Text('Choose $name'),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.lock_rounded,
+                    size: 20,
+                    color: cs.onPrimary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Proceed to Checkout',
+                    style: textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: cs.onPrimary,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 16),
+
+          // Security note
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.verified_user_rounded,
+                size: 16,
+                color: cs.onSurfaceVariant,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Bank-grade security',
+                style: textTheme.labelMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
+}
+
+/// Internal plan definition.
+class _PlanDef {
+  final String name;
+  final String price;
+  final int amountNaira;
+  final String tier;
+  final String description;
+  final List<String> features;
+  final bool isBestValue;
+
+  const _PlanDef({
+    required this.name,
+    required this.price,
+    required this.amountNaira,
+    required this.tier,
+    required this.description,
+    this.features = const [],
+    this.isBestValue = false,
+  });
 }

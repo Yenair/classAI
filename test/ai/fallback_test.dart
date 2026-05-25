@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:classai/core/services/ai_service.dart';
+import 'package:classai/core/database/database.dart';
 
 class MockSupabaseClient extends Mock implements SupabaseClient {}
 class MockFunctionsClient extends Mock implements FunctionsClient {}
@@ -9,11 +10,15 @@ class MockFunctionsClient extends Mock implements FunctionsClient {}
 void main() {
   late MockSupabaseClient mockSupabase;
   late MockFunctionsClient mockFunctions;
+  late AppDatabase db;
 
-  setUp(() {
+  setUp(() async {
     mockSupabase = MockSupabaseClient();
     mockFunctions = MockFunctionsClient();
     when(() => mockSupabase.functions).thenReturn(mockFunctions);
+    db = AppDatabase.forTesting();
+    await db.initialize();
+    addTearDown(db.close);
   });
 
   group('AiService fallback', () {
@@ -29,7 +34,7 @@ void main() {
                 status: 200,
               ));
 
-      final aiService = AiService(supabase: mockSupabase);
+      final aiService = AiService(supabase: mockSupabase, db: db);
       final result = await aiService.generate('Teach me something');
 
       expect(result, isA<Map<String, dynamic>>());
@@ -49,7 +54,7 @@ void main() {
                 status: 200,
               ));
 
-      final aiService = AiService(supabase: mockSupabase);
+      final aiService = AiService(supabase: mockSupabase, db: db);
       final result = await aiService.generate('Teach me something');
 
       expect(result, isA<Map<String, dynamic>>());
@@ -60,7 +65,7 @@ void main() {
       when(() => mockFunctions.invoke(any(), body: any(named: 'body')))
           .thenThrow(FunctionException(status: 500));
 
-      final aiService = AiService(supabase: mockSupabase);
+      final aiService = AiService(supabase: mockSupabase, db: db);
 
       expect(
         () => aiService.generate('Teach me something'),
@@ -69,7 +74,7 @@ void main() {
     });
 
     test('Injection detection throws AiInjectionException', () async {
-      final aiService = AiService(supabase: mockSupabase);
+      final aiService = AiService(supabase: mockSupabase, db: db);
 
       expect(
         () => aiService.generate(

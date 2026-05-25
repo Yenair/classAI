@@ -1,0 +1,310 @@
+<!DOCTYPE html><html class="light" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Exam Editor - ClassAI</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;700&amp;family=Albert+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<style>
+        .material-symbols-outlined {
+          font-variation-settings:
+          'FILL' 0,
+          'wght' 400,
+          'GRAD' 0,
+          'opsz' 24
+        }
+        .material-symbols-outlined.fill {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+<script id="tailwind-config">tailwind.config = {darkMode: "class", theme: {extend: {colors: {"surface-dim": "#d9dae0", "secondary-fixed": "#e0e0ff", "on-secondary-container": "#1e258f", "surface-container-low": "#f2f3f9", "primary-fixed-dim": "#a1c9ff", "inverse-primary": "#a1c9ff", "tertiary-container": "#5068d9", "secondary-container": "#8c94ff", secondary: "#4b53ba", "on-secondary-fixed": "#00026c", "secondary-fixed-dim": "#bec2ff", "on-primary-fixed-variant": "#004880", "on-background": "#191c20", "on-surface": "#191c20", outline: "#727781", "surface-container": "#ededf3", "on-primary": "#ffffff", "outline-variant": "#c1c7d2", "surface-tint": "#1b61a0", tertiary: "#344ebf", "inverse-on-surface": "#eff0f6", "primary-fixed": "#d2e4ff", "on-error-container": "#93000a", "inverse-surface": "#2e3035", "on-tertiary": "#ffffff", "surface-container-lowest": "#ffffff", error: "#ba1a1a", surface: "#f8f9ff", "surface-variant": "#e1e2e8", "surface-bright": "#f8f9ff", "on-surface-variant": "#414750", "on-primary-container": "#f5f7ff", "on-secondary-fixed-variant": "#323aa1", "on-tertiary-container": "#f8f6ff", "surface-container-high": "#e7e8ee", "tertiary-fixed": "#dde1ff", "error-container": "#ffdad6", "surface-container-highest": "#e1e2e8", background: "#f8f9ff", "on-secondary": "#ffffff", "on-primary-fixed": "#001c37", "tertiary-fixed-dim": "#b9c3ff", "on-error": "#ffffff", primary: "#115b9b", "primary-container": "#3674b5", "on-tertiary-fixed": "#001257", "on-tertiary-fixed-variant": "#1d3aac"}, borderRadius: {DEFAULT: "0.125rem", lg: "0.25rem", xl: "0.5rem", full: "0.75rem"}, spacing: {gutter: "16px", "margin-mobile": "16px", "margin-tablet": "24px", "touch-target": "48px", base: "8px"}, fontFamily: {"headline-lg": ["Inter"], "title-lg": ["Inter"], "label-lg": ["Inter"], "display-lg": ["Inter"], "headline-lg-mobile": ["Inter"], "body-lg": ["Inter"], "body-md": ["Inter"], "label-md": ["Inter"], headline: ["Open Sans"], display: ["Open Sans"], body: ["Albert Sans"], label: ["Open Sans"]}, fontSize: {"headline-lg": ["32px", {lineHeight: "40px", fontWeight: "600"}], "title-lg": ["22px", {lineHeight: "28px", fontWeight: "500"}], "label-lg": ["14px", {lineHeight: "20px", letterSpacing: "0.1px", fontWeight: "500"}], "display-lg": ["48px", {lineHeight: "56px", letterSpacing: "-0.02em", fontWeight: "700"}], "headline-lg-mobile": ["28px", {lineHeight: "36px", fontWeight: "600"}], "body-lg": ["18px", {lineHeight: "28px", fontWeight: "400"}], "body-md": ["16px", {lineHeight: "24px", fontWeight: "400"}], "label-md": ["12px", {lineHeight: "16px", fontWeight: "500"}]}}}};</script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md text-body-md h-screen flex overflow-hidden">
+<!-- NavigationDrawer (Tablet/Web) -->
+<nav class="hidden md:flex flex-col h-full border-r border-outline-variant/30 py-margin-tablet bg-surface-container-low dark:bg-surface-container-high docked left-0 h-full w-72">
+<div class="px-margin-tablet mb-8 flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-surface-variant flex items-center justify-center overflow-hidden">
+<img alt="Educator" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuChJXyLNqZjZqHDYqi9Q0zcKn7U4VG4qJsrce7JPqHxP2E1fEO4A7KR6S9genij9Ch2Ldkqb69ukshQATz7ELKBxTKU2-tbPzBnbfy_orHKmflu1cbu2Zri_u-pw_SsMFanU0zQzBJGBsm8fgLnLwc4jA91EibC9AcVD9COeU-Kt0u-AlOk3rUOrFiQ-7AGvneGby4ghZ0tVztkXC8Db2K-_aq-hj4kk1_e-x9vhH58eXT-hkjRm5iS0dbEF3txz8AYS0a7043ZQv4">
+</div>
+<div>
+<div class="text-headline-lg font-headline-lg font-black text-primary dark:text-primary-fixed">ClassAI</div>
+<div class="text-body-md font-body-md text-on-surface-variant">Nigerian Academic Partner</div>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto">
+<a class="flex items-center gap-4 text-on-surface-variant dark:text-outline-variant px-4 py-3 mx-3 hover:bg-surface-variant dark:hover:bg-surface-dim rounded-full text-label-lg font-label-lg" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+                Home
+            </a>
+<a class="flex items-center gap-4 text-on-surface-variant dark:text-outline-variant px-4 py-3 mx-3 hover:bg-surface-variant dark:hover:bg-surface-dim rounded-full text-label-lg font-label-lg" href="#">
+<span class="material-symbols-outlined" data-icon="menu_book">menu_book</span>
+                Lessons
+            </a>
+<a class="flex items-center gap-4 bg-secondary-fixed dark:bg-on-secondary-fixed-variant text-on-secondary-fixed dark:text-secondary-fixed-dim rounded-full px-4 py-3 mx-3 text-label-lg font-label-lg scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined fill" data-icon="quiz">quiz</span>
+                Exams
+            </a>
+<a class="flex items-center gap-4 text-on-surface-variant dark:text-outline-variant px-4 py-3 mx-3 hover:bg-surface-variant dark:hover:bg-surface-dim rounded-full text-label-lg font-label-lg" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+                Vault
+            </a>
+<a class="flex items-center gap-4 text-on-surface-variant dark:text-outline-variant px-4 py-3 mx-3 hover:bg-surface-variant dark:hover:bg-surface-dim rounded-full text-label-lg font-label-lg" href="#">
+<span class="material-symbols-outlined" data-icon="admin_panel_settings">admin_panel_settings</span>
+                Admin
+            </a>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="flex-1 flex flex-col h-full overflow-hidden">
+<!-- TopAppBar (Mobile & Global Header) -->
+<header class="flex justify-between items-center w-full px-margin-mobile md:px-margin-tablet py-2 bg-surface dark:bg-surface-container-high border-b border-surface-container md:border-none docked full-width top-0 z-40">
+<div class="flex items-center gap-3">
+<div class="md:hidden w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center overflow-hidden">
+<img alt="Educator Profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB0SkyyxHqzsb69StTB1HAyS-FHS9ako_p3d6SanmZbbn_IkFK76ExqRDFjGbdiJRhmtseh7U1WpLNIAWU8RuOyRzOqaD-uU-7mNbDMpRv5pZpqxKJ8OZVkn2g2ePAPlaj_1-feVx-xtqkOlsxB8lNpDiUJ4w93jzPlfs-31PWEtjKfLlW0RjFJFtpi3jt4KfTc4sA0_VxEah4E5IzFqcKo53_EDu0jUO5n_-ufs_rsC-8voDHnc403KuOjfzCwwbY2eyPZEifquXE">
+</div>
+<h1 class="text-headline-lg-mobile font-headline-lg-mobile md:text-headline-lg md:font-headline-lg font-bold text-primary dark:text-primary-fixed">Exam Editor</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 bg-surface-variant rounded-full px-4 py-2 text-label-lg font-label-lg font-bold text-primary">
+<span class="material-symbols-outlined text-[20px]" data-icon="stars">stars</span>
+                    ₦500
+                </div>
+</div>
+</header>
+<!-- Editor Workspace -->
+<div class="flex-1 overflow-y-auto bg-surface-bright p-margin-mobile md:p-margin-tablet">
+<div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-gutter md:gap-margin-tablet">
+<!-- Left Column: Controls & Generation Settings -->
+<div class="lg:col-span-4 flex flex-col gap-gutter">
+<!-- Basic Info Card -->
+<div class="bg-[#F5F7F9] rounded-xl p-6 border border-outline-variant/30">
+<h2 class="text-title-lg font-title-lg text-primary mb-4 border-b border-outline-variant/30 pb-2">Exam Configuration</h2>
+<div class="flex flex-col gap-4">
+<div class="flex flex-col gap-1">
+<label class="font-label-md text-on-surface-variant text-body-lg">Subject / Topic</label>
+<input class="h-touch-target rounded-lg border-outline-variant bg-surface px-4 text-body-md font-body-md focus:ring-2 focus:ring-primary focus:border-primary outline-none text-on-surface" type="text" value="Advanced Mathematics: Calculus Fundamentals">
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="flex flex-col gap-1">
+<label class="text-label-md font-label-md text-on-surface-variant">Grade Level</label>
+<select class="h-touch-target rounded-lg border-outline-variant bg-surface px-4 text-body-md font-body-md focus:ring-2 focus:ring-primary focus:border-primary outline-none text-on-surface appearance-none">
+<option>SS 3</option>
+<option>SS 2</option>
+<option>SS 1</option>
+</select>
+</div>
+<div class="flex flex-col gap-1">
+<label class="text-label-md font-label-md text-on-surface-variant">Duration (Mins)</label>
+<input class="h-touch-target rounded-lg border-outline-variant bg-surface px-4 text-body-md font-body-md focus:ring-2 focus:ring-primary focus:border-primary outline-none text-on-surface" type="number" value="120">
+</div>
+</div>
+</div>
+</div>
+<!-- AI Generation Engine Card -->
+<div class="bg-primary-container text-on-primary-container rounded-xl p-6 relative overflow-hidden group">
+<div class="absolute -right-10 -top-10 w-32 h-32 bg-secondary-container rounded-full opacity-10 blur-2xl group-hover:opacity-20 transition-opacity"></div>
+<h2 class="text-title-lg font-title-lg text-on-primary mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined" data-icon="auto_awesome">auto_awesome</span>
+                            Generation Engine
+                        </h2>
+<div class="flex flex-col gap-5">
+<div>
+<label class="font-label-md text-primary-fixed-dim block mb-2 text-body-md font-bold uppercase">Multiple Choice (MCQ)</label>
+<div class="flex items-center gap-4">
+<input class="w-full accent-secondary h-2 bg-on-primary-container/20 rounded-lg appearance-none cursor-pointer" max="50" min="0" type="range" value="20">
+<span class="text-title-lg font-title-lg text-on-primary font-bold w-8 text-right">20</span>
+</div>
+</div>
+<div>
+<label class="font-label-md text-primary-fixed-dim block mb-2 text-body-md font-bold uppercase">Theory / Essay</label>
+<div class="flex items-center gap-4">
+<input class="w-full accent-secondary h-2 bg-on-primary-container/20 rounded-lg appearance-none cursor-pointer" max="10" min="0" type="range" value="4">
+<span class="text-title-lg font-title-lg text-on-primary font-bold w-8 text-right">4</span>
+</div>
+</div>
+<div class="flex flex-col gap-1 mt-2">
+<label class="text-label-md font-label-md text-primary-fixed-dim font-bold uppercase">Difficulty Distribution</label>
+<div class="flex h-3 w-full rounded-full overflow-hidden mt-1">
+<div class="bg-secondary w-[20%]" title="Easy"></div>
+<div class="bg-tertiary-container w-[50%]" title="Medium"></div>
+<div class="bg-error w-[30%]" title="Hard"></div>
+</div>
+<div class="flex justify-between text-primary-fixed-dim mt-1 text-label-md">
+<span class="text-label-md font-bold uppercase !text-body-md">20% Easy</span>
+<span class="text-label-md font-bold uppercase !text-body-md">50% Med</span>
+<span class="text-label-md font-bold uppercase !text-body-md">30% Hard</span>
+</div>
+</div>
+<button class="w-full h-touch-target bg-secondary text-on-secondary rounded-lg text-label-lg font-label-lg font-bold hover:bg-on-secondary-container transition-colors mt-4 flex items-center justify-center gap-2">
+<span class="material-symbols-outlined" data-icon="bolt">bolt</span>
+                                Generate Exam (-50 Credits)
+                            </button>
+</div>
+</div>
+</div>
+<!-- Right Column: Preview Canvas -->
+<div class="lg:col-span-8 flex flex-col gap-gutter">
+<div class="flex justify-between items-end mb-2">
+<div>
+<h2 class="text-title-lg font-title-lg font-bold text-on-background">Preview Draft</h2>
+<p class="text-body-md font-body-md text-on-surface-variant">24 Questions Total • 120 Minutes</p>
+</div>
+<button class="h-touch-target px-6 bg-surface border-2 border-primary text-primary rounded-lg text-label-lg font-label-lg font-bold hover:bg-surface-variant transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined" data-icon="save">save</span>
+                            Save to Vault
+                        </button>
+</div>
+<!-- Question Cards Canvas -->
+<div class="flex flex-col gap-4">
+<!-- Section Header -->
+<div class="flex items-center gap-4 py-2 border-b-2 border-on-surface">
+<span class="bg-on-surface text-surface px-3 py-1 rounded text-label-lg font-label-lg font-bold tracking-widest uppercase">Section A</span>
+<h3 class="text-title-lg font-title-lg font-bold">Multiple Choice</h3>
+</div>
+<!-- Q1 (High Contrast Card) -->
+<div class="bg-surface border border-outline-variant rounded-xl p-6 hover:shadow-md transition-shadow relative group">
+<div class="absolute right-4 top-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="w-8 h-8 rounded-full bg-surface-variant text-on-surface-variant flex items-center justify-center hover:bg-primary hover:text-on-primary"><span class="material-symbols-outlined text-[18px]" data-icon="edit">edit</span></button>
+<button class="w-8 h-8 rounded-full bg-surface-variant text-error flex items-center justify-center hover:bg-error hover:text-on-error"><span class="material-symbols-outlined text-[18px]" data-icon="delete">delete</span></button>
+</div>
+<div class="flex gap-4">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-bold text-label-lg font-label-lg shrink-0">1</div>
+<div class="flex-1">
+<p class="text-body-lg font-body-lg font-semibold text-on-surface mb-4 pr-16">Evaluate the integral of \( f(x) = 3x^2 + 2x \) with respect to \( x \).</p>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+<div class="flex items-center gap-3 p-3 rounded bg-surface-container-low border border-outline-variant/30">
+<div class="w-6 h-6 rounded-full border-2 border-outline-variant flex items-center justify-center font-bold text-label-md">A</div>
+<span class="text-body-md font-body-md">\( x^3 + x^2 + C \)</span>
+</div>
+<div class="flex items-center gap-3 p-3 rounded bg-secondary-container border border-secondary text-on-secondary-container font-medium">
+<div class="w-6 h-6 rounded-full bg-secondary text-on-secondary flex items-center justify-center font-bold text-label-md"><span class="material-symbols-outlined text-[14px]" data-icon="check">check</span></div>
+<span class="text-body-md font-body-md">\( x^3 + x^2 + C \)</span>
+<span class="ml-auto uppercase font-bold text-secondary text-label-md">Correct</span>
+</div>
+<div class="flex items-center gap-3 p-3 rounded bg-surface-container-low border border-outline-variant/30">
+<div class="w-6 h-6 rounded-full border-2 border-outline-variant flex items-center justify-center font-bold text-label-md">C</div>
+<span class="text-body-md font-body-md">\( 6x + 2 + C \)</span>
+</div>
+<div class="flex items-center gap-3 p-3 rounded bg-surface-container-low border border-outline-variant/30">
+<div class="w-6 h-6 rounded-full border-2 border-outline-variant flex items-center justify-center font-bold text-label-md">D</div>
+<span class="text-body-md font-body-md">\( 3x^3 + 2x^2 + C \)</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Section Header -->
+<div class="flex items-center gap-4 py-2 border-b-2 border-on-surface mt-6">
+<span class="bg-on-surface text-surface px-3 py-1 rounded text-label-lg font-label-lg font-bold tracking-widest uppercase">Section B</span>
+<h3 class="text-title-lg font-title-lg font-bold">Theory / Essay</h3>
+</div>
+<!-- Q21 Theory -->
+<div class="bg-surface border border-outline-variant rounded-xl p-6 hover:shadow-md transition-shadow relative group">
+<div class="absolute right-4 top-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="w-8 h-8 rounded-full bg-surface-variant text-on-surface-variant flex items-center justify-center hover:bg-primary hover:text-on-primary"><span class="material-symbols-outlined text-[18px]" data-icon="edit">edit</span></button>
+<button class="w-8 h-8 rounded-full bg-surface-variant text-error flex items-center justify-center hover:bg-error hover:text-on-error"><span class="material-symbols-outlined text-[18px]" data-icon="delete">delete</span></button>
+</div>
+<div class="flex gap-4">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-bold text-label-lg font-label-lg shrink-0">21</div>
+<div class="flex-1">
+<div class="flex items-center gap-2 mb-2">
+<span class="bg-error-container text-on-error-container px-2 py-0.5 rounded font-bold uppercase tracking-wide text-label-md">Hard</span>
+<span class="text-label-md font-label-md text-outline">15 Marks</span>
+</div>
+<p class="text-body-lg font-body-lg font-semibold text-on-surface mb-4 pr-16">Using the First Principles of differentiation, derive the derivative of \( f(x) = \sin(x) \). Show all intermediate steps clearly.</p>
+<div class="mt-4 p-4 bg-[#F5F7F9] rounded border border-outline-variant/50 border-dashed">
+<p class="text-label-md font-label-md font-bold text-primary mb-2 flex items-center gap-1"><span class="material-symbols-outlined text-[16px]" data-icon="key">key</span> Marking Guide / Expected Elements:</p>
+<ul class="list-disc list-inside text-body-md font-body-md text-on-surface-variant space-y-1">
+<li class="">Definition of derivative limit setup (3 marks)</li>
+<li class="">Application of sum-to-product trigonometric identity (5 marks)</li>
+<li class="">Evaluation of standard limits \( \lim_{h \to 0} \frac{\sin h}{h} \) (4 marks)</li>
+<li class="">Final logical conclusion (3 marks)</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-touch-target px-2 pb-2 md:hidden bg-surface-container-low dark:bg-surface-container-lowest border-t border-outline-variant/20 docked full-width bottom-0 rounded-t-full">
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline hover:bg-surface-variant/50 w-full h-full rounded-full" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="text-label-md font-label-md">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline hover:bg-surface-variant/50 w-full h-full rounded-full" href="#">
+<span class="material-symbols-outlined" data-icon="menu_book">menu_book</span>
+<span class="text-label-md font-label-md">Lessons</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-secondary-container dark:bg-secondary text-on-secondary-container dark:text-on-secondary rounded-full px-6 py-1 hover:bg-surface-variant/50 scale-90 transition-all" href="#">
+<span class="material-symbols-outlined fill" data-icon="quiz">quiz</span>
+<span class="text-label-md font-label-md font-bold">Exams</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline hover:bg-surface-variant/50 w-full h-full rounded-full" href="#">
+<span class="material-symbols-outlined" data-icon="more_horiz">more_horiz</span>
+<span class="text-label-md font-label-md">More</span>
+</a>
+</nav>
+
+
+
+
+</body></html>

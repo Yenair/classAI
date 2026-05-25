@@ -1,8 +1,9 @@
 import 'dart:isolate';
-import 'dart:typed_data';
+import 'package:drift/drift.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:crypto/crypto.dart';
+import 'package:uuid/uuid.dart';
 import 'dart:convert';
 import '../database/database.dart';
 import 'low_storage_service.dart';
@@ -22,6 +23,15 @@ class PdfCacheKey {
     required this.schoolNameHash,
     this.logoHash,
   });
+}
+
+class PdfExportException implements Exception {
+  final String message;
+  final int? remainingCount;
+  PdfExportException(this.message, {this.remainingCount});
+
+  @override
+  String toString() => 'PDF export limit exceeded: $message';
 }
 
 class PdfService {
@@ -51,10 +61,54 @@ class PdfService {
     return _cachedWatermarkRequired!;
   }
 
+  /// Check if PDF export is allowed based on daily limit.
+  /// Throws [PdfExportException] if limit exceeded.
+  Future<bool> checkDailyLimit(String tier) async {
+    final allowed = await _db.securityConfigDao
+        .checkAndIncrementDailyPdfExports(tier: tier);
+    if (!allowed) {
+      final remaining =
+          await _db.securityConfigDao.getRemainingPdfExports(tier: tier);
+      throw PdfExportException(
+        'Daily PDF export limit reached.',
+        remainingCount: remaining < 0 ? null : remaining,
+      );
+    }
+    return true;
+  }
+
+  /// Log an audit entry for PDF export.
+  Future<void> logPdfExport(
+      {required String? teacherId,
+      required String? schoolId,
+      required String topic}) async {
+    final id = const Uuid().v4();
+    await _db.auditLogsDao.insert(
+      AuditLogsCompanion.insert(
+        id: Value(id),
+        teacherId: Value(teacherId),
+        schoolId: Value(schoolId),
+        action: Value('pdf_export'),
+        metadata: Value(jsonEncode({
+          'topic': topic,
+          'timestamp': DateTime.now().toIso8601String(),
+        })),
+      ),
+    );
+  }
+
   /// Generate a PDF for a lesson. Uses isolate to avoid UI blocking.
-  /// Checks available disk space before generation; throws [Exception]
+  /// Checks disk space before generation; throws [Exception]
   /// if critical (< 100 MB).
-  Future<Uint8List> generateLessonPdf(Lesson lesson, School school) async {
+  /// Optionally accepts [teacherId] for audit logging.
+  Future<Uint8List> generateLessonPdf(
+    Lesson lesson,
+    School school, {
+    String? teacherId,
+  }) async {
+    // Check daily PDF export limit before generating
+    await checkDailyLimit(school.subscriptionTier);
+
     // Check disk space before generating
     final storageService = LowStorageService();
     final canGenerate = await storageService.canGeneratePdf();
@@ -73,8 +127,7 @@ class PdfService {
     final cacheKey = PdfCacheKey(
       contentHash: contentHash,
       applyWatermark: applyWatermark,
-      schoolNameHash:
-          sha256.convert(utf8.encode(school.schoolName)).toString(),
+      schoolNameHash: sha256.convert(utf8.encode(school.schoolName)).toString(),
       logoHash: school.logoUrl != null
           ? sha256.convert(utf8.encode(school.logoUrl!)).toString()
           : null,
@@ -95,6 +148,13 @@ class PdfService {
     );
 
     final pdfBytes = await Isolate.run(() => _generatePdfInIsolate(params));
+
+    // Audit log the PDF export
+    await logPdfExport(
+      teacherId: teacherId,
+      schoolId: school.serverId,
+      topic: lesson.topic,
+    );
 
     // Cache result
     await _db.pdfCacheDao.insert(

@@ -7,19 +7,24 @@ class CreditService {
 
   CreditService(this._db);
 
-  /// Spend credits for content generation. Returns batch ID.
+  /// Spend credits for content unlock. Returns batch ID.
   /// CRITICAL: Batch ID is written to SQLite BEFORE the network call.
+  /// This is used for unlocking already-generated content.
+  /// Only deducts 1 credit per unlock.
   Future<String> spendCredits({
     required int amount,
     required List<String> contentIds,
   }) async {
+    // Clamp to 1 credit for unlock operations
+    final effectiveAmount = amount > 1 ? 1 : amount;
+
     final batchId = _uuid.v4();
     final config = await _db.securityConfigDao.get();
 
-    if (config.offlineCredits < amount) {
+    if (config.offlineCredits < effectiveAmount) {
       throw CreditInsufficientException(
         available: config.offlineCredits,
-        required: amount,
+        required: effectiveAmount,
       );
     }
 
@@ -30,19 +35,19 @@ class CreditService {
 
     // 2. Decrement locally
     await _db.securityConfigDao.updateOfflineCredits(
-      config.offlineCredits - amount,
+      config.offlineCredits - effectiveAmount,
     );
 
     // 3. Queue for sync — use a unique local ID so the sync push
     //    response can correlate results back to this entry.
     final uniqueLocalId = DateTime.now().microsecondsSinceEpoch;
     await _db.syncQueueDao.insertEntry(
-      queueTable  : 'credit_spend',
+      queueTable: 'credit_spend',
       recordLocalId: uniqueLocalId,
       operation: 'SPEND_CREDITS',
       payload: {
         'batch_id': batchId,
-        'amount': amount,
+        'amount': effectiveAmount,
         'content_ids': contentIds,
         'local_id': uniqueLocalId,
       },
@@ -78,7 +83,8 @@ class CreditService {
 class CreditInsufficientException implements Exception {
   final int available;
   final int required;
-  CreditInsufficientException({required this.available, required this.required});
+  CreditInsufficientException(
+      {required this.available, required this.required});
 
   @override
   String toString() => 'Insufficient credits: have $available, need $required';

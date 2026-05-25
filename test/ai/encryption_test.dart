@@ -4,6 +4,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:classai/core/services/ai_service.dart';
 import 'package:classai/core/utils/encryption_utils.dart';
+import 'package:classai/core/database/database.dart';
 
 class MockSupabaseClient extends Mock implements SupabaseClient {}
 class MockFunctionsClient extends Mock implements FunctionsClient {}
@@ -12,12 +13,16 @@ void main() {
   late MockSupabaseClient mockSupabase;
   late MockFunctionsClient mockFunctions;
   late Uint8List schoolKey;
+  late AppDatabase db;
 
-  setUp(() {
+  setUp(() async {
     mockSupabase = MockSupabaseClient();
     mockFunctions = MockFunctionsClient();
     schoolKey = EncryptionUtils.generateKey();
     when(() => mockSupabase.functions).thenReturn(mockFunctions);
+    db = AppDatabase.forTesting();
+    await db.initialize();
+    addTearDown(db.close);
   });
 
   group('AiService encryption', () {
@@ -34,7 +39,7 @@ void main() {
                 status: 200,
               ));
 
-      final aiService = AiService(schoolKey: schoolKey, supabase: mockSupabase);
+      final aiService = AiService(schoolKey: schoolKey, supabase: mockSupabase, db: db);
 
       // Act
       final result = await aiService.generate('Teach me something');
@@ -62,7 +67,7 @@ void main() {
                 status: 200,
               ));
 
-      final aiService = AiService(schoolKey: schoolKey, supabase: mockSupabase);
+      final aiService = AiService(schoolKey: schoolKey, supabase: mockSupabase, db: db);
 
       // Act
       final result = await aiService.generate('Test prompt');
@@ -82,7 +87,7 @@ void main() {
                 status: 200,
               ));
 
-      final aiService = AiService(schoolKey: null, supabase: mockSupabase);
+      final aiService = AiService(schoolKey: null, supabase: mockSupabase, db: db);
 
       // Act
       final result = await aiService.generate('Teach me something');

@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ClassAI - Vault Publisher</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;700&amp;family=Albert+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">tailwind.config = {darkMode: "class", theme: {extend: {colors: {"surface-dim": "#d9dae0", "secondary-fixed": "#e0e0ff", "on-secondary-container": "#1e258f", "surface-container-low": "#f2f3f9", "primary-fixed-dim": "#a1c9ff", "inverse-primary": "#a1c9ff", "tertiary-container": "#5068d9", "secondary-container": "#8c94ff", secondary: "#4b53ba", "on-secondary-fixed": "#00026c", "secondary-fixed-dim": "#bec2ff", "on-primary-fixed-variant": "#004880", "on-background": "#191c20", "on-surface": "#191c20", outline: "#727781", "surface-container": "#ededf3", "on-primary": "#ffffff", "outline-variant": "#c1c7d2", "surface-tint": "#1b61a0", tertiary: "#344ebf", "inverse-on-surface": "#eff0f6", "primary-fixed": "#d2e4ff", "on-error-container": "#93000a", "inverse-surface": "#2e3035", "on-tertiary": "#ffffff", "surface-container-lowest": "#ffffff", error: "#ba1a1a", surface: "#f8f9ff", "surface-variant": "#e1e2e8", "surface-bright": "#f8f9ff", "on-surface-variant": "#414750", "on-primary-container": "#f5f7ff", "on-secondary-fixed-variant": "#323aa1", "on-tertiary-container": "#f8f6ff", "surface-container-high": "#e7e8ee", "tertiary-fixed": "#dde1ff", "error-container": "#ffdad6", "surface-container-highest": "#e1e2e8", background: "#f8f9ff", "on-secondary": "#ffffff", "on-primary-fixed": "#001c37", "tertiary-fixed-dim": "#b9c3ff", "on-error": "#ffffff", primary: "#115b9b", "primary-container": "#3674b5", "on-tertiary-fixed": "#001257", "on-tertiary-fixed-variant": "#1d3aac"}, borderRadius: {DEFAULT: "0.125rem", lg: "0.25rem", xl: "0.5rem", full: "0.75rem"}, spacing: {gutter: "16px", "margin-mobile": "16px", "margin-tablet": "24px", "touch-target": "48px", base: "8px"}, fontFamily: {"headline-lg": ["Inter"], "title-lg": ["Inter"], "label-lg": ["Inter"], "display-lg": ["Inter"], "headline-lg-mobile": ["Inter"], "body-lg": ["Inter"], "body-md": ["Inter"], "label-md": ["Inter"], headline: ["Open Sans"], display: ["Open Sans"], body: ["Albert Sans"], label: ["Open Sans"]}, fontSize: {"headline-lg": ["32px", {lineHeight: "40px", fontWeight: "600"}], "title-lg": ["22px", {lineHeight: "28px", fontWeight: "500"}], "label-lg": ["14px", {lineHeight: "20px", letterSpacing: "0.1px", fontWeight: "500"}], "display-lg": ["48px", {lineHeight: "56px", letterSpacing: "-0.02em", fontWeight: "700"}], "headline-lg-mobile": ["28px", {lineHeight: "36px", fontWeight: "600"}], "body-lg": ["18px", {lineHeight: "28px", fontWeight: "400"}], "body-md": ["16px", {lineHeight: "24px", fontWeight: "400"}], "label-md": ["12px", {lineHeight: "16px", fontWeight: "500"}]}}}};</script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen flex flex-col md:flex-row font-body-md">
+<!-- NavigationDrawer (Tablet/Desktop) -->
+<nav class="hidden md:flex flex-col h-full border-r border-outline-variant/30 py-margin-tablet bg-surface-container-low docked left-0 h-full w-72 fixed z-40">
+<div class="px-4 mb-8">
+<h1 class="text-headline-lg font-headline-lg font-black text-primary">ClassAI</h1>
+<p class="text-body-md font-body-md text-on-surface-variant">Nigerian Academic Partner</p>
+</div>
+<div class="flex items-center gap-4 text-on-surface-variant px-4 py-3 mx-3 hover:bg-surface-variant rounded-full mb-1">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">home</span>
+<span class="text-label-lg font-label-lg">Home</span>
+</div>
+<div class="flex items-center gap-4 text-on-surface-variant px-4 py-3 mx-3 hover:bg-surface-variant rounded-full mb-1">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">menu_book</span>
+<span class="text-label-lg font-label-lg">Lessons</span>
+</div>
+<div class="flex items-center gap-4 text-on-surface-variant px-4 py-3 mx-3 hover:bg-surface-variant rounded-full mb-1">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">quiz</span>
+<span class="text-label-lg font-label-lg">Exams</span>
+</div>
+<div class="flex items-center gap-4 bg-secondary-fixed text-on-secondary-fixed rounded-full px-4 py-3 mx-3 mb-1 translate-x-1">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">inventory_2</span>
+<span class="text-label-lg font-label-lg">Vault</span>
+</div>
+<div class="flex items-center gap-4 text-on-surface-variant px-4 py-3 mx-3 hover:bg-surface-variant rounded-full">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">admin_panel_settings</span>
+<span class="text-label-lg font-label-lg">Admin</span>
+</div>
+</nav>
+<!-- TopAppBar (Mobile) -->
+<header class="md:hidden flex justify-between items-center w-full px-margin-mobile py-2 bg-surface docked full-width top-0 z-40 fixed border-b border-surface-container">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-variant overflow-hidden flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface-variant">person</span>
+</div>
+<h1 class="text-title-lg font-title-lg font-bold text-primary">ClassAI</h1>
+</div>
+<div class="text-body-md font-body-md font-medium text-primary">
+            ₦500
+        </div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 w-full md:ml-72 pt-[64px] md:pt-0 pb-[80px] md:pb-0 min-h-screen flex flex-col">
+<div class="flex-1 p-margin-mobile md:p-margin-tablet max-w-5xl mx-auto w-full">
+<header class="mb-8">
+<h2 class="text-headline-lg-mobile font-headline-lg-mobile md:text-headline-lg md:font-headline-lg text-on-background mb-2">Vault Publisher</h2>
+<p class="text-body-lg font-body-lg text-on-surface-variant">Publish academic resources to the national curriculum repository.</p>
+</header>
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<!-- Main Form Area -->
+<div class="lg:col-span-2 space-y-6">
+<div class="bg-[#F5F7F9] rounded-xl p-6">
+<form class="space-y-5">
+<!-- Title -->
+<div>
+<label class="block text-label-lg font-label-lg text-on-surface mb-1" for="title">Resource Title</label>
+<input class="w-full h-touch-target rounded-lg border-outline-variant bg-surface px-4 text-body-md focus:border-primary focus:ring-1 focus:ring-primary" id="title" name="title" placeholder="e.g., SS2 Biology Term 1 Notes" type="text"/>
+</div>
+<!-- Subject & Class Level -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+<div>
+<label class="block text-label-lg font-label-lg text-on-surface mb-1" for="subject">Subject</label>
+<select class="w-full h-touch-target rounded-lg border-outline-variant bg-surface px-4 text-body-md focus:border-primary focus:ring-1 focus:ring-primary" id="subject" name="subject">
+<option disabled="" selected="" value="">Select subject...</option>
+<option value="math">Mathematics</option>
+<option value="english">English Language</option>
+<option value="biology">Biology</option>
+<option value="physics">Physics</option>
+<option value="chemistry">Chemistry</option>
+</select>
+</div>
+<div>
+<label class="block text-label-lg font-label-lg text-on-surface mb-1" for="class_level">Class Level</label>
+<select class="w-full h-touch-target rounded-lg border-outline-variant bg-surface px-4 text-body-md focus:border-primary focus:ring-1 focus:ring-primary" id="class_level" name="class_level">
+<option disabled="" selected="" value="">Select class...</option>
+<option value="jss1">JSS 1</option>
+<option value="jss2">JSS 2</option>
+<option value="jss3">JSS 3</option>
+<option value="ss1">SS 1</option>
+<option value="ss2">SS 2</option>
+<option value="ss3">SS 3</option>
+</select>
+</div>
+</div>
+<!-- Description -->
+<div>
+<label class="block text-label-lg font-label-lg text-on-surface mb-1" for="description">Description</label>
+<textarea class="w-full rounded-lg border-outline-variant bg-surface px-4 py-3 text-body-md focus:border-primary focus:ring-1 focus:ring-primary" id="description" name="description" placeholder="Provide a brief overview of the resource content..." rows="4"></textarea>
+</div>
+<!-- Content Upload Area -->
+<div>
+<label class="block text-label-lg font-label-lg text-on-surface mb-1">Resource Content</label>
+<div class="border-2 border-dashed border-outline-variant rounded-xl bg-surface p-8 text-center hover:bg-surface-variant/30 transition-colors cursor-pointer flex flex-col items-center justify-center min-h-[160px]">
+<span class="material-symbols-outlined text-outline text-4xl mb-2">upload_file</span>
+<p class="text-body-md font-body-md text-on-surface font-medium">Tap to upload PDF or Document</p>
+<p class="text-label-md font-label-md text-on-surface-variant mt-1">Supports .pdf, .docx, .ppt (Max 10MB)</p>
+</div>
+</div>
+<!-- Image Picker (Low Bandwidth) -->
+<div>
+<label class="block text-label-lg font-label-lg text-on-surface mb-1">Cover Image (Optional)</label>
+<div class="flex items-center gap-4">
+<div class="w-20 h-20 rounded-lg bg-surface-container border border-outline-variant flex items-center justify-center overflow-hidden">
+<span class="material-symbols-outlined text-outline">image</span>
+</div>
+<div class="flex-1">
+<button class="h-10 px-4 rounded-lg border border-outline text-label-lg font-label-lg text-primary hover:bg-surface-variant transition-colors" type="button">Choose Image</button>
+<p class="text-label-md font-label-md text-error mt-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">warning</span>
+                                            Strict limit: 50KB for remote school access.
+                                        </p>
+</div>
+</div>
+</div>
+<!-- Actions -->
+<div class="pt-4 flex items-center justify-end gap-3 border-t border-outline-variant/30">
+<button class="h-touch-target px-6 rounded-full border border-outline text-label-lg font-label-lg text-primary hover:bg-surface-variant transition-colors flex items-center gap-2" type="button">
+<span class="material-symbols-outlined text-[20px]">visibility</span>
+                                    Preview
+                                </button>
+<button class="h-touch-target px-6 rounded-full bg-primary text-on-primary text-label-lg font-label-lg hover:bg-primary/90 transition-colors flex items-center gap-2" type="submit">
+<span class="material-symbols-outlined text-[20px]">publish</span>
+                                    Publish to Vault
+                                </button>
+</div>
+</form>
+</div>
+</div>
+<!-- Side Panel: Status Tracker -->
+<div class="lg:col-span-1 space-y-6">
+<div class="bg-[#F5F7F9] rounded-xl p-6">
+<h3 class="text-title-lg font-title-lg text-on-background mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined">history</span>
+                            Recent Submissions
+                        </h3>
+<div class="space-y-4">
+<!-- Status Item: Pending -->
+<div class="p-4 rounded-lg bg-surface border border-outline-variant/50">
+<div class="flex justify-between items-start mb-2">
+<h4 class="text-label-lg font-label-lg text-on-surface truncate pr-2">SS1 Chemistry Practicals</h4>
+<span class="shrink-0 px-2 py-1 rounded bg-surface-variant text-on-surface-variant text-label-md font-label-md flex items-center gap-1">
+<div class="w-2 h-2 rounded-full bg-[#9E9E9E]"></div>
+                                        Pending
+                                    </span>
+</div>
+<p class="text-label-md font-label-md text-outline">Submitted: Today, 09:45 AM</p>
+</div>
+<!-- Status Item: Approved -->
+<div class="p-4 rounded-lg bg-surface border border-outline-variant/50">
+<div class="flex justify-between items-start mb-2">
+<h4 class="text-label-lg font-label-lg text-on-surface truncate pr-2">JSS3 Math Revision Guide</h4>
+<span class="shrink-0 px-2 py-1 rounded bg-secondary-container/50 text-on-secondary-container text-label-md font-label-md flex items-center gap-1">
+<div class="w-2 h-2 rounded-full bg-[#008751]"></div>
+                                        Approved
+                                    </span>
+</div>
+<p class="text-label-md font-label-md text-outline">Submitted: Yesterday</p>
+</div>
+<!-- Status Item: Rejected -->
+<div class="p-4 rounded-lg bg-surface border border-error/20">
+<div class="flex justify-between items-start mb-2">
+<h4 class="text-label-lg font-label-lg text-on-surface truncate pr-2">English Essay Topics</h4>
+<span class="shrink-0 px-2 py-1 rounded bg-error-container/50 text-on-error-container text-label-md font-label-md flex items-center gap-1">
+<div class="w-2 h-2 rounded-full bg-[#B71C1C]"></div>
+                                        Rejected
+                                    </span>
+</div>
+<p class="text-label-md font-label-md text-outline mb-2">Submitted: Oct 12</p>
+<p class="text-label-md font-label-md text-error bg-error-container/20 p-2 rounded">Image size exceeds 50KB limit.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer Indicator -->
+<div class="mt-12 py-4 border-t border-outline-variant/30 flex justify-center items-center">
+<div class="flex items-center gap-2 text-label-md font-label-md text-outline">
+<span class="material-symbols-outlined text-[16px] text-[#2196F3]">sync</span>
+                    EmergencyFlushService: Background Sync Active
+                </div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-touch-target px-2 pb-2 md:hidden bg-surface-container-low border-t border-outline-variant/20 rounded-t-full">
+<div class="flex flex-col items-center justify-center text-on-surface-variant pt-2 w-16 hover:bg-surface-variant/50 rounded-lg">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">home</span>
+<span class="text-label-md font-label-md">Home</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant pt-2 w-16 hover:bg-surface-variant/50 rounded-lg">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">menu_book</span>
+<span class="text-label-md font-label-md">Lessons</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant pt-2 w-16 hover:bg-surface-variant/50 rounded-lg">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">quiz</span>
+<span class="text-label-md font-label-md">Exams</span>
+</div>
+<div class="flex flex-col items-center justify-center bg-secondary-container text-on-secondary-container rounded-full px-4 py-1 mt-1 scale-90">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">more_horiz</span>
+<span class="text-label-md font-label-md">More</span>
+</div>
+</nav>
+</body></html>

@@ -10,8 +10,7 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
   SecurityConfigDao(AppDatabase db) : super(db);
 
   Future<SecurityConfigData> get() {
-    return (select(securityConfig)..where((t) => t.id.equals(1)))
-        .getSingle();
+    return (select(securityConfig)..where((t) => t.id.equals(1))).getSingle();
   }
 
   Future<void> updateConfig({
@@ -43,8 +42,7 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
     double? monotonicLastSeen,
   }) async {
     final config = await get();
-    await (update(securityConfig)..where((t) => t.id.equals(config.id)))
-        .write(
+    await (update(securityConfig)..where((t) => t.id.equals(config.id))).write(
       SecurityConfigCompanion(
         offlineCredits: offlineCredits != null
             ? Value(offlineCredits)
@@ -64,9 +62,8 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
         lastPullTimestamp: lastPullTimestamp != null
             ? Value(lastPullTimestamp)
             : const Value.absent(),
-        syncCursor: syncCursor != null
-            ? Value(syncCursor)
-            : const Value.absent(),
+        syncCursor:
+            syncCursor != null ? Value(syncCursor) : const Value.absent(),
         lastSyncAttemptTime: lastSyncAttemptTime != null
             ? Value(lastSyncAttemptTime)
             : const Value.absent(),
@@ -114,9 +111,8 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
             ? Value(vacuumedDbPath)
             : const Value.absent(),
         isLocked: isLocked != null ? Value(isLocked) : const Value.absent(),
-        lastSeenTime: lastSeenTime != null
-            ? Value(lastSeenTime)
-            : const Value.absent(),
+        lastSeenTime:
+            lastSeenTime != null ? Value(lastSeenTime) : const Value.absent(),
         lastKnownGoodTime: lastKnownGoodTime != null
             ? Value(lastKnownGoodTime)
             : const Value.absent(),
@@ -133,11 +129,111 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
 
   Future<void> clearCreditSpentBatchId() async {
     final config = await get();
-    await (update(securityConfig)..where((t) => t.id.equals(config.id)))
-        .write(
+    await (update(securityConfig)..where((t) => t.id.equals(config.id))).write(
       SecurityConfigCompanion(
         creditSpentBatchId: Value(null),
       ),
     );
+  }
+
+  // -----------------------------------------------------------------------
+  // Daily counter methods for rate limiting
+  // -----------------------------------------------------------------------
+
+  /// Check and increment the daily generation counter.
+  /// Returns true if the generation is allowed, false if limit exceeded.
+  /// Also resets the counter if the date has changed.
+  Future<bool> checkAndIncrementDailyGenerations({required String tier}) async {
+    final config = await get();
+    final today = DateTime.now().toIso8601String().split('T').first;
+    final currentCount = config.dailyGenerations;
+    final currentDate = config.dailyGenerationDate;
+
+    // Reset counter if date changed
+    int newCount = currentCount;
+    String newDate = currentDate ?? '';
+
+    if (currentDate != today) {
+      newCount = 0;
+      newDate = today;
+    }
+
+    // Check limit based on tier
+    const limits = {'free': 10, 'basic': 10, 'standard': 10, 'elite': -1};
+    final limit = limits[tier] ?? 10;
+
+    if (limit > 0 && newCount >= limit) {
+      return false; // Limit exceeded
+    }
+
+    // Increment and save
+    await (update(securityConfig)..where((t) => t.id.equals(config.id))).write(
+      SecurityConfigCompanion(
+        dailyGenerations: Value(newCount + 1),
+        dailyGenerationDate: Value(newDate),
+      ),
+    );
+
+    return true;
+  }
+
+  /// Check and increment the daily PDF export counter.
+  /// Returns true if the export is allowed, false if limit exceeded.
+  /// Also resets the counter if the date has changed.
+  Future<bool> checkAndIncrementDailyPdfExports({required String tier}) async {
+    final config = await get();
+    final today = DateTime.now().toIso8601String().split('T').first;
+    final currentCount = config.dailyPdfExports;
+    final currentDate = config.dailyPdfExportDate;
+
+    // Reset counter if date changed
+    int newCount = currentCount;
+    String newDate = currentDate ?? '';
+
+    if (currentDate != today) {
+      newCount = 0;
+      newDate = today;
+    }
+
+    // Check limit based on tier
+    const limits = {'free': 1, 'basic': 3, 'standard': 5, 'elite': -1};
+    final limit = limits[tier] ?? 1;
+
+    if (limit > 0 && newCount >= limit) {
+      return false; // Limit exceeded
+    }
+
+    // Increment and save
+    await (update(securityConfig)..where((t) => t.id.equals(config.id))).write(
+      SecurityConfigCompanion(
+        dailyPdfExports: Value(newCount + 1),
+        dailyPdfExportDate: Value(newDate),
+      ),
+    );
+
+    return true;
+  }
+
+  /// Get remaining PDF exports for today.
+  Future<int> getRemainingPdfExports({required String tier}) async {
+    final config = await get();
+    final today = DateTime.now().toIso8601String().split('T').first;
+
+    // Reset counter if date changed
+    if (config.dailyPdfExportDate != today) {
+      return _getTierPdfLimit(tier);
+    }
+
+    const limits = {'free': 1, 'basic': 3, 'standard': 5, 'elite': -1};
+    final limit = limits[tier] ?? 1;
+
+    if (limit < 0) return -1; // Unlimited
+
+    return limit - config.dailyPdfExports;
+  }
+
+  int _getTierPdfLimit(String tier) {
+    const limits = {'free': 1, 'basic': 3, 'standard': 5, 'elite': -1};
+    return limits[tier] ?? 1;
   }
 }

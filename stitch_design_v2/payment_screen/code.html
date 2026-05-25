@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ClassAI - Payment</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;700&amp;family=Albert+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">tailwind.config = {darkMode: "class", theme: {extend: {colors: {"surface-dim": "#d9dae0", "secondary-fixed": "#e0e0ff", "on-secondary-container": "#1e258f", "surface-container-low": "#f2f3f9", "primary-fixed-dim": "#a1c9ff", "inverse-primary": "#a1c9ff", "tertiary-container": "#5068d9", "secondary-container": "#8c94ff", secondary: "#4b53ba", "on-secondary-fixed": "#00026c", "secondary-fixed-dim": "#bec2ff", "on-primary-fixed-variant": "#004880", "on-background": "#191c20", "on-surface": "#191c20", outline: "#727781", "surface-container": "#ededf3", "on-primary": "#ffffff", "outline-variant": "#c1c7d2", "surface-tint": "#1b61a0", tertiary: "#344ebf", "inverse-on-surface": "#eff0f6", "primary-fixed": "#d2e4ff", "on-error-container": "#93000a", "inverse-surface": "#2e3035", "on-tertiary": "#ffffff", "surface-container-lowest": "#ffffff", error: "#ba1a1a", surface: "#f8f9ff", "surface-variant": "#e1e2e8", "surface-bright": "#f8f9ff", "on-surface-variant": "#414750", "on-primary-container": "#f5f7ff", "on-secondary-fixed-variant": "#323aa1", "on-tertiary-container": "#f8f6ff", "surface-container-high": "#e7e8ee", "tertiary-fixed": "#dde1ff", "error-container": "#ffdad6", "surface-container-highest": "#e1e2e8", background: "#f8f9ff", "on-secondary": "#ffffff", "on-primary-fixed": "#001c37", "tertiary-fixed-dim": "#b9c3ff", "on-error": "#ffffff", primary: "#115b9b", "primary-container": "#3674b5", "on-tertiary-fixed": "#001257", "on-tertiary-fixed-variant": "#1d3aac"}, borderRadius: {DEFAULT: "0.125rem", lg: "0.25rem", xl: "0.5rem", full: "0.75rem"}, spacing: {gutter: "16px", "margin-mobile": "16px", "margin-tablet": "24px", "touch-target": "48px", base: "8px"}, fontFamily: {"headline-lg": ["Inter"], "title-lg": ["Inter"], "label-lg": ["Inter"], "display-lg": ["Inter"], "headline-lg-mobile": ["Inter"], "body-lg": ["Inter"], "body-md": ["Inter"], "label-md": ["Inter"], headline: ["Open Sans"], display: ["Open Sans"], body: ["Albert Sans"], label: ["Open Sans"]}, fontSize: {"headline-lg": ["32px", {lineHeight: "40px", fontWeight: "600"}], "title-lg": ["22px", {lineHeight: "28px", fontWeight: "500"}], "label-lg": ["14px", {lineHeight: "20px", letterSpacing: "0.1px", fontWeight: "500"}], "display-lg": ["48px", {lineHeight: "56px", letterSpacing: "-0.02em", fontWeight: "700"}], "headline-lg-mobile": ["28px", {lineHeight: "36px", fontWeight: "600"}], "body-lg": ["18px", {lineHeight: "28px", fontWeight: "400"}], "body-md": ["16px", {lineHeight: "24px", fontWeight: "400"}], "label-md": ["12px", {lineHeight: "16px", fontWeight: "500"}]}}}};</script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.fill {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex flex-col md:flex-row">
+<!-- TopAppBar (Mobile Only) -->
+<header class="md:hidden flex justify-between items-center w-full px-margin-mobile py-2 bg-surface z-50 sticky top-0">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center overflow-hidden shrink-0">
+<img alt="Educator Profile" class="w-full h-full object-cover" data-alt="A professional headshot of a Nigerian educator smiling warmly. The lighting is soft and natural, emphasizing a trustworthy and approachable demeanor. The background is slightly blurred to focus on the individual, fitting a modern, clean light-mode UI profile picture context." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDduRlAJ2uUbeGNvhGfuKWhHlyJHA8R4_Z77cYUUNTkKxVT8Hv3NNPQeiJQQiGkXytfkL0_SXnTIwa9OxoIJjQ8KIGt4WcHCc0mHHLj4itllFqiZoPLQTg7O-_OrAmRIUSeoFy_ySyeK99mSYxfYRirvPbfeDhE8uefUrc8mUDwoetUCz5Iw-BlraeeXWz3offTrV8SRf1br3awGIWJ4i-Ndy3N5XMGtAOoL9g_kKx4qe237ffq136aUgN8_WX2udvOtHqfLE4z7qw"/>
+</div>
+<span class="text-title-lg font-title-lg font-bold text-primary">ClassAI</span>
+</div>
+<div class="flex items-center">
+<span class="text-body-md font-body-md font-medium px-3 py-1.5 bg-surface-container-high rounded-full">₦500</span>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 flex flex-col px-margin-mobile md:px-margin-tablet py-6 md:py-8 overflow-y-auto w-full max-w-7xl mx-auto">
+<!-- Header Section -->
+<div class="mb-8 flex items-center gap-4">
+<button aria-label="Go back" class="w-touch-target h-touch-target flex items-center justify-center rounded-full bg-surface hover:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined text-on-surface">arrow_back</span>
+</button>
+<div>
+<h1 class="text-headline-lg-mobile font-headline-lg-mobile md:text-headline-lg md:font-headline-lg text-on-surface mb-1">Upgrade Your Plan</h1>
+<p class="text-body-md font-body-md text-on-surface-variant">Select the package that best fits your classroom needs.</p>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+<!-- Pricing Cards Section -->
+<div class="lg:col-span-7 flex flex-col gap-6">
+<!-- Plan: Basic -->
+<label class="relative block w-full cursor-pointer group">
+<input class="peer sr-only" name="plan_selection" type="radio" value="basic"/>
+<div class="w-full bg-surface rounded-xl border-2 border-outline-variant/30 p-6 flex flex-col md:flex-row gap-4 md:items-center justify-between transition-all duration-200 peer-checked:border-primary peer-checked:bg-primary/5 hover:border-outline peer-checked:shadow-sm">
+<div class="flex items-start gap-4">
+<div class="w-6 h-6 rounded-full border-2 border-outline-variant flex items-center justify-center mt-1 shrink-0 peer-checked:border-primary peer-checked:bg-primary">
+<span class="material-symbols-outlined text-white text-[16px] opacity-0 transition-opacity peer-checked:opacity-100 hidden">check</span>
+<div class="w-3 h-3 bg-primary rounded-full opacity-0 scale-50 transition-all peer-checked:opacity-100 peer-checked:scale-100"></div>
+</div>
+<div>
+<h3 class="text-title-lg font-title-lg text-on-surface mb-1">Basic</h3>
+<p class="text-body-md font-body-md text-on-surface-variant line-clamp-2">Essential tools for small classrooms. Up to 30 students.</p>
+</div>
+</div>
+<div class="text-left md:text-right ml-10 md:ml-0 shrink-0">
+<span class="text-headline-lg-mobile font-headline-lg-mobile text-on-surface block">₦5,000</span>
+<span class="text-label-md font-label-md text-on-surface-variant">/ term</span>
+</div>
+</div>
+</label>
+<!-- Plan: Standard (Best Value) -->
+<label class="relative block w-full cursor-pointer group">
+<input checked="" class="peer sr-only" name="plan_selection" type="radio" value="standard"/>
+<!-- Best Value Badge -->
+<div class="absolute -top-3 right-6 bg-secondary text-on-secondary text-label-md font-label-md px-3 py-1 rounded-full z-10 font-medium shadow-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">star</span>
+                        Best Value
+                    </div>
+<div class="w-full bg-surface rounded-xl border-2 border-primary/20 p-6 flex flex-col md:flex-row gap-4 md:items-center justify-between transition-all duration-200 peer-checked:border-primary peer-checked:bg-primary/5 hover:border-outline peer-checked:shadow-sm relative overflow-hidden">
+<div class="flex items-start gap-4 z-10">
+<div class="w-6 h-6 rounded-full border-2 border-primary flex items-center justify-center mt-1 shrink-0 bg-primary">
+<div class="w-3 h-3 bg-white rounded-full"></div>
+</div>
+<div>
+<h3 class="text-title-lg font-title-lg text-on-surface mb-1">Standard</h3>
+<p class="text-body-md font-body-md text-on-surface-variant line-clamp-2">Advanced analytics and resources. Up to 100 students.</p>
+</div>
+</div>
+<div class="text-left md:text-right ml-10 md:ml-0 shrink-0 z-10">
+<span class="text-headline-lg-mobile font-headline-lg-mobile text-on-surface block">₦10,000</span>
+<span class="text-label-md font-label-md text-on-surface-variant">/ term</span>
+</div>
+</div>
+</label>
+<!-- Plan: Elite -->
+<label class="relative block w-full cursor-pointer group">
+<input class="peer sr-only" name="plan_selection" type="radio" value="elite"/>
+<div class="w-full bg-surface rounded-xl border-2 border-outline-variant/30 p-6 flex flex-col md:flex-row gap-4 md:items-center justify-between transition-all duration-200 peer-checked:border-primary peer-checked:bg-primary/5 hover:border-outline peer-checked:shadow-sm">
+<div class="flex items-start gap-4">
+<div class="w-6 h-6 rounded-full border-2 border-outline-variant flex items-center justify-center mt-1 shrink-0">
+<div class="w-3 h-3 bg-primary rounded-full opacity-0 scale-50 transition-all"></div>
+</div>
+<div>
+<h3 class="text-title-lg font-title-lg text-on-surface mb-1">Elite</h3>
+<p class="text-body-md font-body-md text-on-surface-variant line-clamp-2">Unlimited students, priority support, and custom modules.</p>
+</div>
+</div>
+<div class="text-left md:text-right ml-10 md:ml-0 shrink-0">
+<span class="text-headline-lg-mobile font-headline-lg-mobile text-on-surface block">₦25,000</span>
+<span class="text-label-md font-label-md text-on-surface-variant">/ term</span>
+</div>
+</div>
+</label>
+</div>
+<!-- Checkout / WebView Section -->
+<div class="lg:col-span-5 flex flex-col gap-6">
+<div class="bg-surface-container-lowest rounded-xl p-6 border border-outline-variant/20 shadow-sm flex flex-col h-full min-h-[400px]">
+<h2 class="text-title-lg font-title-lg text-on-surface mb-4 pb-4 border-b border-outline-variant/20">Order Summary</h2>
+<div class="flex justify-between items-center mb-2">
+<span class="text-body-md font-body-md text-on-surface-variant">Selected Plan</span>
+<span class="text-body-md font-body-md font-medium text-on-surface">Standard</span>
+</div>
+<div class="flex justify-between items-center mb-6">
+<span class="text-body-md font-body-md text-on-surface-variant">Duration</span>
+<span class="text-body-md font-body-md font-medium text-on-surface">1 Academic Term</span>
+</div>
+<div class="flex justify-between items-center pt-4 border-t border-outline-variant/20 mb-8">
+<span class="text-title-lg font-title-lg text-on-surface">Total Due</span>
+<span class="text-headline-lg-mobile font-headline-lg-mobile text-primary font-bold">₦10,000</span>
+</div>
+<!-- Placeholder for Paystack WebView -->
+<div class="flex-1 bg-surface-container-low rounded-lg border border-dashed border-outline-variant flex flex-col items-center justify-center p-6 mb-6 text-center">
+<span class="material-symbols-outlined text-outline text-[48px] mb-2">account_balance_wallet</span>
+<p class="text-body-md font-body-md text-on-surface-variant">Secure checkout powered by Paystack.</p>
+<p class="text-label-md font-label-md text-outline mt-1">(WebView Container)</p>
+</div>
+<button class="w-full h-touch-target bg-primary text-on-primary rounded-full flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors font-label-lg text-label-lg font-medium shadow-sm">
+<span class="material-symbols-outlined text-[20px]">lock</span>
+                        Proceed to Checkout
+                    </button>
+<div class="mt-4 flex items-center justify-center gap-2 text-label-md font-label-md text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]">verified_user</span>
+<span>Bank-grade security</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

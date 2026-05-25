@@ -141,7 +141,9 @@ class _SyncDetailsSheet extends ConsumerWidget {
               child: FilledButton(
                 onPressed: data.isOnline && data.status != SyncStatus.syncing
                     ? () {
-                        ref.read(syncStatusProvider.notifier).refresh();
+                        ref
+                            .read(syncStatusProvider.notifier)
+                            .syncNow();
                         Navigator.of(context).pop();
                       }
                     : null,

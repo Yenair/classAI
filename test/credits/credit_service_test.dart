@@ -19,17 +19,20 @@ void main() {
   });
 
   test('spend credits decrements locally', () async {
+    // spendCredits clamps amount>1 to 1 (only deducts 1 credit per unlock)
     final batchId = await creditService.spendCredits(
       amount: 2,
-      contentIds: ['content_1', 'content_2'],
+      contentIds: ['content_1'],
     );
 
     final config = await db.securityConfigDao.get();
-    expect(config.offlineCredits, equals(8));
+    expect(config.offlineCredits, equals(9)); // 10 - 1 (clamped)
     expect(config.creditSpentBatchId, equals(batchId));
   });
 
   test('spend credits when insufficient throws', () async {
+    // spendCredits clamps amount>1 to 1; set credits to 0 so the check fails
+    await db.securityConfigDao.updateConfig(offlineCredits: 0);
     await expectLater(
       () => creditService.spendCredits(amount: 20, contentIds: ['x']),
       throwsA(isA<CreditInsufficientException>()),

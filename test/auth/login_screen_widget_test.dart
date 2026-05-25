@@ -205,6 +205,29 @@ void main() {
   });
 
   group('LoginScreen error states', () {
+    // For error-state tests, mock connectivity as online so loginOnline()
+    // proceeds past the PlatformHelper.isOnline() check to the auth service.
+    setUp(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('dev.fluttercommunity.plus/connectivity'),
+        (MethodCall methodCall) async {
+          if (methodCall.method == 'check') {
+            return <String>['wifi'];
+          }
+          return null;
+        },
+      );
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('dev.fluttercommunity.plus/connectivity'),
+        null,
+      );
+    });
+
     testWidgets('shows error banner on failed login attempt', (tester) async {
       when(() => mockAuth.login(any(), any(), any())).thenThrow(
         AuthException(

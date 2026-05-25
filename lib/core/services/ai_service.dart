@@ -1,6 +1,8 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'package:drift/drift.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
+import '../database/database.dart';
 import '../utils/sanitization_utils.dart';
 import '../utils/token_counter.dart';
 import '../utils/encryption_utils.dart';
@@ -8,10 +10,45 @@ import '../utils/encryption_utils.dart';
 class AiService {
   final Uint8List? _schoolKey;
   final SupabaseClient _supabase;
+  final AppDatabase _db;
 
-  AiService({Uint8List? schoolKey, SupabaseClient? supabase})
+  AiService(
+      {Uint8List? schoolKey, SupabaseClient? supabase, required AppDatabase db})
       : _schoolKey = schoolKey,
-        _supabase = supabase ?? Supabase.instance.client;
+        _supabase = supabase ?? Supabase.instance.client,
+        _db = db;
+
+  /// Check if generation is allowed based on daily limit.
+  /// Returns true if allowed, throws exception if limit exceeded.
+  Future<bool> checkDailyLimit(String tier) async {
+    final allowed = await _db.securityConfigDao
+        .checkAndIncrementDailyGenerations(tier: tier);
+    if (!allowed) {
+      throw AiGenerationException(
+          'Daily generation limit reached. Try again tomorrow.');
+    }
+    return true;
+  }
+
+  /// Log an audit entry for AI generation.
+  Future<void> logGeneration(
+      {required String? teacherId,
+      required String? schoolId,
+      required String topic}) async {
+    final id = const Uuid().v4();
+    await _db.auditLogsDao.insert(
+      AuditLogsCompanion.insert(
+        id: Value(id),
+        teacherId: Value(teacherId),
+        schoolId: Value(schoolId),
+        action: Value('ai_generation'),
+        metadata: Value(jsonEncode({
+          'topic': topic,
+          'timestamp': DateTime.now().toIso8601String(),
+        })),
+      ),
+    );
+  }
 
   Future<Map<String, dynamic>> generate(String prompt) async {
     // 1. Sanitize
@@ -34,29 +71,29 @@ class AiService {
   }
 
   Future<Map<String, dynamic>> _callDeepSeek(String prompt) async {
-    try {
-      final response = await _supabase.functions.invoke('deepseek-proxy', body: {
-        'prompt': prompt,
-      });
-      final data = response.data as Map<String, dynamic>;
-      final generated = data['generatedJson'] as Map<String, dynamic>;
-      return _encrypt(generated);
-    } catch (_) {
-      throw AiGenerationException('DeepSeek proxy not available');
+    final response = await _supabase.functions.invoke('deepseek-proxy', body: {
+      'prompt': prompt,
+    });
+    final data = response.data as Map<String, dynamic>?;
+    if (data == null || data['error'] != null) {
+      throw AiGenerationException(
+          data?['error'] as String? ?? 'DeepSeek proxy not available');
     }
+    final generated = data['generatedJson'] as Map<String, dynamic>;
+    return _encrypt(generated);
   }
 
   Future<Map<String, dynamic>> _callGemini(String prompt) async {
-    try {
-      final response = await _supabase.functions.invoke('gemini-proxy', body: {
-        'prompt': prompt,
-      });
-      final data = response.data as Map<String, dynamic>;
-      final generated = data['generatedJson'] as Map<String, dynamic>;
-      return _encrypt(generated);
-    } catch (_) {
-      throw AiGenerationException('Gemini proxy not available');
+    final response = await _supabase.functions.invoke('gemini-proxy', body: {
+      'prompt': prompt,
+    });
+    final data = response.data as Map<String, dynamic>?;
+    if (data == null || data['error'] != null) {
+      throw AiGenerationException(
+          data?['error'] as String? ?? 'Gemini proxy not available');
     }
+    final generated = data['generatedJson'] as Map<String, dynamic>;
+    return _encrypt(generated);
   }
 
   Future<Map<String, dynamic>> _encrypt(Map<String, dynamic> parsed) async {

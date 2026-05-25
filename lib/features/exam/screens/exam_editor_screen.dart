@@ -9,12 +9,13 @@ import 'package:classai/core/services/ai_service.dart';
 import 'package:classai/core/services/credit_service.dart';
 import 'package:classai/core/constants/prompt_templates.dart';
 import 'package:classai/core/widgets/app_toast.dart';
+import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
 enum QuestionType { mcq, theory, both }
 
-/// Material Design exam editor with AI generation.
+/// Stitch‑designed exam editor with AI generation.
 ///
 /// Generates MCQ + theory questions. Preview as editable list of question cards.
 /// Save inserts into `exams` table.
@@ -82,7 +83,6 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   @override
   void initState() {
     super.initState();
-    debugPrint('[DBG] ExamEditorScreen.initState');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _registerWithEmergencyFlush();
       _loadCreditBalance();
@@ -404,587 +404,161 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     super.dispose();
   }
 
+  // ── Nav items ──────────────────────────────────────────────────────
+  static const _navItems = [
+    _NavDef('Home', Icons.home_rounded, false),
+    _NavDef('Lessons', Icons.menu_book_rounded, false),
+    _NavDef('Exams', Icons.quiz_rounded, true),
+    _NavDef('Vault', Icons.inventory_2_rounded, false),
+    _NavDef('Admin', Icons.admin_panel_settings_rounded, false),
+  ];
+
+  static const _bottomNavItems = [
+    _BottomDef('Home', Icons.home_rounded, false),
+    _BottomDef('Lessons', Icons.menu_book_rounded, false),
+    _BottomDef('Exams', Icons.quiz_rounded, true),
+    _BottomDef('More', Icons.more_horiz_rounded, false),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    debugPrint('[DBG] ExamEditorScreen.build()');
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
-
-    const v08 = SizedBox(height: 8);
-    const v12 = SizedBox(height: 12);
-    const v16 = SizedBox(height: 16);
-    const v20 = SizedBox(height: 20);
-    const v24 = SizedBox(height: 24);
+    final totalQuestions = _mcqs.length + _theoryQuestions.length;
 
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              cs.surface.withValues(alpha: 0.55),
-              cs.surfaceContainerLowest,
-            ],
-          ),
-        ),
-        child: Column(
-          children: [
-            // ── AppBar ──────────────────────────────────────────
-            Container(
-              decoration: BoxDecoration(
-                color: cs.surface,
-                border: Border(
-                  bottom: BorderSide(
-                    color: cs.outlineVariant.withValues(alpha: 0.5),
-                  ),
-                ),
-              ),
-              child: AppBar(
-                backgroundColor: cs.surface,
-                elevation: 0,
-                surfaceTintColor: cs.surface,
-                title: Text(
-                  'Exam Editor',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: cs.onSurface,
-                  ),
-                ),
-                actions: [
-                  // Credits pill
-                  Container(
-                    margin: const EdgeInsets.only(right: 12),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: cs.primary.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: cs.primary.withValues(alpha: 0.20),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.lock_rounded, size: 14, color: cs.primary),
-                        const SizedBox(width: 6),
-                        Text(
-                          '$_creditBalance',
-                          style: theme.textTheme.labelMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: cs.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // ── Scrollable body ──────────────────────────────────
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 20,
-                ),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // ── Form card ─────────────────────────────────
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 24),
-                        decoration: BoxDecoration(
-                          color: cs.surfaceContainerLowest,
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(
-                            color: cs.outlineVariant.withValues(alpha: 0.45),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // Subject dropdown
-                            DropdownButtonFormField<String>(
-                              initialValue: _subject,
-                              decoration: const InputDecoration(
-                                labelText: 'Subject',
-                              ),
-                              items: _subjects
-                                  .map((s) => DropdownMenuItem(
-                                      value: s, child: Text(s)))
-                                  .toList(),
-                              onChanged: (v) =>
-                                  setState(() => _subject = v ?? _subject),
-                            ),
-                            v12,
-
-                            // Class level dropdown
-                            DropdownButtonFormField<String>(
-                              initialValue: _classLevel,
-                              decoration: const InputDecoration(
-                                labelText: 'Class',
-                              ),
-                              items: _classLevels
-                                  .map((c) => DropdownMenuItem(
-                                      value: c, child: Text(c)))
-                                  .toList(),
-                              onChanged: (v) => setState(
-                                  () => _classLevel = v ?? _classLevel),
-                            ),
-                            v12,
-
-                            // Topic text field
-                            TextFormField(
-                              controller: _topicController,
-                              decoration: const InputDecoration(
-                                labelText: 'Topic',
-                              ),
-                              validator: (v) => (v == null || v.trim().isEmpty)
-                                  ? 'Topic is required'
-                                  : null,
-                            ),
-                            v12,
-
-                            // Number of Questions
-                            TextFormField(
-                              controller: _questionCountController,
-                              decoration: const InputDecoration(
-                                labelText: 'Number of Questions',
-                              ),
-                              keyboardType: TextInputType.number,
-                              validator: (v) {
-                                if (v == null || v.trim().isEmpty) {
-                                  return 'Number of questions is required';
-                                }
-                                final count = int.tryParse(v);
-                                if (count == null || count < 1) {
-                                  return 'Enter a valid number (minimum 1)';
-                                }
-                                if (count > 100) {
-                                  return 'Maximum 100 questions allowed';
-                                }
-                                return null;
-                              },
-                            ),
-                            v12,
-
-                            // Difficulty dropdown
-                            DropdownButtonFormField<String>(
-                              initialValue: _difficulty,
-                              decoration: const InputDecoration(
-                                labelText: 'Difficulty',
-                              ),
-                              items: _difficulties
-                                  .map((d) => DropdownMenuItem(
-                                      value: d, child: Text(d)))
-                                  .toList(),
-                              onChanged: (v) => setState(
-                                  () => _difficulty = v ?? _difficulty),
-                            ),
-                            v16,
-
-                            // Question type label
-                            Text(
-                              'Question Type:',
-                              style: theme.textTheme.labelLarge?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: cs.onSurface,
-                              ),
-                            ),
-                            v08,
-                            SegmentedButton<QuestionType>(
-                              segments: const [
-                                ButtonSegment(
-                                    value: QuestionType.mcq,
-                                    label: Text('MCQ')),
-                                ButtonSegment(
-                                    value: QuestionType.theory,
-                                    label: Text('Theory')),
-                                ButtonSegment(
-                                    value: QuestionType.both,
-                                    label: Text('Both')),
-                              ],
-                              selected: {_questionType},
-                              style: ButtonStyle(
-                                shape: WidgetStateProperty.all(
-                                  RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                ),
-                                side: WidgetStateProperty.all(
-                                  BorderSide(color: cs.outlineVariant),
-                                ),
-                              ),
-                              onSelectionChanged: (selection) {
-                                setState(() => _questionType = selection.first);
-                              },
-                            ),
-                            v24,
-
-                            // Generate button
-                            SizedBox(
-                              height: 56,
-                              child: FilledButton.icon(
-                                onPressed:
-                                    _isGenerating ? null : _handleGenerate,
-                                icon: _isGenerating
-                                    ? const SizedBox(
-                                        height: 22,
-                                        width: 22,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2.5,
-                                        ),
-                                      )
-                                    : const Icon(Icons.auto_awesome_rounded),
-                                label: Text(
-                                  _isGenerating ? 'Generating...' : 'Generate',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      v24,
-
-                      // ── Locked preview ─────────────────────────────────
-                      if (_hasGenerated && !_isUnlocked) ...[
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: cs.tertiary.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: cs.tertiary.withValues(alpha: 0.3),
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(Icons.lock_rounded,
-                                      color: cs.tertiary, size: 20),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Locked — Unlock for 1 credit',
-                                    style: theme.textTheme.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      color: cs.tertiary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'Generated ${_mcqs.length} MCQs and ${_theoryQuestions.length} theory questions',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: cs.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          height: 48,
-                          child: FilledButton.icon(
-                            onPressed: _handleUnlock,
-                            icon: const Icon(Icons.lock_open_rounded),
-                            label: const Text('Unlock for 1 Credit'),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                      ],
-
-                      // ── MCQ preview cards ───────────────────────────
-                      if (_hasGenerated && _mcqs.isNotEmpty && _isUnlocked) ...[
-                        _SectionHeader(
-                          icon: Icons.check_circle_rounded,
-                          label: 'MCQs (${_mcqs.length})',
-                          cs: cs,
-                          theme: theme,
-                        ),
-                        v12,
-                        ...List.generate(
-                            _mcqs.length, (i) => _buildMcqCard(i, theme, cs)),
-                        v20,
-                      ],
-
-                      // ── Theory preview cards ────────────────────────
-                      if (_hasGenerated &&
-                          _theoryQuestions.isNotEmpty &&
-                          _isUnlocked) ...[
-                        _SectionHeader(
-                          icon: Icons.article_rounded,
-                          label:
-                              'Theory Questions (${_theoryQuestions.length})',
-                          cs: cs,
-                          theme: theme,
-                        ),
-                        v12,
-                        ...List.generate(_theoryQuestions.length,
-                            (i) => _buildTheoryCard(i, theme, cs)),
-                        v20,
-                      ],
-
-                      // ── Save / Discard ──────────────────────────────
-                      (_hasGenerated)
-                          ? Row(
-                              children: [
-                                Expanded(
-                                  child: FilledButton.icon(
-                                    onPressed: () => _saveExam(),
-                                    icon: const Icon(Icons.save_rounded),
-                                    label: const Text(
-                                      'Save',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                    style: FilledButton.styleFrom(
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(28),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 16),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: OutlinedButton.icon(
-                                    onPressed: _discard,
-                                    icon: const Icon(
-                                        Icons.delete_outline_rounded),
-                                    label: const Text(
-                                      'Discard',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                    style: OutlinedButton.styleFrom(
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(28),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 16),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            )
-                          : const SizedBox(),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMcqCard(int index, ThemeData theme, ColorScheme cs) {
-    final mcq = _mcqs[index];
-    final question = mcq['question'] as String? ?? '';
-    final options = mcq['options'] as Map<String, dynamic>? ?? {};
-    final correct = mcq['correct'] as String? ?? 'A';
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.45),
-        ),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      backgroundColor: cs.surface,
+      body: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: cs.primary.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Center(
-                  child: Text(
-                    'Q${index + 1}',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: cs.primary,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Question',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: cs.onSurface,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            initialValue: question,
-            maxLines: 2,
-            decoration: const InputDecoration(isDense: true),
-            onChanged: (v) => _updateMcq(index, 'question', v),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Answer Options:',
-            style: theme.textTheme.labelMedium?.copyWith(
-              fontWeight: FontWeight.w500,
-              color: cs.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 8),
-          RadioGroup<String>(
-            groupValue: correct,
-            onChanged: (v) => _updateMcq(index, 'correct', v ?? 'A'),
+          // ── Navigation Drawer (tablet+) ──────────────────────────
+          _NavDrawer(cs: cs, theme: theme),
+
+          // ── Main Content ─────────────────────────────────────────
+          Expanded(
             child: Column(
-              children: ['A', 'B', 'C', 'D'].map((key) {
-                final optVal = options[key] as String? ?? '';
-                final isCorrect = correct == key;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Radio<String>(value: key),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: TextFormField(
-                          initialValue: optVal,
-                          decoration: InputDecoration(
-                            labelText: 'Option $key',
-                            isDense: true,
-                            prefixIcon: isCorrect
-                                ? Icon(Icons.check_circle_rounded,
-                                    size: 18, color: cs.primary)
-                                : null,
-                          ),
-                          onChanged: (v) => _updateMcqOption(index, key, v),
+              children: [
+                // ── Top AppBar ──────────────────────────────────────
+                _TopBar(
+                  cs: cs,
+                  theme: theme,
+                  creditBalance: _creditBalance,
+                ),
+
+                // ── Editor Workspace ────────────────────────────────
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isWide = constraints.maxWidth >= 1024;
+                      return SingleChildScrollView(
+                        padding: EdgeInsets.all(
+                          isWide
+                              ? AppTheme.spacingMarginTablet
+                              : AppTheme.spacingMarginMobile,
                         ),
-                      ),
-                    ],
+                        child: Form(
+                          key: _formKey,
+                          child: isWide
+                              ? Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    SizedBox(
+                                      width: 380,
+                                      child: _ConfigPanel(
+                                        cs: cs,
+                                        theme: theme,
+                                        subject: _subject,
+                                        classLevel: _classLevel,
+                                        topicController: _topicController,
+                                        questionCountController:
+                                            _questionCountController,
+                                        difficulty: _difficulty,
+                                        isGenerating: _isGenerating,
+                                        creditBalance: _creditBalance,
+                                        subjects: _subjects,
+                                        classLevels: _classLevels,
+                                        difficulties: _difficulties,
+                                        onSubjectChanged: (v) => setState(
+                                            () => _subject = v),
+                                        onClassChanged: (v) => setState(
+                                            () => _classLevel = v),
+                                        onDifficultyChanged: (v) => setState(
+                                            () => _difficulty = v),
+                                        onGenerate: _handleGenerate,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 24),
+                                    Expanded(
+                                      child: _PreviewPanel(
+                                        cs: cs,
+                                        theme: theme,
+                                        hasGenerated: _hasGenerated,
+                                        isUnlocked: _isUnlocked,
+                                        mcqs: _mcqs,
+                                        theoryQuestions: _theoryQuestions,
+                                        totalQuestions: totalQuestions,
+                                        onUnlock: _handleUnlock,
+                                        onSave: () => _saveExam(),
+                                        onDiscard: _discard,
+                                        onUpdateMcq: _updateMcq,
+                                        onUpdateMcqOption: _updateMcqOption,
+                                        onUpdateTheory: _updateTheory,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Column(
+                                  children: [
+                                    _ConfigPanel(
+                                      cs: cs,
+                                      theme: theme,
+                                      subject: _subject,
+                                      classLevel: _classLevel,
+                                      topicController: _topicController,
+                                      questionCountController:
+                                          _questionCountController,
+                                      difficulty: _difficulty,
+                                      isGenerating: _isGenerating,
+                                      creditBalance: _creditBalance,
+                                      subjects: _subjects,
+                                      classLevels: _classLevels,
+                                      difficulties: _difficulties,
+                                      onSubjectChanged: (v) => setState(
+                                          () => _subject = v),
+                                      onClassChanged: (v) => setState(
+                                          () => _classLevel = v),
+                                      onDifficultyChanged: (v) => setState(
+                                          () => _difficulty = v),
+                                      onGenerate: _handleGenerate,
+                                    ),
+                                    const SizedBox(height: 24),
+                                    _PreviewPanel(
+                                      cs: cs,
+                                      theme: theme,
+                                      hasGenerated: _hasGenerated,
+                                      isUnlocked: _isUnlocked,
+                                      mcqs: _mcqs,
+                                      theoryQuestions: _theoryQuestions,
+                                      totalQuestions: totalQuestions,
+                                      onUnlock: _handleUnlock,
+                                      onSave: () => _saveExam(),
+                                      onDiscard: _discard,
+                                      onUpdateMcq: _updateMcq,
+                                      onUpdateMcqOption: _updateMcqOption,
+                                      onUpdateTheory: _updateTheory,
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      );
+                    },
                   ),
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+                ),
 
-  Widget _buildTheoryCard(int index, ThemeData theme, ColorScheme cs) {
-    final theory = _theoryQuestions[index];
-    final question = theory['question'] as String? ?? '';
-    final modelAnswer = theory['modelAnswer'] as String? ?? '';
-    final cognitiveLevel = theory['cognitiveLevel'] as String? ?? '';
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.45),
-        ),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: cs.tertiary.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Center(
-                  child: Text(
-                    'T${index + 1}',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: cs.tertiary,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Theory Q${index + 1}',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: cs.onSurface,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            initialValue: question,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'Question',
-              isDense: false,
+                // ── Bottom Navigation (mobile) ──────────────────────
+                _BottomBar(cs: cs, theme: theme),
+              ],
             ),
-            onChanged: (v) => _updateTheory(index, 'question', v),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            initialValue: modelAnswer,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'Model Answer',
-              isDense: false,
-            ),
-            onChanged: (v) => _updateTheory(index, 'modelAnswer', v),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            initialValue: cognitiveLevel,
-            decoration: const InputDecoration(
-              labelText: 'Cognitive Level',
-              isDense: false,
-            ),
-            onChanged: (v) => _updateTheory(index, 'cognitiveLevel', v),
           ),
         ],
       ),
@@ -992,37 +566,1199 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
-    required this.icon,
+// ═══════════════════════════════════════════════════════════════════════
+// Data classes
+// ═══════════════════════════════════════════════════════════════════════
+class _NavDef {
+  final String label;
+  final IconData icon;
+  final bool isActive;
+  const _NavDef(this.label, this.icon, this.isActive);
+}
+
+class _BottomDef {
+  final String label;
+  final IconData icon;
+  final bool isActive;
+  const _BottomDef(this.label, this.icon, this.isActive);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Navigation Drawer
+// ═══════════════════════════════════════════════════════════════════════
+class _NavDrawer extends StatelessWidget {
+  final ColorScheme cs;
+  final ThemeData theme;
+  const _NavDrawer({required this.cs, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 768) return const SizedBox.shrink();
+        return Container(
+          width: 288,
+          color: cs.surfaceContainerLow,
+          child: Column(
+            children: [
+              const SizedBox(height: 32),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(
+                          AppTheme.radiusFull,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.person_rounded,
+                        size: 24,
+                        color: Colors.white54,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'ClassAI',
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            color: cs.primary,
+                          ),
+                        ),
+                        Text(
+                          'Nigerian Academic Partner',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+              Expanded(
+                child: Column(
+                  children: _ExamEditorScreenState._navItems.map((item) {
+                    return Container(
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: item.isActive
+                            ? cs.secondaryFixed
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(
+                          AppTheme.radiusFull,
+                        ),
+                      ),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                item.icon,
+                                size: 22,
+                                color: item.isActive
+                                    ? cs.onSecondaryFixed
+                                    : cs.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                item.label,
+                                style: theme.textTheme.labelLarge?.copyWith(
+                                  fontWeight: item.isActive
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  color: item.isActive
+                                      ? cs.onSecondaryFixed
+                                      : cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Top Bar
+// ═══════════════════════════════════════════════════════════════════════
+class _TopBar extends StatelessWidget {
+  final ColorScheme cs;
+  final ThemeData theme;
+  final int creditBalance;
+  const _TopBar({
+    required this.cs,
+    required this.theme,
+    required this.creditBalance,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.spacingMarginMobile,
+        vertical: 8,
+      ),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: cs.surfaceContainer,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Mobile avatar (hidden on desktop)
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth >= 768) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                  ),
+                  child: const Icon(
+                    Icons.person_rounded,
+                    size: 22,
+                    color: Colors.white54,
+                  ),
+                ),
+              );
+            },
+          ),
+          Text(
+            'Exam Editor',
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: cs.primary,
+            ),
+          ),
+          const Spacer(),
+          // Credit chip
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.stars_rounded, size: 20, color: cs.primary),
+                const SizedBox(width: 6),
+                Text(
+                  '₦$creditBalance',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: cs.primary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Configuration Panel (left column)
+// ═══════════════════════════════════════════════════════════════════════
+class _ConfigPanel extends StatelessWidget {
+  final ColorScheme cs;
+  final ThemeData theme;
+  final String subject;
+  final String classLevel;
+  final TextEditingController topicController;
+  final TextEditingController questionCountController;
+  final String difficulty;
+  final bool isGenerating;
+  final int creditBalance;
+  final List<String> subjects;
+  final List<String> classLevels;
+  final List<String> difficulties;
+  final ValueChanged<String> onSubjectChanged;
+  final ValueChanged<String> onClassChanged;
+  final ValueChanged<String> onDifficultyChanged;
+  final VoidCallback onGenerate;
+
+  const _ConfigPanel({
+    required this.cs,
+    required this.theme,
+    required this.subject,
+    required this.classLevel,
+    required this.topicController,
+    required this.questionCountController,
+    required this.difficulty,
+    required this.isGenerating,
+    required this.creditBalance,
+    required this.subjects,
+    required this.classLevels,
+    required this.difficulties,
+    required this.onSubjectChanged,
+    required this.onClassChanged,
+    required this.onDifficultyChanged,
+    required this.onGenerate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // ── Exam Configuration Card ────────────────────────────────
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF5F7F9),
+            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+            border: Border.all(
+              color: cs.outlineVariant.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Exam Configuration',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: cs.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Divider(height: 1),
+              ),
+              const SizedBox(height: 8),
+              // Subject / Topic
+              _FieldLabel(theme: theme, cs: cs, label: 'Subject / Topic'),
+              const SizedBox(height: 4),
+              SizedBox(
+                height: AppTheme.touchTarget,
+                child: TextFormField(
+                  controller: topicController,
+                  decoration: InputDecoration(
+                    hintText: 'e.g. Advanced Mathematics: Calculus',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                      borderSide: BorderSide(color: cs.outlineVariant),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                      borderSide: BorderSide(color: cs.outlineVariant),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                    filled: true,
+                    fillColor: cs.surface,
+                  ),
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'Required' : null,
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Grade Level + Duration row
+              Row(
+                children: [
+                  Expanded(
+                    child: _SimpleDropdown(
+                      cs: cs,
+                      theme: theme,
+                      label: 'Grade Level',
+                      value: classLevel,
+                      items: classLevels,
+                      onChanged: onClassChanged,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _FieldLabel(
+                      theme: theme,
+                      cs: cs,
+                      label: 'Duration (Mins)',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              // Subject dropdown
+              _SimpleDropdown(
+                cs: cs,
+                theme: theme,
+                label: 'Subject',
+                value: subject,
+                items: subjects,
+                onChanged: onSubjectChanged,
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 24),
+
+        // ── Generation Engine Card ─────────────────────────────────
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: cs.primaryContainer,
+            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.auto_awesome_rounded,
+                      color: cs.onPrimaryContainer, size: 22),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Generation Engine',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: cs.onPrimaryContainer,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              // MCQ count
+              _FieldLabel(
+                theme: theme,
+                cs: cs,
+                label: 'Multiple Choice (MCQ)',
+                color: Colors.white70,
+              ),
+              const SizedBox(height: 4),
+              SizedBox(
+                height: AppTheme.touchTarget,
+                child: TextFormField(
+                  controller: questionCountController,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                      borderSide: BorderSide.none,
+                    ),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.15),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 16),
+                  ),
+                  keyboardType: TextInputType.number,
+                  style: TextStyle(color: cs.onPrimaryContainer),
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) {
+                      return 'Required';
+                    }
+                    final count = int.tryParse(v);
+                    if (count == null || count < 1) {
+                      return 'Min 1';
+                    }
+                    if (count > 100) {
+                      return 'Max 100';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Generate button
+              SizedBox(
+                width: double.infinity,
+                height: AppTheme.touchTarget,
+                child: FilledButton.icon(
+                  onPressed: isGenerating ? null : onGenerate,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: cs.secondary,
+                    foregroundColor: cs.onSecondary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                    ),
+                  ),
+                  icon: isGenerating
+                      ? const SizedBox(
+                          height: 22,
+                          width: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.bolt_rounded),
+                  label: Text(
+                    isGenerating
+                        ? 'Generating...'
+                        : 'Generate Exam (-50 Credits)',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Preview Panel (right column)
+// ═══════════════════════════════════════════════════════════════════════
+class _PreviewPanel extends StatelessWidget {
+  final ColorScheme cs;
+  final ThemeData theme;
+  final bool hasGenerated;
+  final bool isUnlocked;
+  final List<Map<String, dynamic>> mcqs;
+  final List<Map<String, dynamic>> theoryQuestions;
+  final int totalQuestions;
+  final VoidCallback onUnlock;
+  final VoidCallback onSave;
+  final VoidCallback onDiscard;
+  final void Function(int, String, String) onUpdateMcq;
+  final void Function(int, String, String) onUpdateMcqOption;
+  final void Function(int, String, String) onUpdateTheory;
+
+  const _PreviewPanel({
+    required this.cs,
+    required this.theme,
+    required this.hasGenerated,
+    required this.isUnlocked,
+    required this.mcqs,
+    required this.theoryQuestions,
+    required this.totalQuestions,
+    required this.onUnlock,
+    required this.onSave,
+    required this.onDiscard,
+    required this.onUpdateMcq,
+    required this.onUpdateMcqOption,
+    required this.onUpdateTheory,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!hasGenerated) {
+      return Container(
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+          border: Border.all(
+            color: cs.outlineVariant.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Column(
+          children: [
+            _previewHeader(null),
+            SizedBox(
+              height: 300,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.quiz_outlined,
+                        size: 48, color: cs.outlineVariant),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Configure and generate\nyour exam to see preview',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Preview header
+          _previewHeader(totalQuestions),
+
+          // Locked overlay
+          if (hasGenerated && !isUnlocked) ...[
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: cs.tertiary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                  border: Border.all(
+                    color: cs.tertiary.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.lock_rounded,
+                            color: cs.tertiary, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Locked — Unlock for 1 credit',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: cs.tertiary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Generated ${mcqs.length} MCQs and ${theoryQuestions.length} theory questions',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      height: AppTheme.touchTarget,
+                      child: FilledButton.icon(
+                        onPressed: onUnlock,
+                        style: FilledButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusXl),
+                          ),
+                        ),
+                        icon: const Icon(Icons.lock_open_rounded),
+                        label: const Text('Unlock for 1 Credit'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+
+          // MCQ Section
+          if (hasGenerated && mcqs.isNotEmpty && isUnlocked) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: _SectionHeader(
+                label: 'Section A',
+                subtitle: 'Multiple Choice',
+                cs: cs,
+                theme: theme,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: Column(
+                children: List.generate(mcqs.length,
+                    (i) => _buildMcqCard(i, theme, cs)),
+                ),
+            ),
+          ],
+
+          // Theory Section
+          if (hasGenerated && theoryQuestions.isNotEmpty && isUnlocked) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+              child: _SectionHeader(
+                label: 'Section B',
+                subtitle: 'Theory / Essay',
+                cs: cs,
+                theme: theme,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: Column(
+                children: List.generate(
+                    theoryQuestions.length, (i) => _buildTheoryCard(i, theme, cs)),
+              ),
+            ),
+          ],
+
+          // Action footer
+          if (hasGenerated)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                    color: cs.outlineVariant.withValues(alpha: 0.2),
+                  ),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  SizedBox(
+                    height: AppTheme.touchTarget,
+                    child: OutlinedButton(
+                      onPressed: onDiscard,
+                      style: OutlinedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusXl),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                      ),
+                      child: const Text('Discard'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    height: AppTheme.touchTarget,
+                    child: FilledButton.icon(
+                      onPressed: onSave,
+                      style: FilledButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusXl),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                      ),
+                      icon: const Icon(Icons.save_rounded),
+                      label: const Text('Save to Vault'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _previewHeader(int? totalQuestions) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: cs.outlineVariant.withValues(alpha: 0.2),
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Text(
+            'Preview Draft',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: cs.onSurface,
+            ),
+          ),
+          if (totalQuestions != null) ...[
+            const Spacer(),
+            Text(
+              '$totalQuestions Questions Total',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMcqCard(int index, ThemeData theme, ColorScheme cs) {
+    final mcq = mcqs[index];
+    final question = mcq['question'] as String? ?? '';
+    final options = mcq['options'] as Map<String, dynamic>? ?? {};
+    final correct = mcq['correct'] as String? ?? 'A';
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.4),
+        ),
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Question number
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer,
+                  borderRadius: BorderRadius.circular(
+                    AppTheme.radiusFull,
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    '${index + 1}',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: cs.onPrimaryContainer,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextFormField(
+                  initialValue: question,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderRadius:
+                          BorderRadius.circular(AppTheme.radiusLg),
+                      borderSide: BorderSide(color: cs.outlineVariant),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    isDense: true,
+                  ),
+                  onChanged: (v) => onUpdateMcq(index, 'question', v),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Options grid
+          ...['A', 'B', 'C', 'D'].map((key) {
+            final optVal = options[key] as String? ?? '';
+            final isCorrect = correct == key;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  InkWell(
+                    onTap: () => onUpdateMcq(index, 'correct', key),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isCorrect
+                            ? cs.secondaryContainer
+                            : Colors.transparent,
+                        border: Border.all(
+                          color: isCorrect
+                              ? cs.secondary
+                              : cs.outlineVariant,
+                          width: 2,
+                        ),
+                      ),
+                      child: isCorrect
+                          ? Icon(Icons.check_rounded,
+                              size: 14, color: cs.onSecondaryContainer)
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$key.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: TextFormField(
+                      initialValue: optVal,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        border: OutlineInputBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusLg),
+                          borderSide: BorderSide(color: cs.outlineVariant),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 6),
+                      ),
+                      onChanged: (v) =>
+                          onUpdateMcqOption(index, key, v),
+                    ),
+                  ),
+                  if (isCorrect)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: Text(
+                        'CORRECT',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: cs.secondary,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTheoryCard(int index, ThemeData theme, ColorScheme cs) {
+    final theory = theoryQuestions[index];
+    final question = theory['question'] as String? ?? '';
+    final modelAnswer = theory['modelAnswer'] as String? ?? '';
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.4),
+        ),
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer,
+                  borderRadius: BorderRadius.circular(
+                    AppTheme.radiusFull,
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    '${index + 1}',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: cs.onPrimaryContainer,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextFormField(
+                  initialValue: question,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    labelText: 'Question',
+                    labelStyle: theme.textTheme.labelMedium?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius:
+                          BorderRadius.circular(AppTheme.radiusLg),
+                      borderSide: BorderSide(color: cs.outlineVariant),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                  ),
+                  onChanged: (v) => onUpdateTheory(index, 'question', v),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            initialValue: modelAnswer,
+            maxLines: 4,
+            decoration: InputDecoration(
+              labelText: 'Marking Guide / Expected Elements',
+              labelStyle: theme.textTheme.labelMedium?.copyWith(
+                color: cs.primary,
+                fontWeight: FontWeight.w600,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                borderSide: BorderSide(
+                  color: cs.outlineVariant.withValues(alpha: 0.5),
+                  style: BorderStyle.solid,
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                borderSide: BorderSide(
+                  color: cs.outlineVariant.withValues(alpha: 0.5),
+                  style: BorderStyle.solid,
+                ),
+              ),
+              contentPadding: const EdgeInsets.all(12),
+              fillColor: const Color(0xFFF5F7F9),
+              filled: true,
+            ),
+            onChanged: (v) => onUpdateTheory(index, 'modelAnswer', v),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Bottom Navigation Bar (mobile)
+// ═══════════════════════════════════════════════════════════════════════
+class _BottomBar extends StatelessWidget {
+  final ColorScheme cs;
+  final ThemeData theme;
+  const _BottomBar({required this.cs, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth >= 768) return const SizedBox.shrink();
+        return Container(
+          padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerLow,
+            border: Border(
+              top: BorderSide(
+                color: cs.outlineVariant.withValues(alpha: 0.2),
+              ),
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(AppTheme.radiusFull),
+            ),
+            child: BottomNavigationBar(
+              backgroundColor: cs.surfaceContainerLow,
+              elevation: 0,
+              type: BottomNavigationBarType.fixed,
+              selectedFontSize: 0,
+              unselectedFontSize: 0,
+              currentIndex: 2,
+              onTap: (_) {},
+              items: _ExamEditorScreenState._bottomNavItems.map((item) {
+                return BottomNavigationBarItem(
+                  icon: item.isActive
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: cs.secondaryContainer,
+                            borderRadius: BorderRadius.circular(
+                              AppTheme.radiusFull,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                item.icon,
+                                size: 22,
+                                color: cs.onSecondaryContainer,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                item.label,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: cs.onSecondaryContainer,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : Icon(
+                          item.icon,
+                          size: 22,
+                          color: cs.onSurfaceVariant,
+                        ),
+                  label: '',
+                );
+              }).toList(),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Reusable Widgets
+// ═══════════════════════════════════════════════════════════════════════
+
+class _FieldLabel extends StatelessWidget {
+  final ThemeData theme;
+  final ColorScheme cs;
+  final String label;
+  final Color? color;
+  const _FieldLabel({
+    required this.theme,
+    required this.cs,
     required this.label,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: theme.textTheme.labelMedium?.copyWith(
+        color: color ?? cs.onSurfaceVariant,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+  }
+}
+
+class _SimpleDropdown extends StatelessWidget {
+  final ColorScheme cs;
+  final ThemeData theme;
+  final String label;
+  final String value;
+  final List<String> items;
+  final ValueChanged<String> onChanged;
+
+  const _SimpleDropdown({
+    required this.cs,
+    required this.theme,
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _FieldLabel(theme: theme, cs: cs, label: label),
+        const SizedBox(height: 4),
+        Container(
+          height: AppTheme.touchTarget,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+            border: Border.all(color: cs.outlineVariant),
+            color: cs.surface,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: value,
+              isExpanded: true,
+              icon: const Icon(Icons.arrow_drop_down_rounded),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: cs.onSurface,
+              ),
+              items: items.map((item) {
+                return DropdownMenuItem(
+                  value: item,
+                  child: Text(
+                    item,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: cs.onSurface,
+                    ),
+                  ),
+                );
+              }).toList(),
+              onChanged: (v) {
+                if (v != null) onChanged(v);
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String label;
+  final String subtitle;
+  final ColorScheme cs;
+  final ThemeData theme;
+  const _SectionHeader({
+    required this.label,
+    required this.subtitle,
     required this.cs,
     required this.theme,
   });
-
-  final IconData icon;
-  final String label;
-  final ColorScheme cs;
-  final ThemeData theme;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
         Container(
-          width: 3,
-          height: 20,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           decoration: BoxDecoration(
-            color: cs.primary,
-            borderRadius: BorderRadius.circular(2),
+            color: cs.onSurface,
+            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          ),
+          child: Text(
+            label,
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: cs.surface,
+              letterSpacing: 1.5,
+            ),
           ),
         ),
-        const SizedBox(width: 10),
-        Icon(icon, size: 20, color: cs.primary),
-        const SizedBox(width: 6),
+        const SizedBox(width: 12),
         Text(
-          label,
-          style: theme.textTheme.titleSmall?.copyWith(
+          subtitle,
+          style: theme.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.w700,
             color: cs.onSurface,
           ),

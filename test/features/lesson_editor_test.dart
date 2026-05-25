@@ -11,6 +11,8 @@ void main() {
   setUp(() async {
     db = AppDatabase.forTesting();
     await db.initialize();
+    // Set initial credits so _handleGenerate() passes the credit check
+    await db.securityConfigDao.updateConfig(offlineCredits: 10);
   });
 
   tearDown(() async {
@@ -220,8 +222,8 @@ void main() {
       await tester.tap(find.text('Generate'));
       await tester.pumpAndSettle();
 
-      // Wait for the Lesson generated successfully! SnackBar to auto-dismiss
-      await tester.pump(const Duration(seconds: 5));
+      // Dismiss the "Lesson generated successfully!" toast dialog
+      await tester.tap(find.text('Close'));
       await tester.pumpAndSettle();
 
       // Scroll Save button into view (it's below preview cards)
@@ -283,8 +285,8 @@ void main() {
       // Verify preview cards visible
       expect(find.text('Learning Objectives'), findsOneWidget);
 
-      // Wait for the "Lesson generated successfully!" SnackBar to auto-dismiss
-      await tester.pump(const Duration(seconds: 5));
+      // Dismiss the "Lesson generated successfully!" toast dialog
+      await tester.tap(find.text('Close'));
       await tester.pumpAndSettle();
 
       // Scroll Discard button into view (it's below preview cards)

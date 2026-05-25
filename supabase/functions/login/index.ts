@@ -55,6 +55,15 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Invalid credentials" }), { status: 401 });
     }
 
+    // 3. Check for concurrent sessions (no device sharing)
+    // If device_id is provided and different from current_device_id, reject login
+    if (device_id && teacher.current_device_id && teacher.current_device_id !== device_id) {
+      return new Response(
+        JSON.stringify({ error: "Session active on another device. Please logout from the other device first." }),
+        { status: 403 }
+      );
+    }
+
     // 3. If force_password_reset, issue short-lived JWT (5 min) with flag
     const isForceReset = teacher.force_password_reset === true;
     const tokenExpiry = isForceReset ? getNumericDate(60 * 5) : getNumericDate(60 * 60 * 24); // 5 min vs 24 hours
@@ -102,14 +111,9 @@ serve(async (req) => {
       );
     }
 
-    // 5. Register device
+    // 5. Register device - update current_device_id on teachers table
     if (device_id) {
-      await supabase.from("teacher_devices").upsert({
-        teacher_id: teacher.id,
-        device_id,
-        last_active: new Date(),
-        is_active: true,
-      });
+      await supabase.from("teachers").update({ current_device_id: device_id }).eq("id", teacher.id);
     }
 
     // 6. Return auth result
@@ -123,6 +127,7 @@ serve(async (req) => {
           name: teacher.teacher_name,
           role: teacher.role,
           school_id: teacher.school_id,
+          email_verified: teacher.email_verified ?? false,
         },
         school: {
           id: school.id,
@@ -134,6 +139,7 @@ serve(async (req) => {
         password_hash_version: teacher.password_hash_version,
         offline_credits: 3, // placeholder, should come from a credit table later
         last_credit_refill_server_time: teacher.last_credit_refill_date?.toISOString() ?? null,
+        email_verified: teacher.email_verified ?? false,
       }),
       { headers: { "Content-Type": "application/json" } }
     );

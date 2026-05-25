@@ -180,6 +180,10 @@ void main() {
 
   group('loginOnline', () {
     setUp(() async {
+      // Override connectivity to online so loginOnline() can proceed
+      // past the PlatformHelper.isOnline() check.
+      _mockConnectivityChannel(isOnline: true);
+
       // Insert a school record so teacher foreign key references work
       await db.into(db.schools).insert(
             SchoolsCompanion.insert(
@@ -240,6 +244,7 @@ void main() {
         passwordHashVersion: 1,
         offlineCredits: 50,
         lastCreditRefillServerTime: now,
+        emailVerified: true,  // Required to reach authenticated state
       );
 
       when(() => mockAuth.login(any(), any(), any()))
@@ -341,7 +346,8 @@ void main() {
 
       final state = container.read(authProvider);
       expect(state.state, equals(AuthState.onlineLoginRequired));
-      expect(state.errorMessage, contains('Network error'));
+      expect(state.errorMessage,
+          contains('No internet connection. Please check your connection and try again.'));
     });
   });
 

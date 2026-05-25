@@ -115,6 +115,7 @@ serve(async (req) => {
         password_hash_version: 1,
         force_password_reset: false,
         is_active: true,
+        email_verified: false,
       })
       .select()
       .single();
@@ -150,6 +151,7 @@ serve(async (req) => {
           name: teacher.teacher_name,
           role: teacher.role,
           school_id: teacher.school_id,
+          email_verified: false,
         },
         school: {
           id: school.id,
@@ -161,6 +163,7 @@ serve(async (req) => {
         password_hash_version: teacher.password_hash_version,
         offline_credits: 3,
         last_credit_refill_server_time: new Date().toISOString(),
+        email_verified: false,
       }),
       { headers: { "Content-Type": "application/json" } }
     );

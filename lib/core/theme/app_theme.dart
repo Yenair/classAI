@@ -3,18 +3,56 @@ import 'package:google_fonts/google_fonts.dart';
 
 /// Centralised theme based on the Google Stitch design system tokens.
 ///
-/// ## Typography (Stitch `index.css`)
-/// | Role         | Font          |
-/// |-------------|---------------|
-/// | Headlines   | Open Sans     |
-/// | Body / Labels| Albert Sans  |
-/// | Button specs | Inter        |
+/// ## Design Tokens (from Stitch `tailwind.config`)
+/// | Token        | Value        |
+/// |-------------|-------------|
+/// | BorderRadius: DEFAULT | 0.125rem (2px) |
+/// | BorderRadius: lg      | 0.25rem (4px)  | buttons, inputs, tags
+/// | BorderRadius: xl      | 0.5rem (8px)   | cards, containers
+/// | BorderRadius: full    | 0.75rem (12px) | nav items, decorative
+/// | Spacing base          | 8px            |
+/// | Touch target          | 48px           |
+/// | Margin mobile         | 16px           |
+/// | Margin tablet         | 24px           |
 ///
-/// ## WCAG Contrast & Chinese-Icons Notes
-/// - error (#BA1A1A) on white → 6.5 : 1 ✅ AA (exact Stitch token)
-/// - onError (#FFFFFF) on error → 6.5 : 1 ✅ AA
-/// - iconTheme has **no** fontFamily → Material icons render correctly
+/// ## Typography (from Stitch HTML / DESIGN.md)
+/// All text roles in the rendered HTML map to **Inter** via the Tailwind
+/// config's `fontFamily` overrides.  Open Sans (headlines) and Albert Sans
+/// (body) are declared in the DESIGN.md but the HTML classes that are actually
+/// used (`font-headline-lg`, `font-body-md`, etc.) all resolve to Inter.
+///
+/// ## WCAG Contrast
+/// | Pair                | Ratio |
+/// |---------------------|-------|
+/// | primary (#115B9B) on white | 5.5:1 ✅ AA |
+/// | error (#BA1A1A) on white   | 6.5:1 ✅ AA |
 class AppTheme {
+  // ═══════════════════════════════════════════════════════════════════
+  //  STITCH BORDER RADIUS TOKENS
+  // ═══════════════════════════════════════════════════════════════════
+
+  /// 0.25rem → buttons, inputs, tags, chips (Stitch `rounded-lg`)
+  static const double radiusLg = 4.0;
+
+  /// 0.5rem → cards, containers, dialogs (Stitch `rounded-xl`)
+  static const double radiusXl = 8.0;
+
+  /// 0.75rem → nav items, decorative rounding (Stitch `rounded-full`)
+  static const double radiusFull = 12.0;
+
+  /// 0.125rem → fine details (Stitch default)
+  static const double radiusDefault = 2.0;
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  STITCH SPACING TOKENS
+  // ═══════════════════════════════════════════════════════════════════
+
+  static const double spacingBase = 8.0;
+  static const double spacingGutter = 16.0;
+  static const double spacingMarginMobile = 16.0;
+  static const double spacingMarginTablet = 24.0;
+  static const double touchTarget = 48.0;
+
   // ═══════════════════════════════════════════════════════════════════
   //  LIGHT THEME – Stitch tokens
   // ═══════════════════════════════════════════════════════════════════
@@ -34,7 +72,6 @@ class AppTheme {
   static const Color tertiaryContainer = Color(0xFF5068D9);
   static const Color onTertiaryContainer = Color(0xFFF8F6FF);
 
-  // Exact Stitch token (#BA1A1A). 6.5 : 1 on white — AA ✓
   static const Color error = Color(0xFFBA1A1A);
   static const Color onError = Color(0xFFFFFFFF);
   static const Color errorContainer = Color(0xFFFFDAD6);
@@ -48,6 +85,9 @@ class AppTheme {
   static const Color surfaceContainer = Color(0xFFEDEDF3);
   static const Color surfaceContainerHigh = Color(0xFFE7E8EE);
   static const Color surfaceContainerHighest = Color(0xFFE1E2E8);
+  static const Color surfaceContainerLowest = Color(0xFFFFFFFF);
+  static const Color surfaceBright = Color(0xFFF8F9FF);
+  static const Color surfaceDim = Color(0xFFD9DAE0);
 
   static const Color background = Color(0xFFF8F9FF);
   static const Color onBackground = Color(0xFF191C20);
@@ -58,6 +98,11 @@ class AppTheme {
   static const Color inverseSurface = Color(0xFF2E3035);
   static const Color inverseOnSurface = Color(0xEFF0F6);
   static const Color inversePrimary = Color(0xFFA1C9FF);
+
+  // Secondary-fixed tokens used for active nav items
+  static const Color secondaryFixed = Color(0xFFE0E0FF);
+  static const Color onSecondaryFixed = Color(0xFF00026C);
+  static const Color secondaryFixedDim = Color(0xFFBEC2FF);
 
   // ═══════════════════════════════════════════════════════════════════
   //  DARK THEME – derived from Stitch
@@ -91,6 +136,9 @@ class AppTheme {
   static const Color darkSurfaceContainer = Color(0xFF202127);
   static const Color darkSurfaceContainerHigh = Color(0xFF2B2C32);
   static const Color darkSurfaceContainerHighest = Color(0xFF36373D);
+  static const Color darkSurfaceContainerLowest = Color(0xFF0E0E14);
+  static const Color darkSurfaceBright = Color(0xFF3A3B42);
+  static const Color darkSurfaceDim = Color(0xFF0B0B10);
 
   static const Color darkBackground = Color(0xFF131318);
   static const Color darkOnBackground = Color(0xFFE1E2E8);
@@ -103,54 +151,104 @@ class AppTheme {
   static const Color darkInversePrimary = Color(0xFF115B9B);
 
   // ═══════════════════════════════════════════════════════════════════
-  //  PRIVATE HELPERS
+  //  TYPOGRAPHY HELPERS
   // ═══════════════════════════════════════════════════════════════════
 
-  /// Builds the Stitch `TextTheme` by assigning each Material-3 text key
-  /// to the correct Google Fonts source:
+  /// Builds the Stitch `TextTheme` mapping each Material-3 key to Inter
+  /// (the font family used by all text roles in the rendered HTML).
   ///
-  /// - Open Sans:   displayLarge/Medium/Small, headlineLarge/Medium/Small
-  ///                titleLarge
-  /// - Albert Sans: bodyLarge/Medium/Small, labelLarge/Medium/Small
-  ///                titleMedium, titleSmall
-  ///
-  /// Any keys missing from the source theme fall back to [fallback].
-  static TextTheme _stitchTextTheme({
-    required TextTheme openSans,
-    required TextTheme albertSans,
-    TextStyle? Function(TextStyle?)? fallback,
-  }) {
+  /// Sizes and weights follow the DESIGN.md spec:
+  /// | Role              | Size  | Weight |
+  /// |-------------------|-------|--------|
+  /// | displayLarge      | 48px  | 700    |
+  /// | headlineLarge     | 32px  | 600    |
+  /// | headlineMedium    | 28px  | 600    | (headline-lg-mobile)
+  /// | titleLarge        | 22px  | 500    |
+  /// | bodyLarge         | 18px  | 400    |
+  /// | bodyMedium        | 16px  | 400    |
+  /// | labelLarge        | 14px  | 500    |
+  /// | labelMedium       | 12px  | 500    |
+  static TextTheme _stitchTextTheme(TextTheme inter) {
     return TextTheme(
-      // ── Open Sans ────────────────────────────────────────────────
-      displayLarge:
-          fallback?.call(openSans.displayLarge) ?? openSans.displayLarge,
-      displayMedium:
-          fallback?.call(openSans.displayMedium) ?? openSans.displayMedium,
-      displaySmall:
-          fallback?.call(openSans.displaySmall) ?? openSans.displaySmall,
-      headlineLarge:
-          fallback?.call(openSans.headlineLarge) ?? openSans.headlineLarge,
-      headlineMedium:
-          fallback?.call(openSans.headlineMedium) ?? openSans.headlineMedium,
-      headlineSmall:
-          fallback?.call(openSans.headlineSmall) ?? openSans.headlineSmall,
-      titleLarge: fallback?.call(openSans.titleLarge) ?? openSans.titleLarge,
+      // ── Display ─────────────────────────────────────────────────
+      displayLarge: inter.displayLarge?.copyWith(
+        fontSize: 48,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.02,
+        height: 56 / 48,
+      ),
+      displayMedium: inter.displayMedium?.copyWith(
+        fontSize: 40,
+        fontWeight: FontWeight.w600,
+      ),
+      displaySmall: inter.displaySmall?.copyWith(
+        fontSize: 36,
+        fontWeight: FontWeight.w500,
+      ),
 
-      // ── Albert Sans ──────────────────────────────────────────────
-      titleMedium:
-          fallback?.call(albertSans.titleMedium) ?? albertSans.titleMedium,
-      titleSmall:
-          fallback?.call(albertSans.titleSmall) ?? albertSans.titleSmall,
-      bodyLarge: fallback?.call(albertSans.bodyLarge) ?? albertSans.bodyLarge,
-      bodyMedium:
-          fallback?.call(albertSans.bodyMedium) ?? albertSans.bodyMedium,
-      bodySmall: fallback?.call(albertSans.bodySmall) ?? albertSans.bodySmall,
-      labelLarge:
-          fallback?.call(albertSans.labelLarge) ?? albertSans.labelLarge,
-      labelMedium:
-          fallback?.call(albertSans.labelMedium) ?? albertSans.labelMedium,
-      labelSmall:
-          fallback?.call(albertSans.labelSmall) ?? albertSans.labelSmall,
+      // ── Headline ────────────────────────────────────────────────
+      headlineLarge: inter.headlineLarge?.copyWith(
+        fontSize: 32,
+        fontWeight: FontWeight.w600,
+        height: 40 / 32,
+      ),
+      headlineMedium: inter.headlineMedium?.copyWith(
+        fontSize: 28,
+        fontWeight: FontWeight.w600,
+        height: 36 / 28,
+      ),
+      headlineSmall: inter.headlineSmall?.copyWith(
+        fontSize: 24,
+        fontWeight: FontWeight.w500,
+      ),
+
+      // ── Title ───────────────────────────────────────────────────
+      titleLarge: inter.titleLarge?.copyWith(
+        fontSize: 22,
+        fontWeight: FontWeight.w500,
+        height: 28 / 22,
+      ),
+      titleMedium: inter.titleMedium?.copyWith(
+        fontSize: 18,
+        fontWeight: FontWeight.w500,
+      ),
+      titleSmall: inter.titleSmall?.copyWith(
+        fontSize: 16,
+        fontWeight: FontWeight.w500,
+      ),
+
+      // ── Body ────────────────────────────────────────────────────
+      bodyLarge: inter.bodyLarge?.copyWith(
+        fontSize: 18,
+        fontWeight: FontWeight.w400,
+        height: 28 / 18,
+      ),
+      bodyMedium: inter.bodyMedium?.copyWith(
+        fontSize: 16,
+        fontWeight: FontWeight.w400,
+        height: 24 / 16,
+      ),
+      bodySmall: inter.bodySmall?.copyWith(
+        fontSize: 14,
+        fontWeight: FontWeight.w400,
+      ),
+
+      // ── Label ───────────────────────────────────────────────────
+      labelLarge: inter.labelLarge?.copyWith(
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+        height: 20 / 14,
+        letterSpacing: 0.1,
+      ),
+      labelMedium: inter.labelMedium?.copyWith(
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+        height: 16 / 12,
+      ),
+      labelSmall: inter.labelSmall?.copyWith(
+        fontSize: 11,
+        fontWeight: FontWeight.w500,
+      ),
     );
   }
 
@@ -187,52 +285,32 @@ class AppTheme {
       surfaceTint: primary,
     );
 
-    // Google Fonts sources – Open Sans for headlines, Albert Sans for body
-    final openSans = GoogleFonts.openSansTextTheme();
-    final albert = GoogleFonts.albertSansTextTheme();
-    final inter =
-        GoogleFonts.interTextTheme(); // Inter used for button weight spec
-
-    // Weight/letter-spacing overrides applied to every style after the
-    // source font family has been locked in by _stitchTextTheme.
-    TextStyle? weightOverride(TextStyle? s) {
-      if (s == null) return null;
-      return s.copyWith(
-        fontWeight: FontWeight.w500,
-        letterSpacing: 0.0,
-      );
-    }
+    final inter = GoogleFonts.interTextTheme();
 
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
       colorScheme: cs,
-      scaffoldBackgroundColor: surface,
+      scaffoldBackgroundColor: background,
 
       // ── Icon Theme ──────────────────────────────────────────────
-      // CRITICAL: No fontFamily here.  Material Icons always use their
-      // own font; the Inter font set on text widgets must NOT cascade
-      // into icon glyphs (causes Chinese-character rendering bug).
       iconTheme: const IconThemeData(
         color: onSurface,
         size: 24.0,
         opacity: 1.0,
-        fill: 1.0,
       ),
 
       // ── Text Theme ──────────────────────────────────────────────
-      textTheme: _stitchTextTheme(
-        openSans: openSans,
-        albertSans: albert,
-        fallback: weightOverride,
-      ),
+      textTheme: _stitchTextTheme(inter),
 
       // ── AppBar ──────────────────────────────────────────────────
       appBarTheme: AppBarTheme(
         backgroundColor: surface,
         foregroundColor: onSurface,
         elevation: 0,
-        centerTitle: true,
+        centerTitle: false,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: surface,
         titleTextStyle: inter.titleLarge?.copyWith(
           color: onSurface,
           fontWeight: FontWeight.w600,
@@ -240,18 +318,21 @@ class AppTheme {
       ),
 
       // ── Card ────────────────────────────────────────────────────
+      // Stitch `rounded-xl` (8px), subtle border, no elevation
       cardTheme: CardThemeData(
-        color: surfaceContainerLow,
+        color: surfaceContainerLowest,
         elevation: 0,
+        shadowColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: outlineVariant.withValues(alpha: 0.5)),
+          borderRadius: BorderRadius.circular(radiusXl),
+          side: BorderSide(color: outlineVariant.withValues(alpha: 0.3)),
         ),
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        margin: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
       ),
 
       // ── Filled Button ───────────────────────────────────────────
-      // Pill shape + generous padding = Stitch primary CTA
+      // Stitch `rounded-lg` (4px), 48px touch-target height
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: primary,
@@ -259,12 +340,12 @@ class AppTheme {
           disabledBackgroundColor: onSurface.withValues(alpha: 0.12),
           disabledForegroundColor: onSurface.withValues(alpha: 0.38),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(radiusLg),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          minimumSize: const Size.fromHeight(touchTarget),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           textStyle: inter.labelLarge?.copyWith(
             fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
           ),
         ),
       ),
@@ -274,7 +355,7 @@ class AppTheme {
         style: TextButton.styleFrom(
           foregroundColor: primary,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(radiusLg),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           textStyle: inter.labelLarge?.copyWith(
@@ -289,8 +370,9 @@ class AppTheme {
           foregroundColor: onSurfaceVariant,
           side: const BorderSide(color: outline),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(radiusLg),
           ),
+          minimumSize: const Size.fromHeight(touchTarget),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           textStyle: inter.labelLarge?.copyWith(
             fontWeight: FontWeight.w500,
@@ -299,30 +381,30 @@ class AppTheme {
       ),
 
       // ── Input Decoration ────────────────────────────────────────
-      // Pill-shaped fields matching Stitch form inputs
+      // Stitch: outlined style, no fill, `rounded-lg` (4px)
       inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: surfaceContainerLow,
+        filled: false,
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        isDense: true,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: outline),
+          borderRadius: BorderRadius.circular(radiusLg),
+          borderSide: const BorderSide(color: outline),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: outlineVariant),
+          borderRadius: BorderRadius.circular(radiusLg),
+          borderSide: const BorderSide(color: outlineVariant),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: primary, width: 2),
+          borderRadius: BorderRadius.circular(radiusLg),
+          borderSide: const BorderSide(color: primary, width: 2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: error),
+          borderRadius: BorderRadius.circular(radiusLg),
+          borderSide: const BorderSide(color: error),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(radiusLg),
           borderSide: BorderSide(color: error, width: 2),
         ),
         labelStyle: inter.bodyMedium?.copyWith(
@@ -341,6 +423,7 @@ class AppTheme {
       ),
 
       // ── Chip ────────────────────────────────────────────────────
+      // Stitch `rounded-lg` (4px)
       chipTheme: ChipThemeData(
         backgroundColor: surfaceContainer,
         selectedColor: primaryContainer,
@@ -349,12 +432,13 @@ class AppTheme {
         secondaryLabelStyle: inter.labelMedium ?? const TextStyle(),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: BorderSide(color: outlineVariant),
+          borderRadius: BorderRadius.circular(radiusLg),
+          side: const BorderSide(color: outlineVariant),
         ),
       ),
 
       // ── Bottom Navigation Bar ───────────────────────────────────
+      // Stitch: rounded-t-full (12px) top corners
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: surfaceContainerLow,
         selectedItemColor: primary,
@@ -368,11 +452,15 @@ class AppTheme {
       ),
 
       // ── Navigation Rail ─────────────────────────────────────────
+      // Stitch: items use `rounded-full` (12px)
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: surface,
-        indicatorColor: primaryContainer,
+        indicatorColor: secondaryFixed,
+        indicatorShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusFull),
+        ),
         selectedIconTheme: const IconThemeData(
-          color: onPrimaryContainer,
+          color: onSecondaryFixed,
           size: 24,
         ),
         unselectedIconTheme: const IconThemeData(
@@ -381,7 +469,7 @@ class AppTheme {
         ),
         selectedLabelTextStyle: inter.labelSmall?.copyWith(
           fontWeight: FontWeight.w600,
-          color: onSurface,
+          color: onSecondaryFixed,
         ),
         unselectedLabelTextStyle: inter.labelSmall?.copyWith(
           color: onSurfaceVariant,
@@ -392,7 +480,7 @@ class AppTheme {
       dialogTheme: DialogThemeData(
         backgroundColor: surface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(radiusXl),
         ),
         titleTextStyle: inter.headlineSmall?.copyWith(
           color: onSurface,
@@ -414,7 +502,7 @@ class AppTheme {
           color: inverseOnSurface,
         ),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(radiusXl),
         ),
         behavior: SnackBarBehavior.floating,
       ),
@@ -423,7 +511,7 @@ class AppTheme {
       popupMenuTheme: PopupMenuThemeData(
         color: surface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(radiusXl),
         ),
         elevation: 3,
       ),
@@ -459,45 +547,33 @@ class AppTheme {
       surfaceTint: darkPrimary,
     );
 
-    final openSans = GoogleFonts.openSansTextTheme(ThemeData.dark().textTheme);
-    final albert = GoogleFonts.albertSansTextTheme(ThemeData.dark().textTheme);
-    final inter = GoogleFonts.interTextTheme(ThemeData.dark().textTheme);
-
-    TextStyle? weightOverride(TextStyle? s) {
-      if (s == null) return null;
-      return s.copyWith(
-        fontWeight: FontWeight.w500,
-        letterSpacing: 0.0,
-      );
-    }
+    final inter =
+        GoogleFonts.interTextTheme(ThemeData.dark().textTheme);
 
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: cs,
-      scaffoldBackgroundColor: darkSurface,
+      scaffoldBackgroundColor: darkBackground,
 
-      // ── Icon Theme (same fix – no fontFamily) ───────────────────
+      // ── Icon Theme ──────────────────────────────────────────────
       iconTheme: const IconThemeData(
         color: darkOnSurface,
         size: 24.0,
         opacity: 1.0,
-        fill: 1.0,
       ),
 
       // ── Text Theme ──────────────────────────────────────────────
-      textTheme: _stitchTextTheme(
-        openSans: openSans,
-        albertSans: albert,
-        fallback: weightOverride,
-      ),
+      textTheme: _stitchTextTheme(inter),
 
       // ── AppBar ──────────────────────────────────────────────────
       appBarTheme: AppBarTheme(
         backgroundColor: darkSurface,
         foregroundColor: darkOnSurface,
         elevation: 0,
-        centerTitle: true,
+        centerTitle: false,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: darkSurface,
         titleTextStyle: inter.titleLarge?.copyWith(
           color: darkOnSurface,
           fontWeight: FontWeight.w600,
@@ -506,13 +582,16 @@ class AppTheme {
 
       // ── Card ────────────────────────────────────────────────────
       cardTheme: CardThemeData(
-        color: darkSurfaceContainerLow,
+        color: darkSurfaceContainerLowest,
         elevation: 0,
+        shadowColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: darkOutlineVariant.withValues(alpha: 0.5)),
+          borderRadius: BorderRadius.circular(radiusXl),
+          side: BorderSide(
+              color: darkOutlineVariant.withValues(alpha: 0.3)),
         ),
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        margin: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
       ),
 
       // ── Filled Button ───────────────────────────────────────────
@@ -520,15 +599,18 @@ class AppTheme {
         style: FilledButton.styleFrom(
           backgroundColor: darkPrimary,
           foregroundColor: darkOnPrimary,
-          disabledBackgroundColor: darkOnSurface.withValues(alpha: 0.12),
-          disabledForegroundColor: darkOnSurface.withValues(alpha: 0.38),
+          disabledBackgroundColor:
+              darkOnSurface.withValues(alpha: 0.12),
+          disabledForegroundColor:
+              darkOnSurface.withValues(alpha: 0.38),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(radiusLg),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          minimumSize: const Size.fromHeight(touchTarget),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           textStyle: inter.labelLarge?.copyWith(
             fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
           ),
         ),
       ),
@@ -538,9 +620,10 @@ class AppTheme {
         style: TextButton.styleFrom(
           foregroundColor: darkPrimary,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(radiusLg),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           textStyle: inter.labelLarge?.copyWith(
             fontWeight: FontWeight.w500,
           ),
@@ -553,9 +636,11 @@ class AppTheme {
           foregroundColor: darkOnSurface,
           side: BorderSide(color: darkOutline),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(radiusLg),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          minimumSize: const Size.fromHeight(touchTarget),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           textStyle: inter.labelLarge?.copyWith(
             fontWeight: FontWeight.w500,
           ),
@@ -564,28 +649,29 @@ class AppTheme {
 
       // ── Input Decoration ────────────────────────────────────────
       inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: darkSurfaceContainerLow,
+        filled: false,
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        isDense: true,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(radiusLg),
           borderSide: BorderSide(color: darkOutline),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(radiusLg),
           borderSide: BorderSide(color: darkOutlineVariant),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: darkPrimary, width: 2),
+          borderRadius: BorderRadius.circular(radiusLg),
+          borderSide:
+              BorderSide(color: darkPrimary, width: 2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(radiusLg),
           borderSide: BorderSide(color: darkError),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(radiusLg),
           borderSide: BorderSide(color: darkError, width: 2),
         ),
         labelStyle: inter.bodyMedium?.copyWith(
@@ -610,9 +696,10 @@ class AppTheme {
         disabledColor: darkSurfaceContainerHighest,
         labelStyle: inter.labelMedium ?? const TextStyle(),
         secondaryLabelStyle: inter.labelMedium ?? const TextStyle(),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(radiusLg),
           side: BorderSide(color: darkOutlineVariant),
         ),
       ),
@@ -633,9 +720,12 @@ class AppTheme {
       // ── Navigation Rail ─────────────────────────────────────────
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: darkSurface,
-        indicatorColor: darkPrimaryContainer,
+        indicatorColor: darkSecondaryContainer,
+        indicatorShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusFull),
+        ),
         selectedIconTheme: const IconThemeData(
-          color: darkOnPrimaryContainer,
+          color: darkOnSecondaryContainer,
           size: 24,
         ),
         unselectedIconTheme: const IconThemeData(
@@ -644,7 +734,7 @@ class AppTheme {
         ),
         selectedLabelTextStyle: inter.labelSmall?.copyWith(
           fontWeight: FontWeight.w600,
-          color: darkOnSurface,
+          color: darkOnSecondaryContainer,
         ),
         unselectedLabelTextStyle: inter.labelSmall?.copyWith(
           color: darkOnSurfaceVariant,
@@ -655,7 +745,7 @@ class AppTheme {
       dialogTheme: DialogThemeData(
         backgroundColor: darkSurface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(radiusXl),
         ),
         titleTextStyle: inter.headlineSmall?.copyWith(
           color: darkOnSurface,
@@ -677,7 +767,7 @@ class AppTheme {
           color: darkInverseOnSurface,
         ),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(radiusXl),
         ),
         behavior: SnackBarBehavior.floating,
       ),
@@ -686,7 +776,7 @@ class AppTheme {
       popupMenuTheme: PopupMenuThemeData(
         color: darkSurface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(radiusXl),
         ),
         elevation: 3,
       ),

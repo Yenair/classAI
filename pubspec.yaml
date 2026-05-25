@@ -68,9 +68,6 @@ dependencies:
   # URL Launching
   url_launcher: ^6.3.0
 
-  # Icons
-  font_awesome_flutter: ^11.0.0
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -82,3 +79,6 @@ dev_dependencies:
   mocktail: ^1.0.5
   integration_test:
     sdk: flutter
+
+flutter:
+  uses-material-design: true

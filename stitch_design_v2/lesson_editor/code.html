@@ -1,0 +1,365 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Lesson Editor - ClassAI</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;700&amp;family=Albert+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">tailwind.config = {darkMode: "class", theme: {extend: {colors: {"surface-dim": "#d9dae0", "secondary-fixed": "#e0e0ff", "on-secondary-container": "#1e258f", "surface-container-low": "#f2f3f9", "primary-fixed-dim": "#a1c9ff", "inverse-primary": "#a1c9ff", "tertiary-container": "#5068d9", "secondary-container": "#8c94ff", secondary: "#4b53ba", "on-secondary-fixed": "#00026c", "secondary-fixed-dim": "#bec2ff", "on-primary-fixed-variant": "#004880", "on-background": "#191c20", "on-surface": "#191c20", outline: "#727781", "surface-container": "#ededf3", "on-primary": "#ffffff", "outline-variant": "#c1c7d2", "surface-tint": "#1b61a0", tertiary: "#344ebf", "inverse-on-surface": "#eff0f6", "primary-fixed": "#d2e4ff", "on-error-container": "#93000a", "inverse-surface": "#2e3035", "on-tertiary": "#ffffff", "surface-container-lowest": "#ffffff", error: "#ba1a1a", surface: "#f8f9ff", "surface-variant": "#e1e2e8", "surface-bright": "#f8f9ff", "on-surface-variant": "#414750", "on-primary-container": "#f5f7ff", "on-secondary-fixed-variant": "#323aa1", "on-tertiary-container": "#f8f6ff", "surface-container-high": "#e7e8ee", "tertiary-fixed": "#dde1ff", "error-container": "#ffdad6", "surface-container-highest": "#e1e2e8", background: "#f8f9ff", "on-secondary": "#ffffff", "on-primary-fixed": "#001c37", "tertiary-fixed-dim": "#b9c3ff", "on-error": "#ffffff", primary: "#115b9b", "primary-container": "#3674b5", "on-tertiary-fixed": "#001257", "on-tertiary-fixed-variant": "#1d3aac"}, borderRadius: {DEFAULT: "0.125rem", lg: "0.25rem", xl: "0.5rem", full: "0.75rem"}, spacing: {gutter: "16px", "margin-mobile": "16px", "margin-tablet": "24px", "touch-target": "48px", base: "8px"}, fontFamily: {"headline-lg": ["Inter"], "title-lg": ["Inter"], "label-lg": ["Inter"], "display-lg": ["Inter"], "headline-lg-mobile": ["Inter"], "body-lg": ["Inter"], "body-md": ["Inter"], "label-md": ["Inter"], headline: ["Open Sans"], display: ["Open Sans"], body: ["Albert Sans"], label: ["Open Sans"]}, fontSize: {"headline-lg": ["32px", {lineHeight: "40px", fontWeight: "600"}], "title-lg": ["22px", {lineHeight: "28px", fontWeight: "500"}], "label-lg": ["14px", {lineHeight: "20px", letterSpacing: "0.1px", fontWeight: "500"}], "display-lg": ["48px", {lineHeight: "56px", letterSpacing: "-0.02em", fontWeight: "700"}], "headline-lg-mobile": ["28px", {lineHeight: "36px", fontWeight: "600"}], "body-lg": ["18px", {lineHeight: "28px", fontWeight: "400"}], "body-md": ["16px", {lineHeight: "24px", fontWeight: "400"}], "label-md": ["12px", {lineHeight: "16px", fontWeight: "500"}]}}}};</script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex flex-col md:flex-row antialiased">
+<!-- TopAppBar (Mobile) / Invisible on Desktop -->
+<header class="md:hidden flex justify-between items-center w-full px-margin-mobile py-2 bg-surface border-b border-surface-container docked full-width top-0 z-40 sticky">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center overflow-hidden">
+<span class="material-symbols-outlined text-[18px]">person</span>
+</div>
+<span class="text-headline-lg-mobile font-headline-lg-mobile font-bold text-primary">ClassAI</span>
+</div>
+<div class="flex items-center gap-4">
+<span class="text-label-lg font-label-lg text-on-surface-variant font-medium">₦500</span>
+</div>
+</header>
+<!-- NavigationDrawer (Tablet/Desktop) -->
+<aside class="hidden md:flex flex-col h-full border-r border-outline-variant/30 py-margin-tablet w-72 bg-surface-container-low docked left-0 sticky top-0 min-h-screen z-30">
+<div class="px-6 mb-8 flex flex-col items-start">
+<div class="flex items-center gap-4 mb-2">
+<div class="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center overflow-hidden">
+<span class="material-symbols-outlined">person</span>
+</div>
+<div class="flex flex-col">
+<span class="text-headline-lg font-headline-lg font-black text-primary">ClassAI</span>
+</div>
+</div>
+<span class="text-label-md font-label-md text-on-surface-variant pl-14">Nigerian Academic Partner</span>
+</div>
+<nav class="flex-1 flex flex-col gap-1 mt-4">
+<a class="flex items-center gap-4 text-on-surface-variant hover:bg-surface-variant px-4 py-3 mx-3 rounded-full group transition-colors" href="#">
+<span class="material-symbols-outlined group-hover:text-on-surface">home</span>
+<span class="text-label-lg font-label-lg group-hover:text-on-surface">Home</span>
+</a>
+<a class="flex items-center gap-4 bg-secondary-fixed text-on-secondary-fixed rounded-full px-4 py-3 mx-3 translate-x-1 transition-transform" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">menu_book</span>
+<span class="text-label-lg font-label-lg font-bold">Lessons</span>
+</a>
+<a class="flex items-center gap-4 text-on-surface-variant hover:bg-surface-variant px-4 py-3 mx-3 rounded-full group transition-colors" href="#">
+<span class="material-symbols-outlined group-hover:text-on-surface">quiz</span>
+<span class="text-label-lg font-label-lg group-hover:text-on-surface">Exams</span>
+</a>
+<a class="flex items-center gap-4 text-on-surface-variant hover:bg-surface-variant px-4 py-3 mx-3 rounded-full group transition-colors" href="#">
+<span class="material-symbols-outlined group-hover:text-on-surface">inventory_2</span>
+<span class="text-label-lg font-label-lg group-hover:text-on-surface">Vault</span>
+</a>
+<a class="flex items-center gap-4 text-on-surface-variant hover:bg-surface-variant px-4 py-3 mx-3 rounded-full group transition-colors" href="#">
+<span class="material-symbols-outlined group-hover:text-on-surface">admin_panel_settings</span>
+<span class="text-label-lg font-label-lg group-hover:text-on-surface">Admin</span>
+</a>
+</nav>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-1 flex flex-col min-h-screen pb-24 md:pb-0 w-full relative">
+<!-- Header area for the specific tool -->
+<div class="px-margin-mobile md:px-margin-tablet py-6 md:py-8 flex flex-col gap-2 border-b border-outline-variant/20 bg-surface-bright">
+<div class="flex items-center gap-2 text-on-surface-variant text-label-md font-label-md mb-1">
+<span class="material-symbols-outlined text-[16px]">arrow_back</span>
+<span class="">Back to Lessons</span>
+</div>
+<h1 class="text-headline-lg-mobile md:text-headline-lg font-headline-lg-mobile md:font-headline-lg text-on-surface">Lesson Editor</h1>
+<p class="text-body-md font-body-md text-on-surface-variant max-w-2xl">Configure parameters to generate high-quality, localized educational content.</p>
+</div>
+<div class="p-margin-mobile md:p-margin-tablet flex flex-col lg:flex-row gap-6 max-w-[1600px] mx-auto w-full flex-1">
+<!-- Left Column: Configuration Form -->
+<div class="w-full lg:w-[450px] flex flex-col gap-6 shrink-0">
+<!-- Bento Style Card for Basic Info -->
+<div class="bg-surface rounded-xl p-5 border border-outline-variant/30 flex flex-col gap-5 relative overflow-hidden shadow-sm">
+<div class="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-bl-full -mr-10 -mt-10 pointer-events-none"></div>
+<h2 class="text-title-lg font-title-lg text-on-surface border-b border-outline-variant/20 pb-3">Curriculum Context</h2>
+<div class="flex flex-col gap-4 relative z-10">
+<div class="grid grid-cols-2 gap-4">
+<div class="flex flex-col gap-1">
+<label class="text-label-md font-label-md text-on-surface-variant">Subject</label>
+<div class="relative">
+<select class="w-full h-touch-target rounded-lg border border-outline bg-surface-bright text-on-surface px-4 appearance-none focus:ring-2 focus:ring-primary focus:border-primary focus:outline-none transition-shadow text-body-md font-body-md">
+<option>Physics</option>
+<option>Mathematics</option>
+<option>Chemistry</option>
+<option>Biology</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">arrow_drop_down</span>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<label class="text-label-md font-label-md text-on-surface-variant">Class</label>
+<div class="relative">
+<select class="w-full h-touch-target rounded-lg border border-outline bg-surface-bright text-on-surface px-4 appearance-none focus:ring-2 focus:ring-primary focus:border-primary focus:outline-none transition-shadow text-body-md font-body-md">
+<option>SS2</option>
+<option>SS1</option>
+<option>SS3</option>
+<option>JSS3</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">arrow_drop_down</span>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-[1fr_80px] gap-4">
+<div class="flex flex-col gap-1">
+<label class="text-label-md font-label-md text-on-surface-variant">Topic</label>
+<input class="w-full h-touch-target rounded-lg border border-outline bg-surface-bright text-on-surface px-4 focus:ring-2 focus:ring-primary focus:border-primary focus:outline-none transition-shadow text-body-md font-body-md placeholder:text-outline-variant" type="text" value="Optics">
+</div>
+<div class="flex flex-col gap-1">
+<label class="text-label-md font-label-md text-on-surface-variant">Week</label>
+<div class="relative h-touch-target flex items-center justify-between border border-outline rounded-lg bg-surface-bright px-2">
+<button class="w-6 h-6 flex items-center justify-center text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined text-[18px]">remove</span></button>
+<span class="text-body-md font-body-md text-on-surface font-medium">4</span>
+<button class="w-6 h-6 flex items-center justify-center text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined text-[18px]">add</span></button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bento Style Card for AI Parameters -->
+<div class="bg-surface rounded-xl p-5 border border-outline-variant/30 flex flex-col gap-5 relative overflow-hidden shadow-sm">
+<div class="absolute bottom-0 right-0 w-40 h-40 bg-secondary/5 rounded-tl-full -mr-10 -mb-10 pointer-events-none"></div>
+<h2 class="text-title-lg font-title-lg text-on-surface border-b border-outline-variant/20 pb-3">Generation Parameters</h2>
+<div class="flex flex-col gap-5 relative z-10">
+<!-- Difficulty Segmented Button -->
+<div class="flex flex-col gap-2">
+<label class="text-label-md font-label-md text-on-surface-variant">Difficulty Level</label>
+<div class="flex rounded-lg overflow-hidden border border-outline h-touch-target bg-surface-bright p-1">
+<button class="flex-1 flex items-center justify-center text-label-lg font-label-lg text-on-surface-variant rounded-md hover:bg-surface-variant/50 transition-colors">Easy</button>
+<div class="w-px bg-outline-variant/50 my-2"></div>
+<button class="flex-1 flex items-center justify-center text-label-lg font-label-lg bg-secondary-container text-on-secondary-container rounded-md font-medium shadow-sm transition-colors">Medium</button>
+<div class="w-px bg-outline-variant/50 my-2"></div>
+<button class="flex-1 flex items-center justify-center text-label-lg font-label-lg text-on-surface-variant rounded-md hover:bg-surface-variant/50 transition-colors">Hard</button>
+</div>
+</div>
+<!-- Bloom's Taxonomy Chips -->
+<div class="flex flex-col gap-2">
+<div class="flex justify-between items-end">
+<label class="text-label-md font-label-md text-on-surface-variant">Cognitive Objectives (Bloom's)</label>
+<span class="text-[10px] text-outline uppercase tracking-wider font-semibold">Select Multiple</span>
+</div>
+<div class="flex flex-wrap gap-2">
+<button class="h-8 px-3 rounded-lg border border-primary text-primary bg-primary/5 text-label-md font-label-md flex items-center gap-1 hover:bg-primary/10 transition-colors">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">check</span>
+                                    Identify
+                                </button>
+<button class="h-8 px-3 rounded-lg border border-primary text-primary bg-primary/5 text-label-md font-label-md flex items-center gap-1 hover:bg-primary/10 transition-colors">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">check</span>
+                                    Describe
+                                </button>
+<button class="h-8 px-3 rounded-lg border border-primary text-primary bg-primary/5 text-label-md font-label-md flex items-center gap-1 hover:bg-primary/10 transition-colors">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">check</span>
+                                    Calculate
+                                </button>
+<button class="h-8 px-3 rounded-lg border border-outline text-on-surface-variant bg-surface-bright text-label-md font-label-md hover:bg-surface-variant transition-colors">
+                                    Analyze
+                                </button>
+<button class="h-8 px-3 rounded-lg border border-outline text-on-surface-variant bg-surface-bright text-label-md font-label-md hover:bg-surface-variant transition-colors">
+                                    Evaluate
+                                </button>
+</div>
+</div>
+<!-- Question Type Segmented Button -->
+<div class="flex flex-col gap-2">
+<label class="text-label-md font-label-md text-on-surface-variant">Assessment Format</label>
+<div class="flex rounded-lg overflow-hidden border border-outline h-touch-target bg-surface-bright p-1">
+<button class="flex-1 flex items-center justify-center text-label-lg font-label-lg text-on-surface-variant rounded-md hover:bg-surface-variant/50 transition-colors">MCQ</button>
+<div class="w-px bg-outline-variant/50 my-2"></div>
+<button class="flex-1 flex items-center justify-center text-label-lg font-label-lg text-on-surface-variant rounded-md hover:bg-surface-variant/50 transition-colors">Theory</button>
+<div class="w-px bg-outline-variant/50 my-2"></div>
+<button class="flex-1 flex items-center justify-center text-label-lg font-label-lg bg-secondary-container text-on-secondary-container rounded-md font-medium shadow-sm transition-colors">Both</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Action Button Area -->
+<div class="mt-2 flex flex-col gap-3">
+<button class="w-full h-touch-target bg-primary text-on-primary rounded-xl flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors shadow-sm">
+<span class="material-symbols-outlined">auto_awesome</span>
+<span class="text-label-lg font-label-lg font-semibold">Generate with AI</span>
+</button>
+<div class="flex items-center justify-center gap-1 text-label-md font-label-md text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px]">info</span>
+<span class="">Estimated Cost: 20 Credits</span>
+</div>
+</div>
+</div>
+<!-- Right Column: Preview Area -->
+<div class="flex-1 flex flex-col min-w-0 bg-surface rounded-xl border border-outline-variant/30 overflow-hidden shadow-sm flex flex-col">
+<!-- Preview Header -->
+<div class="p-4 border-b border-outline-variant/20 bg-surface-container-lowest flex justify-between items-center shrink-0">
+<h2 class="text-title-lg font-title-lg text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">visibility</span>
+                        Preview Generated Content
+                    </h2>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary-fixed"></span>
+<span class="text-label-md font-label-md text-secondary">Ready to Save</span>
+</div>
+</div>
+<!-- Preview Canvas -->
+<div class="flex-1 p-5 overflow-y-auto bg-surface-container-low/30 relative">
+<div class="flex flex-col gap-4 max-w-3xl mx-auto">
+<!-- Content Card 1: Lesson Intro -->
+<div class="bg-surface-bright border border-outline-variant/40 rounded-xl p-5 shadow-sm group hover:border-primary/30 transition-colors relative">
+<button class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-surface-variant/50 text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary-container hover:text-on-primary-container">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+<div class="flex items-center gap-2 mb-3">
+<span class="px-2 py-0.5 bg-tertiary-container/10 text-tertiary-container font-bold rounded uppercase tracking-wider border border-tertiary-container/20 text-label-md">Introduction</span>
+</div>
+<h3 class="text-title-lg font-title-lg text-on-surface mb-2 pr-8">Introduction to Optics and Light Waves</h3>
+<p class="text-body-md font-body-md text-on-surface-variant leading-relaxed">
+                                Optics is the branch of physics that studies the behaviour and properties of light, including its interactions with matter and the construction of instruments that use or detect it. In this lesson, we will explore the fundamental principles of reflection, refraction, and the dual nature of light as both a wave and a particle.
+                            </p>
+</div>
+<!-- Content Card 2: MCQ -->
+<div class="bg-surface-bright border border-outline-variant/40 rounded-xl p-5 shadow-sm group hover:border-primary/30 transition-colors relative">
+<button class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-surface-variant/50 text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary-container hover:text-on-primary-container">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+<div class="flex items-center gap-2 mb-3">
+<span class="px-2 py-0.5 bg-primary/10 text-primary font-bold rounded uppercase tracking-wider border border-primary/20 text-label-md">MCQ</span>
+<span class="text-label-md text-outline-variant">•</span>
+<span class="text-label-md font-label-md text-on-surface-variant">Cognitive: Identify</span>
+</div>
+<h3 class="text-body-lg font-body-lg text-on-surface mb-4 font-medium pr-8">1. Which phenomenon best illustrates the wave nature of light?</h3>
+<div class="flex flex-col gap-2">
+<div class="flex items-center gap-3 p-3 rounded-lg border border-outline-variant/50 bg-surface">
+<div class="w-5 h-5 rounded-full border-2 border-outline flex items-center justify-center"></div>
+<span class="text-body-md font-body-md text-on-surface">A) Photoelectric effect</span>
+</div>
+<div class="flex items-center gap-3 p-3 rounded-lg border border-primary bg-primary/5">
+<div class="w-5 h-5 rounded-full border-2 border-primary flex items-center justify-center">
+<div class="w-2.5 h-2.5 rounded-full bg-primary"></div>
+</div>
+<span class="text-body-md font-body-md text-on-surface font-medium">B) Diffraction</span>
+</div>
+<div class="flex items-center gap-3 p-3 rounded-lg border border-outline-variant/50 bg-surface">
+<div class="w-5 h-5 rounded-full border-2 border-outline flex items-center justify-center"></div>
+<span class="text-body-md font-body-md text-on-surface">C) Rectilinear propagation</span>
+</div>
+<div class="flex items-center gap-3 p-3 rounded-lg border border-outline-variant/50 bg-surface">
+<div class="w-5 h-5 rounded-full border-2 border-outline flex items-center justify-center"></div>
+<span class="text-body-md font-body-md text-on-surface">D) Blackbody radiation</span>
+</div>
+</div>
+</div>
+<!-- Content Card 3: Theory Question -->
+<div class="bg-surface-bright border border-outline-variant/40 rounded-xl p-5 shadow-sm group hover:border-primary/30 transition-colors relative">
+<button class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-surface-variant/50 text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary-container hover:text-on-primary-container">
+<span class="material-symbols-outlined text-[18px]">edit</span>
+</button>
+<div class="flex items-center gap-2 mb-3">
+<span class="px-2 py-0.5 bg-secondary/10 text-secondary font-bold rounded uppercase tracking-wider border border-secondary/20 text-label-md">Theory</span>
+<span class="text-label-md text-outline-variant">•</span>
+<span class="text-label-md font-label-md text-on-surface-variant">Cognitive: Calculate, Analyze</span>
+</div>
+<h3 class="text-body-lg font-body-lg text-on-surface mb-3 font-medium pr-8">2. A light ray travels from air into a glass block with a refractive index of 1.52.</h3>
+<p class="text-body-md font-body-md text-on-surface-variant mb-4 pl-4 border-l-2 border-outline-variant/40 italic">
+                                If the angle of incidence is 45°, calculate the angle of refraction. State Snell's Law and explain how the speed of light changes as it enters the glass block.
+                            </p>
+<div class="bg-surface-variant/30 rounded-lg p-4 border border-outline-variant/30">
+<h4 class="text-label-md font-label-md text-on-surface-variant mb-2 font-semibold uppercase tracking-wider">Suggested Rubric / Key</h4>
+<ul class="text-body-md font-body-md text-on-surface-variant list-disc pl-5 space-y-1">
+<li class="">Calculation of angle (approx 28°): 3 marks</li>
+<li class="">Correct statement of Snell's Law: 2 marks</li>
+<li class="">Explanation of speed reduction in denser medium: 2 marks</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+<!-- Action Footer -->
+<div class="p-4 border-t border-outline-variant/20 bg-surface flex justify-end gap-3 shrink-0">
+<button class="h-touch-target px-6 rounded-xl border border-outline text-on-surface bg-surface-bright hover:bg-surface-variant transition-colors flex items-center justify-center">
+<span class="text-label-lg font-label-lg font-medium">Discard</span>
+</button>
+<button class="h-touch-target px-8 rounded-xl bg-primary text-on-primary hover:bg-primary/90 transition-colors flex items-center justify-center shadow-sm">
+<span class="text-label-lg font-label-lg font-semibold">Save to Vault</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile) / Invisible on Desktop -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-[72px] px-2 pb-2 md:hidden bg-surface-container-low border-t border-outline-variant/20 rounded-t-full docked full-width">
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-variant/50 w-16 h-full rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined mb-1">home</span>
+<span class="text-[10px] font-medium leading-none">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-secondary-container text-on-secondary-container rounded-full px-5 py-1.5 translate-y-[-4px] shadow-sm" href="#">
+<span class="material-symbols-outlined mb-0.5" style="font-variation-settings: 'FILL' 1;">menu_book</span>
+<span class="text-[11px] font-bold leading-none">Lessons</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-variant/50 w-16 h-full rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined mb-1">quiz</span>
+<span class="text-[10px] font-medium leading-none">Exams</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-variant/50 w-16 h-full rounded-xl transition-colors" href="#">
+<span class="material-symbols-outlined mb-1">more_horiz</span>
+<span class="text-[10px] font-medium leading-none">More</span>
+</a>
+</nav>
+
+
+</body></html>

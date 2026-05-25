@@ -4,7 +4,10 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/services/sync_service.dart';
-import 'package:classai/main.dart' show databaseProvider;
+import 'package:classai/core/widgets/app_toast.dart';
+import 'package:classai/features/auth/providers/auth_provider.dart'
+    show securityServiceProvider;
+import 'package:classai/main.dart' show databaseProvider, navigatorKey;
 
 /// Possible sync statuses for UI display.
 enum SyncStatus {
@@ -32,6 +35,25 @@ class SyncStatusData {
     this.isOnline = false,
   });
 }
+
+/// Provider that lazily constructs a [SyncService] instance.
+///
+/// Loads the school's server ID from the database to configure both the
+/// [SyncService] and its [SupabaseSyncRemoteApi].
+final syncServiceProvider = FutureProvider<SyncService>((ref) async {
+  final db = ref.watch(databaseProvider);
+  final securityService = ref.watch(securityServiceProvider);
+
+  final school = await db.schoolsDao.get();
+  final schoolId = school?.serverId ?? '';
+
+  return SyncService(
+    db: db,
+    schoolId: schoolId,
+    securityService: securityService,
+    remoteApi: SupabaseSyncRemoteApi(schoolId: schoolId),
+  );
+});
 
 /// Notifier that provides current sync status for UI display.
 ///
@@ -70,6 +92,53 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
   }
 
   AppDatabase get _db => ref.read(databaseProvider);
+
+  /// Trigger a full sync cycle (pull‑merge‑push) and update UI status.
+  ///
+  /// Sets the status to [SyncStatus.syncing], calls
+  /// [SyncService.onConnectivityRestored()], then refreshes the display.
+  /// On failure the status is set to [SyncStatus.error] and a snackbar is
+  /// shown with the error message.
+  Future<void> syncNow() async {
+    final currentState = state;
+    try {
+      // Immediately show syncing state
+      state = SyncStatusData(
+        status: SyncStatus.syncing,
+        lastSyncTime: currentState.lastSyncTime,
+        pendingPushCount: currentState.pendingPushCount,
+        pendingPullCount: currentState.pendingPullCount,
+        conflictCount: currentState.conflictCount,
+        isOnline: currentState.isOnline,
+      );
+
+      // Resolve SyncService (may load school info asynchronously)
+      final syncService = await ref.read(syncServiceProvider.future);
+
+      // Run the full sync cycle
+      await syncService.onConnectivityRestored();
+    } catch (e, _) {
+      // Mark as error
+      state = SyncStatusData(
+        status: SyncStatus.error,
+        lastSyncTime: currentState.lastSyncTime,
+        pendingPushCount: currentState.pendingPushCount,
+        pendingPullCount: currentState.pendingPullCount,
+        conflictCount: currentState.conflictCount,
+        isOnline: currentState.isOnline,
+      );
+
+      // Show snackbar with error details
+      final context = navigatorKey.currentContext;
+      if (context != null && context.mounted) {
+        showErrorToast(context: context, message: 'Sync failed: $e');
+      }
+      return;
+    }
+
+    // Refresh display state after successful sync
+    await refresh();
+  }
 
   /// Refresh sync status from the database and service.
   Future<void> refresh() async {

@@ -146,9 +146,9 @@ class _EmailVerificationDialogState
   }
 
   Future<void> _cancel() async {
-    // Log the user out, which transitions to uninitialized state.
+    // Log the user out, which transitions to onlineLoginRequired state.
     // The parent listener in LoginScreen will detect the state change
-    // and pop the dialog.
+    // and pop the dialog, showing the login screen immediately.
     await ref.read(authProvider.notifier).manualLogout();
   }
 

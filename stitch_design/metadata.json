@@ -1,6 +1,0 @@
-{
-  "name": "ClassAI Vault",
-  "description": "Nigerian Academic Partner - Specialized resource publisher and curriculum vault for educators.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
