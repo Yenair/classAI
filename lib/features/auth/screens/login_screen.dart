@@ -564,8 +564,10 @@ class _LoginCard extends StatelessWidget {
               ),
             ),
             child: Center(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 4,
                 children: [
                   Text(
                     'New to ClassAI?',
@@ -573,7 +575,6 @@ class _LoginCard extends StatelessWidget {
                       color: cs.onSurfaceVariant,
                     ),
                   ),
-                  const SizedBox(width: 4),
                   TextButton(
                     onPressed: isLoggingIn ? null : onActivate,
                     style: TextButton.styleFrom(
