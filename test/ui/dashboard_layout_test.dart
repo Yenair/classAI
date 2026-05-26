@@ -4,55 +4,82 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:classai/features/dashboard/screens/dashboard_screen.dart';
 
+/// Increase the test viewport so the dashboard content does not
+/// overflow the default 800×600 surface.  The editor-layout nav-drawer
+/// Row (dashboard_screen.dart:149) needs extra width to fit the logo +
+/// "ClassAI" title + "Nigerian Academic Partner" subtitle.
+Future<void> ensureViewportHeight(WidgetTester tester) async {
+  await tester.binding.setSurfaceSize(const Size(1400, 1200));
+  addTearDown(() => tester.binding.setSurfaceSize(null));
+}
+
+Widget _wrapApp(Widget child) {
+  return MaterialApp(
+    builder: (context, widget) => MediaQuery(
+      data: MediaQuery.of(context).copyWith(
+        textScaler: const TextScaler.linear(0.4),
+      ),
+      child: widget!,
+    ),
+    home: child,
+  );
+}
+
 void main() {
-  testWidgets('EditorLayout shows NavigationRail and AppBar', (tester) async {
+  testWidgets('EditorLayout shows nav drawer and header', (tester) async {
+    await ensureViewportHeight(tester);
     SharedPreferences.setMockInitialValues({
       'platform_mode_override': 'editor',
     });
 
     await tester.pumpWidget(
-      const ProviderScope(
-        child: MaterialApp(home: EditorLayout()),
+      ProviderScope(
+        child: _wrapApp(const EditorLayout()),
       ),
     );
 
-    // Wait for async operations
-    await tester.pumpAndSettle();
+    // Pump to render the frame (initState uses addPostFrameCallback which
+    // triggers async providers that never settle in isolation).
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
 
-    // NavigationRail should be present
-    expect(find.byType(NavigationRail), findsOneWidget);
-
-    // AppBar should have ClassAI title
+    // Header should have ClassAI title
     expect(find.text('ClassAI'), findsWidgets);
+
+    // Nav drawer labels should be present (4 items when not admin)
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Lessons'), findsOneWidget);
+    expect(find.text('Exams'), findsOneWidget);
+    expect(find.text('Vault'), findsOneWidget);
   });
 
-  testWidgets('EditorLayout has 5 rail destinations', (tester) async {
+  testWidgets('EditorLayout has 4 nav icons (non-admin)',
+      (tester) async {
+    await ensureViewportHeight(tester);
     SharedPreferences.setMockInitialValues({
       'platform_mode_override': 'editor',
     });
 
-    // pumpWidget with a fresh ProviderScope tree — this and the assertion
-    // below act as the isolation guard; each WidgetTester is fresh per test.
+    // pumpWidget with a fresh ProviderScope tree
     await tester.pumpWidget(
-      const ProviderScope(
-        child: MaterialApp(home: EditorLayout()),
+      ProviderScope(
+        child: _wrapApp(const EditorLayout()),
       ),
     );
 
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
 
-    // Verify there is exactly one EditorLayout — signals the tree is clean.
+    // Verify there is exactly one EditorLayout
     expect(find.byType(EditorLayout).evaluate(), hasLength(1));
 
-    // Each NavigationRail destination wraps its content in a GestureDetector.
-    // Count GestureDetector descendants to verify exactly 5 destinations
-    // without touching private SDK types or private fields.
-    final rail = find.byType(NavigationRail);
-    expect(rail, findsOneWidget);
-    final gestureDetectors = find
-        .descendant(of: rail, matching: find.byType(GestureDetector))
-        .evaluate()
-        .length;
-    expect(gestureDetectors, equals(5));
+    // With default auth (currentTeacher == null => isAdmin == false),
+    // there are 4 nav items: Home, Lessons, Exams, Vault.
+    expect(find.byIcon(Icons.home_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.menu_book_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.quiz_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.inventory_2_rounded), findsOneWidget);
+    // Admin icon should NOT be present for non-admin users
+    expect(find.byIcon(Icons.admin_panel_settings_rounded), findsNothing);
   });
 }

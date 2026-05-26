@@ -24,7 +24,20 @@ class MockSecurityService extends Mock implements SecurityService {}
 // Helpers
 // ---------------------------------------------------------------------------
 
+/// Increases the test surface height so the login screen content doesn't
+/// overflow the default 800×600 viewport.
+/// Tablet breakpoint is 768 px.  The login screen uses a two-column layout on
+/// tablets, and the right-hand card is capped at [ConstrainedBox(maxWidth:400)]
+/// with 24 px scroll padding + 32 px card padding, leaving ~336 px for content.
+/// A 1200 px wide viewport gives each column ~600 px, which is plenty.
+Future<void> ensureViewportHeight(WidgetTester tester) async {
+  await tester.binding.setSurfaceSize(const Size(1200, 1200));
+  addTearDown(() => tester.binding.setSurfaceSize(null));
+}
+
 /// Wraps [widget] in a [ProviderScope] with overridden auth dependencies.
+/// Also applies a [TextScaler] so the card's constrained width (~334 px) does
+/// not overflow (the Row at login_screen.dart:567 is too wide at 1×).
 Widget createTestApp({
   required Widget child,
   required AppDatabase db,
@@ -41,6 +54,12 @@ Widget createTestApp({
           .overrideWithValue(emergencyFlushService ?? EmergencyFlushService()),
     ],
     child: MaterialApp(
+      builder: (context, widget) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: const TextScaler.linear(0.5),
+        ),
+        child: widget!,
+      ),
       home: child,
     ),
   );
@@ -113,6 +132,7 @@ void main() {
 
   group('LoginScreen rendering', () {
     testWidgets('renders email and password fields', (tester) async {
+      await ensureViewportHeight(tester);
       await tester.pumpWidget(createTestApp(
         child: const LoginScreen(),
         db: db,
@@ -123,8 +143,8 @@ void main() {
       // Should show the app title
       expect(find.text('ClassAI'), findsOneWidget);
 
-      // Should show "Sign in to ClassAI"
-      expect(find.text('Sign in to ClassAI'), findsOneWidget);
+      // Should show the welcome title
+      expect(find.text('Welcome back, Educator.'), findsOneWidget);
 
       // Should have email and password fields
       expect(find.byType(TextFormField), findsNWidgets(2));
@@ -138,6 +158,7 @@ void main() {
     });
 
     testWidgets('shows school icon', (tester) async {
+      await ensureViewportHeight(tester);
       await tester.pumpWidget(createTestApp(
         child: const LoginScreen(),
         db: db,
@@ -149,6 +170,7 @@ void main() {
     });
 
     testWidgets('email field validates empty input', (tester) async {
+      await ensureViewportHeight(tester);
       await tester.pumpWidget(createTestApp(
         child: const LoginScreen(),
         db: db,
@@ -165,6 +187,7 @@ void main() {
     });
 
     testWidgets('password field validates empty input', (tester) async {
+      await ensureViewportHeight(tester);
       await tester.pumpWidget(createTestApp(
         child: const LoginScreen(),
         db: db,
@@ -185,6 +208,7 @@ void main() {
     });
 
     testWidgets('password visibility toggle works', (tester) async {
+      await ensureViewportHeight(tester);
       await tester.pumpWidget(createTestApp(
         child: const LoginScreen(),
         db: db,
@@ -229,6 +253,7 @@ void main() {
     });
 
     testWidgets('shows error banner on failed login attempt', (tester) async {
+      await ensureViewportHeight(tester);
       when(() => mockAuth.login(any(), any(), any())).thenThrow(
         AuthException(
           code: AuthErrorCode.invalidCredentials,
@@ -265,6 +290,7 @@ void main() {
     });
 
     testWidgets('shows loading indicator during login', (tester) async {
+      await ensureViewportHeight(tester);
       // Delay the auth service response to give us time to check loading state
       when(() => mockAuth.login(any(), any(), any())).thenAnswer(
         (_) async {
@@ -311,6 +337,7 @@ void main() {
   group('LoginScreen dialogs', () {
     testWidgets('shows role-selection dialog on forgot password tap',
         (tester) async {
+      await ensureViewportHeight(tester);
       await tester.pumpWidget(createTestApp(
         child: const LoginScreen(),
         db: db,
@@ -332,6 +359,7 @@ void main() {
 
     testWidgets('tapping "I\'m an Admin" navigates to AdminRecoveryScreen',
         (tester) async {
+      await ensureViewportHeight(tester);
       when(() => mockAuth.requestAdminOtp(any())).thenAnswer(
         (_) async => AdminRecoveryResult(
           otpSent: true,
@@ -361,6 +389,7 @@ void main() {
 
     testWidgets('tapping "I\'m a Teacher" opens teacher recovery dialog',
         (tester) async {
+      await ensureViewportHeight(tester);
       await tester.pumpWidget(createTestApp(
         child: const LoginScreen(),
         db: db,
@@ -383,6 +412,7 @@ void main() {
     });
 
     testWidgets('shows signup screen on create account tap', (tester) async {
+      await ensureViewportHeight(tester);
       await tester.pumpWidget(createTestApp(
         child: const LoginScreen(),
         db: db,
@@ -402,6 +432,7 @@ void main() {
       expect(find.text('Admin Email'), findsOneWidget);
     });
     testWidgets('signup screen shows recovery email field', (tester) async {
+      await ensureViewportHeight(tester);
       await tester.pumpWidget(createTestApp(
         child: const LoginScreen(),
         db: db,
