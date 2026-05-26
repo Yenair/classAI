@@ -4,7 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/core/theme/app_theme.dart';
+import 'package:classai/core/widgets/animated_pressable.dart';
+import 'package:classai/core/widgets/shimmer_loading.dart';
 import 'package:classai/core/widgets/conflict_banner.dart';
+import 'package:classai/core/widgets/spring_scroll_physics.dart';
 import 'package:classai/core/widgets/sync_indicator.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
@@ -12,6 +15,7 @@ import 'package:classai/features/dashboard/providers/credit_state_provider.dart'
 import 'package:classai/features/dashboard/providers/unresolved_conflicts_provider.dart';
 import 'package:classai/features/settings/providers/theme_provider.dart';
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/widgets/profile_slide_up_menu.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
 /// Root dashboard screen that routes to either [EditorLayout] or [ReaderLayout]
@@ -51,7 +55,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     if (_isEditorMode == null) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        body: ShimmerLoading(),
       );
     }
 
@@ -290,102 +294,13 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                       const _CreditChip(),
                       const SizedBox(width: 12),
                       // Profile popup
-                      PopupMenuButton<String>(
-                        onSelected: (value) {
-                          switch (value) {
-                            case 'settings':
-                              context.push('/settings');
-                            case 'logout':
-                              _showLogoutConfirmation();
-                            case 'theme_light':
-                              ref.read(themeProvider.notifier).setTheme(ThemeMode.light);
-                            case 'theme_dark':
-                              ref.read(themeProvider.notifier).setTheme(ThemeMode.dark);
-                            case 'theme_system':
-                              ref.read(themeProvider.notifier).setTheme(ThemeMode.system);
-                          }
-                        },
-                        offset: const Offset(0, 48),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                        ),
-                        itemBuilder: (context) {
-                          final teacher = authData.currentTeacher;
-                          return [
-                            // ── Teacher info header ──
-                            PopupMenuItem<String>(
-                              enabled: false,
-                              child: SizedBox(
-                                width: 200,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      teacher?.teacherName ?? 'Educator',
-                                      style: theme.textTheme.titleSmall?.copyWith(
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      teacher?.email ?? '',
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        color: cs.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const PopupMenuDivider(),
-                            // ── Theme selector ──
-                            PopupMenuItem<String>(
-                              enabled: false,
-                              child: Text(
-                                'Theme',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                  color: cs.onSurfaceVariant,
-                                ),
-                              ),
-                            ),
-                            CheckedPopupMenuItem<String>(
-                              checked: themeMode == ThemeMode.light,
-                              value: 'theme_light',
-                              child: const Text('Light'),
-                            ),
-                            CheckedPopupMenuItem<String>(
-                              checked: themeMode == ThemeMode.dark,
-                              value: 'theme_dark',
-                              child: const Text('Dark'),
-                            ),
-                            CheckedPopupMenuItem<String>(
-                              checked: themeMode == ThemeMode.system,
-                              value: 'theme_system',
-                              child: const Text('System'),
-                            ),
-                            const PopupMenuDivider(),
-                            // ── Settings ──
-                            const PopupMenuItem<String>(
-                              value: 'settings',
-                              child: ListTile(
-                                leading: Icon(Icons.settings_rounded),
-                                title: Text('Settings'),
-                                contentPadding: EdgeInsets.zero,
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            ),
-                            // ── Logout ──
-                            const PopupMenuItem<String>(
-                              value: 'logout',
-                              child: ListTile(
-                                leading: Icon(Icons.logout_rounded),
-                                title: Text('Logout'),
-                                contentPadding: EdgeInsets.zero,
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            ),
-                          ];
-                        },
+                      ProfileSlideUpMenu(
+                        themeMode: themeMode,
+                        ref: ref,
+                        teacherName: authData.currentTeacher?.teacherName,
+                        teacherEmail: authData.currentTeacher?.email,
+                        onSettings: () => context.push('/settings'),
+                        onLogout: _showLogoutConfirmation,
                         child: Container(
                           width: 40,
                           height: 40,
@@ -412,6 +327,7 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                 // ── Canvas ─────────────────────────────────────────
                 Expanded(
                   child: SingleChildScrollView(
+                    physics: const SpringScrollPhysics(),
                     padding: const EdgeInsets.all(
                       AppTheme.spacingMarginTablet,
                     ),
@@ -742,7 +658,7 @@ class _RecentLessonsSection extends ConsumerWidget {
         ),
         const SizedBox(height: 16),
         lessonsAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const ShimmerLoading(itemCount: 3),
           error: (err, _) => Text(
             'Could not load lessons.',
             style: theme.textTheme.bodyMedium?.copyWith(color: cs.error),
@@ -1192,98 +1108,13 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
             child: Row(
               children: [
                 // Profile popup
-                PopupMenuButton<String>(
-                  onSelected: (value) {
-                    switch (value) {
-                      case 'settings':
-                        context.push('/settings');
-                      case 'logout':
-                        _showLogoutConfirmation();
-                      case 'theme_light':
-                        ref.read(themeProvider.notifier).setTheme(ThemeMode.light);
-                      case 'theme_dark':
-                        ref.read(themeProvider.notifier).setTheme(ThemeMode.dark);
-                      case 'theme_system':
-                        ref.read(themeProvider.notifier).setTheme(ThemeMode.system);
-                    }
-                  },
-                  offset: const Offset(0, 48),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                  ),
-                  itemBuilder: (context) {
-                    final teacher = authData.currentTeacher;
-                    return [
-                      PopupMenuItem<String>(
-                        enabled: false,
-                        child: SizedBox(
-                          width: 200,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                teacher?.teacherName ?? 'Educator',
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                teacher?.email ?? '',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: cs.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const PopupMenuDivider(),
-                      PopupMenuItem<String>(
-                        enabled: false,
-                        child: Text(
-                          'Theme',
-                          style: theme.textTheme.labelMedium?.copyWith(
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                      CheckedPopupMenuItem<String>(
-                        checked: themeMode == ThemeMode.light,
-                        value: 'theme_light',
-                        child: const Text('Light'),
-                      ),
-                      CheckedPopupMenuItem<String>(
-                        checked: themeMode == ThemeMode.dark,
-                        value: 'theme_dark',
-                        child: const Text('Dark'),
-                      ),
-                      CheckedPopupMenuItem<String>(
-                        checked: themeMode == ThemeMode.system,
-                        value: 'theme_system',
-                        child: const Text('System'),
-                      ),
-                      const PopupMenuDivider(),
-                      const PopupMenuItem<String>(
-                        value: 'settings',
-                        child: ListTile(
-                          leading: Icon(Icons.settings_rounded),
-                          title: Text('Settings'),
-                          contentPadding: EdgeInsets.zero,
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ),
-                      const PopupMenuItem<String>(
-                        value: 'logout',
-                        child: ListTile(
-                          leading: Icon(Icons.logout_rounded),
-                          title: Text('Logout'),
-                          contentPadding: EdgeInsets.zero,
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ),
-                    ];
-                  },
+                ProfileSlideUpMenu(
+                  themeMode: themeMode,
+                  ref: ref,
+                  teacherName: authData.currentTeacher?.teacherName,
+                  teacherEmail: authData.currentTeacher?.email,
+                  onSettings: () => context.push('/settings'),
+                  onLogout: _showLogoutConfirmation,
                   child: Container(
                     width: 40,
                     height: 40,
@@ -1365,6 +1196,7 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
         ),
       ),
       body: SingleChildScrollView(
+        physics: const SpringScrollPhysics(),
         padding: const EdgeInsets.all(AppTheme.spacingMarginMobile),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1430,7 +1262,7 @@ class _RecentLessonsList extends ConsumerWidget {
     final lessonsAsync = ref.watch(recentLessonsProvider);
 
     return lessonsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const ShimmerLoading(itemCount: 3),
       error: (err, _) => Text(
         'Could not load lessons.',
         style: theme.textTheme.bodyMedium?.copyWith(color: cs.error),
@@ -1597,12 +1429,15 @@ class _ReaderLessonCard extends StatelessWidget {
               ),
               SizedBox(
                 height: AppTheme.touchTarget,
-                child: FilledButton(
+                child: AnimatedPressable(
                   onPressed: () => context.push('/lessons/$lessonId'),
-                  child: Text(
-                    buttonText,
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w500,
+                  child: FilledButton(
+                    onPressed: () {},
+                    child: Text(
+                      buttonText,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ),

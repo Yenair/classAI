@@ -473,6 +473,12 @@ class _LoginCard extends StatelessWidget {
                   height: AppTheme.touchTarget,
                   child: FilledButton(
                     onPressed: isLoggingIn ? null : onLogin,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: cs.primary,
+                      foregroundColor: cs.onPrimary,
+                      elevation: 2,
+                      shadowColor: cs.primary.withValues(alpha: 0.4),
+                    ),
                     child: isLoggingIn
                         ? SizedBox(
                             height: 22,
@@ -485,7 +491,8 @@ class _LoginCard extends StatelessWidget {
                         : Text(
                             'Sign In',
                             style: theme.textTheme.labelLarge?.copyWith(
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w700,
+                              color: cs.onPrimary,
                             ),
                           ),
                   ),
@@ -719,3 +726,4 @@ class _DeactivatedNotice extends StatelessWidget {
     );
   }
 }
+

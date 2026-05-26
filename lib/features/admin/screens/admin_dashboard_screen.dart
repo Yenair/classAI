@@ -2,13 +2,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:classai/core/widgets/shimmer_loading.dart';
 import 'package:classai/features/admin/providers/admin_provider.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/core/services/auth_service.dart';
-import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/widgets/app_toast.dart';
+import 'package:classai/core/widgets/spring_scroll_physics.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/features/settings/providers/theme_provider.dart';
+import 'package:classai/core/widgets/profile_slide_up_menu.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
 /// Admin dashboard screen with teacher management, vault approval queue,
@@ -63,7 +65,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   // === Main canvas ===
                   Expanded(
                     child: dashboardData.loading
-                        ? const Center(child: CircularProgressIndicator())
+                        ? const ShimmerLoading()
                         : dashboardData.errorMessage != null
                             ? _buildErrorState(cs, textTheme, dashboardData)
                             : _buildCanvas(context, cs, textTheme,
@@ -147,7 +149,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           // Navigation items
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+                physics: const SpringScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
               children: [
                 _NavItem(
                   icon: Icons.home_rounded,
@@ -273,102 +276,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               ),
               const SizedBox(width: 8),
               // Profile popup
-              PopupMenuButton<String>(
-                onSelected: (value) {
-                  switch (value) {
-                    case 'settings':
-                      context.push('/settings');
-                    case 'logout':
-                      _showLogoutConfirmation(context, ref);
-                    case 'theme_light':
-                      ref
-                          .read(themeProvider.notifier)
-                          .setTheme(ThemeMode.light);
-                    case 'theme_dark':
-                      ref.read(themeProvider.notifier).setTheme(ThemeMode.dark);
-                    case 'theme_system':
-                      ref
-                          .read(themeProvider.notifier)
-                          .setTheme(ThemeMode.system);
-                  }
-                },
-                offset: const Offset(0, 48),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                ),
-                itemBuilder: (context) {
-                  final teacher = authData.currentTeacher;
-                  return [
-                    PopupMenuItem<String>(
-                      enabled: false,
-                      child: SizedBox(
-                        width: 200,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              teacher?.teacherName ?? 'Admin',
-                              style: textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              teacher?.email ?? '',
-                              style: textTheme.bodySmall?.copyWith(
-                                color: cs.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const PopupMenuDivider(),
-                    PopupMenuItem<String>(
-                      enabled: false,
-                      child: Text(
-                        'Theme',
-                        style: textTheme.labelMedium?.copyWith(
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                    CheckedPopupMenuItem<String>(
-                      checked: themeMode == ThemeMode.light,
-                      value: 'theme_light',
-                      child: const Text('Light'),
-                    ),
-                    CheckedPopupMenuItem<String>(
-                      checked: themeMode == ThemeMode.dark,
-                      value: 'theme_dark',
-                      child: const Text('Dark'),
-                    ),
-                    CheckedPopupMenuItem<String>(
-                      checked: themeMode == ThemeMode.system,
-                      value: 'theme_system',
-                      child: const Text('System'),
-                    ),
-                    const PopupMenuDivider(),
-                    const PopupMenuItem<String>(
-                      value: 'settings',
-                      child: ListTile(
-                        leading: Icon(Icons.settings_rounded),
-                        title: Text('Settings'),
-                        contentPadding: EdgeInsets.zero,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ),
-                    const PopupMenuItem<String>(
-                      value: 'logout',
-                      child: ListTile(
-                        leading: Icon(Icons.logout_rounded),
-                        title: Text('Logout'),
-                        contentPadding: EdgeInsets.zero,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ),
-                  ];
-                },
+              ProfileSlideUpMenu(
+                themeMode: themeMode,
+                ref: ref,
+                teacherName: authData.currentTeacher?.teacherName,
+                teacherEmail: authData.currentTeacher?.email,
+                onSettings: () => context.push('/settings'),
+                onLogout: () => _showLogoutConfirmation(context, ref),
                 child: Container(
                   width: 40,
                   height: 40,
@@ -967,6 +881,7 @@ class _TeacherManagementTabState extends ConsumerState<_TeacherManagementTab> {
 
     // -- Teacher Roster Card --
     return SingleChildScrollView(
+      physics: const SpringScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 80),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1421,7 +1336,7 @@ class _VaultApprovalTab extends ConsumerWidget {
       future: ref.read(databaseProvider).vaultItemsDao.getPendingApproval(),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator());
+          return const ShimmerLoading();
         }
 
         final items = snapshot.data ?? [];
@@ -1598,6 +1513,7 @@ class _SyncHealthTab extends StatelessWidget {
         totalTeachers > 0 ? ((greenCount / totalTeachers) * 100).round() : 0;
 
     return SingleChildScrollView(
+      physics: const SpringScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 80),
       child: isWide
           ? _buildWideLayout(context, cs, textTheme, greenCount, yellowCount,

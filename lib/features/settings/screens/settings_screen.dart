@@ -6,9 +6,11 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:classai/core/constants/curriculum_types.dart';
 import 'package:classai/core/widgets/app_toast.dart';
+import 'package:classai/core/widgets/spring_scroll_physics.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
+import 'package:classai/core/widgets/shimmer_loading.dart';
 import 'package:classai/features/settings/providers/theme_provider.dart';
 
 /// Settings screen — redesigned to match Google Stitch bento grid layout.
@@ -212,6 +214,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   // === Canvas ===
                   Expanded(
                     child: SingleChildScrollView(
+                      physics: const SpringScrollPhysics(),
                       padding: const EdgeInsets.fromLTRB(16, 24, 16, 100),
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 896),
@@ -326,6 +329,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           // Nav items
           Expanded(
             child: ListView(
+              physics: const SpringScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 12),
               children: [
                 _SettingsNavItem(
@@ -1008,7 +1012,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const SizedBox(height: 16),
           if (_loadingSubjects)
-            const Center(child: CircularProgressIndicator())
+            const ShimmerLoading(itemCount: 3)
           else ...[
             Wrap(
               spacing: 8,

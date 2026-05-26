@@ -1,5 +1,6 @@
 // lib/features/payment/screens/payment_screen.dart
 import 'package:flutter/material.dart';
+import 'package:classai/core/widgets/shimmer_loading.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
@@ -385,8 +386,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const CircularProgressIndicator(),
-                      const SizedBox(height: 16),
+                      const ShimmerLoading(itemCount: 3),
                       Text(
                         'Processing payment\u2026',
                         style: TextStyle(

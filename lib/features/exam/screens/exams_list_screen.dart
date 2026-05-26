@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/widgets/animated_pressable.dart';
 import 'package:classai/core/widgets/conflict_banner.dart';
+import 'package:classai/core/widgets/spring_scroll_physics.dart';
+import 'package:classai/core/widgets/staggered_fade_in.dart';
 import 'package:classai/core/widgets/sync_indicator.dart';
 import 'package:classai/core/widgets/credit_counter.dart';
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
@@ -166,16 +169,22 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
 
                 return RefreshIndicator(
                   onRefresh: () async => ref.invalidate(examsListProvider),
+                  color: cs.primary,
+                  backgroundColor: cs.surface,
                   child: ListView.builder(
+                    physics: const SpringScrollPhysics(),
                     padding: const EdgeInsets.all(16),
                     itemCount: exams.length,
                     itemBuilder: (context, index) {
                       final exam = exams[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: _ExamCard(
-                          exam: exam,
-                          onTap: () => context.push('/exams/${exam.id}'),
+                      return StaggeredFadeIn(
+                        index: index,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _ExamCard(
+                            exam: exam,
+                            onTap: () => context.push('/exams/${exam.id}'),
+                          ),
                         ),
                       );
                     },
@@ -197,19 +206,22 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
             ),
           ],
         ),
-        child: FloatingActionButton.extended(
+        child: AnimatedPressable(
           onPressed: () => context.push('/exam-editor'),
-          heroTag: 'newExam',
-          backgroundColor: cs.primary,
-          foregroundColor: cs.onPrimary,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-          icon: const Icon(Icons.add_rounded),
-          label: const Text(
-            'New Exam',
-            style: TextStyle(fontWeight: FontWeight.w600),
+          child: FloatingActionButton.extended(
+            onPressed: () {},
+            heroTag: 'newExam',
+            backgroundColor: cs.primary,
+            foregroundColor: cs.onPrimary,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text(
+              'New Exam',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
         ),
       ),
@@ -228,7 +240,9 @@ class _ExamCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
 
-    return InkWell(
+    return Hero(
+      tag: 'exam-${exam.id}',
+      child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
@@ -335,6 +349,7 @@ class _ExamCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }
