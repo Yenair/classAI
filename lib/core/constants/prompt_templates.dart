@@ -7,10 +7,60 @@ class PromptTemplates {
     return 'You are a professional educator designing a lesson note for $subject '
         '($curriculum curriculum), $classLevel, Week $week, Topic: "$topic". '
         'Difficulty: $difficulty. Target cognitive levels: $bloomsVerbs. '
-        'Include: Learning Objectives, Key Vocabulary, Materials, Lesson Presentation, '
-        'Assessment, Homework. $attribution. '
+        'Use the following clear section headings in the output:\n'
+        '## Learning Objectives\n'
+        '## Key Vocabulary\n'
+        '## Materials\n'
+        '## Lesson Presentation\n'
+        '## Assessment\n'
+        '## Homework\n'
+        '$attribution. '
+        'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
         'Return ONLY valid JSON: '
         '{"objectives":[...],"vocabulary":[...],"materials":[...],"presentation":{...},"assessment":"...","homework":"..."}';
+  }
+
+  /// Generate a combined exam prompt that supports MCQ, Theory, and Subjective.
+  /// [typeCounts] maps question type names ("MCQ", "Theory", "Subjective") to their counts.
+  static String examQuestions(
+      String subject, String classLevel, String topic, String difficulty,
+      Map<String, int> typeCounts,
+      {String teacherName = 'Teacher', String schoolName = 'School'}) {
+    final attribution =
+        '— Generated for $teacherName, $schoolName. Not for redistribution.';
+
+    // Build dynamic description of requested types
+    final parts = <String>[];
+    for (final entry in typeCounts.entries) {
+      if (entry.value > 0) {
+        parts.add('${entry.value} ${entry.key} questions');
+      }
+    }
+    final typeDescription = parts.isEmpty ? '10 MCQs' : parts.join(', ');
+
+    final jsonStructure = <String>[];
+    if ((typeCounts['MCQ'] ?? 0) > 0) {
+      jsonStructure.add(
+          '"mcq":[{"question":"...","options":{"A":"...","B":"...","C":"...","D":"..."},"correct":"A"}]');
+    }
+    if ((typeCounts['Theory'] ?? 0) > 0) {
+      jsonStructure.add(
+          '"theory":[{"question":"...","modelAnswer":"...","cognitiveLevel":"..."}]');
+    }
+    if ((typeCounts['Subjective'] ?? 0) > 0) {
+      jsonStructure.add(
+          '"subjective":[{"question":"...","prompt":"...","rubric":"..."}]');
+    }
+
+    return 'Generate $typeDescription for $subject, $classLevel, "$topic". Difficulty: $difficulty. '
+        'Use the following clear section headings in the output:\n'
+        '## MCQ Questions\n'
+        '## Theory Questions\n'
+        '## Subjective Questions\n'
+        '$attribution. '
+        'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
+        'Return ONLY valid JSON: '
+        '{$jsonStructure}';
   }
 
   static String mcqs(
@@ -19,7 +69,10 @@ class PromptTemplates {
     final attribution =
         '— Generated for $teacherName, $schoolName. Not for redistribution.';
     return 'Generate 10 MCQs for $subject, $classLevel, "$topic". Difficulty: $difficulty. '
+        'Use the following clear section heading in the output:\n'
+        '## MCQ Questions\n'
         '$attribution. '
+        'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
         '4 options each (A-D). Return ONLY valid JSON: '
         '{"questions":[{"question":"...","options":{"A":"...","B":"...","C":"...","D":"..."},"correct":"A"}]}';
   }
@@ -29,8 +82,25 @@ class PromptTemplates {
     final attribution =
         '— Generated for $teacherName, $schoolName. Not for redistribution.';
     return 'Generate 5 theory questions for $subject, $classLevel, "$topic". '
+        'Use the following clear section heading in the output:\n'
+        '## Theory Questions\n'
         '$attribution. '
+        'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
         'Include model answer and cognitive level. Return ONLY valid JSON: '
         '{"questions":[{"question":"...","modelAnswer":"...","cognitiveLevel":"..."}]}';
+  }
+
+  static String subjectiveQuestions(
+      String subject, String classLevel, String topic,
+      {String teacherName = 'Teacher', String schoolName = 'School'}) {
+    final attribution =
+        '— Generated for $teacherName, $schoolName. Not for redistribution.';
+    return 'Generate 5 subjective questions for $subject, $classLevel, "$topic". '
+        'Use the following clear section heading in the output:\n'
+        '## Subjective Questions\n'
+        '$attribution. '
+        'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
+        'Include detailed prompt and marking rubric. Return ONLY valid JSON: '
+        '{"questions":[{"question":"...","prompt":"...","rubric":"..."}]}';
   }
 }

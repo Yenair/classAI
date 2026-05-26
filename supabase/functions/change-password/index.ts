@@ -87,7 +87,7 @@ serve(async (req) => {
     const pepper = Deno.env.get("PASSWORD_PEPPER")!;
     const newPasswordHash = await bcrypt.hash(new_password + pepper, 10);
 
-    // ── 5. Update password in teachers table ──────────────────────────────
+    // ── 5. Update password in teachers table, clear temp_password ──────────
     const newVersion = (teacher.password_hash_version ?? 1) + 1;
 
     const { error: updateError } = await supabase
@@ -96,6 +96,7 @@ serve(async (req) => {
         password_hash: newPasswordHash,
         password_hash_version: newVersion,
         force_password_reset: false,
+        temp_password: null,
       })
       .eq("id", teacherId);
 

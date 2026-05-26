@@ -70,6 +70,29 @@ class AiService {
     }
   }
 
+  /// Strip extraneous markdown code fences and introductory/concluding text
+  /// from an AI response string before JSON parsing.
+  String _stripMarkdownWrappers(String raw) {
+    // Remove ```json ... ``` blocks
+    final jsonFencePattern = RegExp(r'```(?:json)?\s*([\s\S]*?)```');
+    final jsonFenceMatch = jsonFencePattern.firstMatch(raw);
+    if (jsonFenceMatch != null) {
+      return jsonFenceMatch.group(1)!.trim();
+    }
+
+    // Remove "Here is the..." or "Here are the..." type wrappers
+    final introPattern = RegExp(r'^.*?(?=\{)', dotAll: true);
+    final introMatch = introPattern.firstMatch(raw);
+    if (introMatch != null && introMatch.group(0)!.trim().isNotEmpty) {
+      final afterIntro = raw.substring(introMatch.end).trim();
+      if (afterIntro.startsWith('{') || afterIntro.startsWith('[')) {
+        return afterIntro;
+      }
+    }
+
+    return raw.trim();
+  }
+
   Future<Map<String, dynamic>> _callDeepSeek(String prompt) async {
     final response = await _supabase.functions.invoke('deepseek-proxy', body: {
       'prompt': prompt,
@@ -79,7 +102,15 @@ class AiService {
       throw AiGenerationException(
           data?['error'] as String? ?? 'DeepSeek proxy not available');
     }
-    final generated = data['generatedJson'] as Map<String, dynamic>;
+    final generatedJson = data['generatedJson'];
+    Map<String, dynamic> generated;
+    if (generatedJson is String) {
+      // Response came as raw text — strip wrappers and parse
+      final stripped = _stripMarkdownWrappers(generatedJson);
+      generated = Map<String, dynamic>.from(jsonDecode(stripped) as Map);
+    } else {
+      generated = generatedJson as Map<String, dynamic>;
+    }
     return _encrypt(generated);
   }
 
@@ -92,7 +123,15 @@ class AiService {
       throw AiGenerationException(
           data?['error'] as String? ?? 'Gemini proxy not available');
     }
-    final generated = data['generatedJson'] as Map<String, dynamic>;
+    final generatedJson = data['generatedJson'];
+    Map<String, dynamic> generated;
+    if (generatedJson is String) {
+      // Response came as raw text — strip wrappers and parse
+      final stripped = _stripMarkdownWrappers(generatedJson);
+      generated = Map<String, dynamic>.from(jsonDecode(stripped) as Map);
+    } else {
+      generated = generatedJson as Map<String, dynamic>;
+    }
     return _encrypt(generated);
   }
 

@@ -1,4 +1,5 @@
 // lib/features/admin/providers/admin_provider.dart
+import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:classai/core/database/database.dart';
@@ -59,15 +60,36 @@ class TeacherAdminData {
   }
 }
 
+/// Data for a pending teacher (hasn't logged in yet) with their temp password.
+class PendingTeacherData {
+  final int localId;
+  final String? serverId;
+  final String email;
+  final String teacherName;
+  final String role;
+  final String? tempPassword;
+
+  const PendingTeacherData({
+    required this.localId,
+    this.serverId,
+    required this.email,
+    required this.teacherName,
+    required this.role,
+    this.tempPassword,
+  });
+}
+
 /// Data exposed to the admin dashboard screens.
 class AdminDashboardData {
   final List<TeacherAdminData> teachers;
+  final List<PendingTeacherData> pendingTeachers;
   final int pendingVaultApprovals;
   final bool loading;
   final String? errorMessage;
 
   const AdminDashboardData({
     this.teachers = const [],
+    this.pendingTeachers = const [],
     this.pendingVaultApprovals = 0,
     this.loading = false,
     this.errorMessage,
@@ -92,10 +114,13 @@ class AdminDashboardNotifier extends Notifier<AdminDashboardData> {
       final authState = ref.read(authProvider);
       final schoolLocalId = authState.currentSchool?.localId ?? 0;
       final teachers = await _db.teachersDao.getBySchool(schoolLocalId);
+      final pendingTeachersFromDao =
+          await _db.teachersDao.getPendingTeachers();
       final pendingItems = await _db.vaultItemsDao.getPendingApproval();
 
       // Build teacher data with real device counts, sync counts, conflicts
       final teacherDataList = <TeacherAdminData>[];
+      final pendingTeacherList = <PendingTeacherData>[];
       final totalPendingCount = await _db.syncQueueDao.pendingCount();
       final conflictRows = await (_db.select(_db.conflicts)
             ..where((t) => t.resolution.equals('unresolved')))
@@ -120,8 +145,28 @@ class AdminDashboardNotifier extends Notifier<AdminDashboardData> {
         ));
       }
 
+      // Build pending teacher list using the dedicated DAO method
+      for (final t in pendingTeachersFromDao
+          .where((t) => t.schoolLocalId == schoolLocalId)) {
+        pendingTeacherList.add(PendingTeacherData(
+          localId: t.localId,
+          serverId: t.serverId,
+          email: t.email,
+          teacherName: t.teacherName,
+          role: t.role,
+          tempPassword: t.tempPassword,
+        ));
+      }
+
+      debugPrint(
+        '[admin] refresh: ${teachers.length} teachers, '
+        '${pendingTeachersFromDao.length} pending from DAO, '
+        '${pendingTeacherList.length} filtered by school',
+      );
+
       state = AdminDashboardData(
         teachers: teacherDataList,
+        pendingTeachers: pendingTeacherList,
         pendingVaultApprovals: pendingItems.length,
       );
     } catch (e) {

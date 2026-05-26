@@ -4,7 +4,8 @@ import nodemailer from "npm:nodemailer";
 
 serve(async (req) => {
   try {
-    const { email } = await req.json();
+    let { email } = await req.json();
+    email = email.toLowerCase();
 
     if (!email) {
       return new Response(

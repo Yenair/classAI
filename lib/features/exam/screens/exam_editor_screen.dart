@@ -13,11 +13,9 @@ import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
-enum QuestionType { mcq, theory, both }
-
 /// Stitch‑designed exam editor with AI generation.
 ///
-/// Generates MCQ + theory questions. Preview as editable list of question cards.
+/// Generates MCQ, Theory, and/or Subjective questions. Preview as editable list of question cards.
 /// Save inserts into `exams` table.
 class ExamEditorScreen extends ConsumerStatefulWidget {
   /// Callback invoked with the generated prompt; returns parsed JSON map.
@@ -32,7 +30,6 @@ class ExamEditorScreen extends ConsumerStatefulWidget {
 class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   final _formKey = GlobalKey<FormState>();
   final _topicController = TextEditingController();
-  final _questionCountController = TextEditingController(text: '10');
   String _subject = 'Mathematics';
   String _classLevel = 'JSS 1';
   String _difficulty = 'medium';
@@ -40,7 +37,6 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   bool _hasGenerated = false;
   bool _isUnlocked = false;
   int _creditBalance = 3;
-  QuestionType _questionType = QuestionType.both;
   String? _teacherId;
   String? _schoolId;
   String _subscriptionTier = 'free';
@@ -48,11 +44,28 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   /// Loaded from subjectsDao, falls back to [_subjects] if empty.
   List<String> _loadedSubjects = [];
 
+  // Multi-select question types and their counts
+  final Set<String> _selectedQuestionTypes = {'MCQ', 'Theory'};
+  final Map<String, int> _questionCounts = {
+    'MCQ': 5,
+    'Theory': 5,
+    'Subjective': 5,
+  };
+  static const _defaultQuestionTypes = {'MCQ', 'Theory'};
+  static const Map<String, int> _defaultQuestionCounts = {
+    'MCQ': 5,
+    'Theory': 5,
+    'Subjective': 5,
+  };
+
   // Generated MCQ data
   List<Map<String, dynamic>> _mcqs = [];
 
   // Generated theory questions
   List<Map<String, dynamic>> _theoryQuestions = [];
+
+  // Generated subjective questions
+  List<Map<String, dynamic>> _subjectiveQuestions = [];
 
   final List<String> _subjects = [
     'Mathematics',
@@ -164,8 +177,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       final db = ref.read(databaseProvider);
       final aiService = AiService(db: db);
       final topic = _topicController.text.trim();
-      final generateMcq = _questionType != QuestionType.theory;
-      final generateTheory = _questionType != QuestionType.mcq;
+      final generateMcq = _selectedQuestionTypes.contains('MCQ');
+      final generateTheory = _selectedQuestionTypes.contains('Theory');
+      final generateSubjective = _selectedQuestionTypes.contains('Subjective');
 
       // Check daily generation limit before generating
       try {
@@ -181,10 +195,11 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         return;
       }
 
-      // Generate MCQ and Theory questions
+      // Generate questions
       // NOTE: No credit is spent on AI generation - credit is spent on unlock
       _mcqs = [];
       _theoryQuestions = [];
+      _subjectiveQuestions = [];
 
       if (generateMcq) {
         final mcqPrompt = PromptTemplates.mcqs(
@@ -224,6 +239,25 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
             theoryList.map((q) => Map<String, dynamic>.from(q as Map)).toList();
       }
 
+      if (generateSubjective) {
+        final subjectivePrompt = PromptTemplates.subjectiveQuestions(
+          _subject,
+          _classLevel,
+          topic,
+        );
+        Map<String, dynamic> subjectiveResult = {};
+        if (widget.generateCallback != null) {
+          subjectiveResult = await widget.generateCallback!(subjectivePrompt);
+        } else {
+          subjectiveResult = await aiService.generate(subjectivePrompt);
+        }
+        final subjectiveRaw =
+            subjectiveResult['raw'] as Map<String, dynamic>? ?? subjectiveResult;
+        final subjectiveList = subjectiveRaw['questions'] as List<dynamic>? ?? [];
+        _subjectiveQuestions =
+            subjectiveList.map((q) => Map<String, dynamic>.from(q as Map)).toList();
+      }
+
       // Audit log the generation
       await aiService.logGeneration(
         teacherId: _teacherId,
@@ -240,10 +274,13 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       if (mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
+          final parts = <String>[];
+          if (_mcqs.isNotEmpty) parts.add('${_mcqs.length} MCQs');
+          if (_theoryQuestions.isNotEmpty) parts.add('${_theoryQuestions.length} theory');
+          if (_subjectiveQuestions.isNotEmpty) parts.add('${_subjectiveQuestions.length} subjective');
           showInfoToast(
             context: context,
-            message:
-                'Generated ${_mcqs.length} MCQs and ${_theoryQuestions.length} theory questions',
+            message: 'Generated ${parts.join(', ')}',
           );
         });
       }
@@ -373,6 +410,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       final content = {
         'mcqs': _mcqs,
         'theory': _theoryQuestions,
+        'subjective': _subjectiveQuestions,
       };
 
       final db = ref.read(databaseProvider);
@@ -384,8 +422,26 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
               difficulty: _difficulty,
               curriculum: 'NERDC',
               content: jsonEncode(content),
+              teacherServerId: Value(_teacherId),
+              schoolServerId: Value(_schoolId),
             ),
           );
+
+      // Queue sync entry so this exam gets pushed to the server
+      await db.syncQueueDao.insertEntry(
+        queueTable: 'exams',
+        recordLocalId: id,
+        operation: 'INSERT',
+        payload: {
+          'subject': _subject,
+          'classLevel': _classLevel,
+          'topic': _topicController.text.trim(),
+          'difficulty': _difficulty,
+          'curriculum': 'NERDC',
+          'teacher_server_id': _teacherId,
+          'school_server_id': _schoolId,
+        },
+      );
 
       if (notify && mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -411,6 +467,13 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       _difficulty = 'medium';
       _mcqs = [];
       _theoryQuestions = [];
+      _subjectiveQuestions = [];
+      _selectedQuestionTypes
+        ..clear()
+        ..addAll(_defaultQuestionTypes);
+      _questionCounts
+        ..clear()
+        ..addAll(_defaultQuestionCounts);
       _hasGenerated = false;
     });
   }
@@ -418,7 +481,6 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   @override
   void dispose() {
     _topicController.dispose();
-    _questionCountController.dispose();
     super.dispose();
   }
 
@@ -442,7 +504,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
-    final totalQuestions = _mcqs.length + _theoryQuestions.length;
+    final totalQuestions = _mcqs.length + _theoryQuestions.length + _subjectiveQuestions.length;
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -483,27 +545,38 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                     SizedBox(
                                       width: 380,
                                       child: _ConfigPanel(
-                                        cs: cs,
-                                        theme: theme,
-                                        subject: _subject,
-                                        classLevel: _classLevel,
-                                        topicController: _topicController,
-                                        questionCountController:
-                                            _questionCountController,
-                                        difficulty: _difficulty,
-                                        isGenerating: _isGenerating,
-                                        creditBalance: _creditBalance,
-                                        subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
-                                        classLevels: _classLevels,
-                                        difficulties: _difficulties,
-                                        onSubjectChanged: (v) => setState(
-                                            () => _subject = v),
-                                        onClassChanged: (v) => setState(
-                                            () => _classLevel = v),
-                                        onDifficultyChanged: (v) => setState(
-                                            () => _difficulty = v),
-                                        onGenerate: _handleGenerate,
-                                      ),
+                                          cs: cs,
+                                          theme: theme,
+                                          subject: _subject,
+                                          classLevel: _classLevel,
+                                          topicController: _topicController,
+                                          selectedQuestionTypes:
+                                              _selectedQuestionTypes,
+                                          questionCounts: _questionCounts,
+                                          difficulty: _difficulty,
+                                          isGenerating: _isGenerating,
+                                          creditBalance: _creditBalance,
+                                          subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
+                                          classLevels: _classLevels,
+                                          difficulties: _difficulties,
+                                          onSubjectChanged: (v) => setState(
+                                              () => _subject = v),
+                                          onClassChanged: (v) => setState(
+                                              () => _classLevel = v),
+                                          onDifficultyChanged: (v) => setState(
+                                              () => _difficulty = v),
+                                          onTypeToggled: (type) => setState(() {
+                                            if (_selectedQuestionTypes.contains(type)) {
+                                              _selectedQuestionTypes.remove(type);
+                                            } else {
+                                              _selectedQuestionTypes.add(type);
+                                            }
+                                          }),
+                                          onCountChanged: (type, count) => setState(() {
+                                            _questionCounts[type] = count;
+                                          }),
+                                          onGenerate: _handleGenerate,
+                                        ),
                                     ),
                                     const SizedBox(width: 24),
                                     Expanded(
@@ -514,6 +587,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                         isUnlocked: _isUnlocked,
                                         mcqs: _mcqs,
                                         theoryQuestions: _theoryQuestions,
+                                        subjectiveQuestions: _subjectiveQuestions,
                                         totalQuestions: totalQuestions,
                                         onUnlock: _handleUnlock,
                                         onSave: () => _saveExam(),
@@ -533,8 +607,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                       subject: _subject,
                                       classLevel: _classLevel,
                                       topicController: _topicController,
-                                      questionCountController:
-                                          _questionCountController,
+                                      selectedQuestionTypes:
+                                          _selectedQuestionTypes,
+                                      questionCounts: _questionCounts,
                                       difficulty: _difficulty,
                                       isGenerating: _isGenerating,
                                       creditBalance: _creditBalance,
@@ -547,6 +622,16 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                           () => _classLevel = v),
                                       onDifficultyChanged: (v) => setState(
                                           () => _difficulty = v),
+                                      onTypeToggled: (type) => setState(() {
+                                        if (_selectedQuestionTypes.contains(type)) {
+                                          _selectedQuestionTypes.remove(type);
+                                        } else {
+                                          _selectedQuestionTypes.add(type);
+                                        }
+                                      }),
+                                      onCountChanged: (type, count) => setState(() {
+                                        _questionCounts[type] = count;
+                                      }),
                                       onGenerate: _handleGenerate,
                                     ),
                                     const SizedBox(height: 24),
@@ -557,6 +642,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                       isUnlocked: _isUnlocked,
                                       mcqs: _mcqs,
                                       theoryQuestions: _theoryQuestions,
+                                      subjectiveQuestions: _subjectiveQuestions,
                                       totalQuestions: totalQuestions,
                                       onUnlock: _handleUnlock,
                                       onSave: () => _saveExam(),
@@ -819,7 +905,8 @@ class _ConfigPanel extends StatelessWidget {
   final String subject;
   final String classLevel;
   final TextEditingController topicController;
-  final TextEditingController questionCountController;
+  final Set<String> selectedQuestionTypes;
+  final Map<String, int> questionCounts;
   final String difficulty;
   final bool isGenerating;
   final int creditBalance;
@@ -829,6 +916,8 @@ class _ConfigPanel extends StatelessWidget {
   final ValueChanged<String> onSubjectChanged;
   final ValueChanged<String> onClassChanged;
   final ValueChanged<String> onDifficultyChanged;
+  final ValueChanged<String> onTypeToggled;
+  final void Function(String, int) onCountChanged;
   final VoidCallback onGenerate;
 
   const _ConfigPanel({
@@ -837,7 +926,8 @@ class _ConfigPanel extends StatelessWidget {
     required this.subject,
     required this.classLevel,
     required this.topicController,
-    required this.questionCountController,
+    required this.selectedQuestionTypes,
+    required this.questionCounts,
     required this.difficulty,
     required this.isGenerating,
     required this.creditBalance,
@@ -847,6 +937,8 @@ class _ConfigPanel extends StatelessWidget {
     required this.onSubjectChanged,
     required this.onClassChanged,
     required this.onDifficultyChanged,
+    required this.onTypeToggled,
+    required this.onCountChanged,
     required this.onGenerate,
   });
 
@@ -971,45 +1063,94 @@ class _ConfigPanel extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 24),
-              // MCQ count
+              // Question Types
               _FieldLabel(
                 theme: theme,
                 cs: cs,
-                label: 'Multiple Choice (MCQ)',
+                label: 'Question Types',
                 color: Colors.white70,
               ),
-              const SizedBox(height: 4),
-              SizedBox(
-                height: AppTheme.touchTarget,
-                child: TextFormField(
-                  controller: questionCountController,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                      borderSide: BorderSide.none,
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: ['MCQ', 'Theory', 'Subjective'].map((type) {
+                  final isSelected = selectedQuestionTypes.contains(type);
+                  return FilterChip(
+                    label: Text(
+                      type,
+                      style: TextStyle(
+                        color: isSelected
+                            ? cs.onSecondaryFixed
+                            : cs.onPrimaryContainer,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
                     ),
-                    filled: true,
-                    fillColor: Colors.white.withValues(alpha: 0.15),
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 16),
-                  ),
-                  keyboardType: TextInputType.number,
-                  style: TextStyle(color: cs.onPrimaryContainer),
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) {
-                      return 'Required';
-                    }
-                    final count = int.tryParse(v);
-                    if (count == null || count < 1) {
-                      return 'Min 1';
-                    }
-                    if (count > 100) {
-                      return 'Max 100';
-                    }
-                    return null;
-                  },
-                ),
+                    selected: isSelected,
+                    onSelected: (_) => onTypeToggled(type),
+                    selectedColor: cs.secondary,
+                    checkmarkColor: cs.onSecondaryFixed,
+                    backgroundColor: Colors.white.withValues(alpha: 0.10),
+                    side: BorderSide.none,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                    ),
+                  );
+                }).toList(),
               ),
+              const SizedBox(height: 16),
+              // Quantity fields for selected types
+              ...['MCQ', 'Theory', 'Subjective']
+                  .where((t) => selectedQuestionTypes.contains(t))
+                  .map((type) {
+                final count = questionCounts[type] ?? 5;
+                final labels = {
+                  'MCQ': 'Multiple Choice (MCQ)',
+                  'Theory': 'Theory / Essay',
+                  'Subjective': 'Subjective / Practical',
+                };
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _FieldLabel(
+                        theme: theme,
+                        cs: cs,
+                        label: labels[type] ?? type,
+                        color: Colors.white70,
+                      ),
+                      const SizedBox(height: 4),
+                      SizedBox(
+                        height: AppTheme.touchTarget,
+                        child: TextFormField(
+                          initialValue: count.toString(),
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.radiusLg),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            fillColor: Colors.white.withValues(alpha: 0.15),
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                          ),
+                          keyboardType: TextInputType.number,
+                          style: TextStyle(color: cs.onPrimaryContainer),
+                          onChanged: (v) {
+                            final parsed = int.tryParse(v);
+                            if (parsed != null && parsed >= 1 && parsed <= 100) {
+                              onCountChanged(type, parsed);
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
               const SizedBox(height: 20),
               // Generate button
               SizedBox(
@@ -1063,6 +1204,7 @@ class _PreviewPanel extends StatelessWidget {
   final bool isUnlocked;
   final List<Map<String, dynamic>> mcqs;
   final List<Map<String, dynamic>> theoryQuestions;
+  final List<Map<String, dynamic>> subjectiveQuestions;
   final int totalQuestions;
   final VoidCallback onUnlock;
   final VoidCallback onSave;
@@ -1078,6 +1220,7 @@ class _PreviewPanel extends StatelessWidget {
     required this.isUnlocked,
     required this.mcqs,
     required this.theoryQuestions,
+    required this.subjectiveQuestions,
     required this.totalQuestions,
     required this.onUnlock,
     required this.onSave,
@@ -1171,7 +1314,7 @@ class _PreviewPanel extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Generated ${mcqs.length} MCQs and ${theoryQuestions.length} theory questions',
+                      _buildSummaryText(),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: cs.onSurfaceVariant,
                       ),
@@ -1238,6 +1381,26 @@ class _PreviewPanel extends StatelessWidget {
             ),
           ],
 
+          // Subjective Questions Section
+          if (hasGenerated && subjectiveQuestions.isNotEmpty && isUnlocked) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+              child: _SectionHeader(
+                label: 'Section C',
+                subtitle: 'Subjective / Practical',
+                cs: cs,
+                theme: theme,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: Column(
+                children: List.generate(
+                    subjectiveQuestions.length, (i) => _buildTheoryCard(i, theme, cs)),
+              ),
+            ),
+          ],
+
           // Action footer
           if (hasGenerated)
             Container(
@@ -1288,6 +1451,14 @@ class _PreviewPanel extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _buildSummaryText() {
+    final parts = <String>[];
+    if (mcqs.isNotEmpty) parts.add('${mcqs.length} MCQs');
+    if (theoryQuestions.isNotEmpty) parts.add('${theoryQuestions.length} theory');
+    if (subjectiveQuestions.isNotEmpty) parts.add('${subjectiveQuestions.length} subjective');
+    return 'Generated ${parts.join(', ')} questions';
   }
 
   Widget _previewHeader(int? totalQuestions) {

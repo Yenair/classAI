@@ -4,7 +4,8 @@ import bcrypt from "npm:bcryptjs";
 
 serve(async (req) => {
   try {
-    const { email, otp, newPassword } = await req.json();
+    let { email, otp, newPassword } = await req.json();
+    email = email.toLowerCase();
 
     if (!email || !otp || !newPassword) {
       return new Response(

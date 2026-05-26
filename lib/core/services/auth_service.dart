@@ -115,7 +115,18 @@ abstract class AuthService {
   ///
   /// Calls POST /functions/v1/add-teacher with email, teacher_name, role
   /// and the admin's JWT in the Authorization header.
-  Future<void> addTeacher(
+  /// Returns the temporary password if one was generated, or null otherwise.
+  Future<String?> addTeacher(
+    String email,
+    String teacherName,
+    String role,
+  );
+
+  /// Resend the temporary password to a teacher who hasn't logged in yet.
+  ///
+  /// Calls POST /functions/v1/add-teacher with resend=true.
+  /// Returns the new temporary password.
+  Future<String?> resendTeacherPassword(
     String email,
     String teacherName,
     String role,
@@ -150,6 +161,9 @@ class SupabaseAuthService implements AuthService {
     String password,
     String deviceId,
   ) async {
+    // Normalize email to lowercase for case-insensitive matching
+    email = email.toLowerCase();
+
     // Uses the custom JWT auth Edge Function, not Supabase Auth's
     // built-in provider. Passwords are validated server-side with bcrypt+pepper.
     final client = supabase_pkg.Supabase.instance.client;
@@ -517,6 +531,9 @@ class SupabaseAuthService implements AuthService {
     String adminPassword,
     String? recoveryEmail,
   ) async {
+    // Normalize email to lowercase for case-insensitive matching
+    adminEmail = adminEmail.toLowerCase();
+
     final client = supabase_pkg.Supabase.instance.client;
     final url = '${AppConstants.supabaseUrl}/functions/v1/signup';
     debugPrint('[DEBUG] signup() — Full Edge Function URL: $url');
@@ -591,7 +608,7 @@ class SupabaseAuthService implements AuthService {
   }
 
   @override
-  Future<void> addTeacher(
+  Future<String?> addTeacher(
     String email,
     String teacherName,
     String role,
@@ -624,6 +641,9 @@ class SupabaseAuthService implements AuthService {
           message: errorResponse,
         );
       }
+
+      // Return the temporary password from the response
+      return data['temp_password'] as String?;
     } on AuthException {
       rethrow;
     } on supabase_pkg.FunctionException catch (e) {
@@ -635,6 +655,65 @@ class SupabaseAuthService implements AuthService {
         code: AuthErrorCode.validationError,
         message:
             serverError ?? 'Failed to add teacher (server error ${e.status}).',
+        originalError: e,
+      );
+    } catch (e) {
+      throw AuthException(
+        code: AuthErrorCode.networkError,
+        message: 'Network error. Please check your connection and try again.',
+        originalError: e,
+      );
+    }
+  }
+
+  @override
+  Future<String?> resendTeacherPassword(
+    String email,
+    String teacherName,
+    String role,
+  ) async {
+    final jwt = _currentJwt;
+    if (jwt == null || jwt.isEmpty) {
+      throw AuthException(
+        code: AuthErrorCode.validationError,
+        message: 'No active session. Please login again.',
+      );
+    }
+
+    final client = supabase_pkg.Supabase.instance.client;
+    try {
+      final response = await client.functions.invoke(
+        'add-teacher',
+        headers: {'Authorization': 'Bearer $jwt'},
+        body: {
+          'email': email,
+          'teacher_name': teacherName,
+          'role': role,
+          'resend': true,
+        },
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      final errorResponse = data['error'] as String?;
+      if (errorResponse != null) {
+        throw AuthException(
+          code: AuthErrorCode.validationError,
+          message: errorResponse,
+        );
+      }
+
+      return data['temp_password'] as String?;
+    } on AuthException {
+      rethrow;
+    } on supabase_pkg.FunctionException catch (e) {
+      final serverError =
+          (e.details is Map && (e.details as Map)['error'] != null)
+              ? (e.details as Map)['error'] as String
+              : null;
+      throw AuthException(
+        code: AuthErrorCode.validationError,
+        message:
+            serverError ?? 'Failed to resend password (server error ${e.status}).',
         originalError: e,
       );
     } catch (e) {

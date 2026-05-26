@@ -24,7 +24,8 @@ serve(async (req) => {
       );
     }
 
-    const { email, password, device_id } = await req.json();
+    let { email, password, device_id } = await req.json();
+    email = email.toLowerCase();
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,

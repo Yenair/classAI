@@ -24,8 +24,9 @@ serve(async (req) => {
       );
     }
 
-    const { school_name, admin_email, admin_password, recovery_email } =
+    let { school_name, admin_email, admin_password, recovery_email } =
       await req.json();
+    admin_email = admin_email.toLowerCase();
 
     // ── Validate required fields ──────────────────────────────────────────
     if (!school_name || !admin_email || !admin_password) {

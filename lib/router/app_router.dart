@@ -21,30 +21,6 @@ import 'package:classai/features/payment/screens/payment_screen.dart';
 import 'package:classai/features/settings/screens/settings_screen.dart';
 import 'package:classai/features/credit/screens/insufficient_credit_screen.dart';
 
-/// Shared page transition helper.
-///
-/// Provides a fade-through transition (250ms ease-in-out) that creates a
-/// smooth visual flow between screens. The outgoing page fades to transparent
-/// while the incoming page fades in — mimicking the Z-axis shared-axis pattern
-/// used in Material 3.
-CustomTransitionPage _buildPageWithTransition({
-  required Widget child,
-  required LocalKey key,
-}) {
-  return CustomTransitionPage(
-    key: key,
-    child: child,
-    transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      return FadeTransition(
-        opacity: CurveTween(curve: Curves.easeInOut).animate(animation),
-        child: child,
-      );
-    },
-    transitionDuration: const Duration(milliseconds: 250),
-    reverseTransitionDuration: const Duration(milliseconds: 200),
-  );
-}
-
 /// GoRouter configuration for the ClassAI app.
 ///
 /// Routes:
@@ -74,166 +50,109 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/',
       name: 'dashboard',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        key: const ValueKey('dashboard'),
-        child: const DashboardScreen(),
-      ),
+      builder: (context, state) => const DashboardScreen(),
     ),
     GoRoute(
       path: '/login',
       name: 'login',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        key: const ValueKey('login'),
-        child: const LoginScreen(),
-      ),
+      builder: (context, state) => const LoginScreen(),
     ),
     GoRoute(
       path: '/lessons',
       name: 'lessons',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        key: const ValueKey('lessons'),
-        child: const LessonsListScreen(),
-      ),
+      builder: (context, state) => const LessonsListScreen(),
     ),
     GoRoute(
       path: '/lessons/:id',
       name: 'lesson-editor',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        key: ValueKey('/lessons/${state.pathParameters['id']}'),
-        child: const LessonEditorScreen(),
-      ),
+      builder: (context, state) {
+        final lessonId = int.tryParse(state.pathParameters['id'] ?? '');
+        return LessonEditorScreen(lessonId: lessonId);
+      },
     ),
     GoRoute(
       path: '/lesson-editor',
       name: 'lesson-creator',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        key: const ValueKey('lesson-creator'),
-        child: const LessonEditorScreen(),
-      ),
+      builder: (context, state) => const LessonEditorScreen(),
     ),
     GoRoute(
       path: '/exams',
       name: 'exams',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        key: const ValueKey('exams'),
-        child: const ExamsListScreen(),
-      ),
+      builder: (context, state) => const ExamsListScreen(),
     ),
     GoRoute(
       path: '/exams/:id',
       name: 'exam-editor',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        key: ValueKey('/exams/${state.pathParameters['id']}'),
-        child: const ExamEditorScreen(),
-      ),
+      builder: (context, state) => const ExamEditorScreen(),
     ),
     GoRoute(
       path: '/exam-editor',
       name: 'exam-creator',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        key: const ValueKey('exam-creator'),
-        child: const ExamEditorScreen(),
-      ),
+      builder: (context, state) => const ExamEditorScreen(),
     ),
     GoRoute(
       path: '/conflicts',
       name: 'conflicts',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        key: const ValueKey('conflicts'),
-        child: const ConflictResolutionScreen(),
-      ),
+      builder: (context, state) => const ConflictResolutionScreen(),
     ),
     GoRoute(
       path: '/admin',
       name: 'admin',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        key: const ValueKey('admin'),
-        child: const AdminDashboardScreen(),
-      ),
+      builder: (context, state) => const AdminDashboardScreen(),
     ),
     GoRoute(
       path: '/admin/teachers/:id',
       name: 'teacher-detail',
-      pageBuilder: (context, state) {
+      builder: (context, state) {
         final teacherLocalId = int.tryParse(state.pathParameters['id'] ?? '');
         if (teacherLocalId == null) {
-          return _buildPageWithTransition(
-            key: const ValueKey('teacher-detail-error'),
-            child: Scaffold(
-              appBar: AppBar(title: const Text('Error')),
-              body: const Center(child: Text('Invalid teacher ID')),
-            ),
+          return Scaffold(
+            appBar: AppBar(title: const Text('Error')),
+            body: const Center(child: Text('Invalid teacher ID')),
           );
         }
-        return _buildPageWithTransition(
-          key: ValueKey('/admin/teachers/${state.pathParameters['id']}'),
-          child: TeacherDetailScreen(teacherLocalId: teacherLocalId),
-        );
+        return TeacherDetailScreen(teacherLocalId: teacherLocalId);
       },
     ),
     GoRoute(
       path: '/vault',
       name: 'vault',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        key: const ValueKey('vault'),
-        child: const VaultBrowserScreen(),
-      ),
+      builder: (context, state) => const VaultBrowserScreen(),
     ),
     GoRoute(
       path: '/vault/publish',
       name: 'vault-publish',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        key: const ValueKey('vault-publish'),
-        child: const VaultPublisherScreen(),
-      ),
+      builder: (context, state) => const VaultPublisherScreen(),
     ),
     GoRoute(
       path: '/settings',
       name: 'settings',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        key: const ValueKey('settings'),
-        child: const SettingsScreen(),
-      ),
+      builder: (context, state) => const SettingsScreen(),
     ),
     GoRoute(
       path: '/signup',
       name: 'signup',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        key: const ValueKey('signup'),
-        child: const SignupScreen(),
-      ),
+      builder: (context, state) => const SignupScreen(),
     ),
     GoRoute(
       path: '/admin-recovery',
       name: 'admin-recovery',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        key: const ValueKey('admin-recovery'),
-        child: const AdminRecoveryScreen(),
-      ),
+      builder: (context, state) => const AdminRecoveryScreen(),
     ),
     GoRoute(
       path: '/change-password',
       name: 'change-password',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        key: const ValueKey('change-password'),
-        child: const ChangePasswordScreen(),
-      ),
+      builder: (context, state) => const ChangePasswordScreen(),
     ),
     GoRoute(
       path: '/payment',
       name: 'payment',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        key: const ValueKey('payment'),
-        child: const PaymentScreen(),
-      ),
+      builder: (context, state) => const PaymentScreen(),
     ),
     GoRoute(
       path: '/insufficient-credit',
       name: 'insufficient-credit',
-      pageBuilder: (context, state) => _buildPageWithTransition(
-        key: const ValueKey('insufficient-credit'),
-        child: const InsufficientCreditScreen(),
-      ),
+      builder: (context, state) => const InsufficientCreditScreen(),
     ),
   ],
 );

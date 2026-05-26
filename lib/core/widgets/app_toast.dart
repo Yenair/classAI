@@ -32,31 +32,15 @@ class AppToast {
     final effectiveFgColor =
         foregroundColor ?? cs.onErrorContainer;
 
-    showGeneralDialog(
+    showDialog(
       context: context,
       barrierDismissible: false,
-      barrierColor: Colors.transparent,
-      transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (context, animation, secondaryAnimation) => _ToastOverlay(
+      builder: (dialogContext) => _ToastOverlay(
         message: message,
         icon: effectiveIcon,
         backgroundColor: effectiveBgColor,
         foregroundColor: effectiveFgColor,
       ),
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        return SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0, 1),
-            end: Offset.zero,
-          ).animate(
-            CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutCubic,
-            ),
-          ),
-          child: child,
-        );
-      },
     );
   }
 }

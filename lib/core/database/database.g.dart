@@ -1087,6 +1087,12 @@ class $TeachersTable extends Teachers with TableInfo<$TeachersTable, Teacher> {
   late final GeneratedColumn<String> currentDeviceId = GeneratedColumn<String>(
       'current_device_id', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _tempPasswordMeta =
+      const VerificationMeta('tempPassword');
+  @override
+  late final GeneratedColumn<String> tempPassword = GeneratedColumn<String>(
+      'temp_password', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         localId,
@@ -1107,7 +1113,8 @@ class $TeachersTable extends Teachers with TableInfo<$TeachersTable, Teacher> {
         isDeleted,
         salt,
         lastModifiedBy,
-        currentDeviceId
+        currentDeviceId,
+        tempPassword
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1221,6 +1228,12 @@ class $TeachersTable extends Teachers with TableInfo<$TeachersTable, Teacher> {
           currentDeviceId.isAcceptableOrUnknown(
               data['current_device_id']!, _currentDeviceIdMeta));
     }
+    if (data.containsKey('temp_password')) {
+      context.handle(
+          _tempPasswordMeta,
+          tempPassword.isAcceptableOrUnknown(
+              data['temp_password']!, _tempPasswordMeta));
+    }
     return context;
   }
 
@@ -1269,6 +1282,8 @@ class $TeachersTable extends Teachers with TableInfo<$TeachersTable, Teacher> {
           DriftSqlType.string, data['${effectivePrefix}last_modified_by']),
       currentDeviceId: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}current_device_id']),
+      tempPassword: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}temp_password']),
     );
   }
 
@@ -1298,6 +1313,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
   final String? salt;
   final String? lastModifiedBy;
   final String? currentDeviceId;
+  final String? tempPassword;
   const Teacher(
       {required this.localId,
       this.serverId,
@@ -1317,7 +1333,8 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       required this.isDeleted,
       this.salt,
       this.lastModifiedBy,
-      this.currentDeviceId});
+      this.currentDeviceId,
+      this.tempPassword});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1353,6 +1370,9 @@ class Teacher extends DataClass implements Insertable<Teacher> {
     }
     if (!nullToAbsent || currentDeviceId != null) {
       map['current_device_id'] = Variable<String>(currentDeviceId);
+    }
+    if (!nullToAbsent || tempPassword != null) {
+      map['temp_password'] = Variable<String>(tempPassword);
     }
     return map;
   }
@@ -1390,6 +1410,9 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       currentDeviceId: currentDeviceId == null && nullToAbsent
           ? const Value.absent()
           : Value(currentDeviceId),
+      tempPassword: tempPassword == null && nullToAbsent
+          ? const Value.absent()
+          : Value(tempPassword),
     );
   }
 
@@ -1418,6 +1441,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       salt: serializer.fromJson<String?>(json['salt']),
       lastModifiedBy: serializer.fromJson<String?>(json['lastModifiedBy']),
       currentDeviceId: serializer.fromJson<String?>(json['currentDeviceId']),
+      tempPassword: serializer.fromJson<String?>(json['tempPassword']),
     );
   }
   @override
@@ -1444,6 +1468,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       'salt': serializer.toJson<String?>(salt),
       'lastModifiedBy': serializer.toJson<String?>(lastModifiedBy),
       'currentDeviceId': serializer.toJson<String?>(currentDeviceId),
+      'tempPassword': serializer.toJson<String?>(tempPassword),
     };
   }
 
@@ -1466,7 +1491,8 @@ class Teacher extends DataClass implements Insertable<Teacher> {
           bool? isDeleted,
           Value<String?> salt = const Value.absent(),
           Value<String?> lastModifiedBy = const Value.absent(),
-          Value<String?> currentDeviceId = const Value.absent()}) =>
+          Value<String?> currentDeviceId = const Value.absent(),
+          Value<String?> tempPassword = const Value.absent()}) =>
       Teacher(
         localId: localId ?? this.localId,
         serverId: serverId.present ? serverId.value : this.serverId,
@@ -1495,6 +1521,8 @@ class Teacher extends DataClass implements Insertable<Teacher> {
         currentDeviceId: currentDeviceId.present
             ? currentDeviceId.value
             : this.currentDeviceId,
+        tempPassword:
+            tempPassword.present ? tempPassword.value : this.tempPassword,
       );
   Teacher copyWithCompanion(TeachersCompanion data) {
     return Teacher(
@@ -1536,6 +1564,9 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       currentDeviceId: data.currentDeviceId.present
           ? data.currentDeviceId.value
           : this.currentDeviceId,
+      tempPassword: data.tempPassword.present
+          ? data.tempPassword.value
+          : this.tempPassword,
     );
   }
 
@@ -1560,7 +1591,8 @@ class Teacher extends DataClass implements Insertable<Teacher> {
           ..write('isDeleted: $isDeleted, ')
           ..write('salt: $salt, ')
           ..write('lastModifiedBy: $lastModifiedBy, ')
-          ..write('currentDeviceId: $currentDeviceId')
+          ..write('currentDeviceId: $currentDeviceId, ')
+          ..write('tempPassword: $tempPassword')
           ..write(')'))
         .toString();
   }
@@ -1585,7 +1617,8 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       isDeleted,
       salt,
       lastModifiedBy,
-      currentDeviceId);
+      currentDeviceId,
+      tempPassword);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1608,7 +1641,8 @@ class Teacher extends DataClass implements Insertable<Teacher> {
           other.isDeleted == this.isDeleted &&
           other.salt == this.salt &&
           other.lastModifiedBy == this.lastModifiedBy &&
-          other.currentDeviceId == this.currentDeviceId);
+          other.currentDeviceId == this.currentDeviceId &&
+          other.tempPassword == this.tempPassword);
 }
 
 class TeachersCompanion extends UpdateCompanion<Teacher> {
@@ -1631,6 +1665,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
   final Value<String?> salt;
   final Value<String?> lastModifiedBy;
   final Value<String?> currentDeviceId;
+  final Value<String?> tempPassword;
   const TeachersCompanion({
     this.localId = const Value.absent(),
     this.serverId = const Value.absent(),
@@ -1651,6 +1686,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
     this.salt = const Value.absent(),
     this.lastModifiedBy = const Value.absent(),
     this.currentDeviceId = const Value.absent(),
+    this.tempPassword = const Value.absent(),
   });
   TeachersCompanion.insert({
     this.localId = const Value.absent(),
@@ -1672,6 +1708,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
     this.salt = const Value.absent(),
     this.lastModifiedBy = const Value.absent(),
     this.currentDeviceId = const Value.absent(),
+    this.tempPassword = const Value.absent(),
   })  : email = Value(email),
         teacherName = Value(teacherName),
         schoolLocalId = Value(schoolLocalId);
@@ -1695,6 +1732,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
     Expression<String>? salt,
     Expression<String>? lastModifiedBy,
     Expression<String>? currentDeviceId,
+    Expression<String>? tempPassword,
   }) {
     return RawValuesInsertable({
       if (localId != null) 'local_id': localId,
@@ -1719,6 +1757,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
       if (salt != null) 'salt': salt,
       if (lastModifiedBy != null) 'last_modified_by': lastModifiedBy,
       if (currentDeviceId != null) 'current_device_id': currentDeviceId,
+      if (tempPassword != null) 'temp_password': tempPassword,
     });
   }
 
@@ -1741,7 +1780,8 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
       Value<bool>? isDeleted,
       Value<String?>? salt,
       Value<String?>? lastModifiedBy,
-      Value<String?>? currentDeviceId}) {
+      Value<String?>? currentDeviceId,
+      Value<String?>? tempPassword}) {
     return TeachersCompanion(
       localId: localId ?? this.localId,
       serverId: serverId ?? this.serverId,
@@ -1762,6 +1802,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
       salt: salt ?? this.salt,
       lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,
       currentDeviceId: currentDeviceId ?? this.currentDeviceId,
+      tempPassword: tempPassword ?? this.tempPassword,
     );
   }
 
@@ -1826,6 +1867,9 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
     if (currentDeviceId.present) {
       map['current_device_id'] = Variable<String>(currentDeviceId.value);
     }
+    if (tempPassword.present) {
+      map['temp_password'] = Variable<String>(tempPassword.value);
+    }
     return map;
   }
 
@@ -1850,7 +1894,8 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
           ..write('isDeleted: $isDeleted, ')
           ..write('salt: $salt, ')
           ..write('lastModifiedBy: $lastModifiedBy, ')
-          ..write('currentDeviceId: $currentDeviceId')
+          ..write('currentDeviceId: $currentDeviceId, ')
+          ..write('tempPassword: $tempPassword')
           ..write(')'))
         .toString();
   }
@@ -2375,6 +2420,18 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
   late final GeneratedColumn<String> lastModifiedBy = GeneratedColumn<String>(
       'last_modified_by', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _teacherServerIdMeta =
+      const VerificationMeta('teacherServerId');
+  @override
+  late final GeneratedColumn<String> teacherServerId = GeneratedColumn<String>(
+      'teacher_server_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _schoolServerIdMeta =
+      const VerificationMeta('schoolServerId');
+  @override
+  late final GeneratedColumn<String> schoolServerId = GeneratedColumn<String>(
+      'school_server_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -2392,7 +2449,9 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
         updatedAt,
         updateCounter,
         isDeleted,
-        lastModifiedBy
+        lastModifiedBy,
+        teacherServerId,
+        schoolServerId
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2497,6 +2556,18 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
           lastModifiedBy.isAcceptableOrUnknown(
               data['last_modified_by']!, _lastModifiedByMeta));
     }
+    if (data.containsKey('teacher_server_id')) {
+      context.handle(
+          _teacherServerIdMeta,
+          teacherServerId.isAcceptableOrUnknown(
+              data['teacher_server_id']!, _teacherServerIdMeta));
+    }
+    if (data.containsKey('school_server_id')) {
+      context.handle(
+          _schoolServerIdMeta,
+          schoolServerId.isAcceptableOrUnknown(
+              data['school_server_id']!, _schoolServerIdMeta));
+    }
     return context;
   }
 
@@ -2538,6 +2609,10 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
           .read(DriftSqlType.bool, data['${effectivePrefix}is_deleted'])!,
       lastModifiedBy: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}last_modified_by']),
+      teacherServerId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}teacher_server_id']),
+      schoolServerId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}school_server_id']),
     );
   }
 
@@ -2564,6 +2639,8 @@ class Lesson extends DataClass implements Insertable<Lesson> {
   final int updateCounter;
   final bool isDeleted;
   final String? lastModifiedBy;
+  final String? teacherServerId;
+  final String? schoolServerId;
   const Lesson(
       {required this.id,
       this.serverId,
@@ -2580,7 +2657,9 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       required this.updatedAt,
       required this.updateCounter,
       required this.isDeleted,
-      this.lastModifiedBy});
+      this.lastModifiedBy,
+      this.teacherServerId,
+      this.schoolServerId});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -2605,6 +2684,12 @@ class Lesson extends DataClass implements Insertable<Lesson> {
     map['is_deleted'] = Variable<bool>(isDeleted);
     if (!nullToAbsent || lastModifiedBy != null) {
       map['last_modified_by'] = Variable<String>(lastModifiedBy);
+    }
+    if (!nullToAbsent || teacherServerId != null) {
+      map['teacher_server_id'] = Variable<String>(teacherServerId);
+    }
+    if (!nullToAbsent || schoolServerId != null) {
+      map['school_server_id'] = Variable<String>(schoolServerId);
     }
     return map;
   }
@@ -2633,6 +2718,12 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       lastModifiedBy: lastModifiedBy == null && nullToAbsent
           ? const Value.absent()
           : Value(lastModifiedBy),
+      teacherServerId: teacherServerId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(teacherServerId),
+      schoolServerId: schoolServerId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(schoolServerId),
     );
   }
 
@@ -2656,6 +2747,8 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       updateCounter: serializer.fromJson<int>(json['updateCounter']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       lastModifiedBy: serializer.fromJson<String?>(json['lastModifiedBy']),
+      teacherServerId: serializer.fromJson<String?>(json['teacherServerId']),
+      schoolServerId: serializer.fromJson<String?>(json['schoolServerId']),
     );
   }
   @override
@@ -2678,6 +2771,8 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       'updateCounter': serializer.toJson<int>(updateCounter),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'lastModifiedBy': serializer.toJson<String?>(lastModifiedBy),
+      'teacherServerId': serializer.toJson<String?>(teacherServerId),
+      'schoolServerId': serializer.toJson<String?>(schoolServerId),
     };
   }
 
@@ -2697,7 +2792,9 @@ class Lesson extends DataClass implements Insertable<Lesson> {
           DateTime? updatedAt,
           int? updateCounter,
           bool? isDeleted,
-          Value<String?> lastModifiedBy = const Value.absent()}) =>
+          Value<String?> lastModifiedBy = const Value.absent(),
+          Value<String?> teacherServerId = const Value.absent(),
+          Value<String?> schoolServerId = const Value.absent()}) =>
       Lesson(
         id: id ?? this.id,
         serverId: serverId.present ? serverId.value : this.serverId,
@@ -2716,6 +2813,11 @@ class Lesson extends DataClass implements Insertable<Lesson> {
         isDeleted: isDeleted ?? this.isDeleted,
         lastModifiedBy:
             lastModifiedBy.present ? lastModifiedBy.value : this.lastModifiedBy,
+        teacherServerId: teacherServerId.present
+            ? teacherServerId.value
+            : this.teacherServerId,
+        schoolServerId:
+            schoolServerId.present ? schoolServerId.value : this.schoolServerId,
       );
   Lesson copyWithCompanion(LessonsCompanion data) {
     return Lesson(
@@ -2744,6 +2846,12 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       lastModifiedBy: data.lastModifiedBy.present
           ? data.lastModifiedBy.value
           : this.lastModifiedBy,
+      teacherServerId: data.teacherServerId.present
+          ? data.teacherServerId.value
+          : this.teacherServerId,
+      schoolServerId: data.schoolServerId.present
+          ? data.schoolServerId.value
+          : this.schoolServerId,
     );
   }
 
@@ -2765,7 +2873,9 @@ class Lesson extends DataClass implements Insertable<Lesson> {
           ..write('updatedAt: $updatedAt, ')
           ..write('updateCounter: $updateCounter, ')
           ..write('isDeleted: $isDeleted, ')
-          ..write('lastModifiedBy: $lastModifiedBy')
+          ..write('lastModifiedBy: $lastModifiedBy, ')
+          ..write('teacherServerId: $teacherServerId, ')
+          ..write('schoolServerId: $schoolServerId')
           ..write(')'))
         .toString();
   }
@@ -2787,7 +2897,9 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       updatedAt,
       updateCounter,
       isDeleted,
-      lastModifiedBy);
+      lastModifiedBy,
+      teacherServerId,
+      schoolServerId);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2807,7 +2919,9 @@ class Lesson extends DataClass implements Insertable<Lesson> {
           other.updatedAt == this.updatedAt &&
           other.updateCounter == this.updateCounter &&
           other.isDeleted == this.isDeleted &&
-          other.lastModifiedBy == this.lastModifiedBy);
+          other.lastModifiedBy == this.lastModifiedBy &&
+          other.teacherServerId == this.teacherServerId &&
+          other.schoolServerId == this.schoolServerId);
 }
 
 class LessonsCompanion extends UpdateCompanion<Lesson> {
@@ -2827,6 +2941,8 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
   final Value<int> updateCounter;
   final Value<bool> isDeleted;
   final Value<String?> lastModifiedBy;
+  final Value<String?> teacherServerId;
+  final Value<String?> schoolServerId;
   const LessonsCompanion({
     this.id = const Value.absent(),
     this.serverId = const Value.absent(),
@@ -2844,6 +2960,8 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     this.updateCounter = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.lastModifiedBy = const Value.absent(),
+    this.teacherServerId = const Value.absent(),
+    this.schoolServerId = const Value.absent(),
   });
   LessonsCompanion.insert({
     this.id = const Value.absent(),
@@ -2862,6 +2980,8 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     this.updateCounter = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.lastModifiedBy = const Value.absent(),
+    this.teacherServerId = const Value.absent(),
+    this.schoolServerId = const Value.absent(),
   })  : subject = Value(subject),
         classLevel = Value(classLevel),
         week = Value(week),
@@ -2887,6 +3007,8 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     Expression<int>? updateCounter,
     Expression<bool>? isDeleted,
     Expression<String>? lastModifiedBy,
+    Expression<String>? teacherServerId,
+    Expression<String>? schoolServerId,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -2905,6 +3027,8 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
       if (updateCounter != null) 'update_counter': updateCounter,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (lastModifiedBy != null) 'last_modified_by': lastModifiedBy,
+      if (teacherServerId != null) 'teacher_server_id': teacherServerId,
+      if (schoolServerId != null) 'school_server_id': schoolServerId,
     });
   }
 
@@ -2924,7 +3048,9 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
       Value<DateTime>? updatedAt,
       Value<int>? updateCounter,
       Value<bool>? isDeleted,
-      Value<String?>? lastModifiedBy}) {
+      Value<String?>? lastModifiedBy,
+      Value<String?>? teacherServerId,
+      Value<String?>? schoolServerId}) {
     return LessonsCompanion(
       id: id ?? this.id,
       serverId: serverId ?? this.serverId,
@@ -2942,6 +3068,8 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
       updateCounter: updateCounter ?? this.updateCounter,
       isDeleted: isDeleted ?? this.isDeleted,
       lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,
+      teacherServerId: teacherServerId ?? this.teacherServerId,
+      schoolServerId: schoolServerId ?? this.schoolServerId,
     );
   }
 
@@ -2996,6 +3124,12 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     if (lastModifiedBy.present) {
       map['last_modified_by'] = Variable<String>(lastModifiedBy.value);
     }
+    if (teacherServerId.present) {
+      map['teacher_server_id'] = Variable<String>(teacherServerId.value);
+    }
+    if (schoolServerId.present) {
+      map['school_server_id'] = Variable<String>(schoolServerId.value);
+    }
     return map;
   }
 
@@ -3017,7 +3151,9 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
           ..write('updatedAt: $updatedAt, ')
           ..write('updateCounter: $updateCounter, ')
           ..write('isDeleted: $isDeleted, ')
-          ..write('lastModifiedBy: $lastModifiedBy')
+          ..write('lastModifiedBy: $lastModifiedBy, ')
+          ..write('teacherServerId: $teacherServerId, ')
+          ..write('schoolServerId: $schoolServerId')
           ..write(')'))
         .toString();
   }
@@ -3703,6 +3839,18 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
   late final GeneratedColumn<String> lastModifiedBy = GeneratedColumn<String>(
       'last_modified_by', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _teacherServerIdMeta =
+      const VerificationMeta('teacherServerId');
+  @override
+  late final GeneratedColumn<String> teacherServerId = GeneratedColumn<String>(
+      'teacher_server_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _schoolServerIdMeta =
+      const VerificationMeta('schoolServerId');
+  @override
+  late final GeneratedColumn<String> schoolServerId = GeneratedColumn<String>(
+      'school_server_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -3717,7 +3865,9 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
         updatedAt,
         updateCounter,
         isDeleted,
-        lastModifiedBy
+        lastModifiedBy,
+        teacherServerId,
+        schoolServerId
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3802,6 +3952,18 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
           lastModifiedBy.isAcceptableOrUnknown(
               data['last_modified_by']!, _lastModifiedByMeta));
     }
+    if (data.containsKey('teacher_server_id')) {
+      context.handle(
+          _teacherServerIdMeta,
+          teacherServerId.isAcceptableOrUnknown(
+              data['teacher_server_id']!, _teacherServerIdMeta));
+    }
+    if (data.containsKey('school_server_id')) {
+      context.handle(
+          _schoolServerIdMeta,
+          schoolServerId.isAcceptableOrUnknown(
+              data['school_server_id']!, _schoolServerIdMeta));
+    }
     return context;
   }
 
@@ -3837,6 +3999,10 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
           .read(DriftSqlType.bool, data['${effectivePrefix}is_deleted'])!,
       lastModifiedBy: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}last_modified_by']),
+      teacherServerId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}teacher_server_id']),
+      schoolServerId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}school_server_id']),
     );
   }
 
@@ -3860,6 +4026,8 @@ class Exam extends DataClass implements Insertable<Exam> {
   final int updateCounter;
   final bool isDeleted;
   final String? lastModifiedBy;
+  final String? teacherServerId;
+  final String? schoolServerId;
   const Exam(
       {required this.id,
       this.serverId,
@@ -3873,7 +4041,9 @@ class Exam extends DataClass implements Insertable<Exam> {
       required this.updatedAt,
       required this.updateCounter,
       required this.isDeleted,
-      this.lastModifiedBy});
+      this.lastModifiedBy,
+      this.teacherServerId,
+      this.schoolServerId});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -3893,6 +4063,12 @@ class Exam extends DataClass implements Insertable<Exam> {
     map['is_deleted'] = Variable<bool>(isDeleted);
     if (!nullToAbsent || lastModifiedBy != null) {
       map['last_modified_by'] = Variable<String>(lastModifiedBy);
+    }
+    if (!nullToAbsent || teacherServerId != null) {
+      map['teacher_server_id'] = Variable<String>(teacherServerId);
+    }
+    if (!nullToAbsent || schoolServerId != null) {
+      map['school_server_id'] = Variable<String>(schoolServerId);
     }
     return map;
   }
@@ -3916,6 +4092,12 @@ class Exam extends DataClass implements Insertable<Exam> {
       lastModifiedBy: lastModifiedBy == null && nullToAbsent
           ? const Value.absent()
           : Value(lastModifiedBy),
+      teacherServerId: teacherServerId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(teacherServerId),
+      schoolServerId: schoolServerId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(schoolServerId),
     );
   }
 
@@ -3936,6 +4118,8 @@ class Exam extends DataClass implements Insertable<Exam> {
       updateCounter: serializer.fromJson<int>(json['updateCounter']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       lastModifiedBy: serializer.fromJson<String?>(json['lastModifiedBy']),
+      teacherServerId: serializer.fromJson<String?>(json['teacherServerId']),
+      schoolServerId: serializer.fromJson<String?>(json['schoolServerId']),
     );
   }
   @override
@@ -3955,6 +4139,8 @@ class Exam extends DataClass implements Insertable<Exam> {
       'updateCounter': serializer.toJson<int>(updateCounter),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'lastModifiedBy': serializer.toJson<String?>(lastModifiedBy),
+      'teacherServerId': serializer.toJson<String?>(teacherServerId),
+      'schoolServerId': serializer.toJson<String?>(schoolServerId),
     };
   }
 
@@ -3971,7 +4157,9 @@ class Exam extends DataClass implements Insertable<Exam> {
           DateTime? updatedAt,
           int? updateCounter,
           bool? isDeleted,
-          Value<String?> lastModifiedBy = const Value.absent()}) =>
+          Value<String?> lastModifiedBy = const Value.absent(),
+          Value<String?> teacherServerId = const Value.absent(),
+          Value<String?> schoolServerId = const Value.absent()}) =>
       Exam(
         id: id ?? this.id,
         serverId: serverId.present ? serverId.value : this.serverId,
@@ -3987,6 +4175,11 @@ class Exam extends DataClass implements Insertable<Exam> {
         isDeleted: isDeleted ?? this.isDeleted,
         lastModifiedBy:
             lastModifiedBy.present ? lastModifiedBy.value : this.lastModifiedBy,
+        teacherServerId: teacherServerId.present
+            ? teacherServerId.value
+            : this.teacherServerId,
+        schoolServerId:
+            schoolServerId.present ? schoolServerId.value : this.schoolServerId,
       );
   Exam copyWithCompanion(ExamsCompanion data) {
     return Exam(
@@ -4010,6 +4203,12 @@ class Exam extends DataClass implements Insertable<Exam> {
       lastModifiedBy: data.lastModifiedBy.present
           ? data.lastModifiedBy.value
           : this.lastModifiedBy,
+      teacherServerId: data.teacherServerId.present
+          ? data.teacherServerId.value
+          : this.teacherServerId,
+      schoolServerId: data.schoolServerId.present
+          ? data.schoolServerId.value
+          : this.schoolServerId,
     );
   }
 
@@ -4028,7 +4227,9 @@ class Exam extends DataClass implements Insertable<Exam> {
           ..write('updatedAt: $updatedAt, ')
           ..write('updateCounter: $updateCounter, ')
           ..write('isDeleted: $isDeleted, ')
-          ..write('lastModifiedBy: $lastModifiedBy')
+          ..write('lastModifiedBy: $lastModifiedBy, ')
+          ..write('teacherServerId: $teacherServerId, ')
+          ..write('schoolServerId: $schoolServerId')
           ..write(')'))
         .toString();
   }
@@ -4047,7 +4248,9 @@ class Exam extends DataClass implements Insertable<Exam> {
       updatedAt,
       updateCounter,
       isDeleted,
-      lastModifiedBy);
+      lastModifiedBy,
+      teacherServerId,
+      schoolServerId);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -4064,7 +4267,9 @@ class Exam extends DataClass implements Insertable<Exam> {
           other.updatedAt == this.updatedAt &&
           other.updateCounter == this.updateCounter &&
           other.isDeleted == this.isDeleted &&
-          other.lastModifiedBy == this.lastModifiedBy);
+          other.lastModifiedBy == this.lastModifiedBy &&
+          other.teacherServerId == this.teacherServerId &&
+          other.schoolServerId == this.schoolServerId);
 }
 
 class ExamsCompanion extends UpdateCompanion<Exam> {
@@ -4081,6 +4286,8 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
   final Value<int> updateCounter;
   final Value<bool> isDeleted;
   final Value<String?> lastModifiedBy;
+  final Value<String?> teacherServerId;
+  final Value<String?> schoolServerId;
   const ExamsCompanion({
     this.id = const Value.absent(),
     this.serverId = const Value.absent(),
@@ -4095,6 +4302,8 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     this.updateCounter = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.lastModifiedBy = const Value.absent(),
+    this.teacherServerId = const Value.absent(),
+    this.schoolServerId = const Value.absent(),
   });
   ExamsCompanion.insert({
     this.id = const Value.absent(),
@@ -4110,6 +4319,8 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     this.updateCounter = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.lastModifiedBy = const Value.absent(),
+    this.teacherServerId = const Value.absent(),
+    this.schoolServerId = const Value.absent(),
   })  : subject = Value(subject),
         classLevel = Value(classLevel),
         topic = Value(topic),
@@ -4130,6 +4341,8 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     Expression<int>? updateCounter,
     Expression<bool>? isDeleted,
     Expression<String>? lastModifiedBy,
+    Expression<String>? teacherServerId,
+    Expression<String>? schoolServerId,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -4145,6 +4358,8 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
       if (updateCounter != null) 'update_counter': updateCounter,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (lastModifiedBy != null) 'last_modified_by': lastModifiedBy,
+      if (teacherServerId != null) 'teacher_server_id': teacherServerId,
+      if (schoolServerId != null) 'school_server_id': schoolServerId,
     });
   }
 
@@ -4161,7 +4376,9 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
       Value<DateTime>? updatedAt,
       Value<int>? updateCounter,
       Value<bool>? isDeleted,
-      Value<String?>? lastModifiedBy}) {
+      Value<String?>? lastModifiedBy,
+      Value<String?>? teacherServerId,
+      Value<String?>? schoolServerId}) {
     return ExamsCompanion(
       id: id ?? this.id,
       serverId: serverId ?? this.serverId,
@@ -4176,6 +4393,8 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
       updateCounter: updateCounter ?? this.updateCounter,
       isDeleted: isDeleted ?? this.isDeleted,
       lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,
+      teacherServerId: teacherServerId ?? this.teacherServerId,
+      schoolServerId: schoolServerId ?? this.schoolServerId,
     );
   }
 
@@ -4221,6 +4440,12 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     if (lastModifiedBy.present) {
       map['last_modified_by'] = Variable<String>(lastModifiedBy.value);
     }
+    if (teacherServerId.present) {
+      map['teacher_server_id'] = Variable<String>(teacherServerId.value);
+    }
+    if (schoolServerId.present) {
+      map['school_server_id'] = Variable<String>(schoolServerId.value);
+    }
     return map;
   }
 
@@ -4239,7 +4464,9 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
           ..write('updatedAt: $updatedAt, ')
           ..write('updateCounter: $updateCounter, ')
           ..write('isDeleted: $isDeleted, ')
-          ..write('lastModifiedBy: $lastModifiedBy')
+          ..write('lastModifiedBy: $lastModifiedBy, ')
+          ..write('teacherServerId: $teacherServerId, ')
+          ..write('schoolServerId: $schoolServerId')
           ..write(')'))
         .toString();
   }
@@ -4452,6 +4679,12 @@ class $VaultItemsTable extends VaultItems
   late final GeneratedColumn<String> authorTeacherId = GeneratedColumn<String>(
       'author_teacher_id', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _schoolServerIdMeta =
+      const VerificationMeta('schoolServerId');
+  @override
+  late final GeneratedColumn<String> schoolServerId = GeneratedColumn<String>(
+      'school_server_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _authorNameMeta =
       const VerificationMeta('authorName');
   @override
@@ -4561,6 +4794,7 @@ class $VaultItemsTable extends VaultItems
         curriculum,
         content,
         authorTeacherId,
+        schoolServerId,
         authorName,
         minTier,
         creditCost,
@@ -4641,6 +4875,12 @@ class $VaultItemsTable extends VaultItems
               data['author_teacher_id']!, _authorTeacherIdMeta));
     } else if (isInserting) {
       context.missing(_authorTeacherIdMeta);
+    }
+    if (data.containsKey('school_server_id')) {
+      context.handle(
+          _schoolServerIdMeta,
+          schoolServerId.isAcceptableOrUnknown(
+              data['school_server_id']!, _schoolServerIdMeta));
     }
     if (data.containsKey('author_name')) {
       context.handle(
@@ -4741,6 +4981,8 @@ class $VaultItemsTable extends VaultItems
           .read(DriftSqlType.string, data['${effectivePrefix}content'])!,
       authorTeacherId: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}author_teacher_id'])!,
+      schoolServerId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}school_server_id']),
       authorName: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}author_name'])!,
       minTier: attachedDatabase.typeMapping
@@ -4786,6 +5028,7 @@ class VaultItem extends DataClass implements Insertable<VaultItem> {
   final String curriculum;
   final String content;
   final String authorTeacherId;
+  final String? schoolServerId;
   final String authorName;
   final String minTier;
   final int creditCost;
@@ -4809,6 +5052,7 @@ class VaultItem extends DataClass implements Insertable<VaultItem> {
       required this.curriculum,
       required this.content,
       required this.authorTeacherId,
+      this.schoolServerId,
       required this.authorName,
       required this.minTier,
       required this.creditCost,
@@ -4836,6 +5080,9 @@ class VaultItem extends DataClass implements Insertable<VaultItem> {
     map['curriculum'] = Variable<String>(curriculum);
     map['content'] = Variable<String>(content);
     map['author_teacher_id'] = Variable<String>(authorTeacherId);
+    if (!nullToAbsent || schoolServerId != null) {
+      map['school_server_id'] = Variable<String>(schoolServerId);
+    }
     map['author_name'] = Variable<String>(authorName);
     map['min_tier'] = Variable<String>(minTier);
     map['credit_cost'] = Variable<int>(creditCost);
@@ -4873,6 +5120,9 @@ class VaultItem extends DataClass implements Insertable<VaultItem> {
       curriculum: Value(curriculum),
       content: Value(content),
       authorTeacherId: Value(authorTeacherId),
+      schoolServerId: schoolServerId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(schoolServerId),
       authorName: Value(authorName),
       minTier: Value(minTier),
       creditCost: Value(creditCost),
@@ -4910,6 +5160,7 @@ class VaultItem extends DataClass implements Insertable<VaultItem> {
       curriculum: serializer.fromJson<String>(json['curriculum']),
       content: serializer.fromJson<String>(json['content']),
       authorTeacherId: serializer.fromJson<String>(json['authorTeacherId']),
+      schoolServerId: serializer.fromJson<String?>(json['schoolServerId']),
       authorName: serializer.fromJson<String>(json['authorName']),
       minTier: serializer.fromJson<String>(json['minTier']),
       creditCost: serializer.fromJson<int>(json['creditCost']),
@@ -4939,6 +5190,7 @@ class VaultItem extends DataClass implements Insertable<VaultItem> {
       'curriculum': serializer.toJson<String>(curriculum),
       'content': serializer.toJson<String>(content),
       'authorTeacherId': serializer.toJson<String>(authorTeacherId),
+      'schoolServerId': serializer.toJson<String?>(schoolServerId),
       'authorName': serializer.toJson<String>(authorName),
       'minTier': serializer.toJson<String>(minTier),
       'creditCost': serializer.toJson<int>(creditCost),
@@ -4965,6 +5217,7 @@ class VaultItem extends DataClass implements Insertable<VaultItem> {
           String? curriculum,
           String? content,
           String? authorTeacherId,
+          Value<String?> schoolServerId = const Value.absent(),
           String? authorName,
           String? minTier,
           int? creditCost,
@@ -4988,6 +5241,8 @@ class VaultItem extends DataClass implements Insertable<VaultItem> {
         curriculum: curriculum ?? this.curriculum,
         content: content ?? this.content,
         authorTeacherId: authorTeacherId ?? this.authorTeacherId,
+        schoolServerId:
+            schoolServerId.present ? schoolServerId.value : this.schoolServerId,
         authorName: authorName ?? this.authorName,
         minTier: minTier ?? this.minTier,
         creditCost: creditCost ?? this.creditCost,
@@ -5025,6 +5280,9 @@ class VaultItem extends DataClass implements Insertable<VaultItem> {
       authorTeacherId: data.authorTeacherId.present
           ? data.authorTeacherId.value
           : this.authorTeacherId,
+      schoolServerId: data.schoolServerId.present
+          ? data.schoolServerId.value
+          : this.schoolServerId,
       authorName:
           data.authorName.present ? data.authorName.value : this.authorName,
       minTier: data.minTier.present ? data.minTier.value : this.minTier,
@@ -5069,6 +5327,7 @@ class VaultItem extends DataClass implements Insertable<VaultItem> {
           ..write('curriculum: $curriculum, ')
           ..write('content: $content, ')
           ..write('authorTeacherId: $authorTeacherId, ')
+          ..write('schoolServerId: $schoolServerId, ')
           ..write('authorName: $authorName, ')
           ..write('minTier: $minTier, ')
           ..write('creditCost: $creditCost, ')
@@ -5097,6 +5356,7 @@ class VaultItem extends DataClass implements Insertable<VaultItem> {
         curriculum,
         content,
         authorTeacherId,
+        schoolServerId,
         authorName,
         minTier,
         creditCost,
@@ -5124,6 +5384,7 @@ class VaultItem extends DataClass implements Insertable<VaultItem> {
           other.curriculum == this.curriculum &&
           other.content == this.content &&
           other.authorTeacherId == this.authorTeacherId &&
+          other.schoolServerId == this.schoolServerId &&
           other.authorName == this.authorName &&
           other.minTier == this.minTier &&
           other.creditCost == this.creditCost &&
@@ -5149,6 +5410,7 @@ class VaultItemsCompanion extends UpdateCompanion<VaultItem> {
   final Value<String> curriculum;
   final Value<String> content;
   final Value<String> authorTeacherId;
+  final Value<String?> schoolServerId;
   final Value<String> authorName;
   final Value<String> minTier;
   final Value<int> creditCost;
@@ -5172,6 +5434,7 @@ class VaultItemsCompanion extends UpdateCompanion<VaultItem> {
     this.curriculum = const Value.absent(),
     this.content = const Value.absent(),
     this.authorTeacherId = const Value.absent(),
+    this.schoolServerId = const Value.absent(),
     this.authorName = const Value.absent(),
     this.minTier = const Value.absent(),
     this.creditCost = const Value.absent(),
@@ -5196,6 +5459,7 @@ class VaultItemsCompanion extends UpdateCompanion<VaultItem> {
     required String curriculum,
     required String content,
     required String authorTeacherId,
+    this.schoolServerId = const Value.absent(),
     required String authorName,
     this.minTier = const Value.absent(),
     this.creditCost = const Value.absent(),
@@ -5227,6 +5491,7 @@ class VaultItemsCompanion extends UpdateCompanion<VaultItem> {
     Expression<String>? curriculum,
     Expression<String>? content,
     Expression<String>? authorTeacherId,
+    Expression<String>? schoolServerId,
     Expression<String>? authorName,
     Expression<String>? minTier,
     Expression<int>? creditCost,
@@ -5251,6 +5516,7 @@ class VaultItemsCompanion extends UpdateCompanion<VaultItem> {
       if (curriculum != null) 'curriculum': curriculum,
       if (content != null) 'content': content,
       if (authorTeacherId != null) 'author_teacher_id': authorTeacherId,
+      if (schoolServerId != null) 'school_server_id': schoolServerId,
       if (authorName != null) 'author_name': authorName,
       if (minTier != null) 'min_tier': minTier,
       if (creditCost != null) 'credit_cost': creditCost,
@@ -5278,6 +5544,7 @@ class VaultItemsCompanion extends UpdateCompanion<VaultItem> {
       Value<String>? curriculum,
       Value<String>? content,
       Value<String>? authorTeacherId,
+      Value<String?>? schoolServerId,
       Value<String>? authorName,
       Value<String>? minTier,
       Value<int>? creditCost,
@@ -5301,6 +5568,7 @@ class VaultItemsCompanion extends UpdateCompanion<VaultItem> {
       curriculum: curriculum ?? this.curriculum,
       content: content ?? this.content,
       authorTeacherId: authorTeacherId ?? this.authorTeacherId,
+      schoolServerId: schoolServerId ?? this.schoolServerId,
       authorName: authorName ?? this.authorName,
       minTier: minTier ?? this.minTier,
       creditCost: creditCost ?? this.creditCost,
@@ -5346,6 +5614,9 @@ class VaultItemsCompanion extends UpdateCompanion<VaultItem> {
     }
     if (authorTeacherId.present) {
       map['author_teacher_id'] = Variable<String>(authorTeacherId.value);
+    }
+    if (schoolServerId.present) {
+      map['school_server_id'] = Variable<String>(schoolServerId.value);
     }
     if (authorName.present) {
       map['author_name'] = Variable<String>(authorName.value);
@@ -5401,6 +5672,7 @@ class VaultItemsCompanion extends UpdateCompanion<VaultItem> {
           ..write('curriculum: $curriculum, ')
           ..write('content: $content, ')
           ..write('authorTeacherId: $authorTeacherId, ')
+          ..write('schoolServerId: $schoolServerId, ')
           ..write('authorName: $authorName, ')
           ..write('minTier: $minTier, ')
           ..write('creditCost: $creditCost, ')
@@ -12699,6 +12971,7 @@ typedef $$TeachersTableCreateCompanionBuilder = TeachersCompanion Function({
   Value<String?> salt,
   Value<String?> lastModifiedBy,
   Value<String?> currentDeviceId,
+  Value<String?> tempPassword,
 });
 typedef $$TeachersTableUpdateCompanionBuilder = TeachersCompanion Function({
   Value<int> localId,
@@ -12720,6 +12993,7 @@ typedef $$TeachersTableUpdateCompanionBuilder = TeachersCompanion Function({
   Value<String?> salt,
   Value<String?> lastModifiedBy,
   Value<String?> currentDeviceId,
+  Value<String?> tempPassword,
 });
 
 final class $$TeachersTableReferences
@@ -12881,6 +13155,9 @@ class $$TeachersTableFilterComposer
   ColumnFilters<String> get currentDeviceId => $composableBuilder(
       column: $table.currentDeviceId,
       builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get tempPassword => $composableBuilder(
+      column: $table.tempPassword, builder: (column) => ColumnFilters(column));
 
   $$SchoolsTableFilterComposer get schoolLocalId {
     final $$SchoolsTableFilterComposer composer = $composerBuilder(
@@ -13060,6 +13337,10 @@ class $$TeachersTableOrderingComposer
       column: $table.currentDeviceId,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get tempPassword => $composableBuilder(
+      column: $table.tempPassword,
+      builder: (column) => ColumnOrderings(column));
+
   $$SchoolsTableOrderingComposer get schoolLocalId {
     final $$SchoolsTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -13143,6 +13424,9 @@ class $$TeachersTableAnnotationComposer
 
   GeneratedColumn<String> get currentDeviceId => $composableBuilder(
       column: $table.currentDeviceId, builder: (column) => column);
+
+  GeneratedColumn<String> get tempPassword => $composableBuilder(
+      column: $table.tempPassword, builder: (column) => column);
 
   $$SchoolsTableAnnotationComposer get schoolLocalId {
     final $$SchoolsTableAnnotationComposer composer = $composerBuilder(
@@ -13298,6 +13582,7 @@ class $$TeachersTableTableManager extends RootTableManager<
             Value<String?> salt = const Value.absent(),
             Value<String?> lastModifiedBy = const Value.absent(),
             Value<String?> currentDeviceId = const Value.absent(),
+            Value<String?> tempPassword = const Value.absent(),
           }) =>
               TeachersCompanion(
             localId: localId,
@@ -13319,6 +13604,7 @@ class $$TeachersTableTableManager extends RootTableManager<
             salt: salt,
             lastModifiedBy: lastModifiedBy,
             currentDeviceId: currentDeviceId,
+            tempPassword: tempPassword,
           ),
           createCompanionCallback: ({
             Value<int> localId = const Value.absent(),
@@ -13340,6 +13626,7 @@ class $$TeachersTableTableManager extends RootTableManager<
             Value<String?> salt = const Value.absent(),
             Value<String?> lastModifiedBy = const Value.absent(),
             Value<String?> currentDeviceId = const Value.absent(),
+            Value<String?> tempPassword = const Value.absent(),
           }) =>
               TeachersCompanion.insert(
             localId: localId,
@@ -13361,6 +13648,7 @@ class $$TeachersTableTableManager extends RootTableManager<
             salt: salt,
             lastModifiedBy: lastModifiedBy,
             currentDeviceId: currentDeviceId,
+            tempPassword: tempPassword,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) =>
@@ -13796,6 +14084,8 @@ typedef $$LessonsTableCreateCompanionBuilder = LessonsCompanion Function({
   Value<int> updateCounter,
   Value<bool> isDeleted,
   Value<String?> lastModifiedBy,
+  Value<String?> teacherServerId,
+  Value<String?> schoolServerId,
 });
 typedef $$LessonsTableUpdateCompanionBuilder = LessonsCompanion Function({
   Value<int> id,
@@ -13814,6 +14104,8 @@ typedef $$LessonsTableUpdateCompanionBuilder = LessonsCompanion Function({
   Value<int> updateCounter,
   Value<bool> isDeleted,
   Value<String?> lastModifiedBy,
+  Value<String?> teacherServerId,
+  Value<String?> schoolServerId,
 });
 
 class $$LessonsTableFilterComposer
@@ -13872,6 +14164,14 @@ class $$LessonsTableFilterComposer
 
   ColumnFilters<String> get lastModifiedBy => $composableBuilder(
       column: $table.lastModifiedBy,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get teacherServerId => $composableBuilder(
+      column: $table.teacherServerId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get schoolServerId => $composableBuilder(
+      column: $table.schoolServerId,
       builder: (column) => ColumnFilters(column));
 }
 
@@ -13933,6 +14233,14 @@ class $$LessonsTableOrderingComposer
   ColumnOrderings<String> get lastModifiedBy => $composableBuilder(
       column: $table.lastModifiedBy,
       builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get teacherServerId => $composableBuilder(
+      column: $table.teacherServerId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get schoolServerId => $composableBuilder(
+      column: $table.schoolServerId,
+      builder: (column) => ColumnOrderings(column));
 }
 
 class $$LessonsTableAnnotationComposer
@@ -13991,6 +14299,12 @@ class $$LessonsTableAnnotationComposer
 
   GeneratedColumn<String> get lastModifiedBy => $composableBuilder(
       column: $table.lastModifiedBy, builder: (column) => column);
+
+  GeneratedColumn<String> get teacherServerId => $composableBuilder(
+      column: $table.teacherServerId, builder: (column) => column);
+
+  GeneratedColumn<String> get schoolServerId => $composableBuilder(
+      column: $table.schoolServerId, builder: (column) => column);
 }
 
 class $$LessonsTableTableManager extends RootTableManager<
@@ -14032,6 +14346,8 @@ class $$LessonsTableTableManager extends RootTableManager<
             Value<int> updateCounter = const Value.absent(),
             Value<bool> isDeleted = const Value.absent(),
             Value<String?> lastModifiedBy = const Value.absent(),
+            Value<String?> teacherServerId = const Value.absent(),
+            Value<String?> schoolServerId = const Value.absent(),
           }) =>
               LessonsCompanion(
             id: id,
@@ -14050,6 +14366,8 @@ class $$LessonsTableTableManager extends RootTableManager<
             updateCounter: updateCounter,
             isDeleted: isDeleted,
             lastModifiedBy: lastModifiedBy,
+            teacherServerId: teacherServerId,
+            schoolServerId: schoolServerId,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -14068,6 +14386,8 @@ class $$LessonsTableTableManager extends RootTableManager<
             Value<int> updateCounter = const Value.absent(),
             Value<bool> isDeleted = const Value.absent(),
             Value<String?> lastModifiedBy = const Value.absent(),
+            Value<String?> teacherServerId = const Value.absent(),
+            Value<String?> schoolServerId = const Value.absent(),
           }) =>
               LessonsCompanion.insert(
             id: id,
@@ -14086,6 +14406,8 @@ class $$LessonsTableTableManager extends RootTableManager<
             updateCounter: updateCounter,
             isDeleted: isDeleted,
             lastModifiedBy: lastModifiedBy,
+            teacherServerId: teacherServerId,
+            schoolServerId: schoolServerId,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -14393,6 +14715,8 @@ typedef $$ExamsTableCreateCompanionBuilder = ExamsCompanion Function({
   Value<int> updateCounter,
   Value<bool> isDeleted,
   Value<String?> lastModifiedBy,
+  Value<String?> teacherServerId,
+  Value<String?> schoolServerId,
 });
 typedef $$ExamsTableUpdateCompanionBuilder = ExamsCompanion Function({
   Value<int> id,
@@ -14408,6 +14732,8 @@ typedef $$ExamsTableUpdateCompanionBuilder = ExamsCompanion Function({
   Value<int> updateCounter,
   Value<bool> isDeleted,
   Value<String?> lastModifiedBy,
+  Value<String?> teacherServerId,
+  Value<String?> schoolServerId,
 });
 
 class $$ExamsTableFilterComposer extends Composer<_$AppDatabase, $ExamsTable> {
@@ -14456,6 +14782,14 @@ class $$ExamsTableFilterComposer extends Composer<_$AppDatabase, $ExamsTable> {
 
   ColumnFilters<String> get lastModifiedBy => $composableBuilder(
       column: $table.lastModifiedBy,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get teacherServerId => $composableBuilder(
+      column: $table.teacherServerId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get schoolServerId => $composableBuilder(
+      column: $table.schoolServerId,
       builder: (column) => ColumnFilters(column));
 }
 
@@ -14508,6 +14842,14 @@ class $$ExamsTableOrderingComposer
   ColumnOrderings<String> get lastModifiedBy => $composableBuilder(
       column: $table.lastModifiedBy,
       builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get teacherServerId => $composableBuilder(
+      column: $table.teacherServerId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get schoolServerId => $composableBuilder(
+      column: $table.schoolServerId,
+      builder: (column) => ColumnOrderings(column));
 }
 
 class $$ExamsTableAnnotationComposer
@@ -14557,6 +14899,12 @@ class $$ExamsTableAnnotationComposer
 
   GeneratedColumn<String> get lastModifiedBy => $composableBuilder(
       column: $table.lastModifiedBy, builder: (column) => column);
+
+  GeneratedColumn<String> get teacherServerId => $composableBuilder(
+      column: $table.teacherServerId, builder: (column) => column);
+
+  GeneratedColumn<String> get schoolServerId => $composableBuilder(
+      column: $table.schoolServerId, builder: (column) => column);
 }
 
 class $$ExamsTableTableManager extends RootTableManager<
@@ -14595,6 +14943,8 @@ class $$ExamsTableTableManager extends RootTableManager<
             Value<int> updateCounter = const Value.absent(),
             Value<bool> isDeleted = const Value.absent(),
             Value<String?> lastModifiedBy = const Value.absent(),
+            Value<String?> teacherServerId = const Value.absent(),
+            Value<String?> schoolServerId = const Value.absent(),
           }) =>
               ExamsCompanion(
             id: id,
@@ -14610,6 +14960,8 @@ class $$ExamsTableTableManager extends RootTableManager<
             updateCounter: updateCounter,
             isDeleted: isDeleted,
             lastModifiedBy: lastModifiedBy,
+            teacherServerId: teacherServerId,
+            schoolServerId: schoolServerId,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -14625,6 +14977,8 @@ class $$ExamsTableTableManager extends RootTableManager<
             Value<int> updateCounter = const Value.absent(),
             Value<bool> isDeleted = const Value.absent(),
             Value<String?> lastModifiedBy = const Value.absent(),
+            Value<String?> teacherServerId = const Value.absent(),
+            Value<String?> schoolServerId = const Value.absent(),
           }) =>
               ExamsCompanion.insert(
             id: id,
@@ -14640,6 +14994,8 @@ class $$ExamsTableTableManager extends RootTableManager<
             updateCounter: updateCounter,
             isDeleted: isDeleted,
             lastModifiedBy: lastModifiedBy,
+            teacherServerId: teacherServerId,
+            schoolServerId: schoolServerId,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -14777,6 +15133,7 @@ typedef $$VaultItemsTableCreateCompanionBuilder = VaultItemsCompanion Function({
   required String curriculum,
   required String content,
   required String authorTeacherId,
+  Value<String?> schoolServerId,
   required String authorName,
   Value<String> minTier,
   Value<int> creditCost,
@@ -14801,6 +15158,7 @@ typedef $$VaultItemsTableUpdateCompanionBuilder = VaultItemsCompanion Function({
   Value<String> curriculum,
   Value<String> content,
   Value<String> authorTeacherId,
+  Value<String?> schoolServerId,
   Value<String> authorName,
   Value<String> minTier,
   Value<int> creditCost,
@@ -14851,6 +15209,10 @@ class $$VaultItemsTableFilterComposer
 
   ColumnFilters<String> get authorTeacherId => $composableBuilder(
       column: $table.authorTeacherId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get schoolServerId => $composableBuilder(
+      column: $table.schoolServerId,
       builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get authorName => $composableBuilder(
@@ -14932,6 +15294,10 @@ class $$VaultItemsTableOrderingComposer
 
   ColumnOrderings<String> get authorTeacherId => $composableBuilder(
       column: $table.authorTeacherId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get schoolServerId => $composableBuilder(
+      column: $table.schoolServerId,
       builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get authorName => $composableBuilder(
@@ -15017,6 +15383,9 @@ class $$VaultItemsTableAnnotationComposer
   GeneratedColumn<String> get authorTeacherId => $composableBuilder(
       column: $table.authorTeacherId, builder: (column) => column);
 
+  GeneratedColumn<String> get schoolServerId => $composableBuilder(
+      column: $table.schoolServerId, builder: (column) => column);
+
   GeneratedColumn<String> get authorName => $composableBuilder(
       column: $table.authorName, builder: (column) => column);
 
@@ -15089,6 +15458,7 @@ class $$VaultItemsTableTableManager extends RootTableManager<
             Value<String> curriculum = const Value.absent(),
             Value<String> content = const Value.absent(),
             Value<String> authorTeacherId = const Value.absent(),
+            Value<String?> schoolServerId = const Value.absent(),
             Value<String> authorName = const Value.absent(),
             Value<String> minTier = const Value.absent(),
             Value<int> creditCost = const Value.absent(),
@@ -15113,6 +15483,7 @@ class $$VaultItemsTableTableManager extends RootTableManager<
             curriculum: curriculum,
             content: content,
             authorTeacherId: authorTeacherId,
+            schoolServerId: schoolServerId,
             authorName: authorName,
             minTier: minTier,
             creditCost: creditCost,
@@ -15137,6 +15508,7 @@ class $$VaultItemsTableTableManager extends RootTableManager<
             required String curriculum,
             required String content,
             required String authorTeacherId,
+            Value<String?> schoolServerId = const Value.absent(),
             required String authorName,
             Value<String> minTier = const Value.absent(),
             Value<int> creditCost = const Value.absent(),
@@ -15161,6 +15533,7 @@ class $$VaultItemsTableTableManager extends RootTableManager<
             curriculum: curriculum,
             content: content,
             authorTeacherId: authorTeacherId,
+            schoolServerId: schoolServerId,
             authorName: authorName,
             minTier: minTier,
             creditCost: creditCost,

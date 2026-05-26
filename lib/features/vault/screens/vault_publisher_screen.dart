@@ -197,6 +197,7 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
         content: contentToStore,
         authorTeacherId: teacher.serverId ?? teacher.email,
         authorName: teacher.teacherName,
+        schoolServerId: school?.serverId,
         creditCost: _creditCost,
         needsApproval: true,
         thumbnailUrl: _thumbnailUrlCtrl.text.trim().isNotEmpty
@@ -212,6 +213,8 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
         payload: {
           'title': _titleCtrl.text.trim(),
           'encrypted': school?.schoolMasterKeyWrapped != null,
+          'teacher_server_id': teacher.serverId ?? teacher.email,
+          'school_server_id': school?.serverId,
         },
       );
 

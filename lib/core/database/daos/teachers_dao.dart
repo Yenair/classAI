@@ -34,4 +34,11 @@ class TeachersDao extends DatabaseAccessor<AppDatabase>
           ..orderBy([(t) => OrderingTerm(expression: t.teacherName, mode: OrderingMode.asc)]))
         .get();
   }
+
+  /// Get all teachers with forcePasswordReset set to true (pending login).
+  Future<List<Teacher>> getPendingTeachers() {
+    return (select(teachers)
+          ..where((t) => t.forcePasswordReset.equals(true)))
+        .get();
+  }
 }

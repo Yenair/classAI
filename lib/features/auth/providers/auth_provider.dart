@@ -743,15 +743,15 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
   /// Add a teacher to the school (admin-only action).
   ///
-  /// Delegates to [AuthService.addTeacher] and returns a success indicator.
+  /// Delegates to [AuthService.addTeacher] and returns the temporary password.
   /// Does not change the auth state.
-  Future<void> addTeacher({
+  Future<String?> addTeacher({
     required String email,
     required String teacherName,
     required String role,
   }) async {
     try {
-      await _authService.addTeacher(email, teacherName, role);
+      return await _authService.addTeacher(email, teacherName, role);
     } on AuthException {
       // Let AuthException propagate so the UI can catch and display it
       rethrow;
@@ -759,6 +759,28 @@ class AuthNotifier extends Notifier<AuthStateData> {
       throw AuthException(
         code: AuthErrorCode.networkError,
         message: 'Failed to add teacher. Please try again.',
+        originalError: e,
+      );
+    }
+  }
+
+  /// Resend the temporary password to a teacher who hasn't logged in yet.
+  ///
+  /// Delegates to [AuthService.resendTeacherPassword].
+  /// Returns the new temporary password.
+  Future<String?> resendTeacherPassword({
+    required String email,
+    required String teacherName,
+    required String role,
+  }) async {
+    try {
+      return await _authService.resendTeacherPassword(email, teacherName, role);
+    } on AuthException {
+      rethrow;
+    } catch (e) {
+      throw AuthException(
+        code: AuthErrorCode.networkError,
+        message: 'Failed to resend password. Please try again.',
         originalError: e,
       );
     }

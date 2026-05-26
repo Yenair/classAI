@@ -2,12 +2,10 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/core/theme/app_theme.dart';
-import 'package:classai/core/widgets/animated_pressable.dart';
-import 'package:classai/core/widgets/shimmer_loading.dart';
 import 'package:classai/core/widgets/conflict_banner.dart';
-import 'package:classai/core/widgets/spring_scroll_physics.dart';
 import 'package:classai/core/widgets/sync_indicator.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
@@ -15,7 +13,6 @@ import 'package:classai/features/dashboard/providers/credit_state_provider.dart'
 import 'package:classai/features/dashboard/providers/unresolved_conflicts_provider.dart';
 import 'package:classai/features/settings/providers/theme_provider.dart';
 import 'package:classai/core/database/database.dart';
-import 'package:classai/core/widgets/profile_slide_up_menu.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
 /// Root dashboard screen that routes to either [EditorLayout] or [ReaderLayout]
@@ -55,7 +52,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     if (_isEditorMode == null) {
       return const Scaffold(
-        body: ShimmerLoading(),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
@@ -294,13 +291,102 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                       const _CreditChip(),
                       const SizedBox(width: 12),
                       // Profile popup
-                      ProfileSlideUpMenu(
-                        themeMode: themeMode,
-                        ref: ref,
-                        teacherName: authData.currentTeacher?.teacherName,
-                        teacherEmail: authData.currentTeacher?.email,
-                        onSettings: () => context.push('/settings'),
-                        onLogout: _showLogoutConfirmation,
+                      PopupMenuButton<String>(
+                        onSelected: (value) {
+                          switch (value) {
+                            case 'settings':
+                              context.push('/settings');
+                            case 'logout':
+                              _showLogoutConfirmation();
+                            case 'theme_light':
+                              ref.read(themeProvider.notifier).setTheme(ThemeMode.light);
+                            case 'theme_dark':
+                              ref.read(themeProvider.notifier).setTheme(ThemeMode.dark);
+                            case 'theme_system':
+                              ref.read(themeProvider.notifier).setTheme(ThemeMode.system);
+                          }
+                        },
+                        offset: const Offset(0, 48),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                        ),
+                        itemBuilder: (context) {
+                          final teacher = authData.currentTeacher;
+                          return [
+                            // ── Teacher info header ──
+                            PopupMenuItem<String>(
+                              enabled: false,
+                              child: SizedBox(
+                                width: 200,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      teacher?.teacherName ?? 'Educator',
+                                      style: theme.textTheme.titleSmall?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      teacher?.email ?? '',
+                                      style: theme.textTheme.bodySmall?.copyWith(
+                                        color: cs.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const PopupMenuDivider(),
+                            // ── Theme selector ──
+                            PopupMenuItem<String>(
+                              enabled: false,
+                              child: Text(
+                                'Theme',
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                            CheckedPopupMenuItem<String>(
+                              checked: themeMode == ThemeMode.light,
+                              value: 'theme_light',
+                              child: const Text('Light'),
+                            ),
+                            CheckedPopupMenuItem<String>(
+                              checked: themeMode == ThemeMode.dark,
+                              value: 'theme_dark',
+                              child: const Text('Dark'),
+                            ),
+                            CheckedPopupMenuItem<String>(
+                              checked: themeMode == ThemeMode.system,
+                              value: 'theme_system',
+                              child: const Text('System'),
+                            ),
+                            const PopupMenuDivider(),
+                            // ── Settings ──
+                            const PopupMenuItem<String>(
+                              value: 'settings',
+                              child: ListTile(
+                                leading: Icon(Icons.settings_rounded),
+                                title: Text('Settings'),
+                                contentPadding: EdgeInsets.zero,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
+                            // ── Logout ──
+                            const PopupMenuItem<String>(
+                              value: 'logout',
+                              child: ListTile(
+                                leading: Icon(Icons.logout_rounded),
+                                title: Text('Logout'),
+                                contentPadding: EdgeInsets.zero,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
+                          ];
+                        },
                         child: Container(
                           width: 40,
                           height: 40,
@@ -327,7 +413,6 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                 // ── Canvas ─────────────────────────────────────────
                 Expanded(
                   child: SingleChildScrollView(
-                    physics: const SpringScrollPhysics(),
                     padding: const EdgeInsets.all(
                       AppTheme.spacingMarginTablet,
                     ),
@@ -483,32 +568,43 @@ class _SyncChip extends ConsumerWidget {
       SyncStatus.offline => cs.onSurfaceVariant,
     };
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: dotColor.withValues(alpha: 0.1),
+    final isSyncing = syncData.status == SyncStatus.syncing;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: isSyncing
+            ? null
+            : () => ref.read(syncStatusProvider.notifier).syncNow(),
         borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: dotColor,
-              shape: BoxShape.circle,
-            ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: dotColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(AppTheme.radiusFull),
           ),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
                   color: dotColor,
-                  fontWeight: FontWeight.w500,
+                  shape: BoxShape.circle,
                 ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: dotColor,
+                      fontWeight: FontWeight.w500,
+                    ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -523,30 +619,161 @@ class _CreditChip extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainer,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _showCreditInfo(context, ref, creditData, cs, theme),
         borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.lock_open_rounded,
-            size: 20,
-            color: cs.primary,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainer,
+            borderRadius: BorderRadius.circular(AppTheme.radiusFull),
           ),
-          const SizedBox(width: 8),
-          Text(
-            creditData.loading ? '…' : '${creditData.currentCredits}',
-            style: theme.textTheme.labelLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: cs.primary,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.lock_open_rounded,
+                size: 20,
+                color: cs.primary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                creditData.loading ? '…' : '${creditData.currentCredits}',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: cs.primary,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
+    );
+  }
+
+  void _showCreditInfo(
+    BuildContext context,
+    WidgetRef ref,
+    CreditStateData creditData,
+    ColorScheme cs,
+    ThemeData theme,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Sheet handle
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: cs.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              // Title row
+              Row(
+                children: [
+                  Icon(Icons.lock_open_rounded, color: cs.primary, size: 22),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Offline Credits',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Offline credits let you access lessons, exams, and '
+                'content even without an internet connection. '
+                'Each unlock uses 1 credit.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              _CreditInfoRow(
+                label: 'Available Credits',
+                value: creditData.loading
+                    ? '…'
+                    : '${creditData.currentCredits}',
+                cs: cs,
+                theme: theme,
+              ),
+              const SizedBox(height: 12),
+              _CreditInfoRow(
+                label: 'Tier',
+                value: creditData.tierName,
+                cs: cs,
+                theme: theme,
+              ),
+              if (creditData.nextRefillTime != null) ...[
+                const SizedBox(height: 12),
+                _CreditInfoRow(
+                  label: 'Next Refill',
+                  value: DateFormat('MMM d, yyyy')
+                      .format(creditData.nextRefillTime!),
+                  cs: cs,
+                  theme: theme,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CreditInfoRow extends StatelessWidget {
+  const _CreditInfoRow({
+    required this.label,
+    required this.value,
+    required this.cs,
+    required this.theme,
+  });
+
+  final String label;
+  final String value;
+  final ColorScheme cs;
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: cs.onSurface.withValues(alpha: 0.65),
+          ),
+        ),
+        Text(
+          value,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: cs.onSurface,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -658,7 +885,7 @@ class _RecentLessonsSection extends ConsumerWidget {
         ),
         const SizedBox(height: 16),
         lessonsAsync.when(
-          loading: () => const ShimmerLoading(itemCount: 3),
+          loading: () => const Center(child: CircularProgressIndicator()),
           error: (err, _) => Text(
             'Could not load lessons.',
             style: theme.textTheme.bodyMedium?.copyWith(color: cs.error),
@@ -1077,6 +1304,93 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
     );
   }
 
+  void _showReaderCreditInfo(
+    BuildContext context,
+    WidgetRef ref,
+    CreditStateData creditData,
+    ColorScheme cs,
+    ThemeData theme,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Sheet handle
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: cs.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              // Title row
+              Row(
+                children: [
+                  Icon(Icons.lock_open_rounded, color: cs.primary, size: 22),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Offline Credits',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Offline credits let you access lessons, exams, and '
+                'content even without an internet connection. '
+                'Each unlock uses 1 credit.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              _CreditInfoRow(
+                label: 'Available Credits',
+                value:
+                    creditData.loading ? '…' : '${creditData.currentCredits}',
+                cs: cs,
+                theme: theme,
+              ),
+              const SizedBox(height: 12),
+              _CreditInfoRow(
+                label: 'Tier',
+                value: creditData.tierName,
+                cs: cs,
+                theme: theme,
+              ),
+              if (creditData.nextRefillTime != null) ...[
+                const SizedBox(height: 12),
+                _CreditInfoRow(
+                  label: 'Next Refill',
+                  value: DateFormat('MMM d, yyyy')
+                      .format(creditData.nextRefillTime!),
+                  cs: cs,
+                  theme: theme,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -1108,13 +1422,98 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
             child: Row(
               children: [
                 // Profile popup
-                ProfileSlideUpMenu(
-                  themeMode: themeMode,
-                  ref: ref,
-                  teacherName: authData.currentTeacher?.teacherName,
-                  teacherEmail: authData.currentTeacher?.email,
-                  onSettings: () => context.push('/settings'),
-                  onLogout: _showLogoutConfirmation,
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'settings':
+                        context.push('/settings');
+                      case 'logout':
+                        _showLogoutConfirmation();
+                      case 'theme_light':
+                        ref.read(themeProvider.notifier).setTheme(ThemeMode.light);
+                      case 'theme_dark':
+                        ref.read(themeProvider.notifier).setTheme(ThemeMode.dark);
+                      case 'theme_system':
+                        ref.read(themeProvider.notifier).setTheme(ThemeMode.system);
+                    }
+                  },
+                  offset: const Offset(0, 48),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                  ),
+                  itemBuilder: (context) {
+                    final teacher = authData.currentTeacher;
+                    return [
+                      PopupMenuItem<String>(
+                        enabled: false,
+                        child: SizedBox(
+                          width: 200,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                teacher?.teacherName ?? 'Educator',
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                teacher?.email ?? '',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                      PopupMenuItem<String>(
+                        enabled: false,
+                        child: Text(
+                          'Theme',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      CheckedPopupMenuItem<String>(
+                        checked: themeMode == ThemeMode.light,
+                        value: 'theme_light',
+                        child: const Text('Light'),
+                      ),
+                      CheckedPopupMenuItem<String>(
+                        checked: themeMode == ThemeMode.dark,
+                        value: 'theme_dark',
+                        child: const Text('Dark'),
+                      ),
+                      CheckedPopupMenuItem<String>(
+                        checked: themeMode == ThemeMode.system,
+                        value: 'theme_system',
+                        child: const Text('System'),
+                      ),
+                      const PopupMenuDivider(),
+                      const PopupMenuItem<String>(
+                        value: 'settings',
+                        child: ListTile(
+                          leading: Icon(Icons.settings_rounded),
+                          title: Text('Settings'),
+                          contentPadding: EdgeInsets.zero,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'logout',
+                        child: ListTile(
+                          leading: Icon(Icons.logout_rounded),
+                          title: Text('Logout'),
+                          contentPadding: EdgeInsets.zero,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                    ];
+                  },
                   child: Container(
                     width: 40,
                     height: 40,
@@ -1141,52 +1540,80 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
                 ),
                 const Spacer(),
                 // Sync status indicator (live from syncStatusProvider)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: syncData.status == SyncStatus.synced
-                            ? cs.primary
-                            : syncData.status == SyncStatus.syncing
-                                ? cs.primary
-                                : syncData.status == SyncStatus.error
-                                    ? cs.error
-                                    : cs.onSurfaceVariant,
-                        shape: BoxShape.circle,
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: syncData.status == SyncStatus.syncing
+                        ? null
+                        : () => ref.read(syncStatusProvider.notifier).syncNow(),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: syncData.status == SyncStatus.synced
+                                  ? cs.primary
+                                  : syncData.status == SyncStatus.syncing
+                                      ? cs.primary
+                                      : syncData.status == SyncStatus.error
+                                          ? cs.error
+                                          : cs.onSurfaceVariant,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            statusLabel(syncData.status),
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: cs.outline,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      statusLabel(syncData.status),
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: cs.outline,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
                 const SizedBox(width: 12),
                 // Credit chip (live from creditStateProvider)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: cs.primaryContainer,
-                    borderRadius: BorderRadius.circular(
-                      AppTheme.radiusFull,
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => _showReaderCreditInfo(
+                      context,
+                      ref,
+                      creditData,
+                      cs,
+                      theme,
                     ),
-                  ),
-                  child: Text(
-                    creditData.loading
-                        ? '…'
-                        : '${creditData.currentCredits}',
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: cs.onPrimaryContainer,
-                      fontWeight: FontWeight.w500,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: cs.primaryContainer,
+                        borderRadius: BorderRadius.circular(
+                          AppTheme.radiusFull,
+                        ),
+                      ),
+                      child: Text(
+                        creditData.loading
+                            ? '…'
+                            : '${creditData.currentCredits}',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: cs.onPrimaryContainer,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -1196,7 +1623,6 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
         ),
       ),
       body: SingleChildScrollView(
-        physics: const SpringScrollPhysics(),
         padding: const EdgeInsets.all(AppTheme.spacingMarginMobile),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1262,7 +1688,7 @@ class _RecentLessonsList extends ConsumerWidget {
     final lessonsAsync = ref.watch(recentLessonsProvider);
 
     return lessonsAsync.when(
-      loading: () => const ShimmerLoading(itemCount: 3),
+      loading: () => const Center(child: CircularProgressIndicator()),
       error: (err, _) => Text(
         'Could not load lessons.',
         style: theme.textTheme.bodyMedium?.copyWith(color: cs.error),
@@ -1429,15 +1855,12 @@ class _ReaderLessonCard extends StatelessWidget {
               ),
               SizedBox(
                 height: AppTheme.touchTarget,
-                child: AnimatedPressable(
+                child: FilledButton(
                   onPressed: () => context.push('/lessons/$lessonId'),
-                  child: FilledButton(
-                    onPressed: () {},
-                    child: Text(
-                      buttonText,
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
+                  child: Text(
+                    buttonText,
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),

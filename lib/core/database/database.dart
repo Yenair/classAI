@@ -93,7 +93,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   static QueryExecutor _openConnection() {
     return LazyDatabase(() async {
@@ -424,6 +424,12 @@ class AppDatabase extends _$AppDatabase {
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
               )
             ''');
+          }
+          if (from < 14) {
+            // Add temp_password column to teachers table for pending teachers
+            await customStatement(
+              'ALTER TABLE teachers ADD COLUMN temp_password TEXT',
+            );
           }
         },
         beforeOpen: (details) async {

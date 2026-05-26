@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:classai/core/widgets/shimmer_loading.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/main.dart' show databaseProvider;
 import 'package:classai/features/dashboard/providers/unresolved_conflicts_provider.dart';
@@ -155,7 +154,7 @@ class _ConflictResolutionScreenState
 
   Widget _buildBody(ColorScheme cs) {
     if (_loading) {
-      return const ShimmerLoading();
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (_errorMessage != null) {
@@ -219,8 +218,6 @@ class _ConflictResolutionScreenState
 
     return RefreshIndicator(
       onRefresh: _loadConflicts,
-      color: Theme.of(context).colorScheme.primary,
-      backgroundColor: Theme.of(context).colorScheme.surface,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: _conflicts.length,

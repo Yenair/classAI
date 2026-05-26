@@ -1,6 +1,5 @@
 // lib/features/admin/screens/teacher_detail_screen.dart
 import 'package:flutter/material.dart';
-import 'package:classai/core/widgets/shimmer_loading.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/features/admin/providers/admin_provider.dart';
@@ -254,7 +253,7 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
           title: const Text('Teacher Details'),
           elevation: 0,
         ),
-        body: const ShimmerLoading(),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 

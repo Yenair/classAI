@@ -11,6 +11,7 @@ class VaultItems extends Table {
   TextColumn get curriculum => text()();
   TextColumn get content => text()(); // JSON
   TextColumn get authorTeacherId => text()(); // server ID
+  TextColumn get schoolServerId => text().nullable()();
   TextColumn get authorName => text()();
   TextColumn get minTier => text().withDefault(const Constant('free'))();
   IntColumn get creditCost => integer().withDefault(const Constant(0))();

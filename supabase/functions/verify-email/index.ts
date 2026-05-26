@@ -4,7 +4,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 serve(async (req) => {
   try {
     // ── Parse request ──────────────────────────────────────────────────────
-    const { email } = await req.json();
+    let { email } = await req.json();
+    email = email.toLowerCase();
 
     if (!email) {
       return new Response(

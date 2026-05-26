@@ -57,8 +57,10 @@ serve(async (req) => {
     const adminTeacherId = claims.teacher_id as string;
     const schoolId = claims.school_id as string;
 
-    // ── 3. Parse request body ────────────────────────────────────────────
-    const { email, teacher_name, role } = await req.json();
+    // ── 3. Parse request body once ────────────────────────────────────────
+    const body = await req.json();
+    let { email, teacher_name, role, resend } = body;
+    email = email.toLowerCase();
 
     if (!email || !teacher_name) {
       return new Response(
@@ -77,11 +79,87 @@ serve(async (req) => {
 
     const { data: existingTeacher } = await supabase
       .from("teachers")
-      .select("id")
+      .select("id, teacher_name")
       .eq("email", email)
       .maybeSingle();
 
     if (existingTeacher) {
+      // If resend flag is set, regenerate their password instead of erroring
+      if (resend === true) {
+        // Generate a new temporary password
+        const charset = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%&";
+        const newTempPassword = Array.from(crypto.getRandomValues(new Uint8Array(12)))
+          .map((b) => charset[b % charset.length])
+          .join("");
+
+        // Hash the new password
+        const pepper = Deno.env.get("PASSWORD_PEPPER")!;
+        const newPasswordHash = await bcrypt.hash(newTempPassword + pepper, 10);
+
+        // Update the teacher's password and temp_password
+        const { error: updateError } = await supabase
+          .from("teachers")
+          .update({
+            password_hash: newPasswordHash,
+            force_password_reset: true,
+            temp_password: newTempPassword,
+          })
+          .eq("email", email);
+
+        if (updateError) {
+          console.error("[add-teacher] resend update error:", updateError);
+          throw updateError;
+        }
+
+        // Send email with new password
+        const gmailUser = Deno.env.get("GMAIL_USER");
+        const gmailAppPassword = Deno.env.get("GMAIL_APP_PASSWORD");
+        if (gmailUser && gmailAppPassword) {
+          try {
+            const schoolName = await getSchoolName(supabase, schoolId);
+            const transporter = nodemailer.createTransport({
+              service: "gmail",
+              auth: {
+                user: gmailUser,
+                pass: gmailAppPassword,
+              },
+            });
+            await transporter.sendMail({
+              from: gmailUser,
+              to: email,
+              subject: `ClassAI – Your Temporary Password Has Been Reset`,
+              html: `
+                <h2>Your temporary password has been reset</h2>
+                <p>Your new temporary password for ClassAI is below.</p>
+                <p><strong>Email:</strong> ${email}</p>
+                <p><strong>Temporary Password:</strong> ${newTempPassword}</p>
+                <p>You will be required to change your password on first login.</p>
+                <p><strong>If you don't see this email, please check your spam/junk folder.</strong></p>
+                <p>Best regards,<br/>The ClassAI Team</p>
+              `,
+            });
+            console.log("[add-teacher] Resend email sent to", email);
+          } catch (emailErr) {
+            console.error("[add-teacher] Gmail SMTP error on resend:", emailErr);
+          }
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            teacher: {
+              id: existingTeacher.id,
+              email,
+              name: existingTeacher.teacher_name,
+              role: teacherRole,
+            },
+            temp_password: newTempPassword,
+            message: "A new temporary password has been emailed to the teacher.",
+          }),
+          { headers: { "Content-Type": "application/json" } }
+        );
+      }
+
       return new Response(
         JSON.stringify({ error: "A teacher with this email already exists" }),
         { status: 409, headers: { "Content-Type": "application/json" } }
@@ -102,7 +180,7 @@ serve(async (req) => {
     const salt = crypto.getRandomValues(new Uint8Array(32));
     const saltBase64 = btoa(String.fromCharCode(...salt));
 
-    // ── 7. Insert teacher with force_password_reset = true ───────────────
+    // ── 7. Insert teacher with force_password_reset = true and temp_password ──
     const { data: newTeacher, error: insertError } = await supabase
       .from("teachers")
       .insert({
@@ -115,6 +193,7 @@ serve(async (req) => {
         password_hash_version: 1,
         force_password_reset: true,
         is_active: true,
+        temp_password: tempPassword,
       })
       .select()
       .single();
@@ -163,7 +242,7 @@ serve(async (req) => {
       );
     }
 
-    // ── 9. Return success ────────────────────────────────────────────────
+    // ── 9. Return success with temp_password ─────────────────────────────
     return new Response(
       JSON.stringify({
         success: true,
@@ -173,6 +252,7 @@ serve(async (req) => {
           name: newTeacher.teacher_name,
           role: newTeacher.role,
         },
+        temp_password: tempPassword,
         message: "Teacher created successfully. A welcome email has been sent.",
       }),
       { headers: { "Content-Type": "application/json" } }

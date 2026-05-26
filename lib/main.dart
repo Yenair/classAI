@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
-import 'package:classai/core/widgets/shimmer_loading.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -156,22 +155,15 @@ class _DatabaseBootstrapperState extends State<DatabaseBootstrapper> {
             theme: AppTheme.light(),
             darkTheme: AppTheme.dark(),
             home: const Scaffold(
-              body: Column(
-                children: [
-                  SizedBox(height: 48),
-                  Center(
-                    child: Text(
-                      'Starting ClassAI...',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: ShimmerLoading(),
-                  ),
-                ],
+              body: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Starting ClassAI...'),
+                  ],
+                ),
               ),
             ),
           );
@@ -357,7 +349,16 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
         theme: AppTheme.light(),
         darkTheme: AppTheme.dark(),
         home: const Scaffold(
-          body: ShimmerLoading(),
+          body: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Starting ClassAI...'),
+              ],
+            ),
+          ),
         ),
       );
     }
@@ -370,7 +371,16 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
         theme: AppTheme.light(),
         darkTheme: AppTheme.dark(),
         home: const Scaffold(
-          body: ShimmerLoading(),
+          body: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Saving data before logout...'),
+              ],
+            ),
+          ),
         ),
       );
     }

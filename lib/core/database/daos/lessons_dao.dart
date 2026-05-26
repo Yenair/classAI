@@ -37,4 +37,10 @@ class LessonsDao extends DatabaseAccessor<AppDatabase>
   Future<int> insertLesson(LessonsCompanion companion) {
     return into(lessons).insert(companion);
   }
+
+  /// Get a lesson by its local ID.
+  Future<Lesson?> getById(int id) async {
+    final results = await (select(lessons)..where((t) => t.id.equals(id))).get();
+    return results.isNotEmpty ? results.first : null;
+  }
 }

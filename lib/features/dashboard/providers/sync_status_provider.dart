@@ -61,10 +61,15 @@ final syncServiceProvider = FutureProvider<SyncService>((ref) async {
 /// a [SyncStatusData] snapshot. Monitors network connectivity via
 /// [connectivity_plus] and updates [isOnline] accordingly.
 ///
-/// Note: This checks network connectivity (link-layer), not actual
-/// internet access (which would require a ping to a known host).
+/// Sync runs automatically:
+/// - When connectivity transitions from offline → online
+/// - Periodically every 5 minutes while online
+/// - Sync pauses when device goes offline
 class SyncStatusNotifier extends Notifier<SyncStatusData> {
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  Timer? _periodicSyncTimer;
+  bool _wasOffline = true;
+  bool _isSyncing = false;
 
   @override
   SyncStatusData build() {
@@ -73,25 +78,76 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
     _connectivitySubscription =
         connectivity.onConnectivityChanged.listen((results) {
       final isOnline = results.any((r) => r != ConnectivityResult.none);
-      // Preserve existing state values, only update isOnline.
+
+      // Update state with new connectivity status
       state = SyncStatusData(
-        status: state.status,
+        status: isOnline ? state.status : SyncStatus.offline,
         lastSyncTime: state.lastSyncTime,
         pendingPushCount: state.pendingPushCount,
         pendingPullCount: state.pendingPullCount,
         conflictCount: state.conflictCount,
         isOnline: isOnline,
       );
+
+      // Auto-trigger sync when transitioning offline → online
+      if (isOnline && _wasOffline) {
+        _autoSync();
+      }
+      _wasOffline = !isOnline;
     });
+
+    // Periodic background sync every 5 minutes while online
+    _periodicSyncTimer = Timer.periodic(
+      const Duration(minutes: 5),
+      (_) {
+        if (state.isOnline && !_isSyncing) {
+          _autoSync();
+        }
+      },
+    );
 
     ref.onDispose(() {
       _connectivitySubscription?.cancel();
+      _periodicSyncTimer?.cancel();
     });
 
     return const SyncStatusData(status: SyncStatus.offline);
   }
 
   AppDatabase get _db => ref.read(databaseProvider);
+
+  /// Silent background sync — no error toasts, just status updates.
+  Future<void> _autoSync() async {
+    if (_isSyncing) return;
+    _isSyncing = true;
+
+    try {
+      state = SyncStatusData(
+        status: SyncStatus.syncing,
+        lastSyncTime: state.lastSyncTime,
+        pendingPushCount: state.pendingPushCount,
+        pendingPullCount: state.pendingPullCount,
+        conflictCount: state.conflictCount,
+        isOnline: state.isOnline,
+      );
+
+      final syncService = await ref.read(syncServiceProvider.future);
+      await syncService.onConnectivityRestored();
+      await refresh();
+    } catch (_) {
+      // Silent fail for auto-sync — no user-visible toasts
+      state = SyncStatusData(
+        status: SyncStatus.error,
+        lastSyncTime: state.lastSyncTime,
+        pendingPushCount: state.pendingPushCount,
+        pendingPullCount: state.pendingPullCount,
+        conflictCount: state.conflictCount,
+        isOnline: state.isOnline,
+      );
+    } finally {
+      _isSyncing = false;
+    }
+  }
 
   /// Trigger a full sync cycle (pull‑merge‑push) and update UI status.
   ///

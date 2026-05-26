@@ -196,6 +196,7 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
     'progress_logs',
     'vault_items',
     'scheme_of_work',
+    'teachers',
   ];
 
   SupabaseSyncRemoteApi({required this.schoolId})
@@ -832,7 +833,138 @@ class SyncService {
       localId: localId,
       snapshot: result.merged,
     );
+
+    // For the teachers table, also upsert the merged data into the
+    // actual Drift teachers table so the admin dashboard can query it
+    // locally (e.g. getPendingTeachers, getBySchool).
+    if (change.table == 'teachers') {
+      await _upsertTeacherFromSync(result.merged);
+    }
+
     _setState(SyncState.merging);
+  }
+
+  /// Upserts a teacher row from synced remote data into the local Drift
+  /// [teachers] table. The [merged] map uses snake_case keys from Supabase.
+  Future<void> _upsertTeacherFromSync(Map<String, dynamic> merged) async {
+    final serverId = merged['server_id'] as String? ??
+        merged['id'] as String?;
+    if (serverId == null || serverId.isEmpty) return;
+
+    // Look up existing teacher by serverId
+    final existing = await (db.select(db.teachers)
+          ..where((t) => t.serverId.equals(serverId)))
+        .get();
+
+    // Map snake_case remote fields to Drift column values
+    String? strVal(String key) => merged[key] as String?;
+    bool boolVal(String key) =>
+        merged[key] == true || merged[key] == 'true';
+    int? intVal(String key) => _readInt(merged, key);
+    DateTime? dateVal(String key) {
+      final raw = merged[key];
+      if (raw == null) return null;
+      if (raw is DateTime) return raw;
+      if (raw is String) return DateTime.tryParse(raw);
+      return null;
+    }
+
+    final email = strVal('email') ?? '';
+    final teacherName = strVal('teacher_name') ?? '';
+    final role = strVal('role') ?? 'teacher';
+    final schoolServerId = strVal('school_id');
+    final isActive = boolVal('is_active');
+    final forcePasswordReset = boolVal('force_password_reset');
+    final passwordHashVersion = intVal('password_hash_version') ?? 1;
+    final tempPassword = strVal('temp_password');
+    final schoolKeyWrapped = strVal('school_key_wrapped') ??
+        strVal('school_master_key_wrapped');
+    final salt = strVal('salt');
+    final currentDeviceId = strVal('current_device_id');
+    final isDeleted = boolVal('is_deleted');
+    final createdAt = dateVal('created_at') ?? DateTime.now();
+    final updatedAt = dateVal('updated_at') ?? DateTime.now();
+    final lastModifiedBy = strVal('last_modified_by');
+
+    // Resolve schoolLocalId from schoolServerId
+    int? resolvedSchoolLocalId;
+    if (schoolServerId != null) {
+      final schoolRow = await (db.select(db.schools)
+            ..where((s) => s.serverId.equals(schoolServerId)))
+          .getSingleOrNull();
+      resolvedSchoolLocalId = schoolRow?.localId;
+    }
+
+    if (existing.isNotEmpty) {
+      // Update existing teacher record
+      final existingTeacher = existing.first;
+      await (db.update(db.teachers)
+            ..where((t) => t.localId.equals(existingTeacher.localId)))
+          .write(TeachersCompanion(
+        email: Value(email),
+        teacherName: Value(teacherName),
+        role: Value(role),
+        schoolServerId: schoolServerId != null
+            ? Value(schoolServerId)
+            : const Value.absent(),
+        schoolLocalId: resolvedSchoolLocalId != null
+            ? Value(resolvedSchoolLocalId)
+            : const Value.absent(),
+        isActive: Value(isActive),
+        forcePasswordReset: Value(forcePasswordReset),
+        passwordHashVersion: Value(passwordHashVersion),
+        schoolKeyWrapped: schoolKeyWrapped != null
+            ? Value(schoolKeyWrapped)
+            : const Value.absent(),
+        salt: salt != null ? Value(salt) : const Value.absent(),
+        currentDeviceId: currentDeviceId != null
+            ? Value(currentDeviceId)
+            : const Value.absent(),
+        tempPassword: tempPassword != null
+            ? Value(tempPassword)
+            : const Value.absent(),
+        isDeleted: Value(isDeleted),
+        updatedAt: Value(updatedAt),
+        lastModifiedBy: lastModifiedBy != null
+            ? Value(lastModifiedBy)
+            : const Value.absent(),
+        updateCounter: Value(existingTeacher.updateCounter + 1),
+      ));
+    } else {
+      // Insert new teacher record
+      await (db.into(db.teachers).insert(
+        TeachersCompanion.insert(
+          serverId: Value(serverId),
+          email: email,
+          teacherName: teacherName,
+          role: Value(role),
+          schoolLocalId:
+              resolvedSchoolLocalId ?? 0,
+          schoolServerId: schoolServerId != null
+              ? Value(schoolServerId)
+              : const Value.absent(),
+          isActive: Value(isActive),
+          forcePasswordReset: Value(forcePasswordReset),
+          passwordHashVersion: Value(passwordHashVersion),
+          schoolKeyWrapped: schoolKeyWrapped != null
+              ? Value(schoolKeyWrapped)
+              : const Value.absent(),
+          tempPassword: tempPassword != null
+              ? Value(tempPassword)
+              : const Value.absent(),
+          salt: salt != null ? Value(salt) : const Value.absent(),
+          currentDeviceId: currentDeviceId != null
+              ? Value(currentDeviceId)
+              : const Value.absent(),
+          isDeleted: Value(isDeleted),
+          createdAt: Value(createdAt),
+          updatedAt: Value(updatedAt),
+          lastModifiedBy: lastModifiedBy != null
+              ? Value(lastModifiedBy)
+              : const Value.absent(),
+        ),
+      ));
+    }
   }
 
   Future<String?> _loadBaseHash(String tableName, int localId) async {

@@ -14,4 +14,6 @@ class Exams extends Table {
   IntColumn get updateCounter => integer().withDefault(const Constant(0))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   TextColumn get lastModifiedBy => text().nullable()();
+  TextColumn get teacherServerId => text().nullable()();
+  TextColumn get schoolServerId => text().nullable()();
 }

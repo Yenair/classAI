@@ -29,7 +29,10 @@ class LessonEditorScreen extends ConsumerStatefulWidget {
   /// In production this wraps [AiService.generate]; in tests a mock is used.
   final Future<Map<String, dynamic>> Function(String prompt)? generateCallback;
 
-  const LessonEditorScreen({super.key, this.generateCallback});
+  /// If provided, pre-fills the form from an existing lesson.
+  final int? lessonId;
+
+  const LessonEditorScreen({super.key, this.generateCallback, this.lessonId});
 
   @override
   ConsumerState<LessonEditorScreen> createState() => _LessonEditorScreenState();
@@ -38,6 +41,7 @@ class LessonEditorScreen extends ConsumerStatefulWidget {
 class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   final _formKey = GlobalKey<FormState>();
   final _topicController = TextEditingController();
+  int? _lessonId;
   int _week = 1;
   String _subject = 'Mathematics';
   String _classLevel = 'JSS 1';
@@ -105,11 +109,15 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   @override
   void initState() {
     super.initState();
+    _lessonId = widget.lessonId;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _registerWithEmergencyFlush();
       _loadCreditBalance();
       _loadAuthInfo();
       _loadSubjects();
+      if (_lessonId != null) {
+        _loadLesson(_lessonId!);
+      }
     });
   }
 
@@ -124,6 +132,23 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       }
     } catch (_) {
       // Fall back to hardcoded _subjects
+    }
+  }
+
+  Future<void> _loadLesson(int id) async {
+    try {
+      final db = ref.read(databaseProvider);
+      final lesson = await db.lessonsDao.getById(id);
+      if (lesson != null && mounted) {
+        setState(() {
+          _topicController.text = lesson.topic;
+          _week = lesson.week;
+          _subject = lesson.subject;
+          _classLevel = lesson.classLevel;
+        });
+      }
+    } catch (_) {
+      // Lesson not found — continue with empty form
     }
   }
 
@@ -363,7 +388,27 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           bloomsVerbs: _selectedBlooms.join(', '),
           curriculum: 'NERDC',
           content: _encryptedContent ?? jsonEncode(content),
+          teacherServerId: Value(_teacherId),
+          schoolServerId: Value(_schoolId),
         ),
+      );
+
+      // Queue sync entry so this lesson gets pushed to the server
+      await db.syncQueueDao.insertEntry(
+        queueTable: 'lessons',
+        recordLocalId: id,
+        operation: 'INSERT',
+        payload: {
+          'subject': _subject,
+          'classLevel': _classLevel,
+          'week': _week,
+          'topic': _topicController.text.trim(),
+          'difficulty': _difficulty,
+          'bloomsVerbs': _selectedBlooms.join(', '),
+          'curriculum': 'NERDC',
+          'teacher_server_id': _teacherId,
+          'school_server_id': _schoolId,
+        },
       );
 
       if (notify && mounted) {
@@ -471,48 +516,49 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                           SizedBox(
                                             width: 450,
                                             child: _ConfigColumn(
-                                              cs: cs,
-                                              theme: theme,
-                                              subject: _subject,
-                                              classLevel: _classLevel,
-                                              week: _week,
-                                              difficulty: _difficulty,
-                                              assessmentFormat:
-                                                  _assessmentFormat,
-                                              selectedBlooms: _selectedBlooms,
-                                              isGenerating: _isGenerating,
-                                              hasGenerated: _hasGenerated,
-                                              subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
-                                              classLevels: _classLevels,
-                                              difficulties: _difficulties,
-                                              bloomVerbs: _bloomVerbs,
-                                              onSubjectChanged: (v) =>
-                                                  setState(() =>
-                                                      _subject = v),
-                                              onClassChanged: (v) =>
-                                                  setState(() =>
-                                                      _classLevel = v),
-                                              onWeekChanged: (v) =>
-                                                  setState(() => _week = v),
-                                              onDifficultyChanged: (v) =>
-                                                  setState(() =>
-                                                      _difficulty = v),
-                                              onAssessmentFormatChanged: (v) =>
-                                                  setState(() =>
-                                                      _assessmentFormat = v),
-                                              onBloomToggled: (verb) {
-                                                setState(() {
-                                                  if (_selectedBlooms
-                                                      .contains(verb)) {
-                                                    _selectedBlooms
-                                                        .remove(verb);
-                                                  } else {
-                                                    _selectedBlooms.add(verb);
-                                                  }
-                                                });
-                                              },
-                                              onGenerate: _handleGenerate,
-                                            ),
+                                                cs: cs,
+                                                theme: theme,
+                                                subject: _subject,
+                                                classLevel: _classLevel,
+                                                week: _week,
+                                                difficulty: _difficulty,
+                                                assessmentFormat:
+                                                    _assessmentFormat,
+                                                selectedBlooms: _selectedBlooms,
+                                                isGenerating: _isGenerating,
+                                                hasGenerated: _hasGenerated,
+                                                subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
+                                                classLevels: _classLevels,
+                                                difficulties: _difficulties,
+                                                bloomVerbs: _bloomVerbs,
+                                                topicController: _topicController,
+                                                onSubjectChanged: (v) =>
+                                                    setState(() =>
+                                                        _subject = v),
+                                                onClassChanged: (v) =>
+                                                    setState(() =>
+                                                        _classLevel = v),
+                                                onWeekChanged: (v) =>
+                                                    setState(() => _week = v),
+                                                onDifficultyChanged: (v) =>
+                                                    setState(() =>
+                                                        _difficulty = v),
+                                                onAssessmentFormatChanged: (v) =>
+                                                    setState(() =>
+                                                        _assessmentFormat = v),
+                                                onBloomToggled: (verb) {
+                                                  setState(() {
+                                                    if (_selectedBlooms
+                                                        .contains(verb)) {
+                                                      _selectedBlooms
+                                                          .remove(verb);
+                                                    } else {
+                                                      _selectedBlooms.add(verb);
+                                                    }
+                                                  });
+                                                },
+                                                onGenerate: _handleGenerate,
+                                              ),
                                           ),
                                           const SizedBox(width: 24),
                                           // Right column: preview
@@ -572,6 +618,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                             classLevels: _classLevels,
                                             difficulties: _difficulties,
                                             bloomVerbs: _bloomVerbs,
+                                            topicController: _topicController,
                                             onSubjectChanged: (v) =>
                                                 setState(() => _subject = v),
                                             onClassChanged: (v) => setState(
@@ -955,6 +1002,7 @@ class _ConfigColumn extends StatelessWidget {
   final List<String> classLevels;
   final List<String> difficulties;
   final List<String> bloomVerbs;
+  final TextEditingController topicController;
   final ValueChanged<String> onSubjectChanged;
   final ValueChanged<String> onClassChanged;
   final ValueChanged<int> onWeekChanged;
@@ -978,6 +1026,7 @@ class _ConfigColumn extends StatelessWidget {
     required this.classLevels,
     required this.difficulties,
     required this.bloomVerbs,
+    required this.topicController,
     required this.onSubjectChanged,
     required this.onClassChanged,
     required this.onWeekChanged,
@@ -1034,8 +1083,8 @@ class _ConfigColumn extends StatelessWidget {
                       cs: cs,
                       theme: theme,
                       label: 'Topic',
-                      controller: null,
-                      initialValue: '',
+                      controller: topicController,
+                      initialValue: null,
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -1485,6 +1534,83 @@ class _PreviewColumn extends StatelessWidget {
     );
   }
 
+  /// Render markdown heading lines (starting with ##) as bold text.
+  /// Other lines are rendered as normal body text with paragraph spacing.
+  Widget _renderMarkdownContent(String content) {
+    if (content.isEmpty) {
+      return Text(
+        'No content yet.',
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: cs.onSurfaceVariant,
+        ),
+      );
+    }
+
+    final lines = content.split('\n');
+    final widgets = <Widget>[];
+
+    for (int i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      final trimmed = line.trim();
+
+      if (trimmed.startsWith('## ')) {
+        // Render heading as bold text
+        final headingText = trimmed.substring(3).trim();
+        widgets.add(Padding(
+          padding: EdgeInsets.only(top: i > 0 ? 12.0 : 0, bottom: 4.0),
+          child: Text(
+            headingText,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: cs.onSurface,
+            ),
+          ),
+        ));
+      } else if (trimmed.startsWith('#')) {
+        // Single # heading
+        final headingText = trimmed.substring(1).trim();
+        widgets.add(Padding(
+          padding: EdgeInsets.only(top: i > 0 ? 12.0 : 0, bottom: 4.0),
+          child: Text(
+            headingText,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: cs.onSurface,
+            ),
+          ),
+        ));
+      } else if (trimmed.isEmpty) {
+        // Blank line = paragraph break
+        widgets.add(const SizedBox(height: 8));
+      } else {
+        // Normal body text
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(bottom: 4.0),
+          child: Text(
+            line,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: cs.onSurface,
+            ),
+          ),
+        ));
+      }
+    }
+
+    if (widgets.isEmpty) {
+      return Text(
+        'No content yet.',
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: cs.onSurfaceVariant,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: widgets,
+    );
+  }
+
   Widget _buildPreviewCard(
     String title,
     String content, {
@@ -1505,12 +1631,7 @@ class _PreviewColumn extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (readOnly)
-            Text(
-              content.isEmpty ? 'No content yet.' : content,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: cs.onSurfaceVariant,
-              ),
-            )
+            _renderMarkdownContent(content)
           else
             TextFormField(
               initialValue: content,

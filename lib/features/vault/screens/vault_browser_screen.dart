@@ -1,13 +1,10 @@
 // lib/features/vault/screens/vault_browser_screen.dart
 import 'package:flutter/material.dart';
-import 'package:classai/core/widgets/shimmer_loading.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/main.dart' show databaseProvider;
 import 'package:classai/core/theme/app_theme.dart';
-import 'package:classai/core/widgets/spring_scroll_physics.dart';
-import 'package:classai/core/widgets/staggered_fade_in.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/features/vault/screens/vault_item_detail_screen.dart';
@@ -125,7 +122,7 @@ class _VaultBrowserScreenState extends ConsumerState<VaultBrowserScreen> {
                   // Scrollable main canvas
                   Expanded(
                     child: _loading
-                        ? const ShimmerLoading()
+                        ? const Center(child: CircularProgressIndicator())
                         : _errorMessage != null
                             ? _ErrorState(
                                 cs: cs,
@@ -635,7 +632,6 @@ class _VaultContent extends StatelessWidget {
                     : 1;
 
         return SingleChildScrollView(
-          physics: const SpringScrollPhysics(),
           padding: const EdgeInsets.only(
             left: AppTheme.spacingMarginMobile,
             right: AppTheme.spacingMarginMobile,
@@ -683,15 +679,12 @@ class _VaultContent extends StatelessWidget {
                 itemCount: items.length,
                 itemBuilder: (context, index) {
                   final item = items[index];
-                  return StaggeredFadeIn(
-                    index: index,
-                    child: _VaultCard(
-                      item: item,
-                      cs: cs,
-                      tt: tt,
-                      getInitials: getInitials,
-                      onTap: () => onOpenDetail(item),
-                    ),
+                  return _VaultCard(
+                    item: item,
+                    cs: cs,
+                    tt: tt,
+                    getInitials: getInitials,
+                    onTap: () => onOpenDetail(item),
                   );
                 },
               ),
@@ -1000,9 +993,7 @@ class _VaultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Hero(
-      tag: 'vault-${item.id}',
-      child: MouseRegion(
+    return MouseRegion(
       child: GestureDetector(
         onTap: onTap,
         child: Container(
@@ -1228,7 +1219,6 @@ class _VaultCard extends StatelessWidget {
             ],
           ),
         ),
-      ),
       ),
     );
   }

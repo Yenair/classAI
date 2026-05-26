@@ -29,4 +29,10 @@ class Teachers extends Table {
 
   // Device tracking for no concurrent sessions
   TextColumn get currentDeviceId => text().nullable()();
+
+  // Temporary password for pending teachers who haven't logged in yet
+  TextColumn get tempPassword => text().nullable()();
 }
+
+
+
