@@ -35,10 +35,14 @@ class TeachersDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
-  /// Get all teachers with forcePasswordReset set to true (pending login).
-  Future<List<Teacher>> getPendingTeachers() {
-    return (select(teachers)
-          ..where((t) => t.forcePasswordReset.equals(true)))
-        .get();
+  /// Get all teachers with forcePasswordReset set to true (pending login)
+  /// for a specific school.
+  Future<List<Teacher>> getPendingTeachers({int? schoolLocalId}) {
+    final query = select(teachers)
+      ..where((t) => t.forcePasswordReset.equals(true));
+    if (schoolLocalId != null) {
+      query.where((t) => t.schoolLocalId.equals(schoolLocalId));
+    }
+    return query.get();
   }
 }

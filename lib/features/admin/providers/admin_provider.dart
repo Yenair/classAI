@@ -115,7 +115,7 @@ class AdminDashboardNotifier extends Notifier<AdminDashboardData> {
       final schoolLocalId = authState.currentSchool?.localId ?? 0;
       final teachers = await _db.teachersDao.getBySchool(schoolLocalId);
       final pendingTeachersFromDao =
-          await _db.teachersDao.getPendingTeachers();
+          await _db.teachersDao.getPendingTeachers(schoolLocalId: schoolLocalId);
       final pendingItems = await _db.vaultItemsDao.getPendingApproval();
 
       // Build teacher data with real device counts, sync counts, conflicts
@@ -146,8 +146,8 @@ class AdminDashboardNotifier extends Notifier<AdminDashboardData> {
       }
 
       // Build pending teacher list using the dedicated DAO method
-      for (final t in pendingTeachersFromDao
-          .where((t) => t.schoolLocalId == schoolLocalId)) {
+      // (now school-filtered at the query level)
+      for (final t in pendingTeachersFromDao) {
         pendingTeacherList.add(PendingTeacherData(
           localId: t.localId,
           serverId: t.serverId,
@@ -159,9 +159,9 @@ class AdminDashboardNotifier extends Notifier<AdminDashboardData> {
       }
 
       debugPrint(
-        '[admin] refresh: ${teachers.length} teachers, '
-        '${pendingTeachersFromDao.length} pending from DAO, '
-        '${pendingTeacherList.length} filtered by school',
+        '[admin] refresh: schoolLocalId=$schoolLocalId, '
+        '${teachers.length} active teachers, '
+        '${pendingTeachersFromDao.length} pending teachers for this school',
       );
 
       state = AdminDashboardData(

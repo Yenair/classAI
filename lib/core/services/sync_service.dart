@@ -849,7 +849,10 @@ class SyncService {
   Future<void> _upsertTeacherFromSync(Map<String, dynamic> merged) async {
     final serverId = merged['server_id'] as String? ??
         merged['id'] as String?;
-    if (serverId == null || serverId.isEmpty) return;
+    if (serverId == null || serverId.isEmpty) {
+      debugPrint('[sync] _upsertTeacherFromSync skipped: no serverId in $merged');
+      return;
+    }
 
     // Look up existing teacher by serverId
     final existing = await (db.select(db.teachers)
@@ -895,6 +898,14 @@ class SyncService {
       resolvedSchoolLocalId = schoolRow?.localId;
     }
 
+    debugPrint(
+      '[sync] _upsertTeacherFromSync: serverId=$serverId, '
+      'forcePasswordReset=$forcePasswordReset, '
+      'tempPassword=${tempPassword != null ? '(set)' : 'null'}, '
+      'schoolServerId=$schoolServerId, '
+      'resolvedSchoolLocalId=$resolvedSchoolLocalId',
+    );
+
     if (existing.isNotEmpty) {
       // Update existing teacher record
       final existingTeacher = existing.first;
@@ -930,6 +941,7 @@ class SyncService {
             : const Value.absent(),
         updateCounter: Value(existingTeacher.updateCounter + 1),
       ));
+      debugPrint('[sync] _upsertTeacherFromSync: UPDATED teacher $serverId');
     } else {
       // Insert new teacher record
       await (db.into(db.teachers).insert(
@@ -964,6 +976,7 @@ class SyncService {
               : const Value.absent(),
         ),
       ));
+      debugPrint('[sync] _upsertTeacherFromSync: INSERTED teacher $serverId');
     }
   }
 
