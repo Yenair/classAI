@@ -76,6 +76,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     let email: string;
+    let teacherId: string | undefined;
 
     if (mode === "signup") {
       // ── Signup mode: no JWT required, use email from body ────────────
@@ -108,7 +109,7 @@ serve(async (req) => {
         return jsonResponse({ error: "Invalid or expired JWT" }, 401);
       }
 
-      const teacherId = claims.sub;
+      teacherId = claims.sub;
       if (typeof teacherId !== "string" || teacherId.length === 0) {
         return jsonResponse({ error: "Invalid token: no subject claim" }, 401);
       }
