@@ -93,19 +93,24 @@ class _RootKeyboardListenerState extends State<_RootKeyboardListener> {
     if (event is! KeyDownEvent) return false;
     if (event.logicalKey != LogicalKeyboardKey.escape) return false;
 
-    // Try to pop via the global navigator key first.
-    final navContext = navigatorKey.currentContext;
-    if (navContext != null && Navigator.canPop(navContext)) {
-      Navigator.of(navContext).maybePop();
-      return true;
-    }
+    // Defer navigation to after the current frame completes to avoid the
+    // "!_debugLocked" navigator assertion when Escape is pressed during
+    // a build/layout phase or route transition animation.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Try to pop via the global navigator key first.
+      final navContext = navigatorKey.currentContext;
+      if (navContext != null && Navigator.canPop(navContext)) {
+        Navigator.of(navContext).maybePop();
+        return;
+      }
 
-    // If the navigator cannot pop, attempt to close any open modal
-    // (dialog, bottom sheet, etc.) using the listener's own context.
-    if (mounted && Navigator.canPop(context)) {
-      Navigator.of(context).maybePop();
-    }
-    return false;
+      // If the navigator cannot pop, attempt to close any open modal
+      // (dialog, bottom sheet, etc.) using the listener's own context.
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.of(context).maybePop();
+      }
+    });
+    return true;
   }
 
   @override

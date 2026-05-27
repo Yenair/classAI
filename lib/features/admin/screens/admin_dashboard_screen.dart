@@ -1,4 +1,6 @@
 // lib/features/admin/screens/admin_dashboard_screen.dart
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,7 +10,9 @@ import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/core/services/auth_service.dart';
 import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/widgets/app_toast.dart';
+import 'package:classai/core/widgets/sync_indicator.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
+import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
 import 'package:classai/features/settings/providers/theme_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
@@ -24,6 +28,7 @@ class AdminDashboardScreen extends ConsumerStatefulWidget {
 
 class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   int _selectedTabIndex = 0;
+  Timer? _autoRefreshTimer;
 
   @override
   void initState() {
@@ -31,6 +36,22 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(adminDashboardProvider.notifier).refresh();
     });
+
+    // Auto-refresh admin data every 30 seconds to stay in sync
+    _autoRefreshTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) {
+        if (mounted) {
+          ref.read(adminDashboardProvider.notifier).refresh();
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _autoRefreshTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -145,44 +166,37 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
             color: cs.outlineVariant.withValues(alpha: 0.3),
           ),
           const SizedBox(height: 16),
-          // Navigation items
+          // Navigation items — admin-specific sidebar
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               children: [
                 _NavItem(
-                  icon: Icons.home_rounded,
-                  label: 'Home',
-                  isActive: false,
-                  onTap: () {},
+                  icon: Icons.people_rounded,
+                  label: 'Teacher Management',
+                  isActive: _selectedTabIndex == 0,
+                  onTap: () => setState(() => _selectedTabIndex = 0),
                 ),
                 const SizedBox(height: 4),
                 _NavItem(
-                  icon: Icons.menu_book_rounded,
-                  label: 'Lessons',
-                  isActive: false,
-                  onTap: () {},
+                  icon: Icons.person_add_rounded,
+                  label: 'Pending Teachers',
+                  isActive: _selectedTabIndex == 1,
+                  onTap: () => setState(() => _selectedTabIndex = 1),
                 ),
                 const SizedBox(height: 4),
                 _NavItem(
-                  icon: Icons.quiz_rounded,
-                  label: 'Exams',
-                  isActive: false,
-                  onTap: () {},
+                  icon: Icons.verified_rounded,
+                  label: 'Vault Approve Queue',
+                  isActive: _selectedTabIndex == 2,
+                  onTap: () => setState(() => _selectedTabIndex = 2),
                 ),
                 const SizedBox(height: 4),
                 _NavItem(
-                  icon: Icons.inventory_2_rounded,
-                  label: 'Vault',
-                  isActive: false,
-                  onTap: () {},
-                ),
-                const SizedBox(height: 4),
-                _NavItem(
-                  icon: Icons.admin_panel_settings_rounded,
-                  label: 'Admin',
-                  isActive: true,
-                  onTap: () {},
+                  icon: Icons.sync_rounded,
+                  label: 'Sync Health',
+                  isActive: _selectedTabIndex == 3,
+                  onTap: () => setState(() => _selectedTabIndex = 3),
                 ),
               ],
             ),
@@ -223,6 +237,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Sync status chip (live from syncStatusProvider) — clickable to trigger sync
+              const _AdminSyncChip(),
+              const SizedBox(width: 12),
               // Credit chip (live from creditStateProvider)
               Container(
                 padding:
@@ -253,6 +270,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   ],
                 ),
               ),
+              const SizedBox(width: 12),
+              // Sync Indicator (opens sync details sheet)
+              const SyncIndicator(),
               const SizedBox(width: 12),
               // Notifications
               Container(
@@ -688,11 +708,75 @@ class _NavItem extends StatelessWidget {
       ),
     );
   }
-}
-
-// ---------------------------------------------------------------------------
-// Add Teacher Dialog
-// ---------------------------------------------------------------------------
+  }
+  
+  // ---------------------------------------------------------------------------
+  // Sync Status Chip (online/offline indicator with one-tap sync)
+  // ---------------------------------------------------------------------------
+  class _AdminSyncChip extends ConsumerWidget {
+    const _AdminSyncChip();
+  
+    @override
+    Widget build(BuildContext context, WidgetRef ref) {
+      final syncData = ref.watch(syncStatusProvider);
+      final cs = Theme.of(context).colorScheme;
+  
+      final label = statusLabel(syncData.status);
+      final Color dotColor = switch (syncData.status) {
+        SyncStatus.synced => cs.primary,
+        SyncStatus.syncing => cs.primary,
+        SyncStatus.error => cs.error,
+        SyncStatus.offline => cs.onSurfaceVariant,
+      };
+  
+      final isSyncing = syncData.status == SyncStatus.syncing;
+  
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: isSyncing
+              ? null
+              : () => ref.read(syncStatusProvider.notifier).syncNow(),
+          borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: dotColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+              border: Border.all(
+                color: dotColor.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: dotColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: dotColor,
+                        fontWeight: FontWeight.w500,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+  }
+  
+  // ---------------------------------------------------------------------------
+  // Add Teacher Dialog
+  // ---------------------------------------------------------------------------
 
 class _AddTeacherDialog extends ConsumerStatefulWidget {
   const _AddTeacherDialog();
