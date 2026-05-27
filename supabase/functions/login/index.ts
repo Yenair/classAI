@@ -119,6 +119,8 @@ serve(async (req) => {
 
     // 6. Return auth result
     const school = teacher.schools;
+    const responseEmailVerified = teacher.email_verified ?? false;
+    
     return new Response(
       JSON.stringify({
         jwt,
@@ -128,7 +130,7 @@ serve(async (req) => {
           name: teacher.teacher_name,
           role: teacher.role,
           school_id: teacher.school_id,
-          email_verified: teacher.email_verified ?? false,
+          email_verified: responseEmailVerified,
         },
         school: {
           id: school.id,
@@ -140,7 +142,7 @@ serve(async (req) => {
         password_hash_version: teacher.password_hash_version,
         offline_credits: 3, // placeholder, should come from a credit table later
         last_credit_refill_server_time: teacher.last_credit_refill_date?.toISOString() ?? null,
-        email_verified: teacher.email_verified ?? false,
+        email_verified: responseEmailVerified,
       }),
       { headers: { "Content-Type": "application/json" } }
     );

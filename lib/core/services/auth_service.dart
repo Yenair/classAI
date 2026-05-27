@@ -886,6 +886,7 @@ class SupabaseAuthService implements AuthService {
       forcePasswordReset: data['force_password_reset'] as bool?,
       emailVerified: data['email_verified'] as bool? ?? false,
     );
+
   }
 
   /// Returns `true` if [e] is a connectivity-related exception.

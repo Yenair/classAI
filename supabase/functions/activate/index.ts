@@ -134,6 +134,7 @@ serve(async (req) => {
           password_hash_version: 1,
           force_password_reset: false,
           is_active: true,
+          email_verified: false, // must verify email on first login
         })
         .select()
         .single();
@@ -175,6 +176,7 @@ serve(async (req) => {
           password_hash_version: 1,
           force_password_reset: false,
           is_active: true,
+          email_verified: false, // must verify email on first login
         })
         .select()
         .single();

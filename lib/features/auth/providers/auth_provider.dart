@@ -251,8 +251,6 @@ class AuthNotifier extends Notifier<AuthStateData> {
         }
       });
     } on AuthException catch (e) {
-      debugPrint(
-          '[DEBUG] loginOnline() — AUTH EXCEPTION: code=${e.code}, message=${e.message}');
       switch (e.code) {
         case AuthErrorCode.accountDeactivated:
           state = state.copyWith(
@@ -273,9 +271,6 @@ class AuthNotifier extends Notifier<AuthStateData> {
           );
       }
     } catch (e) {
-      debugPrint(
-          '[DEBUG] loginOnline() — UNEXPECTED EXCEPTION TYPE: ${e.runtimeType}');
-      debugPrint('[DEBUG] loginOnline() — UNEXPECTED EXCEPTION MESSAGE: $e');
       await Sentry.captureException(e);
       state = state.copyWith(
         state: AuthState.onlineLoginRequired,
