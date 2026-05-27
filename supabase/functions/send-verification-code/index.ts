@@ -86,10 +86,10 @@ serve(async (req) => {
       email = requestedEmail.toLowerCase();
       console.log("[send-verification-code] signup mode, email:", email);
     } else {
-      // ── Normal mode: require JWT ─────────────────────────────────────
-      const authHeader = req.headers.get("Authorization");
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        return jsonResponse({ error: "Missing token" }, 401);
+      // ── Normal mode: require JWT (from x-classai-jwt custom header) ──
+      const classaiJwt = req.headers.get("x-classai-jwt");
+      if (!classaiJwt) {
+        return jsonResponse({ error: "Missing authentication token" }, 401);
       }
 
       const jwtSecret = Deno.env.get("JWT_SECRET");
@@ -100,10 +100,9 @@ serve(async (req) => {
         );
       }
 
-      const token = authHeader.replace("Bearer ", "");
       let claims: Record<string, unknown>;
       try {
-        claims = await verify(token, await getHmacKey(jwtSecret), "HS256");
+        claims = await verify(classaiJwt, await getHmacKey(jwtSecret), "HS256");
       } catch (err) {
         console.error("[send-verification-code] JWT verification failed:", err);
         return jsonResponse({ error: "Invalid or expired JWT" }, 401);

@@ -21,7 +21,7 @@ serve(async (req) => {
     );
 
     // Parse body first
-    const { code, email: bodyEmail, mode } = await req.json();
+    const { code, email: bodyEmail, mode, device_id, platform } = await req.json();
 
     if (!code || typeof code !== "string" || !/^\d{6}$/.test(code)) {
       return new Response(
@@ -31,6 +31,7 @@ serve(async (req) => {
     }
 
     let email: string;
+    let claims: Record<string, unknown> | undefined;
 
     if (mode === "signup") {
       // ── Signup mode: verify code by email (no JWT needed) ────────────
@@ -42,11 +43,11 @@ serve(async (req) => {
       }
       email = bodyEmail.toLowerCase();
     } else {
-      // ── Normal mode: verify JWT ──────────────────────────────────────
-      const authHeader = req.headers.get("Authorization");
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      // ── Normal mode: verify JWT (from x-classai-jwt custom header) ───
+      const classaiJwt = req.headers.get("x-classai-jwt");
+      if (!classaiJwt) {
         return new Response(
-          JSON.stringify({ error: "Missing or invalid Authorization header" }),
+          JSON.stringify({ error: "Missing authentication token" }),
           { status: 401, headers: { "Content-Type": "application/json" } }
         );
       }
@@ -59,11 +60,9 @@ serve(async (req) => {
         );
       }
 
-      const token = authHeader.replace("Bearer ", "");
-      let claims: Record<string, unknown>;
       try {
         const cryptoKey = await getHmacKey(jwtSecret);
-        claims = await verify(token, cryptoKey, "HS256");
+        claims = await verify(classaiJwt, cryptoKey, "HS256");
       } catch {
         return new Response(
           JSON.stringify({ error: "Invalid or expired JWT" }),
@@ -71,14 +70,14 @@ serve(async (req) => {
         );
       }
 
-      if (!claims.sub) {
+      if (!claims!.sub) {
         return new Response(
           JSON.stringify({ error: "Invalid token: no subject claim" }),
           { status: 401, headers: { "Content-Type": "application/json" } }
         );
       }
 
-      const teacherId = claims.sub as string;
+      const teacherId = claims!.sub as string;
 
       // Fetch teacher email
       const { data: teacher, error: teacherError } = await supabase
@@ -156,19 +155,81 @@ serve(async (req) => {
       .update({ used: true })
       .eq("id", record.id);
 
-    // ── For normal mode: mark teacher email as verified ────────────────────
+    // ── For normal mode: handle device registration and email verification ─
     if (mode !== "signup") {
-      const { error: updateError } = await supabase
-        .from("teachers")
-        .update({ email_verified: true })
-        .eq("id", claims!.sub as string);
+      const teacherId = claims!.sub as string;
 
-      if (updateError) {
-        console.error("[verify-code] teacher update error:", updateError);
+      // Fetch the current teacher to check global email_verified status
+      const { data: teacherData, error: teacherFetchError } = await supabase
+        .from("teachers")
+        .select("email_verified")
+        .eq("id", teacherId)
+        .maybeSingle();
+
+      if (teacherFetchError) {
+        console.error("[verify-code] teacher fetch error:", teacherFetchError);
         return new Response(
-          JSON.stringify({ error: "Failed to verify email. Please try again." }),
+          JSON.stringify({ error: "Failed to fetch teacher details." }),
           { status: 500, headers: { "Content-Type": "application/json" } }
         );
+      }
+
+      const isGloballyVerified = teacherData?.email_verified === true;
+
+      if (isGloballyVerified) {
+        // Teacher is already globally verified — this is a "new device"
+        // verification. Do NOT change email_verified, just register the device.
+        if (device_id) {
+          const { error: upsertError } = await supabase
+            .from("teacher_devices")
+            .upsert(
+              {
+                teacher_id: teacherId,
+                device_id: device_id,
+                platform: platform || null,
+                last_active: new Date().toISOString(),
+                is_active: true,
+              },
+              { onConflict: "teacher_id, device_id" }
+            );
+
+          if (upsertError) {
+            console.error("[verify-code] device upsert error:", upsertError);
+            return new Response(
+              JSON.stringify({ error: "Failed to register device. Please try again." }),
+              { status: 500, headers: { "Content-Type": "application/json" } }
+            );
+          }
+        }
+      } else {
+        // Teacher is not globally verified — mark as verified AND register device
+        const { error: updateError } = await supabase
+          .from("teachers")
+          .update({ email_verified: true })
+          .eq("id", teacherId);
+
+        if (updateError) {
+          console.error("[verify-code] teacher update error:", updateError);
+          return new Response(
+            JSON.stringify({ error: "Failed to verify email. Please try again." }),
+            { status: 500, headers: { "Content-Type": "application/json" } }
+          );
+        }
+
+        if (device_id) {
+          await supabase
+            .from("teacher_devices")
+            .upsert(
+              {
+                teacher_id: teacherId,
+                device_id: device_id,
+                platform: platform || null,
+                last_active: new Date().toISOString(),
+                is_active: true,
+              },
+              { onConflict: "teacher_id, device_id" }
+            );
+        }
       }
     }
 

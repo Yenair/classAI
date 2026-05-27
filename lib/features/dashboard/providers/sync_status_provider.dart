@@ -111,6 +111,11 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
       _periodicSyncTimer?.cancel();
     });
 
+    // Trigger an initial sync after the widget tree is built so that
+    // data (teachers, pending teachers, etc.) is available immediately
+    // when the admin dashboard or any other screen first renders.
+    Future(() => _autoSync());
+
     return const SyncStatusData(status: SyncStatus.offline);
   }
 

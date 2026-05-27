@@ -285,7 +285,12 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
     try {
       final initialUri = await _appLinks.getInitialLink();
       if (initialUri != null && mounted) {
-        _routeDeepLink(initialUri.toString());
+        // Defer to after the current build frame so we never call showDialog
+        // or Navigator.push during a GoRouter transition, which would trigger
+        // the "!_debugLocked" Flutter navigator assertion.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _routeDeepLink(initialUri.toString());
+        });
       }
     } catch (_) {
       // No initial link — this is a normal app launch
@@ -294,7 +299,9 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
     // Subscribe to incoming links while the app is already running (warm start)
     _linkSubscription = _appLinks.uriLinkStream.listen((Uri uri) {
       if (mounted) {
-        _routeDeepLink(uri.toString());
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _routeDeepLink(uri.toString());
+        });
       }
     });
   }
@@ -391,13 +398,18 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
     }
 
     // ── Not authenticated — show login screen ──────────────────────────
+    // Note: navigatorKey is NOT passed here because it is owned by
+    // GoRouter (used in the authenticated state). Sharing the same key
+    // between a plain MaterialApp and MaterialApp.router causes GoRouter's
+    // internal "_routeMatch" to become null during the widget tree
+    // transition, triggering a "Null check operator used on a null value"
+    // assertion in go_router/builder.dart.
     if (authData.state != AuthState.authenticated) {
       return MaterialApp(
         title: 'ClassAI',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
         darkTheme: AppTheme.dark(),
-        navigatorKey: navigatorKey,
         home: const LoginScreen(),
       );
     }

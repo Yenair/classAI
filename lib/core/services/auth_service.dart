@@ -18,6 +18,7 @@ class AuthResult {
   final DateTime lastCreditRefillServerTime;
   final bool? forcePasswordReset;
   final bool emailVerified;
+  final bool newDevice;
 
   AuthResult({
     required this.teacher,
@@ -28,6 +29,7 @@ class AuthResult {
     required this.lastCreditRefillServerTime,
     this.forcePasswordReset,
     this.emailVerified = false,
+    this.newDevice = false,
   });
 }
 
@@ -885,6 +887,7 @@ class SupabaseAuthService implements AuthService {
       lastCreditRefillServerTime: serverTime,
       forcePasswordReset: data['force_password_reset'] as bool?,
       emailVerified: data['email_verified'] as bool? ?? false,
+      newDevice: data['new_device'] as bool? ?? false,
     );
 
   }

@@ -83,6 +83,12 @@ class AuthStateData {
   /// Used by [LoginScreen] to skip showing its own email verification dialog.
   final bool isSignupFlow;
 
+  /// The device_id that triggered a "new device" verification flow.
+  /// Set during login when [AuthResult.newDevice] is true, used by
+  /// [AuthNotifier._verifyEmailCodeExisting] to register the device
+  /// after successful verification.
+  final String? pendingDeviceId;
+
   const AuthStateData({
     required this.state,
     this.currentTeacher,
@@ -91,6 +97,7 @@ class AuthStateData {
     this.offlineLoginAttempts = 0,
     this.pendingSignupData,
     this.isSignupFlow = false,
+    this.pendingDeviceId,
   });
 
   AuthStateData copyWith({
@@ -101,10 +108,12 @@ class AuthStateData {
     int? offlineLoginAttempts,
     Map<String, String>? pendingSignupData,
     bool? isSignupFlow,
+    String? pendingDeviceId,
     bool clearError = false,
     bool clearTeacher = false,
     bool clearSchool = false,
     bool clearPendingSignup = false,
+    bool clearPendingDeviceId = false,
   }) {
     return AuthStateData(
       state: state ?? this.state,
@@ -117,6 +126,9 @@ class AuthStateData {
           ? null
           : (pendingSignupData ?? this.pendingSignupData),
       isSignupFlow: isSignupFlow ?? this.isSignupFlow,
+      pendingDeviceId: clearPendingDeviceId
+          ? null
+          : (pendingDeviceId ?? this.pendingDeviceId),
     );
   }
 }
@@ -224,13 +236,17 @@ class AuthNotifier extends Notifier<AuthStateData> {
         return;
       }
 
-      if (!result.emailVerified) {
-        // Email not yet verified — show the verification popup.
+      if (!result.emailVerified || result.newDevice) {
+        // Email not yet verified, OR this is a new device requiring
+        // re-verification — show the verification popup.
+        // Store the device_id so _verifyEmailCodeExisting can register
+        // the device after successful verification.
         state = state.copyWith(
           state: AuthState.emailVerificationRequired,
           currentTeacher: result.teacher,
           currentSchool: result.school,
           offlineLoginAttempts: 0,
+          pendingDeviceId: result.newDevice ? deviceId : null,
         );
         return;
       }
@@ -240,6 +256,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
         currentTeacher: result.teacher,
         currentSchool: result.school,
         offlineLoginAttempts: 0,
+        clearPendingDeviceId: true,
       );
 
       // Navigate based on role — admin goes to /admin, teachers go to /
@@ -657,10 +674,17 @@ class AuthNotifier extends Notifier<AuthStateData> {
       }
 
       final client = supabase_pkg.Supabase.instance.client;
+      // Include device_id and platform for new-device verification flow.
+      // If pendingDeviceId is set, this is a "new device" verification
+      // and the edge function will register the device after verifying.
+      final body = <String, dynamic>{
+        'code': code,
+        if (state.pendingDeviceId != null) 'device_id': state.pendingDeviceId,
+      };
       final response = await client.functions.invoke(
         'verify-code',
-        headers: {'Authorization': 'Bearer $jwt'},
-        body: {'code': code},
+        headers: {'x-classai-jwt': jwt},
+        body: body,
       );
 
       final data = response.data as Map<String, dynamic>;
@@ -668,6 +692,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
         state = state.copyWith(
           state: AuthState.authenticated,
           clearError: true,
+          clearPendingDeviceId: true,
         );
       } else {
         final error = data['error'] as String? ?? 'Verification failed.';
@@ -805,7 +830,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
       final response = await client.functions
           .invoke(
             'send-verification-code',
-            headers: {'Authorization': 'Bearer $jwt'},
+            headers: {'x-classai-jwt': jwt},
             body: body,
           )
           .timeout(

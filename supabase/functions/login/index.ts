@@ -65,11 +65,24 @@ serve(async (req) => {
       );
     }
 
-    // 3. If force_password_reset, issue short-lived JWT (5 min) with flag
+    // 4. Determine if this is a new device
+    let newDevice = false;
+    if (device_id) {
+      const { data: existingDevice } = await supabase
+        .from("teacher_devices")
+        .select("id")
+        .eq("teacher_id", teacher.id)
+        .eq("device_id", device_id)
+        .maybeSingle();
+
+      newDevice = !existingDevice;
+    }
+
+    // 5. If force_password_reset, issue short-lived JWT (5 min) with flag
     const isForceReset = teacher.force_password_reset === true;
     const tokenExpiry = isForceReset ? getNumericDate(60 * 5) : getNumericDate(60 * 60 * 24); // 5 min vs 24 hours
 
-    // 4. Generate JWT
+    // 6. Generate JWT
     const cryptoKey = await getHmacKey(JWT_SECRET);
     const jwt = await create(
       { alg: "HS256", typ: "JWT" },
@@ -112,14 +125,17 @@ serve(async (req) => {
       );
     }
 
-    // 5. Register device - update current_device_id on teachers table
+    // 7. Register device - update current_device_id on teachers table
     if (device_id) {
       await supabase.from("teachers").update({ current_device_id: device_id }).eq("id", teacher.id);
     }
 
-    // 6. Return auth result
+    // 8. Return auth result
     const school = teacher.schools;
-    const responseEmailVerified = teacher.email_verified ?? false;
+    // If this is a new device, force email_verified to false even if
+    // the teacher's account is already verified globally, so the client
+    // shows the email verification popup.
+    const responseEmailVerified = newDevice ? false : (teacher.email_verified ?? false);
     
     return new Response(
       JSON.stringify({
@@ -143,6 +159,7 @@ serve(async (req) => {
         offline_credits: 3, // placeholder, should come from a credit table later
         last_credit_refill_server_time: teacher.last_credit_refill_date?.toISOString() ?? null,
         email_verified: responseEmailVerified,
+        new_device: newDevice,
       }),
       { headers: { "Content-Type": "application/json" } }
     );

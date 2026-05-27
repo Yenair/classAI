@@ -110,9 +110,17 @@ class AdminDashboardNotifier extends Notifier<AdminDashboardData> {
     state = const AdminDashboardData(loading: true);
 
     try {
-      // Only load teachers belonging to the current admin's school
+      // Only load teachers belonging to the current admin's school.
+      // IMPORTANT: authState.currentSchool.localId is always 0 because the
+      // School object in AuthResult is constructed with a hardcoded localId: 0
+      // (see auth_service.dart). Always read the real auto-generated localId
+      // from the local database.
       final authState = ref.read(authProvider);
-      final schoolLocalId = authState.currentSchool?.localId ?? 0;
+      debugPrint('[admin] refresh: authState.state=${authState.state}, '
+          'currentSchool=${authState.currentSchool?.toString() ?? 'null'}');
+
+      final school = await _db.schoolsDao.get();
+      final schoolLocalId = school?.localId ?? 0;
       final teachers = await _db.teachersDao.getBySchool(schoolLocalId);
       final pendingTeachersFromDao =
           await _db.teachersDao.getPendingTeachers(schoolLocalId: schoolLocalId);
