@@ -771,6 +771,45 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+
+          // Recovery email (admin-only, read-only display)
+          if (authData.currentSchool?.adminRecoveryEmail != null &&
+              authData.currentSchool!.adminRecoveryEmail!.isNotEmpty)
+            Row(
+              children: [
+                Icon(
+                  Icons.mail_outline_rounded,
+                  size: 16,
+                  color: cs.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Recovery Email',
+                        style: textTheme.labelSmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                      Text(
+                        authData.currentSchool!.adminRecoveryEmail!,
+                        style: textTheme.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.lock_rounded,
+                  size: 14,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                ),
+              ],
+            ),
           const SizedBox(height: 16),
           Divider(
             height: 1,

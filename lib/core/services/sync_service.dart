@@ -49,16 +49,45 @@ class SyncPullPage {
   final List<SyncChange> changes;
   final String? nextCursor;
 
-  const SyncPullPage({required this.changes, required this.nextCursor});
+  /// Set of teacher server IDs that are active on the server.
+  /// Used by [SyncService._reconcileTeacherRoster] to remove locally-stored
+  /// teachers that were hard-deleted from the cloud (Issue 1).
+  final Set<String>? activeTeacherIds;
+
+  /// Teacher records with [force_password_reset] == true that may have been
+  /// missed by the incremental pull because they weren't updated recently.
+  /// These are upserted in [SyncService._pullChanges] after the main loop
+  /// (Issue 3).
+  final List<SyncChange>? pendingTeachers;
+
+  const SyncPullPage({
+    required this.changes,
+    required this.nextCursor,
+    this.activeTeacherIds,
+    this.pendingTeachers,
+  });
 
   factory SyncPullPage.fromJson(Map<String, dynamic> json) {
     final rawChanges = (json['changes'] as List? ?? const []);
+    final rawPendingTeachers =
+        (json['pending_teachers'] as List? ?? const []);
     return SyncPullPage(
       changes: rawChanges
           .map((item) =>
               SyncChange.fromJson(Map<String, dynamic>.from(item as Map)))
           .toList(),
       nextCursor: json['next_cursor'] as String?,
+      activeTeacherIds: json['active_teacher_ids'] != null
+          ? Set<String>.from(json['active_teacher_ids'] as List)
+          : null,
+      pendingTeachers: rawPendingTeachers.isNotEmpty
+          ? rawPendingTeachers
+              .map((item) => SyncChange(
+                    table: 'teachers',
+                    row: Map<String, dynamic>.from(item as Map),
+                  ))
+              .toList()
+          : null,
     );
   }
 }
@@ -611,6 +640,10 @@ class SyncService {
     final config = await store.loadSecurityConfig();
     String? cursor = config.syncCursor;
 
+    // Collect reconciliation metadata across all pages (Issues 1 & 3)
+    Set<String>? activeTeacherIds;
+    List<SyncChange>? pendingTeachers;
+
     while (true) {
       final page = await remoteApi.pullChanges(
         schoolId: schoolId,
@@ -620,6 +653,16 @@ class SyncService {
 
       for (final change in page.changes) {
         await _mergeRemoteChange(change);
+      }
+
+      // Capture metadata from each page (returned by the edge function
+      // alongside the incremental changes).
+      if (page.activeTeacherIds != null) {
+        activeTeacherIds = page.activeTeacherIds;
+      }
+      if (page.pendingTeachers != null &&
+          page.pendingTeachers!.isNotEmpty) {
+        pendingTeachers = page.pendingTeachers;
       }
 
       cursor = page.nextCursor;
@@ -634,10 +677,51 @@ class SyncService {
       }
     }
 
+    // ── Post-pull reconciliation ──────────────────────────────────────
+    // Issue 1: Remove local teachers that were hard-deleted on the server
+    // (they won't appear in the incremental pull since no change event is
+    // generated for hard deletes).
+    if (activeTeacherIds != null) {
+      await _reconcileTeacherRoster(activeTeacherIds);
+    }
+
+    // Issue 3: Upsert any pending (force_password_reset=true) teachers that
+    // may have been missed by the incremental pull because their record was
+    // last modified before the sync cursor.
+    if (pendingTeachers != null) {
+      for (final change in pendingTeachers) {
+        await _upsertTeacherFromSync(change.row);
+      }
+    }
+
     _setState(SyncState.pushing);
     await _pushChanges();
     _setState(SyncState.applyingCredits);
     await _applyCreditState();
+  }
+
+  /// Removes locally-stored teachers whose [serverId] is not in the server's
+  /// set of active teacher IDs. This handles the case where teachers were
+  /// hard-deleted from Supabase SQL — the incremental sync-pull never returns
+  /// a "delete" event for hard deletes, so we reconcile by comparing the
+  /// full server roster against our local copy.
+  Future<void> _reconcileTeacherRoster(Set<String> activeServerIds) async {
+    final localTeachers = await (db.select(db.teachers)
+          ..where((t) => t.schoolServerId.equals(schoolId)))
+        .get();
+
+    for (final teacher in localTeachers) {
+      if (teacher.serverId != null &&
+          !activeServerIds.contains(teacher.serverId)) {
+        await (db.delete(db.teachers)
+              ..where((t) => t.localId.equals(teacher.localId)))
+            .go();
+        debugPrint(
+          '[sync] _reconcileTeacherRoster: DELETED teacher '
+          '${teacher.serverId} (not in server roster)',
+        );
+      }
+    }
   }
 
   Future<MergeResult> _threeWayMerge(

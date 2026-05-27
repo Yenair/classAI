@@ -95,8 +95,45 @@ serve(async (req) => {
       nextCursor = (lastChange.row.updated_at as string) ?? null;
     }
 
+    // ── 3. Fetch teacher metadata for client-side reconciliation ──────────────
+    // Return the set of all active teacher IDs so the client can delete local
+    // records for teachers that were hard-deleted from the server (Issue 1).
+    // Also return teachers with force_password_reset=true that may have been
+    // missed by the incremental pull (Issue 3).
+    let activeTeacherIds: string[] = [];
+    let pendingTeachers: Record<string, unknown>[] = [];
+
+    try {
+      // All teacher IDs that are not soft-deleted
+      const { data: teacherData } = await supabase
+        .from("teachers")
+        .select("id")
+        .or("is_deleted.is.null,is_deleted.eq.false");
+
+      if (teacherData && teacherData.length > 0) {
+        activeTeacherIds = teacherData.map((t: Record<string, unknown>) => t.id as string);
+      }
+
+      // All teachers with force_password_reset = true (pending sign-in)
+      const { data: pendingData } = await supabase
+        .from("teachers")
+        .select("*")
+        .eq("force_password_reset", true);
+
+      if (pendingData && pendingData.length > 0) {
+        pendingTeachers = pendingData;
+      }
+    } catch (e) {
+      console.warn("sync-pull: error fetching teacher metadata:", e);
+    }
+
     return new Response(
-      JSON.stringify({ changes, next_cursor: nextCursor }),
+      JSON.stringify({
+        changes,
+        next_cursor: nextCursor,
+        active_teacher_ids: activeTeacherIds,
+        pending_teachers: pendingTeachers,
+      }),
       { headers: { "Content-Type": "application/json" } }
     );
   } catch (err) {
