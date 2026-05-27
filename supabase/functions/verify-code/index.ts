@@ -1,17 +1,6 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { verify } from "https://deno.land/x/djwt@v2.8/mod.ts";
-
-// Convert a plain string secret into a CryptoKey for HS256 JWT verification.
-function getHmacKey(secret: string): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["verify"],
-  );
-}
+import { validateTokenVersion } from "../_shared/validate_token.ts";
 
 serve(async (req) => {
   try {
@@ -61,12 +50,17 @@ serve(async (req) => {
       }
 
       try {
-        const cryptoKey = await getHmacKey(jwtSecret);
-        claims = await verify(classaiJwt, cryptoKey, "HS256");
-      } catch {
+        claims = await validateTokenVersion(
+          classaiJwt,
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+          jwtSecret,
+        );
+      } catch (err) {
+        const { error, code, status } = err as { error: string; code: string; status: number };
         return new Response(
-          JSON.stringify({ error: "Invalid or expired JWT" }),
-          { status: 401, headers: { "Content-Type": "application/json" } }
+          JSON.stringify({ error, code }),
+          { status, headers: { "Content-Type": "application/json" } }
         );
       }
 
@@ -179,8 +173,10 @@ serve(async (req) => {
       if (isGloballyVerified) {
         // Teacher is already globally verified — this is a "new device"
         // verification. Do NOT change email_verified, just register the device.
+        console.log(`[verify-code] device_id provided: ${device_id ? 'yes (length=' + device_id.length + ')' : 'no'}`);
+        console.log(`[verify-code] teacherId: ${teacherId}`);
         if (device_id) {
-          const { error: upsertError } = await supabase
+          const { data: upsertData, error: upsertError } = await supabase
             .from("teacher_devices")
             .upsert(
               {
@@ -191,15 +187,19 @@ serve(async (req) => {
                 is_active: true,
               },
               { onConflict: "teacher_id, device_id" }
-            );
+            )
+            .select();
 
+          console.log(`[verify-code] upsert data:`, JSON.stringify(upsertData));
           if (upsertError) {
-            console.error("[verify-code] device upsert error:", upsertError);
+            console.error("[verify-code] device upsert error:", JSON.stringify(upsertError));
             return new Response(
-              JSON.stringify({ error: "Failed to register device. Please try again." }),
+              JSON.stringify({ error: `Failed to register device: ${upsertError.message}` }),
               { status: 500, headers: { "Content-Type": "application/json" } }
             );
           }
+        } else {
+          console.warn(`[verify-code] device_id is missing or empty — skipping device registration`);
         }
       } else {
         // Teacher is not globally verified — mark as verified AND register device
@@ -217,7 +217,8 @@ serve(async (req) => {
         }
 
         if (device_id) {
-          await supabase
+          console.log(`[verify-code] Non-globally-verified path — upserting device: teacherId=${teacherId}, device_id=${device_id}`);
+          const { error: upsertError } = await supabase
             .from("teacher_devices")
             .upsert(
               {
@@ -229,6 +230,11 @@ serve(async (req) => {
               },
               { onConflict: "teacher_id, device_id" }
             );
+          if (upsertError) {
+            console.error("[verify-code] device upsert error (non-verified path):", JSON.stringify(upsertError));
+          }
+        } else {
+          console.warn(`[verify-code] device_id is missing in non-globally-verified path`);
         }
       }
     }

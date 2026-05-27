@@ -57,6 +57,21 @@ class SecurityService {
     await _secureStorage.delete(key: 'session_key_expiry');
   }
 
+  /// Store JWT in secure storage (for auto-login persistence)
+  Future<void> storeJwt(String jwt) async {
+    await _secureStorage.write(key: 'auth_token', value: jwt);
+  }
+
+  /// Read stored JWT from secure storage
+  Future<String?> getStoredJwt() async {
+    return await _secureStorage.read(key: 'auth_token');
+  }
+
+  /// Clear stored JWT from secure storage
+  Future<void> clearJwt() async {
+    await _secureStorage.delete(key: 'auth_token');
+  }
+
   /// Clear all sensitive data from secure storage
   Future<void> clearAll() async {
     await _secureStorage.deleteAll();

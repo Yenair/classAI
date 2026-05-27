@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { validateTokenVersion } from "../_shared/validate_token.ts";
 
 // Key compression map (mirrors PayloadCompressor._keyMap on the Dart side)
 const KEY_MAP: Record<string, string> = {
@@ -70,6 +71,39 @@ function getValue(rowData: Record<string, unknown>, ...keys: string[]): unknown 
 
 serve(async (req) => {
   try {
+    // ── 1. Validate JWT and token_version ──────────────────────────────────
+    const jwtSecret = Deno.env.get("JWT_SECRET");
+    if (!jwtSecret) {
+      return new Response(
+        JSON.stringify({ error: "Server misconfiguration: JWT_SECRET not set" }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const classaiJwt = req.headers.get("x-classai-jwt");
+    if (!classaiJwt) {
+      return new Response(
+        JSON.stringify({ error: "Missing authentication token" }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    try {
+      await validateTokenVersion(
+        classaiJwt,
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        jwtSecret,
+      );
+    } catch (err) {
+      const { error, code, status } = err as { error: string; code: string; status: number };
+      return new Response(
+        JSON.stringify({ error, code }),
+        { status, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── 2. Process sync-push request ───────────────────────────────────────
     const { changes } = await req.json();
 
     if (!Array.isArray(changes)) {

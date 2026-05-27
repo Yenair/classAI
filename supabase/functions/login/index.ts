@@ -82,7 +82,14 @@ serve(async (req) => {
     const isForceReset = teacher.force_password_reset === true;
     const tokenExpiry = isForceReset ? getNumericDate(60 * 5) : getNumericDate(60 * 60 * 24); // 5 min vs 24 hours
 
-    // 6. Generate JWT
+    // 6. Increment token_version for no-concurrent-sessions enforcement
+    const newTokenVersion = (teacher.token_version ?? 0) + 1;
+    await supabase
+      .from("teachers")
+      .update({ token_version: newTokenVersion })
+      .eq("id", teacher.id);
+
+    // 7. Generate JWT with token_version
     const cryptoKey = await getHmacKey(JWT_SECRET);
     const jwt = await create(
       { alg: "HS256", typ: "JWT" },
@@ -92,6 +99,7 @@ serve(async (req) => {
         school_id: teacher.school_id,
         is_admin: teacher.role === "admin",
         force_password_reset: isForceReset,
+        token_version: newTokenVersion,
         exp: tokenExpiry,
       },
       cryptoKey
@@ -125,7 +133,7 @@ serve(async (req) => {
       );
     }
 
-    // 7. Register device - update current_device_id on teachers table
+    // 8. Register device - update current_device_id on teachers table
     if (device_id) {
       await supabase.from("teachers").update({ current_device_id: device_id }).eq("id", teacher.id);
     }

@@ -1,19 +1,8 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import bcrypt from "npm:bcryptjs";
-import { verify } from "https://deno.land/x/djwt@v2.8/mod.ts";
 import nodemailer from "npm:nodemailer";
-
-// Convert a plain string secret into a CryptoKey for HS256 JWT verification.
-function getHmacKey(secret: string): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["verify"],
-  );
-}
+import { validateTokenVersion } from "../_shared/validate_token.ts";
 
 serve(async (req) => {
   try {
@@ -35,14 +24,21 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace("Bearer ", "");
+
+    // Validate token and check token_version
     let claims: Record<string, unknown>;
     try {
-      const cryptoKey = await getHmacKey(jwtSecret);
-      claims = await verify(token, cryptoKey, "HS256");
-    } catch {
+      claims = await validateTokenVersion(
+        token,
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        jwtSecret,
+      );
+    } catch (err) {
+      const { error, code, status } = err as { error: string; code: string; status: number };
       return new Response(
-        JSON.stringify({ error: "Invalid or expired JWT" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
+        JSON.stringify({ error, code }),
+        { status, headers: { "Content-Type": "application/json" } }
       );
     }
 

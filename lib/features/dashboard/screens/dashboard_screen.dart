@@ -458,29 +458,33 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                                   ),
                                 ),
                                 const SizedBox(width: 16),
-                                Row(
-                                  children: [
-                                    _ActionButton(
-                                      icon: Icons.add_rounded,
-                                      label: 'Create Lesson',
-                                      isPrimary: true,
-                                      cs: cs,
-                                      theme: theme,
-                                      onTap: () =>
-                                          context.push('/lesson-editor'),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    _ActionButton(
-                                      icon: Icons.assignment_rounded,
-                                      label: 'Generate Exam',
-                                      isPrimary: false,
-                                      cs: cs,
-                                      theme: theme,
-                                      onTap: () =>
-                                          context.push('/exam-editor'),
-                                    ),
-                                  ],
-                                ),
+                                // Teacher-only action buttons — hidden for admins
+                                // (redirect already blocks admins from this screen,
+                                //  this is defense-in-depth)
+                                if (authData.currentTeacher?.role != 'admin')
+                                  Row(
+                                    children: [
+                                      _ActionButton(
+                                        icon: Icons.add_rounded,
+                                        label: 'Create Lesson',
+                                        isPrimary: true,
+                                        cs: cs,
+                                        theme: theme,
+                                        onTap: () =>
+                                            context.push('/lesson-editor'),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      _ActionButton(
+                                        icon: Icons.assignment_rounded,
+                                        label: 'Generate Exam',
+                                        isPrimary: false,
+                                        cs: cs,
+                                        theme: theme,
+                                        onTap: () =>
+                                            context.push('/exam-editor'),
+                                      ),
+                                    ],
+                                  ),
                               ],
                             ),
 

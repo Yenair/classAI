@@ -48,6 +48,12 @@ abstract class AuthService {
   /// Returns the currently stored JWT, or null if not authenticated.
   String? get currentJwt;
 
+  /// Set the JWT from a stored value (used for auto-login).
+  void setJwt(String jwt);
+
+  /// Clear the stored JWT (called on logout or token expiry).
+  void clearJwt();
+
   /// Authenticate a teacher with email + password + deviceId.
   Future<AuthResult> login(
     String email,
@@ -140,6 +146,12 @@ abstract class AuthService {
   /// Calls POST /functions/v1/change-password with new_password
   /// and the JWT in the Authorization header.
   Future<void> changePassword(String newPassword);
+
+  /// Validate a stored JWT by calling the validate-session edge function.
+  ///
+  /// Used for silent auto-login on app startup.
+  /// Returns teacher/school data if the session is valid.
+  Future<AuthResult> validateSession({String? deviceId});
 }
 
 /// Real implementation of [AuthService] backed by Supabase.
@@ -773,6 +785,73 @@ class SupabaseAuthService implements AuthService {
       throw AuthException(
         code: AuthErrorCode.networkError,
         message: 'Network error. Please check your connection and try again.',
+        originalError: e,
+      );
+    }
+  }
+
+  /// Set the JWT from a stored value (used for auto-login).
+  void setJwt(String jwt) {
+    _currentJwt = jwt;
+  }
+
+  /// Validate a stored JWT by calling the validate-session edge function.
+  ///
+  /// Returns teacher/school data if the session is valid.
+  /// Throws [AuthException] with [AuthErrorCode.invalidCredentials] if
+  /// the token is expired, invalid, or has a token_version mismatch.
+  Future<AuthResult> validateSession({String? deviceId}) async {
+    final jwt = _currentJwt;
+    if (jwt == null || jwt.isEmpty) {
+      throw AuthException(
+        code: AuthErrorCode.invalidCredentials,
+        message: 'No stored session found.',
+      );
+    }
+
+    final client = supabase_pkg.Supabase.instance.client;
+    try {
+      final response = await client.functions.invoke(
+        'validate-session',
+        headers: {'x-classai-jwt': jwt},
+        body: {
+          if (deviceId != null) 'device_id': deviceId,
+        },
+      );
+
+      final data = response.data as Map<String, dynamic>?;
+      if (data == null || data['valid'] != true) {
+        _currentJwt = null;
+        throw AuthException(
+          code: AuthErrorCode.invalidCredentials,
+          message: data?['error'] as String? ?? 'Session expired. Please login again.',
+        );
+      }
+
+      return _parseAuthResult(data);
+    } on supabase_pkg.FunctionException catch (e) {
+      _currentJwt = null;
+      // Check if this is a token_version_mismatch
+      final code = (e.details is Map)
+          ? (e.details as Map)['code'] as String?
+          : null;
+      if (code == 'token_version_mismatch') {
+        throw AuthException(
+          code: AuthErrorCode.invalidCredentials,
+          message: 'Session expired. Please login again.',
+          originalError: e,
+        );
+      }
+      throw AuthException(
+        code: AuthErrorCode.invalidCredentials,
+        message: 'Session expired. Please login again.',
+        originalError: e,
+      );
+    } catch (e) {
+      _currentJwt = null;
+      throw AuthException(
+        code: AuthErrorCode.networkError,
+        message: 'Unable to verify session. Please check your connection.',
         originalError: e,
       );
     }

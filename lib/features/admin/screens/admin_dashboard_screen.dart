@@ -573,10 +573,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   // ---------------------------------------------------------------
   Widget _buildBottomNav(ColorScheme cs, TextTheme textTheme) {
     final items = [
-      (icon: Icons.home_rounded, label: 'Home'),
-      (icon: Icons.menu_book_rounded, label: 'Lessons'),
-      (icon: Icons.quiz_rounded, label: 'Exams'),
-      (icon: Icons.more_horiz_rounded, label: 'More'),
+      (icon: Icons.people_rounded, label: 'Management'),
+      (icon: Icons.person_add_rounded, label: 'Pending'),
+      (icon: Icons.verified_rounded, label: 'Vault Queue'),
+      (icon: Icons.sync_rounded, label: 'Sync'),
     ];
 
     return Container(

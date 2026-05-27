@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:classai/main.dart';
 import 'package:classai/core/services/deep_link_service.dart';
+import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/auth/screens/login_screen.dart';
 import 'package:classai/features/auth/screens/signup_screen.dart';
 import 'package:classai/features/auth/screens/change_password_screen.dart';
@@ -46,6 +48,33 @@ final appRouter = GoRouter(
   navigatorKey: navigatorKey,
   initialLocation: '/',
   debugLogDiagnostics: true,
+  redirect: (context, state) {
+    // Read role from the auth provider.
+    // Only redirect when the GoRouter is mounted (i.e. user is authenticated).
+    final container = ProviderScope.containerOf(context, listen: false);
+    final authData = container.read(authProvider);
+    final role = authData.currentTeacher?.role;
+
+    // If role is null (shouldn't happen in authenticated state), allow navigation.
+    if (role == null) return null;
+
+    if (role == 'admin') {
+      final location = state.uri.toString();
+
+      // Teacher-only routes — admins should never access these.
+      final isTeacherRoute = location == '/' ||
+          location == '/lessons' ||
+          location.startsWith('/lessons/') ||
+          location == '/lesson-editor' ||
+          location == '/exams' ||
+          location.startsWith('/exams/') ||
+          location == '/exam-editor';
+
+      if (isTeacherRoute) return '/admin';
+    }
+
+    return null; // allow navigation
+  },
   routes: [
     GoRoute(
       path: '/',

@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { verify } from "https://deno.land/x/djwt@v2.8/mod.ts";
+import { validateTokenVersion } from "../_shared/validate_token.ts";
 
 function jsonResponse(
   body: Record<string, unknown>,
@@ -13,16 +13,6 @@ function jsonResponse(
       "Cache-Control": "no-store",
     },
   });
-}
-
-function getHmacKey(secret: string): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["verify"],
-  );
 }
 
 function serializeError(err: unknown): Record<string, unknown> {
@@ -102,10 +92,16 @@ serve(async (req) => {
 
       let claims: Record<string, unknown>;
       try {
-        claims = await verify(classaiJwt, await getHmacKey(jwtSecret), "HS256");
+        claims = await validateTokenVersion(
+          classaiJwt,
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+          jwtSecret,
+        );
       } catch (err) {
-        console.error("[send-verification-code] JWT verification failed:", err);
-        return jsonResponse({ error: "Invalid or expired JWT" }, 401);
+        const { error, code, status } = err as { error: string; code: string; status: number };
+        console.error("[send-verification-code] validation failed:", error, code);
+        return jsonResponse({ error, code }, status);
       }
 
       teacherId = claims.sub;

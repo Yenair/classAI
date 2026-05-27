@@ -153,7 +153,12 @@ class AuthNotifier extends Notifier<AuthStateData> {
   // State machine transitions
   // -----------------------------------------------------------------------
 
-  /// Called on app start. Checks for stored password hash to attempt offline login.
+  /// Called on app start. Tries silent auto-login from stored JWT.
+  ///
+  /// 1. Reads stored JWT from flutter_secure_storage (via SecurityService).
+  /// 2. If found, calls validate-session edge function.
+  /// 3. If valid, transitions to [AuthState.authenticated] and navigates.
+  /// 4. If invalid/expired/offline, falls back to [AuthState.onlineLoginRequired].
   Future<void> checkLocalAuth() async {
     state = state.copyWith(
       state: AuthState.checkingLocalAuth,
@@ -161,21 +166,50 @@ class AuthNotifier extends Notifier<AuthStateData> {
     );
 
     try {
-      // Offline login is disabled: the server uses bcrypt+pepper for
-      // password verification while the client only stored a SHA-256 hash
-      // that will never match. In both cases the user must log in online.
-      // Transition silently — no error banner should appear just because
-      // the app started.
-      state = state.copyWith(
-        state: AuthState.onlineLoginRequired,
-        clearError: true,
-      );
-    } catch (e) {
-      state = state.copyWith(
-        state: AuthState.onlineLoginRequired,
-        clearError: true,
-      );
+      // Try auto-login from stored JWT
+      final storedJwt = await _securityService.getStoredJwt();
+      if (storedJwt != null && storedJwt.isNotEmpty) {
+        // Set the JWT on the auth service so validateSession can use it
+        _authService.setJwt(storedJwt);
+
+        try {
+          final result = await _authService.validateSession();
+
+          // Session is valid — save to local DB and transition to authenticated
+          await _saveAuthResultToLocalDb(result);
+          state = state.copyWith(
+            state: AuthState.authenticated,
+            currentTeacher: result.teacher,
+            currentSchool: result.school,
+            clearError: true,
+          );
+
+          // Navigate based on role
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final ctx = navigatorKey.currentContext;
+            if (ctx != null) {
+              final isAdmin = result.teacher.role == 'admin';
+              GoRouter.of(ctx).go(isAdmin ? '/admin' : '/');
+            }
+          });
+          return; // Successful auto-login
+        } catch (_) {
+          // Session validation failed (expired, token_version_mismatch, offline)
+          // Clear the stored JWT and fall through to online login
+          await _securityService.clearJwt();
+          _authService.clearJwt();
+          // No error message — silent fallback
+        }
+      }
+    } catch (_) {
+      // Secure storage read failed — fall through silently
     }
+
+    // No valid stored session — show login screen
+    state = state.copyWith(
+      state: AuthState.onlineLoginRequired,
+      clearError: true,
+    );
   }
 
   /// Attempt offline login using stored password hash.
@@ -217,6 +251,12 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
     try {
       final result = await _authService.login(email, password, deviceId);
+
+      // Store JWT in secure storage for auto-login on next startup
+      final jwt = _authService.currentJwt;
+      if (jwt != null && jwt.isNotEmpty) {
+        await _securityService.storeJwt(jwt);
+      }
 
       // Store password hash locally for future offline login
       await _securityService.storePasswordHash(password);
@@ -321,6 +361,12 @@ class AuthNotifier extends Notifier<AuthStateData> {
         recoveryEmail: recoveryEmail,
       );
 
+      // Persist JWT for auto-login
+      final jwt = _authService.currentJwt;
+      if (jwt != null && jwt.isNotEmpty) {
+        await _securityService.storeJwt(jwt);
+      }
+
       await _securityService.storePasswordHash(password);
       await _saveAuthResultToLocalDb(result);
 
@@ -404,6 +450,12 @@ class AuthNotifier extends Notifier<AuthStateData> {
     try {
       final result = await _authService.verifyAdminOtp(email, otp, newPassword);
 
+      // Persist JWT for auto-login
+      final jwt = _authService.currentJwt;
+      if (jwt != null && jwt.isNotEmpty) {
+        await _securityService.storeJwt(jwt);
+      }
+
       await _securityService.storePasswordHash(newPassword);
       await _saveAuthResultToLocalDb(result);
 
@@ -453,6 +505,12 @@ class AuthNotifier extends Notifier<AuthStateData> {
         newPassword,
       );
 
+      // Persist JWT for auto-login
+      final jwt = _authService.currentJwt;
+      if (jwt != null && jwt.isNotEmpty) {
+        await _securityService.storeJwt(jwt);
+      }
+
       await _securityService.storePasswordHash(newPassword);
       await _saveAuthResultToLocalDb(result);
 
@@ -496,6 +554,12 @@ class AuthNotifier extends Notifier<AuthStateData> {
         adminPassword,
         recoveryEmail,
       );
+
+      // Persist JWT for auto-login
+      final jwt = _authService.currentJwt;
+      if (jwt != null && jwt.isNotEmpty) {
+        await _securityService.storeJwt(jwt);
+      }
 
       await _securityService.storePasswordHash(adminPassword);
       await _saveAuthResultToLocalDb(result);
@@ -681,11 +745,14 @@ class AuthNotifier extends Notifier<AuthStateData> {
         'code': code,
         if (state.pendingDeviceId != null) 'device_id': state.pendingDeviceId,
       };
+      debugPrint('[AuthNotifier] _verifyEmailCodeExisting — JWT present: ${jwt.isNotEmpty}, pendingDeviceId: ${state.pendingDeviceId ?? "null"}');
+      debugPrint('[AuthNotifier] _verifyEmailCodeExisting — body: $body');
       final response = await client.functions.invoke(
         'verify-code',
         headers: {'x-classai-jwt': jwt},
         body: body,
       );
+      debugPrint('[AuthNotifier] _verifyEmailCodeExisting — response: ${response.data}');
 
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
@@ -747,6 +814,12 @@ class AuthNotifier extends Notifier<AuthStateData> {
         adminPassword,
         recoveryEmail,
       );
+
+      // Persist JWT for auto-login
+      final jwt = _authService.currentJwt;
+      if (jwt != null && jwt.isNotEmpty) {
+        await _securityService.storeJwt(jwt);
+      }
 
       await _securityService.storePasswordHash(adminPassword);
       await _saveAuthResultToLocalDb(result);

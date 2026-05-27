@@ -236,7 +236,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
 
                   // === BottomNav (mobile only) ===
-                  if (!isWide) _buildBottomNav(cs, textTheme),
+                  if (!isWide) _buildBottomNav(cs, textTheme, authData),
                 ],
               ),
             ),
@@ -328,30 +328,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               children: [
-                _SettingsNavItem(
-                    icon: Icons.home_rounded,
-                    label: 'Home',
-                    isActive: false,
-                    cs: cs,
-                    textTheme: textTheme,
-                    onTap: () => context.go('/')),
-                const SizedBox(height: 4),
-                _SettingsNavItem(
-                    icon: Icons.menu_book_rounded,
-                    label: 'Lessons',
-                    isActive: false,
-                    cs: cs,
-                    textTheme: textTheme,
-                    onTap: () => context.push('/lessons')),
-                const SizedBox(height: 4),
-                _SettingsNavItem(
-                    icon: Icons.quiz_rounded,
-                    label: 'Exams',
-                    isActive: false,
-                    cs: cs,
-                    textTheme: textTheme,
-                    onTap: () => context.push('/exams')),
-                const SizedBox(height: 4),
+                // Teacher-only nav items — hidden for admins
+                if (authData.currentTeacher?.role != 'admin') ...[
+                  _SettingsNavItem(
+                      icon: Icons.home_rounded,
+                      label: 'Home',
+                      isActive: false,
+                      cs: cs,
+                      textTheme: textTheme,
+                      onTap: () => context.go('/')),
+                  const SizedBox(height: 4),
+                  _SettingsNavItem(
+                      icon: Icons.menu_book_rounded,
+                      label: 'Lessons',
+                      isActive: false,
+                      cs: cs,
+                      textTheme: textTheme,
+                      onTap: () => context.push('/lessons')),
+                  const SizedBox(height: 4),
+                  _SettingsNavItem(
+                      icon: Icons.quiz_rounded,
+                      label: 'Exams',
+                      isActive: false,
+                      cs: cs,
+                      textTheme: textTheme,
+                      onTap: () => context.push('/exams')),
+                  const SizedBox(height: 4),
+                ],
                 _SettingsNavItem(
                     icon: Icons.inventory_2_rounded,
                     label: 'Vault',
@@ -1251,11 +1254,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // ---------------------------------------------------------------
   // Bottom Navigation (Mobile)
   // ---------------------------------------------------------------
-  Widget _buildBottomNav(ColorScheme cs, TextTheme textTheme) {
+  Widget _buildBottomNav(
+      ColorScheme cs, TextTheme textTheme, AuthStateData authData) {
+    final isAdmin = authData.currentTeacher?.role == 'admin';
     final items = [
-      _NavItem(icon: Icons.home_rounded, label: 'Home', route: '/'),
-      _NavItem(icon: Icons.menu_book_rounded, label: 'Lessons', route: '/lessons'),
-      _NavItem(icon: Icons.quiz_rounded, label: 'Exams', route: '/exams'),
+      if (!isAdmin)
+        _NavItem(icon: Icons.home_rounded, label: 'Home', route: '/'),
+      if (!isAdmin)
+        _NavItem(icon: Icons.menu_book_rounded, label: 'Lessons', route: '/lessons'),
+      if (!isAdmin)
+        _NavItem(icon: Icons.quiz_rounded, label: 'Exams', route: '/exams'),
       _NavItem(icon: Icons.more_horiz_rounded, label: 'More', route: null),
     ];
 
