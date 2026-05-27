@@ -15,46 +15,13 @@ function getHmacKey(secret: string): Promise<CryptoKey> {
 
 serve(async (req) => {
   try {
-    // ── 1. Verify JWT ─────────────────────────────────────────────────────────
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return new Response(
-        JSON.stringify({ error: "Missing or invalid Authorization header" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
-      );
-    }
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
 
-    const jwtSecret = Deno.env.get("JWT_SECRET");
-    if (!jwtSecret) {
-      return new Response(
-        JSON.stringify({ error: "Server misconfiguration: JWT_SECRET not set" }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    let claims: Record<string, unknown>;
-    try {
-      const cryptoKey = await getHmacKey(jwtSecret);
-      claims = await verify(token, cryptoKey, "HS256");
-    } catch {
-      return new Response(
-        JSON.stringify({ error: "Invalid or expired JWT" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    if (!claims.sub) {
-      return new Response(
-        JSON.stringify({ error: "Invalid token: no subject claim" }),
-        { status: 401, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    const teacherId = claims.sub as string;
-
-    // ── 2. Parse request body ─────────────────────────────────────────────────
-    const { code } = await req.json();
+    // Parse body first
+    const { code, email: bodyEmail, mode } = await req.json();
 
     if (!code || typeof code !== "string" || !/^\d{6}$/.test(code)) {
       return new Response(
@@ -63,27 +30,72 @@ serve(async (req) => {
       );
     }
 
-    // ── 3. Look up the most recent unused code for this teacher's email ───────
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    let email: string;
 
-    // Fetch teacher email to find the right code record
-    const { data: teacher, error: teacherError } = await supabase
-      .from("teachers")
-      .select("id, email")
-      .eq("id", teacherId)
-      .maybeSingle();
+    if (mode === "signup") {
+      // ── Signup mode: verify code by email (no JWT needed) ────────────
+      if (!bodyEmail) {
+        return new Response(
+          JSON.stringify({ error: "Missing required field: email" }),
+          { status: 400, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      email = bodyEmail.toLowerCase();
+    } else {
+      // ── Normal mode: verify JWT ──────────────────────────────────────
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return new Response(
+          JSON.stringify({ error: "Missing or invalid Authorization header" }),
+          { status: 401, headers: { "Content-Type": "application/json" } }
+        );
+      }
 
-    if (teacherError || !teacher) {
-      return new Response(
-        JSON.stringify({ error: "Teacher not found." }),
-        { status: 404, headers: { "Content-Type": "application/json" } }
-      );
+      const jwtSecret = Deno.env.get("JWT_SECRET");
+      if (!jwtSecret) {
+        return new Response(
+          JSON.stringify({ error: "Server misconfiguration: JWT_SECRET not set" }),
+          { status: 500, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      const token = authHeader.replace("Bearer ", "");
+      let claims: Record<string, unknown>;
+      try {
+        const cryptoKey = await getHmacKey(jwtSecret);
+        claims = await verify(token, cryptoKey, "HS256");
+      } catch {
+        return new Response(
+          JSON.stringify({ error: "Invalid or expired JWT" }),
+          { status: 401, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      if (!claims.sub) {
+        return new Response(
+          JSON.stringify({ error: "Invalid token: no subject claim" }),
+          { status: 401, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      const teacherId = claims.sub as string;
+
+      // Fetch teacher email
+      const { data: teacher, error: teacherError } = await supabase
+        .from("teachers")
+        .select("id, email")
+        .eq("id", teacherId)
+        .maybeSingle();
+
+      if (teacherError || !teacher) {
+        return new Response(
+          JSON.stringify({ error: "Teacher not found." }),
+          { status: 404, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
+      email = teacher.email;
     }
-
-    const email = teacher.email;
 
     // Find the latest unused code for this email
     const { data: codeRecords, error: fetchError } = await supabase
@@ -112,9 +124,8 @@ serve(async (req) => {
       );
     }
 
-    // ── 4. Check attempts limit (max 3) ───────────────────────────────────────
+    // ── Check attempts limit (max 3) ───────────────────────────────────────
     if (record.attempts >= 3) {
-      // Mark as used to force a new code
       await supabase
         .from("verification_codes")
         .update({ used: true })
@@ -126,9 +137,8 @@ serve(async (req) => {
       );
     }
 
-    // ── 5. Verify the code ────────────────────────────────────────────────────
+    // ── Verify the code ────────────────────────────────────────────────────
     if (record.code !== code) {
-      // Increment attempt counter
       await supabase
         .from("verification_codes")
         .update({ attempts: record.attempts + 1 })
@@ -140,27 +150,29 @@ serve(async (req) => {
       );
     }
 
-    // ── 6. Mark code as used ──────────────────────────────────────────────────
+    // ── Mark code as used ──────────────────────────────────────────────────
     await supabase
       .from("verification_codes")
       .update({ used: true })
       .eq("id", record.id);
 
-    // ── 7. Mark teacher email as verified ────────────────────────────────────
-    const { error: updateError } = await supabase
-      .from("teachers")
-      .update({ email_verified: true })
-      .eq("id", teacherId);
+    // ── For normal mode: mark teacher email as verified ────────────────────
+    if (mode !== "signup") {
+      const { error: updateError } = await supabase
+        .from("teachers")
+        .update({ email_verified: true })
+        .eq("id", claims!.sub as string);
 
-    if (updateError) {
-      console.error("[verify-code] teacher update error:", updateError);
-      return new Response(
-        JSON.stringify({ error: "Failed to verify email. Please try again." }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      );
+      if (updateError) {
+        console.error("[verify-code] teacher update error:", updateError);
+        return new Response(
+          JSON.stringify({ error: "Failed to verify email. Please try again." }),
+          { status: 500, headers: { "Content-Type": "application/json" } }
+        );
+      }
     }
 
-    // ── 8. Return success ─────────────────────────────────────────────────────
+    // ── Return success ─────────────────────────────────────────────────────
     return new Response(
       JSON.stringify({
         success: true,

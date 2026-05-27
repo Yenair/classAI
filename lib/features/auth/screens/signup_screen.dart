@@ -4,6 +4,7 @@ import 'package:classai/core/constants/app_constants.dart';
 import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
+import 'package:classai/features/auth/screens/email_verification_dialog.dart';
 import 'package:classai/core/services/auth_service.dart';
 import 'package:classai/core/services/emergency_flush_service.dart';
 
@@ -47,6 +48,12 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   late final EmergencyFlushService _emergencyFlush =
       ref.read(emergencyFlushServiceProvider);
 
+  /// Keeps the auth listener alive without re-registering it on rebuilds.
+  ProviderSubscription<AuthStateData>? _authStateSubscription;
+
+  /// Guards against showing duplicate email verification dialogs.
+  bool _emailVerificationDialogShowing = false;
+
   /// Generates a short code from the school name (uppercase, max 6 chars).
   String _generateShortCode(String schoolName) {
     final cleaned =
@@ -81,10 +88,34 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       }
     };
     _emergencyFlush.register(_flushCallback!);
+
+    // Listen for auth state changes to show/hide email verification dialog
+    _authStateSubscription = ref.listenManual<AuthStateData>(
+      authProvider,
+      (previous, next) {
+        // Show email verification dialog when state requires it for signup flow
+        if (next.state == AuthState.emailVerificationRequired &&
+            next.isSignupFlow &&
+            mounted) {
+          _showEmailVerificationDialog();
+        }
+
+        // Close dialog when signup completes (transitions to authenticated)
+        if (previous?.state == AuthState.emailVerificationRequired &&
+            next.isSignupFlow &&
+            (next.state == AuthState.authenticated ||
+                next.state == AuthState.onlineLoginRequired) &&
+            mounted) {
+          _emailVerificationDialogShowing = false;
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+      },
+    );
   }
 
   @override
   void dispose() {
+    _authStateSubscription?.close();
     if (_flushCallback != null) {
       _emergencyFlush.unregister(_flushCallback!);
     }
@@ -95,6 +126,22 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     _confirmPasswordController.dispose();
     _recoveryEmailController.dispose();
     super.dispose();
+  }
+
+  /// Shows the email verification dialog for the signup flow.
+  Future<void> _showEmailVerificationDialog() async {
+    if (_emailVerificationDialogShowing || !mounted) return;
+    _emailVerificationDialogShowing = true;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const EmailVerificationDialog(),
+    );
+
+    if (mounted) {
+      _emailVerificationDialogShowing = false;
+    }
   }
 
   Future<void> _handleSignUp() async {
@@ -108,7 +155,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     try {
       _cachedDeviceId ??= await AppConstants.getDeviceId();
 
-      await ref.read(authProvider.notifier).signup(
+      // Step 1: Send verification code to admin email (no DB writes yet)
+      await ref.read(authProvider.notifier).initiateSignup(
             schoolName: _schoolNameController.text.trim(),
             adminEmail: _adminEmailController.text.trim(),
             adminPassword: _adminPasswordController.text,
@@ -119,7 +167,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
       if (!mounted) return;
 
-      // After signup completes, check if the auth provider has an error
+      // Check if initiateSignup set an error
       final authState = ref.read(authProvider);
       if (authState.errorMessage != null) {
         setState(() {
@@ -129,7 +177,11 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         return;
       }
 
-      Navigator.of(context).pop();
+      // Step 2: initiateSignup succeeded — state is now
+      // emailVerificationRequired. The auth listener above will show
+      // the email verification dialog. User enters code, verifies,
+      // and _finalizeSignup creates the school + teacher + recovery admin.
+      setState(() => _isLoading = false);
     } on AuthException catch (e) {
       if (!mounted) return;
       setState(() {

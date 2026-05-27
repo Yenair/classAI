@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
 import 'package:classai/core/constants/app_constants.dart';
@@ -889,11 +890,12 @@ class SupabaseAuthService implements AuthService {
 
   /// Returns `true` if [e] is a connectivity-related exception.
   ///
-  /// Checks for [SocketException], [DioException] with connection error types,
-  /// and generic exceptions whose message contains "Failed host lookup" or
-  /// "Connection refused".
+  /// Checks for [SocketException], [http.ClientException], [DioException] with
+  /// connection error types, and generic exceptions whose message contains
+  /// known connectivity keywords.
   bool _isConnectivityException(Object e) {
     if (e is SocketException) return true;
+    if (e is http.ClientException) return true;
     if (e is DioException) {
       switch (e.type) {
         case DioExceptionType.connectionTimeout:
@@ -916,7 +918,8 @@ class SupabaseAuthService implements AuthService {
     }
     final msg = e.toString().toLowerCase();
     return msg.contains('failed host lookup') ||
-        msg.contains('connection refused');
+        msg.contains('connection refused') ||
+        msg.contains('network is unreachable');
   }
 }
 

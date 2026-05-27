@@ -57,34 +57,9 @@ serve(async (req) => {
       return jsonResponse({ error: "Method not allowed" }, 405);
     }
 
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return jsonResponse({ error: "Missing token" }, 401);
-    }
-
-    const jwtSecret = Deno.env.get("JWT_SECRET");
-    if (!jwtSecret) {
-      return jsonResponse(
-        { error: "Server misconfiguration: JWT_SECRET not set" },
-        500,
-      );
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    let claims: Record<string, unknown>;
-    try {
-      claims = await verify(token, await getHmacKey(jwtSecret), "HS256");
-    } catch (err) {
-      console.error("[send-verification-code] JWT verification failed:", err);
-      return jsonResponse({ error: "Invalid or expired JWT" }, 401);
-    }
-
-    const teacherId = claims.sub;
-    if (typeof teacherId !== "string" || teacherId.length === 0) {
-      return jsonResponse({ error: "Invalid token: no subject claim" }, 401);
-    }
-
-    const { email: requestedEmail } = await req.json().catch(() => ({}));
+    // Parse body first to check mode
+    const body = await req.json().catch(() => ({}));
+    const { email: requestedEmail, mode } = body;
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -100,42 +75,83 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    const { data: teacher, error: teacherError } = await supabase
-      .from("teachers")
-      .select("id, email, teacher_name")
-      .eq("id", teacherId)
-      .maybeSingle();
+    let email: string;
 
-    if (teacherError) {
-      console.error("[send-verification-code] teacher lookup error:", teacherError);
-      return jsonResponse(
-        { error: "Failed to look up teacher account" },
-        500,
-      );
-    }
+    if (mode === "signup") {
+      // ── Signup mode: no JWT required, use email from body ────────────
+      if (!requestedEmail) {
+        return jsonResponse({ error: "Missing required field: email" }, 400);
+      }
+      email = requestedEmail.toLowerCase();
+      console.log("[send-verification-code] signup mode, email:", email);
+    } else {
+      // ── Normal mode: require JWT ─────────────────────────────────────
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return jsonResponse({ error: "Missing token" }, 401);
+      }
 
-    if (!teacher) {
-      return jsonResponse({ error: "Teacher not found" }, 404);
-    }
+      const jwtSecret = Deno.env.get("JWT_SECRET");
+      if (!jwtSecret) {
+        return jsonResponse(
+          { error: "Server misconfiguration: JWT_SECRET not set" },
+          500,
+        );
+      }
 
-    const email = teacher.email as string | null;
-    if (!email) {
-      return jsonResponse({ error: "Teacher email not found" }, 404);
-    }
+      const token = authHeader.replace("Bearer ", "");
+      let claims: Record<string, unknown>;
+      try {
+        claims = await verify(token, await getHmacKey(jwtSecret), "HS256");
+      } catch (err) {
+        console.error("[send-verification-code] JWT verification failed:", err);
+        return jsonResponse({ error: "Invalid or expired JWT" }, 401);
+      }
 
-    if (requestedEmail && requestedEmail !== email) {
-      console.warn(
-        "[send-verification-code] requested email did not match teacher email",
-        {
-          teacherId,
-          requestedEmail,
-          email,
-        },
-      );
-      return jsonResponse(
-        { error: "Email does not match the authenticated account" },
-        403,
-      );
+      const teacherId = claims.sub;
+      if (typeof teacherId !== "string" || teacherId.length === 0) {
+        return jsonResponse({ error: "Invalid token: no subject claim" }, 401);
+      }
+
+      const { data: teacher, error: teacherError } = await supabase
+        .from("teachers")
+        .select("id, email, teacher_name")
+        .eq("id", teacherId)
+        .maybeSingle();
+
+      if (teacherError) {
+        console.error("[send-verification-code] teacher lookup error:", teacherError);
+        return jsonResponse(
+          { error: "Failed to look up teacher account" },
+          500,
+        );
+      }
+
+      if (!teacher) {
+        return jsonResponse({ error: "Teacher not found" }, 404);
+      }
+
+      const teacherEmail = teacher.email as string | null;
+      if (!teacherEmail) {
+        return jsonResponse({ error: "Teacher email not found" }, 404);
+      }
+
+      if (requestedEmail && requestedEmail !== teacherEmail) {
+        console.warn(
+          "[send-verification-code] requested email did not match teacher email",
+          {
+            teacherId,
+            requestedEmail,
+            email: teacherEmail,
+          },
+        );
+        return jsonResponse(
+          { error: "Email does not match the authenticated account" },
+          403,
+        );
+      }
+
+      email = teacherEmail;
     }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();

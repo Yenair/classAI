@@ -73,12 +73,24 @@ class AuthStateData {
   final String? errorMessage;
   final int offlineLoginAttempts;
 
+  /// Form data stored temporarily during verify-before-create signup flow.
+  /// Populated after [AuthNotifier.initiateSignup] succeeds and cleared
+  /// after [AuthNotifier._finalizeSignup] completes.
+  final Map<String, String>? pendingSignupData;
+
+  /// True when [AuthState.emailVerificationRequired] is for a signup flow
+  /// (as opposed to a login flow where the teacher already exists).
+  /// Used by [LoginScreen] to skip showing its own email verification dialog.
+  final bool isSignupFlow;
+
   const AuthStateData({
     required this.state,
     this.currentTeacher,
     this.currentSchool,
     this.errorMessage,
     this.offlineLoginAttempts = 0,
+    this.pendingSignupData,
+    this.isSignupFlow = false,
   });
 
   AuthStateData copyWith({
@@ -87,9 +99,12 @@ class AuthStateData {
     School? currentSchool,
     String? errorMessage,
     int? offlineLoginAttempts,
+    Map<String, String>? pendingSignupData,
+    bool? isSignupFlow,
     bool clearError = false,
     bool clearTeacher = false,
     bool clearSchool = false,
+    bool clearPendingSignup = false,
   }) {
     return AuthStateData(
       state: state ?? this.state,
@@ -98,6 +113,10 @@ class AuthStateData {
       currentSchool: clearSchool ? null : (currentSchool ?? this.currentSchool),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       offlineLoginAttempts: offlineLoginAttempts ?? this.offlineLoginAttempts,
+      pendingSignupData: clearPendingSignup
+          ? null
+          : (pendingSignupData ?? this.pendingSignupData),
+      isSignupFlow: isSignupFlow ?? this.isSignupFlow,
     );
   }
 }
@@ -184,17 +203,6 @@ class AuthNotifier extends Notifier<AuthStateData> {
       clearError: true,
     );
 
-    // Check connectivity before making the API call
-    final isOnline = await PlatformHelper.isOnline();
-    if (!isOnline) {
-      state = state.copyWith(
-        state: AuthState.onlineLoginRequired,
-        errorMessage:
-            'No internet connection. Please check your connection and try again.',
-      );
-      return;
-    }
-
     try {
       final result = await _authService.login(email, password, deviceId);
 
@@ -268,10 +276,11 @@ class AuthNotifier extends Notifier<AuthStateData> {
       debugPrint(
           '[DEBUG] loginOnline() — UNEXPECTED EXCEPTION TYPE: ${e.runtimeType}');
       debugPrint('[DEBUG] loginOnline() — UNEXPECTED EXCEPTION MESSAGE: $e');
+      await Sentry.captureException(e);
       state = state.copyWith(
         state: AuthState.onlineLoginRequired,
         errorMessage:
-            'No internet connection. Please check your connection and try again.',
+            'An unexpected error occurred. Please try again. (${e.runtimeType}: $e)',
       );
     }
   }
@@ -468,17 +477,6 @@ class AuthNotifier extends Notifier<AuthStateData> {
       clearError: true,
     );
 
-    // Check connectivity before making the API call
-    final isOnline = await PlatformHelper.isOnline();
-    if (!isOnline) {
-      state = state.copyWith(
-        state: AuthState.onlineLoginRequired,
-        errorMessage:
-            'No internet connection. Please check your connection and try again.',
-      );
-      return;
-    }
-
     try {
       final result = await _authService.signup(
         schoolName,
@@ -515,16 +513,142 @@ class AuthNotifier extends Notifier<AuthStateData> {
       state = state.copyWith(
         state: AuthState.onlineLoginRequired,
         errorMessage:
-            'No internet connection. Please check your connection and try again.',
+            'An unexpected error occurred. Please try again. (${e.runtimeType}: $e)',
+      );
+    }
+  }
+
+  /// Start the verify-before-create signup flow by sending a verification code
+  /// to the admin email via the send-verification-code edge function with
+  /// mode="signup" (no JWT required).
+  ///
+  /// Stores the form data in [AuthStateData.pendingSignupData] and transitions
+  /// to [AuthState.emailVerificationRequired] with [AuthStateData.isSignupFlow]
+  /// set to true. The actual school/teacher creation happens in [_finalizeSignup]
+  /// after the user verifies their email.
+  Future<void> initiateSignup({
+    required String schoolName,
+    required String adminEmail,
+    required String adminPassword,
+    String? recoveryEmail,
+  }) async {
+    state = state.copyWith(
+      state: AuthState.onlineLoginRequired,
+      clearError: true,
+    );
+
+    try {
+      final client = supabase_pkg.Supabase.instance.client;
+      await client.functions
+          .invoke(
+            'send-verification-code',
+            body: {'email': adminEmail, 'mode': 'signup'},
+          )
+          .timeout(const Duration(seconds: 15));
+
+      // Store pending data and transition to email verification
+      state = state.copyWith(
+        state: AuthState.emailVerificationRequired,
+        isSignupFlow: true,
+        clearError: true,
+        pendingSignupData: {
+          'schoolName': schoolName,
+          'adminEmail': adminEmail,
+          'adminPassword': adminPassword,
+          if (recoveryEmail != null) 'recoveryEmail': recoveryEmail,
+        },
+      );
+    } on TimeoutException {
+      state = state.copyWith(
+        state: AuthState.onlineLoginRequired,
+        errorMessage:
+            'The verification email is taking too long. Please try again.',
+      );
+    } on supabase_pkg.FunctionException catch (e) {
+      final details = e.details;
+      String errorMessage;
+      if (details is Map<String, dynamic>) {
+        errorMessage = details['error'] as String? ??
+            'Failed to send verification code.';
+      } else {
+        errorMessage = 'Failed to send verification code.';
+      }
+      state = state.copyWith(
+        state: AuthState.onlineLoginRequired,
+        errorMessage: errorMessage,
+      );
+    } catch (e) {
+      debugPrint('[AuthNotifier] initiateSignup error: $e');
+      state = state.copyWith(
+        state: AuthState.onlineLoginRequired,
+        errorMessage: 'Failed to send verification code. Please try again.',
       );
     }
   }
 
   /// Verify the 6-digit email verification code by calling the verify-code
-  /// edge function with the current JWT.
+  /// edge function.
+  ///
+  /// If [AuthStateData.pendingSignupData] is present (signup flow), calls
+  /// verify-code with mode="signup" (no JWT required) and on success
+  /// calls [_finalizeSignup] to create the school and teacher.
+  ///
+  /// Otherwise uses the existing JWT-based flow (login email verification).
   ///
   /// On success, transitions to [AuthState.authenticated].
   Future<void> verifyEmailCode(String code) async {
+    // Detect mode from state
+    if (state.pendingSignupData != null) {
+      await _verifyEmailCodeForSignup(code);
+      return;
+    }
+    await _verifyEmailCodeExisting(code);
+  }
+
+  /// Signup-mode email verification — calls verify-code with mode="signup"
+  /// (no JWT), then on success creates the school + teacher via [_finalizeSignup].
+  Future<void> _verifyEmailCodeForSignup(String code) async {
+    final email = state.pendingSignupData!['adminEmail']!;
+
+    try {
+      final client = supabase_pkg.Supabase.instance.client;
+      final response = await client.functions.invoke(
+        'verify-code',
+        body: {'code': code, 'email': email, 'mode': 'signup'},
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        // Code verified — now create the school and teacher
+        await _finalizeSignup();
+      } else {
+        final error = data['error'] as String? ?? 'Verification failed.';
+        state = state.copyWith(errorMessage: error, clearError: false);
+      }
+    } on supabase_pkg.FunctionException catch (e) {
+      final details = e.details;
+      String errorMessage;
+      if (details is Map<String, dynamic>) {
+        errorMessage = details['error'] as String? ??
+            details['message'] as String? ??
+            'Verification failed.';
+      } else if (details is String) {
+        errorMessage = details;
+      } else {
+        errorMessage = 'Verification failed.';
+      }
+      state = state.copyWith(errorMessage: errorMessage, clearError: false);
+    } catch (e) {
+      debugPrint('[AuthNotifier] _verifyEmailCodeForSignup error: $e');
+      state = state.copyWith(
+        errorMessage: 'Failed to verify code. Please try again.',
+        clearError: false,
+      );
+    }
+  }
+
+  /// Original JWT-based email verification flow (used after login).
+  Future<void> _verifyEmailCodeExisting(String code) async {
     final jwt = _authService.currentJwt;
 
     try {
@@ -577,11 +701,81 @@ class AuthNotifier extends Notifier<AuthStateData> {
     }
   }
 
+  /// Called after email verification succeeds in signup mode.
+  /// Calls the signup edge function with the stored pending data,
+  /// stores the password hash and auth result locally, and transitions
+  /// to [AuthState.authenticated].
+  Future<void> _finalizeSignup() async {
+    final data = state.pendingSignupData;
+    if (data == null) {
+      state = state.copyWith(
+        errorMessage: 'Signup data lost. Please start over.',
+        clearError: false,
+      );
+      return;
+    }
+
+    final schoolName = data['schoolName']!;
+    final adminEmail = data['adminEmail']!;
+    final adminPassword = data['adminPassword']!;
+    final recoveryEmail = data['recoveryEmail'];
+
+    try {
+      final result = await _authService.signup(
+        schoolName,
+        adminEmail,
+        adminPassword,
+        recoveryEmail,
+      );
+
+      await _securityService.storePasswordHash(adminPassword);
+      await _saveAuthResultToLocalDb(result);
+
+      state = state.copyWith(
+        state: AuthState.authenticated,
+        currentTeacher: result.teacher,
+        currentSchool: result.school,
+        clearPendingSignup: true,
+        isSignupFlow: false,
+        clearError: true,
+      );
+
+      // Navigate to admin dashboard
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctx = navigatorKey.currentContext;
+        if (ctx != null) {
+          final isAdmin = result.teacher.role == 'admin';
+          GoRouter.of(ctx).go(isAdmin ? '/admin' : '/');
+        }
+      });
+    } on AuthException catch (e) {
+      // Stay in emailVerificationRequired so the user can retry
+      state = state.copyWith(
+        state: AuthState.emailVerificationRequired,
+        errorMessage: e.message,
+      );
+    } catch (e) {
+      await Sentry.captureException(e);
+      state = state.copyWith(
+        state: AuthState.emailVerificationRequired,
+        errorMessage: 'Failed to create account. Please try again.',
+      );
+    }
+  }
+
   /// Resend the email verification code by calling the send-verification-code
   /// edge function.
   ///
+  /// If [AuthStateData.pendingSignupData] is present (signup flow), sends
+  /// the code with mode="signup" (no JWT required).
+  ///
   /// Remains in [AuthState.emailVerificationRequired].
   Future<void> resendVerificationCode() async {
+    // Signup mode: use pending email without JWT
+    if (state.pendingSignupData != null) {
+      await _resendVerificationCodeForSignup();
+      return;
+    }
     if (_isResending) {
       return;
     }
@@ -705,6 +899,59 @@ class AuthNotifier extends Notifier<AuthStateData> {
           clearError: false,
         );
       }
+    } finally {
+      _isResending = false;
+    }
+  }
+
+  /// Signup-mode resend — calls send-verification-code with mode="signup"
+  /// (no JWT), using the email from [AuthStateData.pendingSignupData].
+  Future<void> _resendVerificationCodeForSignup() async {
+    final email = state.pendingSignupData?['adminEmail'];
+    if (email == null || email.isEmpty) {
+      state = state.copyWith(
+        errorMessage: 'No email associated with this signup.',
+        clearError: false,
+      );
+      return;
+    }
+
+    _isResending = true;
+    try {
+      final client = supabase_pkg.Supabase.instance.client;
+      await client.functions
+          .invoke(
+            'send-verification-code',
+            body: {'email': email, 'mode': 'signup'},
+          )
+          .timeout(const Duration(seconds: 15));
+
+      state = state.copyWith(clearError: true, errorMessage: null);
+    } on TimeoutException {
+      state = state.copyWith(
+        errorMessage:
+            'The verification email is taking too long to send. Please try again in a moment.',
+        clearError: false,
+      );
+    } on supabase_pkg.FunctionException catch (e) {
+      final details = e.details;
+      String errorMessage;
+      if (details is Map<String, dynamic>) {
+        errorMessage = details['error'] as String? ??
+            details['message'] as String? ??
+            'Failed to resend code.';
+      } else if (details is String) {
+        errorMessage = details;
+      } else {
+        errorMessage = 'Failed to resend code.';
+      }
+      state = state.copyWith(errorMessage: errorMessage, clearError: false);
+    } catch (e) {
+      debugPrint('[AuthNotifier] _resendVerificationCodeForSignup error: $e');
+      state = state.copyWith(
+        errorMessage: 'Failed to resend code. Please try again.',
+        clearError: false,
+      );
     } finally {
       _isResending = false;
     }

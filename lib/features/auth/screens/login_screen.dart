@@ -43,6 +43,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   /// Keeps the auth listener alive without re-registering it on rebuilds.
   ProviderSubscription<AuthStateData>? _authStateSubscription;
 
+  /// Guards against showing duplicate email verification dialogs.
+  bool _emailVerificationDialogShowing = false;
+
   /// Cached reference to avoid `ref.read()` during disposal (Riverpod guard).
   late final EmergencyFlushService _emergencyFlush =
       ref.read(emergencyFlushServiceProvider);
@@ -59,17 +62,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     };
     _emergencyFlush.register(_flushCallback!);
 
+    // Show email verification dialog on initial build if state requires it
+    // (e.g. after returning from SignupScreen which popped back to this screen).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAndShowEmailVerification();
+    });
+
     _authStateSubscription = ref.listenManual<AuthStateData>(
       authProvider,
       (previous, next) {
-        if (previous?.state != AuthState.emailVerificationRequired &&
-            next.state == AuthState.emailVerificationRequired &&
+        // Show email verification dialog when the state requires it,
+        // but only for non-signup flows (signup flow is handled by
+        // SignupScreen's own listener).
+        if (next.state == AuthState.emailVerificationRequired &&
+            !next.isSignupFlow &&
             mounted) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (_) => const EmailVerificationDialog(),
-          );
+          _showEmailVerificationDialog();
         }
 
         if (previous?.state == AuthState.emailVerificationRequired &&
@@ -77,10 +85,42 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 next.state == AuthState.uninitialized ||
                 next.state == AuthState.onlineLoginRequired) &&
             mounted) {
+          _emailVerificationDialogShowing = false;
           Navigator.of(context, rootNavigator: true).pop();
         }
       },
     );
+  }
+
+  /// Shows the email verification dialog if the auth state requires it and
+  /// no dialog is already showing.
+  void _checkAndShowEmailVerification() {
+    if (!mounted || _emailVerificationDialogShowing) return;
+    final authState = ref.read(authProvider);
+    if (authState.state == AuthState.emailVerificationRequired &&
+        !authState.isSignupFlow) {
+      _showEmailVerificationDialog();
+    }
+  }
+
+  /// Shows the non-dismissible email verification dialog.
+  void _showEmailVerificationDialog() {
+    if (!mounted || _emailVerificationDialogShowing) return;
+    _emailVerificationDialogShowing = true;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          // Prevent back-button dismissal — the user must
+          // explicitly Cancel (which logs out) or Verify.
+        },
+        child: const EmailVerificationDialog(),
+      ),
+    ).whenComplete(() {
+      _emailVerificationDialogShowing = false;
+    });
   }
 
   @override

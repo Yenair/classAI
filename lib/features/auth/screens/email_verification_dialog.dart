@@ -159,14 +159,7 @@ class _EmailVerificationDialogState
     final cs = theme.colorScheme;
 
     return PopScope(
-      canPop: true,
-      onPopInvokedWithResult: (didPop, result) {
-        // Prevent dismissal via back button or tapping outside
-        if (!didPop) {
-          // User tried to dismiss via back button - ignore it
-          return;
-        }
-      },
+      canPop: false,
       child: AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         backgroundColor: cs.surfaceContainerLowest,
