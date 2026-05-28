@@ -10,10 +10,15 @@ app = FastAPI()
 
 @app.post("/v1/chat/completions")
 async def handle_chat(request: Request):
-    # Get the data from Roo Code
-    data = await request.json()
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+
     messages = data.get("messages", [])
-    
+    if not messages:
+        return JSONResponse(status_code=400, content={"error": "No messages found"})
+    # ... rest of your code ...
     prompt_text = ""
     
     # Find the last message from the user
