@@ -255,7 +255,12 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     color: cs.onPrimaryContainer,
                     size: 20,
                   ),
-                  onPressed: () {},
+                  onPressed: () {
+                    showInfoToast(
+                      context: context,
+                      message: 'Notifications coming soon.',
+                    );
+                  },
                 ),
               ),
               const SizedBox(width: 8),
@@ -265,18 +270,23 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   switch (value) {
                     case 'settings':
                       context.push('/settings');
+                      break;
                     case 'logout':
                       _showLogoutConfirmation(context, ref);
+                      break;
                     case 'theme_light':
                       ref
                           .read(themeProvider.notifier)
                           .setTheme(ThemeMode.light);
+                      break;
                     case 'theme_dark':
                       ref.read(themeProvider.notifier).setTheme(ThemeMode.dark);
+                      break;
                     case 'theme_system':
                       ref
                           .read(themeProvider.notifier)
                           .setTheme(ThemeMode.system);
+                      break;
                   }
                 },
                 offset: const Offset(0, 48),

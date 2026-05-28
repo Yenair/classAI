@@ -149,6 +149,64 @@ class AuthNotifier extends Notifier<AuthStateData> {
   EmergencyFlushService get _emergencyFlushService =>
       ref.read(emergencyFlushServiceProvider);
 
+  bool _isSessionMismatchError(Object error) {
+    bool matchesText(String text) {
+      final normalized = text.toLowerCase();
+      return normalized.contains('token_version_mismatch') ||
+          normalized.contains('token version mismatch') ||
+          normalized.contains('session expired') ||
+          normalized.contains('401 unauthorized') ||
+          normalized.contains('unauthorized');
+    }
+
+    if (error is AuthException) {
+      if (error.code != AuthErrorCode.invalidCredentials) {
+        return false;
+      }
+      if (matchesText(error.message)) {
+        return true;
+      }
+      final original = error.originalError;
+      if (original is supabase_pkg.FunctionException) {
+        if (original.status == 401) {
+          return true;
+        }
+        final details = original.details;
+        if (details is Map<String, dynamic>) {
+          return matchesText(details.toString());
+        }
+        if (details is String) {
+          return matchesText(details);
+        }
+      }
+      return false;
+    }
+
+    if (error is supabase_pkg.FunctionException) {
+      if (error.status == 401) {
+        return true;
+      }
+      final details = error.details;
+      if (details is Map<String, dynamic>) {
+        return matchesText(details.toString());
+      }
+      if (details is String) {
+        return matchesText(details);
+      }
+      return false;
+    }
+
+    return matchesText(error.toString());
+  }
+
+  Future<bool> _logoutIfSessionMismatch(Object error) async {
+    if (!_isSessionMismatchError(error)) {
+      return false;
+    }
+    await manualLogout();
+    return true;
+  }
+
   // -----------------------------------------------------------------------
   // State machine transitions
   // -----------------------------------------------------------------------
@@ -193,7 +251,10 @@ class AuthNotifier extends Notifier<AuthStateData> {
             }
           });
           return; // Successful auto-login
-        } catch (_) {
+        } catch (e) {
+          if (await _logoutIfSessionMismatch(e)) {
+            return;
+          }
           // Session validation failed (expired, token_version_mismatch, offline)
           // Clear the stored JWT and fall through to online login
           await _securityService.clearJwt();
@@ -201,7 +262,10 @@ class AuthNotifier extends Notifier<AuthStateData> {
           // No error message — silent fallback
         }
       }
-    } catch (_) {
+    } catch (e) {
+      if (await _logoutIfSessionMismatch(e)) {
+        return;
+      }
       // Secure storage read failed — fall through silently
     }
 
@@ -308,6 +372,9 @@ class AuthNotifier extends Notifier<AuthStateData> {
         }
       });
     } on AuthException catch (e) {
+      if (await _logoutIfSessionMismatch(e)) {
+        return;
+      }
       switch (e.code) {
         case AuthErrorCode.accountDeactivated:
           state = state.copyWith(
@@ -328,6 +395,9 @@ class AuthNotifier extends Notifier<AuthStateData> {
           );
       }
     } catch (e) {
+      if (await _logoutIfSessionMismatch(e)) {
+        return;
+      }
       await Sentry.captureException(e);
       state = state.copyWith(
         state: AuthState.onlineLoginRequired,
@@ -376,11 +446,17 @@ class AuthNotifier extends Notifier<AuthStateData> {
         currentSchool: result.school,
       );
     } on AuthException catch (e) {
+      if (await _logoutIfSessionMismatch(e)) {
+        return;
+      }
       state = state.copyWith(
         state: AuthState.onlineLoginRequired,
         errorMessage: e.message,
       );
     } catch (e) {
+      if (await _logoutIfSessionMismatch(e)) {
+        return;
+      }
       state = state.copyWith(
         state: AuthState.onlineLoginRequired,
         errorMessage: 'Activation failed. Please try again.',
@@ -465,11 +541,17 @@ class AuthNotifier extends Notifier<AuthStateData> {
         currentSchool: result.school,
       );
     } on AuthException catch (e) {
+      if (await _logoutIfSessionMismatch(e)) {
+        return;
+      }
       state = state.copyWith(
         state: AuthState.onlineLoginRequired,
         errorMessage: e.message,
       );
     } catch (e) {
+      if (await _logoutIfSessionMismatch(e)) {
+        return;
+      }
       state = state.copyWith(
         state: AuthState.onlineLoginRequired,
         errorMessage: 'Verification failed. Please try again.',
@@ -520,11 +602,17 @@ class AuthNotifier extends Notifier<AuthStateData> {
         currentSchool: result.school,
       );
     } on AuthException catch (e) {
+      if (await _logoutIfSessionMismatch(e)) {
+        return;
+      }
       state = state.copyWith(
         state: AuthState.onlineLoginRequired,
         errorMessage: e.message,
       );
     } catch (e) {
+      if (await _logoutIfSessionMismatch(e)) {
+        return;
+      }
       state = state.copyWith(
         state: AuthState.onlineLoginRequired,
         errorMessage: 'Password recovery failed. Please try again.',
@@ -579,11 +667,17 @@ class AuthNotifier extends Notifier<AuthStateData> {
         currentSchool: result.school,
       );
     } on AuthException catch (e) {
+      if (await _logoutIfSessionMismatch(e)) {
+        return;
+      }
       state = state.copyWith(
         state: AuthState.onlineLoginRequired,
         errorMessage: e.message,
       );
     } catch (e) {
+      if (await _logoutIfSessionMismatch(e)) {
+        return;
+      }
       // Log to Sentry and surface the actual error for debugging
       await Sentry.captureException(e);
       state = state.copyWith(
@@ -641,6 +735,9 @@ class AuthNotifier extends Notifier<AuthStateData> {
             'The verification email is taking too long. Please try again.',
       );
     } on supabase_pkg.FunctionException catch (e) {
+      if (await _logoutIfSessionMismatch(e)) {
+        return;
+      }
       final details = e.details;
       String errorMessage;
       if (details is Map<String, dynamic>) {
@@ -654,6 +751,9 @@ class AuthNotifier extends Notifier<AuthStateData> {
         errorMessage: errorMessage,
       );
     } catch (e) {
+      if (await _logoutIfSessionMismatch(e)) {
+        return;
+      }
       debugPrint('[AuthNotifier] initiateSignup error: $e');
       state = state.copyWith(
         state: AuthState.onlineLoginRequired,
@@ -702,6 +802,9 @@ class AuthNotifier extends Notifier<AuthStateData> {
         state = state.copyWith(errorMessage: error, clearError: false);
       }
     } on supabase_pkg.FunctionException catch (e) {
+      if (await _logoutIfSessionMismatch(e)) {
+        return;
+      }
       final details = e.details;
       String errorMessage;
       if (details is Map<String, dynamic>) {
@@ -715,6 +818,9 @@ class AuthNotifier extends Notifier<AuthStateData> {
       }
       state = state.copyWith(errorMessage: errorMessage, clearError: false);
     } catch (e) {
+      if (await _logoutIfSessionMismatch(e)) {
+        return;
+      }
       debugPrint('[AuthNotifier] _verifyEmailCodeForSignup error: $e');
       state = state.copyWith(
         errorMessage: 'Failed to verify code. Please try again.',
@@ -1068,12 +1174,18 @@ class AuthNotifier extends Notifier<AuthStateData> {
         clearError: true,
       );
     } on AuthException catch (e) {
+      if (await _logoutIfSessionMismatch(e)) {
+        return;
+      }
       state = state.copyWith(
         state:
             state.state, // keep current state (e.g. forcePasswordResetRequired)
         errorMessage: e.message,
       );
     } catch (e) {
+      if (await _logoutIfSessionMismatch(e)) {
+        return;
+      }
       state = state.copyWith(
         state: state.state,
         errorMessage: 'Failed to change password. Please try again.',
@@ -1092,10 +1204,16 @@ class AuthNotifier extends Notifier<AuthStateData> {
   }) async {
     try {
       return await _authService.addTeacher(email, teacherName, role);
-    } on AuthException {
+    } on AuthException catch (e) {
+      if (await _logoutIfSessionMismatch(e)) {
+        return null;
+      }
       // Let AuthException propagate so the UI can catch and display it
       rethrow;
     } catch (e) {
+      if (await _logoutIfSessionMismatch(e)) {
+        return null;
+      }
       throw AuthException(
         code: AuthErrorCode.networkError,
         message: 'Failed to add teacher. Please try again.',
@@ -1115,9 +1233,15 @@ class AuthNotifier extends Notifier<AuthStateData> {
   }) async {
     try {
       return await _authService.resendTeacherPassword(email, teacherName, role);
-    } on AuthException {
+    } on AuthException catch (e) {
+      if (await _logoutIfSessionMismatch(e)) {
+        return null;
+      }
       rethrow;
     } catch (e) {
+      if (await _logoutIfSessionMismatch(e)) {
+        return null;
+      }
       throw AuthException(
         code: AuthErrorCode.networkError,
         message: 'Failed to resend password. Please try again.',

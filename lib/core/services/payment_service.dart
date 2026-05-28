@@ -37,6 +37,7 @@ class PaymentService {
 
   /// Monnify test API keys — replace with actual sandbox keys from the
   /// Monnify dashboard (Settings ⇨ API Keys).
+  // TODO: Replace with live Monnify keys after KYC approval
   static const String _apiKey = 'MK_TEST_ZRD477KLNN';
   static const String _secretKey = 'XYBJ75MD6WPXFUB17EAMJNRZGTXD5WCA';
 

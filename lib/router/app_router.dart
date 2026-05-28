@@ -54,24 +54,29 @@ final appRouter = GoRouter(
     final container = ProviderScope.containerOf(context, listen: false);
     final authData = container.read(authProvider);
     final role = authData.currentTeacher?.role;
+    final location = state.uri.path;
 
     // If role is null (shouldn't happen in authenticated state), allow navigation.
     if (role == null) return null;
 
+    final isTeacherRoute = location == '/' ||
+        location == '/lessons' ||
+        location.startsWith('/lessons/') ||
+        location == '/lesson-editor' ||
+        location == '/exams' ||
+        location.startsWith('/exams/') ||
+        location == '/exam-editor';
+    final isAdminRoute =
+        location == '/admin' || location.startsWith('/admin/teachers/');
+
     if (role == 'admin') {
-      final location = state.uri.toString();
-
       // Teacher-only routes — admins should never access these.
-      final isTeacherRoute = location == '/' ||
-          location == '/lessons' ||
-          location.startsWith('/lessons/') ||
-          location == '/lesson-editor' ||
-          location == '/exams' ||
-          location.startsWith('/exams/') ||
-          location == '/exam-editor';
-
       if (isTeacherRoute) return '/admin';
+      return null;
     }
+
+    // Non-admin users should never reach admin-only routes.
+    if (isAdminRoute) return '/';
 
     return null; // allow navigation
   },

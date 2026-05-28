@@ -931,6 +931,7 @@ class _RecentLessonsSection extends ConsumerWidget {
                               right: row1.last == lesson ? 0 : 8,
                             ),
                             child: _LessonCard(
+                              lessonId: lesson.id,
                               icon: Icons.menu_book_rounded,
                               iconColor: cs.primary,
                               title: lesson.topic.isNotEmpty ? lesson.topic : lesson.subject,
@@ -954,6 +955,7 @@ class _RecentLessonsSection extends ConsumerWidget {
                                 right: row2.last == lesson ? 0 : 8,
                               ),
                               child: _LessonCard(
+                                lessonId: lesson.id,
                                 icon: Icons.menu_book_rounded,
                                 iconColor: cs.tertiary,
                                 title: lesson.topic.isNotEmpty ? lesson.topic : lesson.subject,
@@ -976,6 +978,7 @@ class _RecentLessonsSection extends ConsumerWidget {
                     children: displayed.map((lesson) => Padding(
                       padding: const EdgeInsets.only(bottom: 16),
                       child: _LessonCard(
+                        lessonId: lesson.id,
                         icon: Icons.menu_book_rounded,
                         iconColor: cs.primary,
                         title: lesson.topic.isNotEmpty ? lesson.topic : lesson.subject,
@@ -1009,6 +1012,7 @@ class _RecentLessonsSection extends ConsumerWidget {
 
 class _LessonCard extends StatelessWidget {
   const _LessonCard({
+    required this.lessonId,
     required this.icon,
     required this.iconColor,
     required this.title,
@@ -1021,6 +1025,7 @@ class _LessonCard extends StatelessWidget {
     required this.theme,
   });
 
+  final int lessonId;
   final IconData icon;
   final Color iconColor;
   final String title;
@@ -1114,7 +1119,7 @@ class _LessonCard extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  onPressed: () {},
+                  onPressed: () => context.push('/lessons/$lessonId'),
                   icon: Icon(
                     Icons.edit_rounded,
                     size: 20,
