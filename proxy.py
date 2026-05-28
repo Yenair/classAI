@@ -69,10 +69,10 @@ async def handle_chat(request: Request):
             print(f"Git checkpoint failed: {e}")
 
     # Run command-code
-    cmd_string = shlex.join(["command-code", "-p", prompt_text])
+    cmd_list = ["command-code", "-p", prompt_text]   
     try:
         process = subprocess.run(
-            cmd_string,
+            cmd_list,
             capture_output=True,
             text=True,
             check=True,
