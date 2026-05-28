@@ -2,7 +2,6 @@ import subprocess
 import time
 import uuid
 import os
-import shlex
 import json
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -11,7 +10,6 @@ import uvicorn
 
 app = FastAPI()
 
-# Allow all origins (VS Code’s webview)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,7 +18,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Simple /v1/models so Roo Code can verify the API
 @app.get("/v1/models")
 async def list_models():
     return {
@@ -46,7 +43,6 @@ async def handle_chat(request: Request):
     if not messages:
         return JSONResponse(status_code=400, content={"error": "No messages found"})
 
-    # Extract the last user message
     prompt_text = ""
     if len(messages) > 0:
         last_message = messages[-1]
@@ -59,7 +55,7 @@ async def handle_chat(request: Request):
         else:
             prompt_text = content
 
-    # Optional Git checkpoint (only if inside a repo)
+    # Optional Git checkpoint
     if os.path.isdir(".git"):
         try:
             preview = prompt_text[:40].replace('"', "'") + "..." if len(prompt_text) > 40 else prompt_text.replace('"', "'")
@@ -68,27 +64,23 @@ async def handle_chat(request: Request):
         except Exception as e:
             print(f"Git checkpoint failed: {e}")
 
+    # --- Truncate prompt to avoid "command line too long" ---
+    MAX_PROMPT_LENGTH = 500
+    if len(prompt_text) > MAX_PROMPT_LENGTH:
+        prompt_text = prompt_text[:MAX_PROMPT_LENGTH] + "... [truncated]"
+
     # Run command-code
-    cmd_list = ["command-code", "-p", prompt_text]   
+    cmd_list = ["command-code", "-p", prompt_text]
     try:
-        process = subprocess.run(
-            cmd_list,
-            capture_output=True,
-            text=True,
-            check=True,
-            shell=True
-        )
+        process = subprocess.run(cmd_list, capture_output=True, text=True, check=True, shell=True)
         final_output = process.stdout
     except subprocess.CalledProcessError as error:
         final_output = f"Error: {error.stderr}"
 
-    # Check if the client requested streaming
     stream = data.get("stream", False)
 
     if stream:
-        # --- STREAMING RESPONSE (SSE) ---
         async def event_stream():
-            # First and only chunk: the full message as a delta
             chunk = {
                 "id": f"chatcmpl-{uuid.uuid4()}",
                 "object": "chat.completion.chunk",
@@ -103,7 +95,6 @@ async def handle_chat(request: Request):
                 ]
             }
             yield f"data: {json.dumps(chunk)}\n\n"
-            # Final chunk indicating completion
             final_chunk = {
                 "id": f"chatcmpl-{uuid.uuid4()}",
                 "object": "chat.completion.chunk",
@@ -122,7 +113,6 @@ async def handle_chat(request: Request):
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")
     else:
-        # --- NON-STREAMING RESPONSE (classic JSON) ---
         reply = {
             "id": f"chatcmpl-{uuid.uuid4()}",
             "object": "chat.completion",
