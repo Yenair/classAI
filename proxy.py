@@ -3,14 +3,15 @@ import time
 import uuid
 import os
 import shlex
+import json
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 app = FastAPI()
 
-# Allow all origins (for local VS Code extension)
+# Allow all origins (VS Code’s webview)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,7 +20,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------- NEW: /v1/models endpoint ----------
+# Simple /v1/models so Roo Code can verify the API
 @app.get("/v1/models")
 async def list_models():
     return {
@@ -33,7 +34,6 @@ async def list_models():
             }
         ]
     }
-# ---------------------------------------------
 
 @app.post("/v1/chat/completions")
 async def handle_chat(request: Request):
@@ -46,27 +46,29 @@ async def handle_chat(request: Request):
     if not messages:
         return JSONResponse(status_code=400, content={"error": "No messages found"})
 
+    # Extract the last user message
     prompt_text = ""
     if len(messages) > 0:
         last_message = messages[-1]
         content = last_message.get("content", "")
         if isinstance(content, list):
-            text_pieces = [part.get("text") for part in content if part.get("type") == "text"]
+            text_pieces = [
+                part.get("text") for part in content if part.get("type") == "text"
+            ]
             prompt_text = " ".join(text_pieces)
         else:
             prompt_text = content
 
-    # --- AUTOMATIC CHECKPOINT VIA GIT ---
+    # Optional Git checkpoint (only if inside a repo)
     if os.path.isdir(".git"):
         try:
             preview = prompt_text[:40].replace('"', "'") + "..." if len(prompt_text) > 40 else prompt_text.replace('"', "'")
-            commit_msg = f"Auto-checkpoint: {preview}"
             subprocess.run(["git", "add", "."], capture_output=True, check=False)
-            subprocess.run(["git", "commit", "-m", commit_msg], capture_output=True, check=False)
+            subprocess.run(["git", "commit", "-m", f"Auto-checkpoint: {preview}"], capture_output=True, check=False)
         except Exception as e:
-            print(f"Failed to create Git checkpoint: {e}")
-    # ------------------------------------
+            print(f"Git checkpoint failed: {e}")
 
+    # Run command-code
     cmd_string = shlex.join(["command-code", "-p", prompt_text])
     try:
         process = subprocess.run(
@@ -80,29 +82,69 @@ async def handle_chat(request: Request):
     except subprocess.CalledProcessError as error:
         final_output = f"Error: {error.stderr}"
 
-    reply = {
-        "id": f"chatcmpl-{uuid.uuid4()}",
-        "object": "chat.completion",
-        "created": int(time.time()),
-        "model": "command-code-proxy",   # matches the /v1/models ID
-        "choices": [
-            {
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": final_output
-                },
-                "finish_reason": "stop"
-            }
-        ],
-        "usage": {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0
-        }
-    }
+    # Check if the client requested streaming
+    stream = data.get("stream", False)
 
-    return JSONResponse(content=reply)
+    if stream:
+        # --- STREAMING RESPONSE (SSE) ---
+        async def event_stream():
+            # First and only chunk: the full message as a delta
+            chunk = {
+                "id": f"chatcmpl-{uuid.uuid4()}",
+                "object": "chat.completion.chunk",
+                "created": int(time.time()),
+                "model": "command-code-proxy",
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"content": final_output},
+                        "finish_reason": None
+                    }
+                ]
+            }
+            yield f"data: {json.dumps(chunk)}\n\n"
+            # Final chunk indicating completion
+            final_chunk = {
+                "id": f"chatcmpl-{uuid.uuid4()}",
+                "object": "chat.completion.chunk",
+                "created": int(time.time()),
+                "model": "command-code-proxy",
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {},
+                        "finish_reason": "stop"
+                    }
+                ]
+            }
+            yield f"data: {json.dumps(final_chunk)}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
+    else:
+        # --- NON-STREAMING RESPONSE (classic JSON) ---
+        reply = {
+            "id": f"chatcmpl-{uuid.uuid4()}",
+            "object": "chat.completion",
+            "created": int(time.time()),
+            "model": "command-code-proxy",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": final_output
+                    },
+                    "finish_reason": "stop"
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0
+            }
+        }
+        return JSONResponse(content=reply)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
