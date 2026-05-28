@@ -10,6 +10,7 @@ import uvicorn
 
 app = FastAPI()
 
+# Allow all origins (for local VS Code extension)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,6 +18,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---------- NEW: /v1/models endpoint ----------
+@app.get("/v1/models")
+async def list_models():
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": "command-code-proxy",
+                "object": "model",
+                "created": int(time.time()),
+                "owned_by": "local-proxy"
+            }
+        ]
+    }
+# ---------------------------------------------
 
 @app.post("/v1/chat/completions")
 async def handle_chat(request: Request):
@@ -30,7 +47,6 @@ async def handle_chat(request: Request):
         return JSONResponse(status_code=400, content={"error": "No messages found"})
 
     prompt_text = ""
-    # Find the last message from the user
     if len(messages) > 0:
         last_message = messages[-1]
         content = last_message.get("content", "")
@@ -41,7 +57,7 @@ async def handle_chat(request: Request):
             prompt_text = content
 
     # --- AUTOMATIC CHECKPOINT VIA GIT ---
-    if os.path.isdir(".git"):  # only try if inside a git repo
+    if os.path.isdir(".git"):
         try:
             preview = prompt_text[:40].replace('"', "'") + "..." if len(prompt_text) > 40 else prompt_text.replace('"', "'")
             commit_msg = f"Auto-checkpoint: {preview}"
@@ -51,26 +67,24 @@ async def handle_chat(request: Request):
             print(f"Failed to create Git checkpoint: {e}")
     # ------------------------------------
 
-    # Run the Command Code CLI using the Windows shell so that .cmd files are found
-    cmd_string = shlex.join(["command-code", "-p", prompt_text])  # safe joining for shell
+    cmd_string = shlex.join(["command-code", "-p", prompt_text])
     try:
         process = subprocess.run(
             cmd_string,
             capture_output=True,
             text=True,
             check=True,
-            shell=True  # <-- this allows cmd.exe to resolve command-code.cmd
+            shell=True
         )
         final_output = process.stdout
     except subprocess.CalledProcessError as error:
         final_output = f"Error: {error.stderr}"
 
-    # Make the response look like a real OpenAI server
     reply = {
         "id": f"chatcmpl-{uuid.uuid4()}",
         "object": "chat.completion",
         "created": int(time.time()),
-        "model": "command-code-proxy",
+        "model": "command-code-proxy",   # matches the /v1/models ID
         "choices": [
             {
                 "index": 0,
