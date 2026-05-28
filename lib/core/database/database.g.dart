@@ -2432,6 +2432,16 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
   late final GeneratedColumn<String> schoolServerId = GeneratedColumn<String>(
       'school_server_id', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _isUnlockedMeta =
+      const VerificationMeta('isUnlocked');
+  @override
+  late final GeneratedColumn<bool> isUnlocked = GeneratedColumn<bool>(
+      'is_unlocked', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_unlocked" IN (0, 1))'),
+      defaultValue: const Constant(false));
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -2451,7 +2461,8 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
         isDeleted,
         lastModifiedBy,
         teacherServerId,
-        schoolServerId
+        schoolServerId,
+        isUnlocked
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2568,6 +2579,12 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
           schoolServerId.isAcceptableOrUnknown(
               data['school_server_id']!, _schoolServerIdMeta));
     }
+    if (data.containsKey('is_unlocked')) {
+      context.handle(
+          _isUnlockedMeta,
+          isUnlocked.isAcceptableOrUnknown(
+              data['is_unlocked']!, _isUnlockedMeta));
+    }
     return context;
   }
 
@@ -2613,6 +2630,8 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
           DriftSqlType.string, data['${effectivePrefix}teacher_server_id']),
       schoolServerId: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}school_server_id']),
+      isUnlocked: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_unlocked'])!,
     );
   }
 
@@ -2641,6 +2660,7 @@ class Lesson extends DataClass implements Insertable<Lesson> {
   final String? lastModifiedBy;
   final String? teacherServerId;
   final String? schoolServerId;
+  final bool isUnlocked;
   const Lesson(
       {required this.id,
       this.serverId,
@@ -2659,7 +2679,8 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       required this.isDeleted,
       this.lastModifiedBy,
       this.teacherServerId,
-      this.schoolServerId});
+      this.schoolServerId,
+      required this.isUnlocked});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -2691,6 +2712,7 @@ class Lesson extends DataClass implements Insertable<Lesson> {
     if (!nullToAbsent || schoolServerId != null) {
       map['school_server_id'] = Variable<String>(schoolServerId);
     }
+    map['is_unlocked'] = Variable<bool>(isUnlocked);
     return map;
   }
 
@@ -2724,6 +2746,7 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       schoolServerId: schoolServerId == null && nullToAbsent
           ? const Value.absent()
           : Value(schoolServerId),
+      isUnlocked: Value(isUnlocked),
     );
   }
 
@@ -2749,6 +2772,7 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       lastModifiedBy: serializer.fromJson<String?>(json['lastModifiedBy']),
       teacherServerId: serializer.fromJson<String?>(json['teacherServerId']),
       schoolServerId: serializer.fromJson<String?>(json['schoolServerId']),
+      isUnlocked: serializer.fromJson<bool>(json['isUnlocked']),
     );
   }
   @override
@@ -2773,6 +2797,7 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       'lastModifiedBy': serializer.toJson<String?>(lastModifiedBy),
       'teacherServerId': serializer.toJson<String?>(teacherServerId),
       'schoolServerId': serializer.toJson<String?>(schoolServerId),
+      'isUnlocked': serializer.toJson<bool>(isUnlocked),
     };
   }
 
@@ -2794,7 +2819,8 @@ class Lesson extends DataClass implements Insertable<Lesson> {
           bool? isDeleted,
           Value<String?> lastModifiedBy = const Value.absent(),
           Value<String?> teacherServerId = const Value.absent(),
-          Value<String?> schoolServerId = const Value.absent()}) =>
+          Value<String?> schoolServerId = const Value.absent(),
+          bool? isUnlocked}) =>
       Lesson(
         id: id ?? this.id,
         serverId: serverId.present ? serverId.value : this.serverId,
@@ -2818,6 +2844,7 @@ class Lesson extends DataClass implements Insertable<Lesson> {
             : this.teacherServerId,
         schoolServerId:
             schoolServerId.present ? schoolServerId.value : this.schoolServerId,
+        isUnlocked: isUnlocked ?? this.isUnlocked,
       );
   Lesson copyWithCompanion(LessonsCompanion data) {
     return Lesson(
@@ -2852,6 +2879,8 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       schoolServerId: data.schoolServerId.present
           ? data.schoolServerId.value
           : this.schoolServerId,
+      isUnlocked:
+          data.isUnlocked.present ? data.isUnlocked.value : this.isUnlocked,
     );
   }
 
@@ -2875,7 +2904,8 @@ class Lesson extends DataClass implements Insertable<Lesson> {
           ..write('isDeleted: $isDeleted, ')
           ..write('lastModifiedBy: $lastModifiedBy, ')
           ..write('teacherServerId: $teacherServerId, ')
-          ..write('schoolServerId: $schoolServerId')
+          ..write('schoolServerId: $schoolServerId, ')
+          ..write('isUnlocked: $isUnlocked')
           ..write(')'))
         .toString();
   }
@@ -2899,7 +2929,8 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       isDeleted,
       lastModifiedBy,
       teacherServerId,
-      schoolServerId);
+      schoolServerId,
+      isUnlocked);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2921,7 +2952,8 @@ class Lesson extends DataClass implements Insertable<Lesson> {
           other.isDeleted == this.isDeleted &&
           other.lastModifiedBy == this.lastModifiedBy &&
           other.teacherServerId == this.teacherServerId &&
-          other.schoolServerId == this.schoolServerId);
+          other.schoolServerId == this.schoolServerId &&
+          other.isUnlocked == this.isUnlocked);
 }
 
 class LessonsCompanion extends UpdateCompanion<Lesson> {
@@ -2943,6 +2975,7 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
   final Value<String?> lastModifiedBy;
   final Value<String?> teacherServerId;
   final Value<String?> schoolServerId;
+  final Value<bool> isUnlocked;
   const LessonsCompanion({
     this.id = const Value.absent(),
     this.serverId = const Value.absent(),
@@ -2962,6 +2995,7 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     this.lastModifiedBy = const Value.absent(),
     this.teacherServerId = const Value.absent(),
     this.schoolServerId = const Value.absent(),
+    this.isUnlocked = const Value.absent(),
   });
   LessonsCompanion.insert({
     this.id = const Value.absent(),
@@ -2982,6 +3016,7 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     this.lastModifiedBy = const Value.absent(),
     this.teacherServerId = const Value.absent(),
     this.schoolServerId = const Value.absent(),
+    this.isUnlocked = const Value.absent(),
   })  : subject = Value(subject),
         classLevel = Value(classLevel),
         week = Value(week),
@@ -3009,6 +3044,7 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     Expression<String>? lastModifiedBy,
     Expression<String>? teacherServerId,
     Expression<String>? schoolServerId,
+    Expression<bool>? isUnlocked,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -3029,6 +3065,7 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
       if (lastModifiedBy != null) 'last_modified_by': lastModifiedBy,
       if (teacherServerId != null) 'teacher_server_id': teacherServerId,
       if (schoolServerId != null) 'school_server_id': schoolServerId,
+      if (isUnlocked != null) 'is_unlocked': isUnlocked,
     });
   }
 
@@ -3050,7 +3087,8 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
       Value<bool>? isDeleted,
       Value<String?>? lastModifiedBy,
       Value<String?>? teacherServerId,
-      Value<String?>? schoolServerId}) {
+      Value<String?>? schoolServerId,
+      Value<bool>? isUnlocked}) {
     return LessonsCompanion(
       id: id ?? this.id,
       serverId: serverId ?? this.serverId,
@@ -3070,6 +3108,7 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
       lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,
       teacherServerId: teacherServerId ?? this.teacherServerId,
       schoolServerId: schoolServerId ?? this.schoolServerId,
+      isUnlocked: isUnlocked ?? this.isUnlocked,
     );
   }
 
@@ -3130,6 +3169,9 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     if (schoolServerId.present) {
       map['school_server_id'] = Variable<String>(schoolServerId.value);
     }
+    if (isUnlocked.present) {
+      map['is_unlocked'] = Variable<bool>(isUnlocked.value);
+    }
     return map;
   }
 
@@ -3153,7 +3195,8 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
           ..write('isDeleted: $isDeleted, ')
           ..write('lastModifiedBy: $lastModifiedBy, ')
           ..write('teacherServerId: $teacherServerId, ')
-          ..write('schoolServerId: $schoolServerId')
+          ..write('schoolServerId: $schoolServerId, ')
+          ..write('isUnlocked: $isUnlocked')
           ..write(')'))
         .toString();
   }
@@ -3851,6 +3894,16 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
   late final GeneratedColumn<String> schoolServerId = GeneratedColumn<String>(
       'school_server_id', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _isUnlockedMeta =
+      const VerificationMeta('isUnlocked');
+  @override
+  late final GeneratedColumn<bool> isUnlocked = GeneratedColumn<bool>(
+      'is_unlocked', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_unlocked" IN (0, 1))'),
+      defaultValue: const Constant(false));
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -3867,7 +3920,8 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
         isDeleted,
         lastModifiedBy,
         teacherServerId,
-        schoolServerId
+        schoolServerId,
+        isUnlocked
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3964,6 +4018,12 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
           schoolServerId.isAcceptableOrUnknown(
               data['school_server_id']!, _schoolServerIdMeta));
     }
+    if (data.containsKey('is_unlocked')) {
+      context.handle(
+          _isUnlockedMeta,
+          isUnlocked.isAcceptableOrUnknown(
+              data['is_unlocked']!, _isUnlockedMeta));
+    }
     return context;
   }
 
@@ -4003,6 +4063,8 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
           DriftSqlType.string, data['${effectivePrefix}teacher_server_id']),
       schoolServerId: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}school_server_id']),
+      isUnlocked: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_unlocked'])!,
     );
   }
 
@@ -4028,6 +4090,7 @@ class Exam extends DataClass implements Insertable<Exam> {
   final String? lastModifiedBy;
   final String? teacherServerId;
   final String? schoolServerId;
+  final bool isUnlocked;
   const Exam(
       {required this.id,
       this.serverId,
@@ -4043,7 +4106,8 @@ class Exam extends DataClass implements Insertable<Exam> {
       required this.isDeleted,
       this.lastModifiedBy,
       this.teacherServerId,
-      this.schoolServerId});
+      this.schoolServerId,
+      required this.isUnlocked});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -4070,6 +4134,7 @@ class Exam extends DataClass implements Insertable<Exam> {
     if (!nullToAbsent || schoolServerId != null) {
       map['school_server_id'] = Variable<String>(schoolServerId);
     }
+    map['is_unlocked'] = Variable<bool>(isUnlocked);
     return map;
   }
 
@@ -4098,6 +4163,7 @@ class Exam extends DataClass implements Insertable<Exam> {
       schoolServerId: schoolServerId == null && nullToAbsent
           ? const Value.absent()
           : Value(schoolServerId),
+      isUnlocked: Value(isUnlocked),
     );
   }
 
@@ -4120,6 +4186,7 @@ class Exam extends DataClass implements Insertable<Exam> {
       lastModifiedBy: serializer.fromJson<String?>(json['lastModifiedBy']),
       teacherServerId: serializer.fromJson<String?>(json['teacherServerId']),
       schoolServerId: serializer.fromJson<String?>(json['schoolServerId']),
+      isUnlocked: serializer.fromJson<bool>(json['isUnlocked']),
     );
   }
   @override
@@ -4141,6 +4208,7 @@ class Exam extends DataClass implements Insertable<Exam> {
       'lastModifiedBy': serializer.toJson<String?>(lastModifiedBy),
       'teacherServerId': serializer.toJson<String?>(teacherServerId),
       'schoolServerId': serializer.toJson<String?>(schoolServerId),
+      'isUnlocked': serializer.toJson<bool>(isUnlocked),
     };
   }
 
@@ -4159,7 +4227,8 @@ class Exam extends DataClass implements Insertable<Exam> {
           bool? isDeleted,
           Value<String?> lastModifiedBy = const Value.absent(),
           Value<String?> teacherServerId = const Value.absent(),
-          Value<String?> schoolServerId = const Value.absent()}) =>
+          Value<String?> schoolServerId = const Value.absent(),
+          bool? isUnlocked}) =>
       Exam(
         id: id ?? this.id,
         serverId: serverId.present ? serverId.value : this.serverId,
@@ -4180,6 +4249,7 @@ class Exam extends DataClass implements Insertable<Exam> {
             : this.teacherServerId,
         schoolServerId:
             schoolServerId.present ? schoolServerId.value : this.schoolServerId,
+        isUnlocked: isUnlocked ?? this.isUnlocked,
       );
   Exam copyWithCompanion(ExamsCompanion data) {
     return Exam(
@@ -4209,6 +4279,8 @@ class Exam extends DataClass implements Insertable<Exam> {
       schoolServerId: data.schoolServerId.present
           ? data.schoolServerId.value
           : this.schoolServerId,
+      isUnlocked:
+          data.isUnlocked.present ? data.isUnlocked.value : this.isUnlocked,
     );
   }
 
@@ -4229,7 +4301,8 @@ class Exam extends DataClass implements Insertable<Exam> {
           ..write('isDeleted: $isDeleted, ')
           ..write('lastModifiedBy: $lastModifiedBy, ')
           ..write('teacherServerId: $teacherServerId, ')
-          ..write('schoolServerId: $schoolServerId')
+          ..write('schoolServerId: $schoolServerId, ')
+          ..write('isUnlocked: $isUnlocked')
           ..write(')'))
         .toString();
   }
@@ -4250,7 +4323,8 @@ class Exam extends DataClass implements Insertable<Exam> {
       isDeleted,
       lastModifiedBy,
       teacherServerId,
-      schoolServerId);
+      schoolServerId,
+      isUnlocked);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -4269,7 +4343,8 @@ class Exam extends DataClass implements Insertable<Exam> {
           other.isDeleted == this.isDeleted &&
           other.lastModifiedBy == this.lastModifiedBy &&
           other.teacherServerId == this.teacherServerId &&
-          other.schoolServerId == this.schoolServerId);
+          other.schoolServerId == this.schoolServerId &&
+          other.isUnlocked == this.isUnlocked);
 }
 
 class ExamsCompanion extends UpdateCompanion<Exam> {
@@ -4288,6 +4363,7 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
   final Value<String?> lastModifiedBy;
   final Value<String?> teacherServerId;
   final Value<String?> schoolServerId;
+  final Value<bool> isUnlocked;
   const ExamsCompanion({
     this.id = const Value.absent(),
     this.serverId = const Value.absent(),
@@ -4304,6 +4380,7 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     this.lastModifiedBy = const Value.absent(),
     this.teacherServerId = const Value.absent(),
     this.schoolServerId = const Value.absent(),
+    this.isUnlocked = const Value.absent(),
   });
   ExamsCompanion.insert({
     this.id = const Value.absent(),
@@ -4321,6 +4398,7 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     this.lastModifiedBy = const Value.absent(),
     this.teacherServerId = const Value.absent(),
     this.schoolServerId = const Value.absent(),
+    this.isUnlocked = const Value.absent(),
   })  : subject = Value(subject),
         classLevel = Value(classLevel),
         topic = Value(topic),
@@ -4343,6 +4421,7 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     Expression<String>? lastModifiedBy,
     Expression<String>? teacherServerId,
     Expression<String>? schoolServerId,
+    Expression<bool>? isUnlocked,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -4360,6 +4439,7 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
       if (lastModifiedBy != null) 'last_modified_by': lastModifiedBy,
       if (teacherServerId != null) 'teacher_server_id': teacherServerId,
       if (schoolServerId != null) 'school_server_id': schoolServerId,
+      if (isUnlocked != null) 'is_unlocked': isUnlocked,
     });
   }
 
@@ -4378,7 +4458,8 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
       Value<bool>? isDeleted,
       Value<String?>? lastModifiedBy,
       Value<String?>? teacherServerId,
-      Value<String?>? schoolServerId}) {
+      Value<String?>? schoolServerId,
+      Value<bool>? isUnlocked}) {
     return ExamsCompanion(
       id: id ?? this.id,
       serverId: serverId ?? this.serverId,
@@ -4395,6 +4476,7 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
       lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,
       teacherServerId: teacherServerId ?? this.teacherServerId,
       schoolServerId: schoolServerId ?? this.schoolServerId,
+      isUnlocked: isUnlocked ?? this.isUnlocked,
     );
   }
 
@@ -4446,6 +4528,9 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     if (schoolServerId.present) {
       map['school_server_id'] = Variable<String>(schoolServerId.value);
     }
+    if (isUnlocked.present) {
+      map['is_unlocked'] = Variable<bool>(isUnlocked.value);
+    }
     return map;
   }
 
@@ -4466,7 +4551,8 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
           ..write('isDeleted: $isDeleted, ')
           ..write('lastModifiedBy: $lastModifiedBy, ')
           ..write('teacherServerId: $teacherServerId, ')
-          ..write('schoolServerId: $schoolServerId')
+          ..write('schoolServerId: $schoolServerId, ')
+          ..write('isUnlocked: $isUnlocked')
           ..write(')'))
         .toString();
   }
@@ -5908,6 +5994,20 @@ class $SecurityConfigTable extends SecurityConfig
   late final GeneratedColumn<String> dailyPdfExportDate =
       GeneratedColumn<String>('daily_pdf_export_date', aliasedName, true,
           type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _dailyPreviewCountMeta =
+      const VerificationMeta('dailyPreviewCount');
+  @override
+  late final GeneratedColumn<int> dailyPreviewCount = GeneratedColumn<int>(
+      'daily_preview_count', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _dailyPreviewDateMeta =
+      const VerificationMeta('dailyPreviewDate');
+  @override
+  late final GeneratedColumn<String> dailyPreviewDate = GeneratedColumn<String>(
+      'daily_preview_date', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _pendingDbReplacementMeta =
       const VerificationMeta('pendingDbReplacement');
   @override
@@ -5955,6 +6055,8 @@ class $SecurityConfigTable extends SecurityConfig
         dailyGenerationDate,
         dailyPdfExports,
         dailyPdfExportDate,
+        dailyPreviewCount,
+        dailyPreviewDate,
         pendingDbReplacement,
         vacuumedDbPath
       ];
@@ -6143,6 +6245,18 @@ class $SecurityConfigTable extends SecurityConfig
           dailyPdfExportDate.isAcceptableOrUnknown(
               data['daily_pdf_export_date']!, _dailyPdfExportDateMeta));
     }
+    if (data.containsKey('daily_preview_count')) {
+      context.handle(
+          _dailyPreviewCountMeta,
+          dailyPreviewCount.isAcceptableOrUnknown(
+              data['daily_preview_count']!, _dailyPreviewCountMeta));
+    }
+    if (data.containsKey('daily_preview_date')) {
+      context.handle(
+          _dailyPreviewDateMeta,
+          dailyPreviewDate.isAcceptableOrUnknown(
+              data['daily_preview_date']!, _dailyPreviewDateMeta));
+    }
     if (data.containsKey('pending_db_replacement')) {
       context.handle(
           _pendingDbReplacementMeta,
@@ -6231,6 +6345,10 @@ class $SecurityConfigTable extends SecurityConfig
           .read(DriftSqlType.int, data['${effectivePrefix}daily_pdf_exports'])!,
       dailyPdfExportDate: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}daily_pdf_export_date']),
+      dailyPreviewCount: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}daily_preview_count'])!,
+      dailyPreviewDate: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}daily_preview_date']),
       pendingDbReplacement: attachedDatabase.typeMapping.read(
           DriftSqlType.bool, data['${effectivePrefix}pending_db_replacement'])!,
       vacuumedDbPath: attachedDatabase.typeMapping.read(
@@ -6275,6 +6393,8 @@ class SecurityConfigData extends DataClass
   final String? dailyGenerationDate;
   final int dailyPdfExports;
   final String? dailyPdfExportDate;
+  final int dailyPreviewCount;
+  final String? dailyPreviewDate;
   final bool pendingDbReplacement;
   final String? vacuumedDbPath;
   const SecurityConfigData(
@@ -6307,6 +6427,8 @@ class SecurityConfigData extends DataClass
       this.dailyGenerationDate,
       required this.dailyPdfExports,
       this.dailyPdfExportDate,
+      required this.dailyPreviewCount,
+      this.dailyPreviewDate,
       required this.pendingDbReplacement,
       this.vacuumedDbPath});
   @override
@@ -6374,6 +6496,10 @@ class SecurityConfigData extends DataClass
     map['daily_pdf_exports'] = Variable<int>(dailyPdfExports);
     if (!nullToAbsent || dailyPdfExportDate != null) {
       map['daily_pdf_export_date'] = Variable<String>(dailyPdfExportDate);
+    }
+    map['daily_preview_count'] = Variable<int>(dailyPreviewCount);
+    if (!nullToAbsent || dailyPreviewDate != null) {
+      map['daily_preview_date'] = Variable<String>(dailyPreviewDate);
     }
     map['pending_db_replacement'] = Variable<bool>(pendingDbReplacement);
     if (!nullToAbsent || vacuumedDbPath != null) {
@@ -6444,6 +6570,10 @@ class SecurityConfigData extends DataClass
       dailyPdfExportDate: dailyPdfExportDate == null && nullToAbsent
           ? const Value.absent()
           : Value(dailyPdfExportDate),
+      dailyPreviewCount: Value(dailyPreviewCount),
+      dailyPreviewDate: dailyPreviewDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dailyPreviewDate),
       pendingDbReplacement: Value(pendingDbReplacement),
       vacuumedDbPath: vacuumedDbPath == null && nullToAbsent
           ? const Value.absent()
@@ -6504,6 +6634,8 @@ class SecurityConfigData extends DataClass
       dailyPdfExports: serializer.fromJson<int>(json['dailyPdfExports']),
       dailyPdfExportDate:
           serializer.fromJson<String?>(json['dailyPdfExportDate']),
+      dailyPreviewCount: serializer.fromJson<int>(json['dailyPreviewCount']),
+      dailyPreviewDate: serializer.fromJson<String?>(json['dailyPreviewDate']),
       pendingDbReplacement:
           serializer.fromJson<bool>(json['pendingDbReplacement']),
       vacuumedDbPath: serializer.fromJson<String?>(json['vacuumedDbPath']),
@@ -6547,6 +6679,8 @@ class SecurityConfigData extends DataClass
       'dailyGenerationDate': serializer.toJson<String?>(dailyGenerationDate),
       'dailyPdfExports': serializer.toJson<int>(dailyPdfExports),
       'dailyPdfExportDate': serializer.toJson<String?>(dailyPdfExportDate),
+      'dailyPreviewCount': serializer.toJson<int>(dailyPreviewCount),
+      'dailyPreviewDate': serializer.toJson<String?>(dailyPreviewDate),
       'pendingDbReplacement': serializer.toJson<bool>(pendingDbReplacement),
       'vacuumedDbPath': serializer.toJson<String?>(vacuumedDbPath),
     };
@@ -6582,6 +6716,8 @@ class SecurityConfigData extends DataClass
           Value<String?> dailyGenerationDate = const Value.absent(),
           int? dailyPdfExports,
           Value<String?> dailyPdfExportDate = const Value.absent(),
+          int? dailyPreviewCount,
+          Value<String?> dailyPreviewDate = const Value.absent(),
           bool? pendingDbReplacement,
           Value<String?> vacuumedDbPath = const Value.absent()}) =>
       SecurityConfigData(
@@ -6644,6 +6780,10 @@ class SecurityConfigData extends DataClass
         dailyPdfExportDate: dailyPdfExportDate.present
             ? dailyPdfExportDate.value
             : this.dailyPdfExportDate,
+        dailyPreviewCount: dailyPreviewCount ?? this.dailyPreviewCount,
+        dailyPreviewDate: dailyPreviewDate.present
+            ? dailyPreviewDate.value
+            : this.dailyPreviewDate,
         pendingDbReplacement: pendingDbReplacement ?? this.pendingDbReplacement,
         vacuumedDbPath:
             vacuumedDbPath.present ? vacuumedDbPath.value : this.vacuumedDbPath,
@@ -6733,6 +6873,12 @@ class SecurityConfigData extends DataClass
       dailyPdfExportDate: data.dailyPdfExportDate.present
           ? data.dailyPdfExportDate.value
           : this.dailyPdfExportDate,
+      dailyPreviewCount: data.dailyPreviewCount.present
+          ? data.dailyPreviewCount.value
+          : this.dailyPreviewCount,
+      dailyPreviewDate: data.dailyPreviewDate.present
+          ? data.dailyPreviewDate.value
+          : this.dailyPreviewDate,
       pendingDbReplacement: data.pendingDbReplacement.present
           ? data.pendingDbReplacement.value
           : this.pendingDbReplacement,
@@ -6776,6 +6922,8 @@ class SecurityConfigData extends DataClass
           ..write('dailyGenerationDate: $dailyGenerationDate, ')
           ..write('dailyPdfExports: $dailyPdfExports, ')
           ..write('dailyPdfExportDate: $dailyPdfExportDate, ')
+          ..write('dailyPreviewCount: $dailyPreviewCount, ')
+          ..write('dailyPreviewDate: $dailyPreviewDate, ')
           ..write('pendingDbReplacement: $pendingDbReplacement, ')
           ..write('vacuumedDbPath: $vacuumedDbPath')
           ..write(')'))
@@ -6813,6 +6961,8 @@ class SecurityConfigData extends DataClass
         dailyGenerationDate,
         dailyPdfExports,
         dailyPdfExportDate,
+        dailyPreviewCount,
+        dailyPreviewDate,
         pendingDbReplacement,
         vacuumedDbPath
       ]);
@@ -6851,6 +7001,8 @@ class SecurityConfigData extends DataClass
           other.dailyGenerationDate == this.dailyGenerationDate &&
           other.dailyPdfExports == this.dailyPdfExports &&
           other.dailyPdfExportDate == this.dailyPdfExportDate &&
+          other.dailyPreviewCount == this.dailyPreviewCount &&
+          other.dailyPreviewDate == this.dailyPreviewDate &&
           other.pendingDbReplacement == this.pendingDbReplacement &&
           other.vacuumedDbPath == this.vacuumedDbPath);
 }
@@ -6885,6 +7037,8 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
   final Value<String?> dailyGenerationDate;
   final Value<int> dailyPdfExports;
   final Value<String?> dailyPdfExportDate;
+  final Value<int> dailyPreviewCount;
+  final Value<String?> dailyPreviewDate;
   final Value<bool> pendingDbReplacement;
   final Value<String?> vacuumedDbPath;
   const SecurityConfigCompanion({
@@ -6917,6 +7071,8 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
     this.dailyGenerationDate = const Value.absent(),
     this.dailyPdfExports = const Value.absent(),
     this.dailyPdfExportDate = const Value.absent(),
+    this.dailyPreviewCount = const Value.absent(),
+    this.dailyPreviewDate = const Value.absent(),
     this.pendingDbReplacement = const Value.absent(),
     this.vacuumedDbPath = const Value.absent(),
   });
@@ -6950,6 +7106,8 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
     this.dailyGenerationDate = const Value.absent(),
     this.dailyPdfExports = const Value.absent(),
     this.dailyPdfExportDate = const Value.absent(),
+    this.dailyPreviewCount = const Value.absent(),
+    this.dailyPreviewDate = const Value.absent(),
     this.pendingDbReplacement = const Value.absent(),
     this.vacuumedDbPath = const Value.absent(),
   }) : currentDeviceId = Value(currentDeviceId);
@@ -6983,6 +7141,8 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
     Expression<String>? dailyGenerationDate,
     Expression<int>? dailyPdfExports,
     Expression<String>? dailyPdfExportDate,
+    Expression<int>? dailyPreviewCount,
+    Expression<String>? dailyPreviewDate,
     Expression<bool>? pendingDbReplacement,
     Expression<String>? vacuumedDbPath,
   }) {
@@ -7032,6 +7192,8 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
       if (dailyPdfExports != null) 'daily_pdf_exports': dailyPdfExports,
       if (dailyPdfExportDate != null)
         'daily_pdf_export_date': dailyPdfExportDate,
+      if (dailyPreviewCount != null) 'daily_preview_count': dailyPreviewCount,
+      if (dailyPreviewDate != null) 'daily_preview_date': dailyPreviewDate,
       if (pendingDbReplacement != null)
         'pending_db_replacement': pendingDbReplacement,
       if (vacuumedDbPath != null) 'vacuumed_db_path': vacuumedDbPath,
@@ -7068,6 +7230,8 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
       Value<String?>? dailyGenerationDate,
       Value<int>? dailyPdfExports,
       Value<String?>? dailyPdfExportDate,
+      Value<int>? dailyPreviewCount,
+      Value<String?>? dailyPreviewDate,
       Value<bool>? pendingDbReplacement,
       Value<String?>? vacuumedDbPath}) {
     return SecurityConfigCompanion(
@@ -7104,6 +7268,8 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
       dailyGenerationDate: dailyGenerationDate ?? this.dailyGenerationDate,
       dailyPdfExports: dailyPdfExports ?? this.dailyPdfExports,
       dailyPdfExportDate: dailyPdfExportDate ?? this.dailyPdfExportDate,
+      dailyPreviewCount: dailyPreviewCount ?? this.dailyPreviewCount,
+      dailyPreviewDate: dailyPreviewDate ?? this.dailyPreviewDate,
       pendingDbReplacement: pendingDbReplacement ?? this.pendingDbReplacement,
       vacuumedDbPath: vacuumedDbPath ?? this.vacuumedDbPath,
     );
@@ -7209,6 +7375,12 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
     if (dailyPdfExportDate.present) {
       map['daily_pdf_export_date'] = Variable<String>(dailyPdfExportDate.value);
     }
+    if (dailyPreviewCount.present) {
+      map['daily_preview_count'] = Variable<int>(dailyPreviewCount.value);
+    }
+    if (dailyPreviewDate.present) {
+      map['daily_preview_date'] = Variable<String>(dailyPreviewDate.value);
+    }
     if (pendingDbReplacement.present) {
       map['pending_db_replacement'] =
           Variable<bool>(pendingDbReplacement.value);
@@ -7253,6 +7425,8 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
           ..write('dailyGenerationDate: $dailyGenerationDate, ')
           ..write('dailyPdfExports: $dailyPdfExports, ')
           ..write('dailyPdfExportDate: $dailyPdfExportDate, ')
+          ..write('dailyPreviewCount: $dailyPreviewCount, ')
+          ..write('dailyPreviewDate: $dailyPreviewDate, ')
           ..write('pendingDbReplacement: $pendingDbReplacement, ')
           ..write('vacuumedDbPath: $vacuumedDbPath')
           ..write(')'))
@@ -14086,6 +14260,7 @@ typedef $$LessonsTableCreateCompanionBuilder = LessonsCompanion Function({
   Value<String?> lastModifiedBy,
   Value<String?> teacherServerId,
   Value<String?> schoolServerId,
+  Value<bool> isUnlocked,
 });
 typedef $$LessonsTableUpdateCompanionBuilder = LessonsCompanion Function({
   Value<int> id,
@@ -14106,6 +14281,7 @@ typedef $$LessonsTableUpdateCompanionBuilder = LessonsCompanion Function({
   Value<String?> lastModifiedBy,
   Value<String?> teacherServerId,
   Value<String?> schoolServerId,
+  Value<bool> isUnlocked,
 });
 
 class $$LessonsTableFilterComposer
@@ -14173,6 +14349,9 @@ class $$LessonsTableFilterComposer
   ColumnFilters<String> get schoolServerId => $composableBuilder(
       column: $table.schoolServerId,
       builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isUnlocked => $composableBuilder(
+      column: $table.isUnlocked, builder: (column) => ColumnFilters(column));
 }
 
 class $$LessonsTableOrderingComposer
@@ -14241,6 +14420,9 @@ class $$LessonsTableOrderingComposer
   ColumnOrderings<String> get schoolServerId => $composableBuilder(
       column: $table.schoolServerId,
       builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get isUnlocked => $composableBuilder(
+      column: $table.isUnlocked, builder: (column) => ColumnOrderings(column));
 }
 
 class $$LessonsTableAnnotationComposer
@@ -14305,6 +14487,9 @@ class $$LessonsTableAnnotationComposer
 
   GeneratedColumn<String> get schoolServerId => $composableBuilder(
       column: $table.schoolServerId, builder: (column) => column);
+
+  GeneratedColumn<bool> get isUnlocked => $composableBuilder(
+      column: $table.isUnlocked, builder: (column) => column);
 }
 
 class $$LessonsTableTableManager extends RootTableManager<
@@ -14348,6 +14533,7 @@ class $$LessonsTableTableManager extends RootTableManager<
             Value<String?> lastModifiedBy = const Value.absent(),
             Value<String?> teacherServerId = const Value.absent(),
             Value<String?> schoolServerId = const Value.absent(),
+            Value<bool> isUnlocked = const Value.absent(),
           }) =>
               LessonsCompanion(
             id: id,
@@ -14368,6 +14554,7 @@ class $$LessonsTableTableManager extends RootTableManager<
             lastModifiedBy: lastModifiedBy,
             teacherServerId: teacherServerId,
             schoolServerId: schoolServerId,
+            isUnlocked: isUnlocked,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -14388,6 +14575,7 @@ class $$LessonsTableTableManager extends RootTableManager<
             Value<String?> lastModifiedBy = const Value.absent(),
             Value<String?> teacherServerId = const Value.absent(),
             Value<String?> schoolServerId = const Value.absent(),
+            Value<bool> isUnlocked = const Value.absent(),
           }) =>
               LessonsCompanion.insert(
             id: id,
@@ -14408,6 +14596,7 @@ class $$LessonsTableTableManager extends RootTableManager<
             lastModifiedBy: lastModifiedBy,
             teacherServerId: teacherServerId,
             schoolServerId: schoolServerId,
+            isUnlocked: isUnlocked,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -14717,6 +14906,7 @@ typedef $$ExamsTableCreateCompanionBuilder = ExamsCompanion Function({
   Value<String?> lastModifiedBy,
   Value<String?> teacherServerId,
   Value<String?> schoolServerId,
+  Value<bool> isUnlocked,
 });
 typedef $$ExamsTableUpdateCompanionBuilder = ExamsCompanion Function({
   Value<int> id,
@@ -14734,6 +14924,7 @@ typedef $$ExamsTableUpdateCompanionBuilder = ExamsCompanion Function({
   Value<String?> lastModifiedBy,
   Value<String?> teacherServerId,
   Value<String?> schoolServerId,
+  Value<bool> isUnlocked,
 });
 
 class $$ExamsTableFilterComposer extends Composer<_$AppDatabase, $ExamsTable> {
@@ -14791,6 +14982,9 @@ class $$ExamsTableFilterComposer extends Composer<_$AppDatabase, $ExamsTable> {
   ColumnFilters<String> get schoolServerId => $composableBuilder(
       column: $table.schoolServerId,
       builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isUnlocked => $composableBuilder(
+      column: $table.isUnlocked, builder: (column) => ColumnFilters(column));
 }
 
 class $$ExamsTableOrderingComposer
@@ -14850,6 +15044,9 @@ class $$ExamsTableOrderingComposer
   ColumnOrderings<String> get schoolServerId => $composableBuilder(
       column: $table.schoolServerId,
       builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get isUnlocked => $composableBuilder(
+      column: $table.isUnlocked, builder: (column) => ColumnOrderings(column));
 }
 
 class $$ExamsTableAnnotationComposer
@@ -14905,6 +15102,9 @@ class $$ExamsTableAnnotationComposer
 
   GeneratedColumn<String> get schoolServerId => $composableBuilder(
       column: $table.schoolServerId, builder: (column) => column);
+
+  GeneratedColumn<bool> get isUnlocked => $composableBuilder(
+      column: $table.isUnlocked, builder: (column) => column);
 }
 
 class $$ExamsTableTableManager extends RootTableManager<
@@ -14945,6 +15145,7 @@ class $$ExamsTableTableManager extends RootTableManager<
             Value<String?> lastModifiedBy = const Value.absent(),
             Value<String?> teacherServerId = const Value.absent(),
             Value<String?> schoolServerId = const Value.absent(),
+            Value<bool> isUnlocked = const Value.absent(),
           }) =>
               ExamsCompanion(
             id: id,
@@ -14962,6 +15163,7 @@ class $$ExamsTableTableManager extends RootTableManager<
             lastModifiedBy: lastModifiedBy,
             teacherServerId: teacherServerId,
             schoolServerId: schoolServerId,
+            isUnlocked: isUnlocked,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -14979,6 +15181,7 @@ class $$ExamsTableTableManager extends RootTableManager<
             Value<String?> lastModifiedBy = const Value.absent(),
             Value<String?> teacherServerId = const Value.absent(),
             Value<String?> schoolServerId = const Value.absent(),
+            Value<bool> isUnlocked = const Value.absent(),
           }) =>
               ExamsCompanion.insert(
             id: id,
@@ -14996,6 +15199,7 @@ class $$ExamsTableTableManager extends RootTableManager<
             lastModifiedBy: lastModifiedBy,
             teacherServerId: teacherServerId,
             schoolServerId: schoolServerId,
+            isUnlocked: isUnlocked,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -15598,6 +15802,8 @@ typedef $$SecurityConfigTableCreateCompanionBuilder = SecurityConfigCompanion
   Value<String?> dailyGenerationDate,
   Value<int> dailyPdfExports,
   Value<String?> dailyPdfExportDate,
+  Value<int> dailyPreviewCount,
+  Value<String?> dailyPreviewDate,
   Value<bool> pendingDbReplacement,
   Value<String?> vacuumedDbPath,
 });
@@ -15632,6 +15838,8 @@ typedef $$SecurityConfigTableUpdateCompanionBuilder = SecurityConfigCompanion
   Value<String?> dailyGenerationDate,
   Value<int> dailyPdfExports,
   Value<String?> dailyPdfExportDate,
+  Value<int> dailyPreviewCount,
+  Value<String?> dailyPreviewDate,
   Value<bool> pendingDbReplacement,
   Value<String?> vacuumedDbPath,
 });
@@ -15756,6 +15964,14 @@ class $$SecurityConfigTableFilterComposer
 
   ColumnFilters<String> get dailyPdfExportDate => $composableBuilder(
       column: $table.dailyPdfExportDate,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get dailyPreviewCount => $composableBuilder(
+      column: $table.dailyPreviewCount,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get dailyPreviewDate => $composableBuilder(
+      column: $table.dailyPreviewDate,
       builder: (column) => ColumnFilters(column));
 
   ColumnFilters<bool> get pendingDbReplacement => $composableBuilder(
@@ -15891,6 +16107,14 @@ class $$SecurityConfigTableOrderingComposer
       column: $table.dailyPdfExportDate,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get dailyPreviewCount => $composableBuilder(
+      column: $table.dailyPreviewCount,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get dailyPreviewDate => $composableBuilder(
+      column: $table.dailyPreviewDate,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<bool> get pendingDbReplacement => $composableBuilder(
       column: $table.pendingDbReplacement,
       builder: (column) => ColumnOrderings(column));
@@ -16000,6 +16224,12 @@ class $$SecurityConfigTableAnnotationComposer
   GeneratedColumn<String> get dailyPdfExportDate => $composableBuilder(
       column: $table.dailyPdfExportDate, builder: (column) => column);
 
+  GeneratedColumn<int> get dailyPreviewCount => $composableBuilder(
+      column: $table.dailyPreviewCount, builder: (column) => column);
+
+  GeneratedColumn<String> get dailyPreviewDate => $composableBuilder(
+      column: $table.dailyPreviewDate, builder: (column) => column);
+
   GeneratedColumn<bool> get pendingDbReplacement => $composableBuilder(
       column: $table.pendingDbReplacement, builder: (column) => column);
 
@@ -16063,6 +16293,8 @@ class $$SecurityConfigTableTableManager extends RootTableManager<
             Value<String?> dailyGenerationDate = const Value.absent(),
             Value<int> dailyPdfExports = const Value.absent(),
             Value<String?> dailyPdfExportDate = const Value.absent(),
+            Value<int> dailyPreviewCount = const Value.absent(),
+            Value<String?> dailyPreviewDate = const Value.absent(),
             Value<bool> pendingDbReplacement = const Value.absent(),
             Value<String?> vacuumedDbPath = const Value.absent(),
           }) =>
@@ -16096,6 +16328,8 @@ class $$SecurityConfigTableTableManager extends RootTableManager<
             dailyGenerationDate: dailyGenerationDate,
             dailyPdfExports: dailyPdfExports,
             dailyPdfExportDate: dailyPdfExportDate,
+            dailyPreviewCount: dailyPreviewCount,
+            dailyPreviewDate: dailyPreviewDate,
             pendingDbReplacement: pendingDbReplacement,
             vacuumedDbPath: vacuumedDbPath,
           ),
@@ -16129,6 +16363,8 @@ class $$SecurityConfigTableTableManager extends RootTableManager<
             Value<String?> dailyGenerationDate = const Value.absent(),
             Value<int> dailyPdfExports = const Value.absent(),
             Value<String?> dailyPdfExportDate = const Value.absent(),
+            Value<int> dailyPreviewCount = const Value.absent(),
+            Value<String?> dailyPreviewDate = const Value.absent(),
             Value<bool> pendingDbReplacement = const Value.absent(),
             Value<String?> vacuumedDbPath = const Value.absent(),
           }) =>
@@ -16162,6 +16398,8 @@ class $$SecurityConfigTableTableManager extends RootTableManager<
             dailyGenerationDate: dailyGenerationDate,
             dailyPdfExports: dailyPdfExports,
             dailyPdfExportDate: dailyPdfExportDate,
+            dailyPreviewCount: dailyPreviewCount,
+            dailyPreviewDate: dailyPreviewDate,
             pendingDbReplacement: pendingDbReplacement,
             vacuumedDbPath: vacuumedDbPath,
           ),

@@ -361,16 +361,17 @@ class _TierBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final (Color bgColor, Color fgColor, String label) = switch (tier) {
-      'free' => (Colors.grey.shade200, Colors.grey.shade700, 'Free'),
-      'basic' => (const Color(0xFF3674B5), Colors.white, 'Basic'),
+      'free' => (cs.surfaceContainerHighest, cs.onSurfaceVariant, 'Free'),
+      'basic' => (cs.primaryContainer, cs.onPrimaryContainer, 'Basic'),
       'standard' => (
-          const Color(0xFF8C94FF),
-          const Color(0xFF1E258F),
+          cs.secondaryContainer,
+          cs.onSecondaryContainer,
           'Standard'
         ),
-      'elite' => (const Color(0xFF5068D9), Colors.white, 'Elite'),
-      _ => (Colors.grey.shade200, Colors.grey.shade700, tier),
+      'elite' => (cs.tertiaryContainer, cs.onTertiaryContainer, 'Elite'),
+      _ => (cs.surfaceContainerHighest, cs.onSurfaceVariant, tier),
     };
 
     return Container(

@@ -19,4 +19,5 @@ class Lessons extends Table {
   TextColumn get lastModifiedBy => text().nullable()();
   TextColumn get teacherServerId => text().nullable()();
   TextColumn get schoolServerId => text().nullable()();
+  BoolColumn get isUnlocked => boolean().withDefault(const Constant(false))();
 }

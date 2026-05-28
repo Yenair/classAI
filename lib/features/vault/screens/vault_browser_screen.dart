@@ -237,7 +237,7 @@ class _NavDrawer extends StatelessWidget {
                   icon: Icons.home_outlined,
                   label: 'Home',
                   isActive: false,
-                  onTap: () => context.go('/dashboard'),
+                  onTap: () => context.go('/'),
                 ),
                 _navItem(
                   cs: cs,
@@ -471,8 +471,8 @@ class _MobileHeader extends StatelessWidget {
                 Container(
                   width: 8,
                   height: 8,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF008751),
+                  decoration: BoxDecoration(
+                    color: cs.primary,
                     shape: BoxShape.circle,
                   ),
                 ),

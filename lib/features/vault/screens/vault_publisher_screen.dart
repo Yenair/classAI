@@ -1304,19 +1304,19 @@ class _StatusCard extends StatelessWidget {
     final (Color dotColor, Color badgeBg, Color badgeTextColor, String badgeLabel) =
         switch (item.status) {
       'approved' => (
-          const Color(0xFF008751),
+          cs.primary,
           cs.secondaryContainer.withValues(alpha: 0.5),
           cs.onSecondaryContainer,
           'Approved'
         ),
       'rejected' => (
-          const Color(0xFFB71C1C),
+          cs.error,
           cs.errorContainer.withValues(alpha: 0.5),
           cs.onErrorContainer,
           'Rejected'
         ),
       _ => (
-          const Color(0xFF9E9E9E),
+          cs.onSurfaceVariant,
           cs.surfaceContainerHighest,
           cs.onSurfaceVariant,
           'Pending'

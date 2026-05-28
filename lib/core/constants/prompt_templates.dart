@@ -14,10 +14,9 @@ class PromptTemplates {
         '## Lesson Presentation\n'
         '## Assessment\n'
         '## Homework\n'
-        '$attribution. '
         'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
         'Return ONLY valid JSON: '
-        '{"objectives":[...],"vocabulary":[...],"materials":[...],"presentation":{...},"assessment":"...","homework":"..."}';
+        '{"objectives":[...],"vocabulary":[...],"materials":[...],"presentation":{...},"assessment":"...","homework":"...","attribution":"$attribution"}';
   }
 
   /// Generate a combined exam prompt that supports MCQ, Theory, and Subjective.
@@ -57,10 +56,9 @@ class PromptTemplates {
         '## MCQ Questions\n'
         '## Theory Questions\n'
         '## Subjective Questions\n'
-        '$attribution. '
         'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
         'Return ONLY valid JSON: '
-        '{$jsonStructure}';
+        '{$jsonStructure,"attribution":"$attribution"}';
   }
 
   static String mcqs(
@@ -71,10 +69,9 @@ class PromptTemplates {
     return 'Generate 10 MCQs for $subject, $classLevel, "$topic". Difficulty: $difficulty. '
         'Use the following clear section heading in the output:\n'
         '## MCQ Questions\n'
-        '$attribution. '
         'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
         '4 options each (A-D). Return ONLY valid JSON: '
-        '{"questions":[{"question":"...","options":{"A":"...","B":"...","C":"...","D":"..."},"correct":"A"}]}';
+        '{"questions":[{"question":"...","options":{"A":"...","B":"...","C":"...","D":"..."},"correct":"A"}],"attribution":"$attribution"}';
   }
 
   static String theoryQuestions(String subject, String classLevel, String topic,
@@ -84,10 +81,9 @@ class PromptTemplates {
     return 'Generate 5 theory questions for $subject, $classLevel, "$topic". '
         'Use the following clear section heading in the output:\n'
         '## Theory Questions\n'
-        '$attribution. '
         'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
         'Include model answer and cognitive level. Return ONLY valid JSON: '
-        '{"questions":[{"question":"...","modelAnswer":"...","cognitiveLevel":"..."}]}';
+        '{"questions":[{"question":"...","modelAnswer":"...","cognitiveLevel":"..."}],"attribution":"$attribution"}';
   }
 
   static String subjectiveQuestions(
@@ -98,9 +94,8 @@ class PromptTemplates {
     return 'Generate 5 subjective questions for $subject, $classLevel, "$topic". '
         'Use the following clear section heading in the output:\n'
         '## Subjective Questions\n'
-        '$attribution. '
         'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
         'Include detailed prompt and marking rubric. Return ONLY valid JSON: '
-        '{"questions":[{"question":"...","prompt":"...","rubric":"..."}]}';
+        '{"questions":[{"question":"...","prompt":"...","rubric":"..."}],"attribution":"$attribution"}';
   }
 }

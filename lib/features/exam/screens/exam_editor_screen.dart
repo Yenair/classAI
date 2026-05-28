@@ -11,6 +11,7 @@ import 'package:classai/core/constants/prompt_templates.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
+import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
 /// Stitch‑designed exam editor with AI generation.
@@ -40,6 +41,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   String? _teacherId;
   String? _schoolId;
   String _subscriptionTier = 'free';
+  String _teacherName = 'Teacher';
+  String _schoolName = 'School';
 
   /// Loaded from subjectsDao, falls back to [_subjects] if empty.
   List<String> _loadedSubjects = [];
@@ -135,10 +138,12 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       final authData = ref.read(authProvider);
       if (authData.currentTeacher?.serverId != null) {
         _teacherId = authData.currentTeacher!.serverId;
+        _teacherName = authData.currentTeacher!.teacherName;
       }
       if (authData.currentSchool != null) {
         _schoolId = authData.currentSchool!.serverId;
         _subscriptionTier = authData.currentSchool!.subscriptionTier;
+        _schoolName = authData.currentSchool!.schoolName;
       }
       // Fallback: read from DB if auth provider has null data
       if (_teacherId == null || _schoolId == null) {
@@ -147,6 +152,11 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         if (school != null) {
           _schoolId ??= school.serverId;
           _subscriptionTier = school.subscriptionTier;
+          _schoolName = school.schoolName;
+        }
+        final teachers = await db.teachersDao.getAll();
+        if (teachers.isNotEmpty) {
+          _teacherName = teachers.first.teacherName;
         }
       }
       if (mounted) setState(() {});
@@ -165,11 +175,6 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
 
   Future<void> _handleGenerate() async {
     if (!_formKey.currentState!.validate()) return;
-
-    if (_creditBalance < 1) {
-      showErrorToast(context: context, message: 'Insufficient credits');
-      return;
-    }
 
     setState(() => _isGenerating = true);
 
@@ -195,6 +200,20 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         return;
       }
 
+      // Check daily preview limit
+      final previewAllowed = await db.securityConfigDao
+          .checkAndIncrementDailyPreviews(tier: _subscriptionTier);
+      if (!previewAllowed) {
+        if (mounted) {
+          setState(() => _isGenerating = false);
+          showErrorToast(
+            context: context,
+            message: 'Daily preview limit reached (10/day). Try again tomorrow.',
+          );
+        }
+        return;
+      }
+
       // Generate questions
       // NOTE: No credit is spent on AI generation - credit is spent on unlock
       _mcqs = [];
@@ -207,6 +226,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
           _classLevel,
           topic,
           _difficulty,
+          teacherName: _teacherName,
+          schoolName: _schoolName,
         );
         Map<String, dynamic> mcqResult = {};
         if (widget.generateCallback != null) {
@@ -225,6 +246,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
           _subject,
           _classLevel,
           topic,
+          teacherName: _teacherName,
+          schoolName: _schoolName,
         );
         Map<String, dynamic> theoryResult = {};
         if (widget.generateCallback != null) {
@@ -244,6 +267,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
           _subject,
           _classLevel,
           topic,
+          teacherName: _teacherName,
+          schoolName: _schoolName,
         );
         Map<String, dynamic> subjectiveResult = {};
         if (widget.generateCallback != null) {
@@ -338,6 +363,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         _creditBalance = _creditBalance - 1;
       });
 
+      ref.read(creditStateProvider.notifier).refresh();
+
       if (mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
@@ -424,6 +451,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
               content: jsonEncode(content),
               teacherServerId: Value(_teacherId),
               schoolServerId: Value(_schoolId),
+              isUnlocked: Value(true),
             ),
           );
 
@@ -1178,7 +1206,7 @@ class _ConfigPanel extends StatelessWidget {
                   label: Text(
                     isGenerating
                         ? 'Generating...'
-                        : 'Generate Exam (-50 Credits)',
+                        : 'Generate with AI',
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 14,
@@ -1283,6 +1311,35 @@ class _PreviewPanel extends StatelessWidget {
           // Preview header
           _previewHeader(totalQuestions),
 
+          // Unlocked banner
+          if (hasGenerated && isUnlocked)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                  border: Border.all(
+                    color: Colors.green.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle_rounded, color: Colors.green, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Unlocked — You can edit and save this exam',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: Colors.green.shade700,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
           // Locked overlay
           if (hasGenerated && !isUnlocked) ...[
             Padding(
@@ -1290,24 +1347,24 @@ class _PreviewPanel extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: cs.tertiary.withValues(alpha: 0.08),
+                  color: Colors.amber.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(AppTheme.radiusXl),
                   border: Border.all(
-                    color: cs.tertiary.withValues(alpha: 0.3),
+                    color: Colors.amber.withValues(alpha: 0.3),
                   ),
                 ),
                 child: Column(
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.lock_rounded,
-                            color: cs.tertiary, size: 20),
+                        const Icon(Icons.lock_rounded,
+                            color: Colors.amber, size: 20),
                         const SizedBox(width: 8),
                         Text(
-                          'Locked — Unlock for 1 credit',
+                          'Locked — Preview only',
                           style: theme.textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.w600,
-                            color: cs.tertiary,
+                            color: Colors.amber.shade700,
                           ),
                         ),
                       ],
@@ -1326,6 +1383,8 @@ class _PreviewPanel extends StatelessWidget {
                       child: FilledButton.icon(
                         onPressed: onUnlock,
                         style: FilledButton.styleFrom(
+                          backgroundColor: Colors.amber.shade700,
+                          foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius:
                                 BorderRadius.circular(AppTheme.radiusXl),

@@ -40,6 +40,8 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
     DateTime? lastSeenTime,
     DateTime? lastKnownGoodTime,
     double? monotonicLastSeen,
+    int? dailyPreviewCount,
+    String? dailyPreviewDate,
   }) async {
     final config = await get();
     await (update(securityConfig)..where((t) => t.id.equals(config.id))).write(
@@ -119,6 +121,12 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
         monotonicLastSeen: monotonicLastSeen != null
             ? Value(monotonicLastSeen)
             : const Value.absent(),
+        dailyPreviewCount: dailyPreviewCount != null
+            ? Value(dailyPreviewCount)
+            : const Value.absent(),
+        dailyPreviewDate: dailyPreviewDate != null
+            ? Value(dailyPreviewDate)
+            : const Value.absent(),
       ),
     );
   }
@@ -171,6 +179,44 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
       SecurityConfigCompanion(
         dailyGenerations: Value(newCount + 1),
         dailyGenerationDate: Value(newDate),
+      ),
+    );
+
+    return true;
+  }
+
+  /// Check and increment the daily preview counter.
+  /// Returns true if the preview is allowed, false if limit exceeded.
+  /// Also resets the counter if the date has changed.
+  /// Elite tier has unlimited previews.
+  Future<bool> checkAndIncrementDailyPreviews({required String tier}) async {
+    final config = await get();
+    final today = DateTime.now().toIso8601String().split('T').first;
+    final currentCount = config.dailyPreviewCount;
+    final currentDate = config.dailyPreviewDate;
+
+    // Reset counter if date changed
+    int newCount = currentCount;
+    String newDate = currentDate ?? '';
+
+    if (currentDate != today) {
+      newCount = 0;
+      newDate = today;
+    }
+
+    // Check limit based on tier
+    const limits = {'free': 10, 'basic': 10, 'standard': 10, 'elite': -1};
+    final limit = limits[tier] ?? 10;
+
+    if (limit > 0 && newCount >= limit) {
+      return false; // Limit exceeded
+    }
+
+    // Increment and save
+    await (update(securityConfig)..where((t) => t.id.equals(config.id))).write(
+      SecurityConfigCompanion(
+        dailyPreviewCount: Value(newCount + 1),
+        dailyPreviewDate: Value(newDate),
       ),
     );
 

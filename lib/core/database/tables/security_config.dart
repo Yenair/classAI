@@ -51,6 +51,10 @@ class SecurityConfig extends Table {
   IntColumn get dailyPdfExports => integer().withDefault(const Constant(0))();
   TextColumn get dailyPdfExportDate => text().nullable()();
 
+  // Daily preview counters (separate from generation)
+  IntColumn get dailyPreviewCount => integer().withDefault(const Constant(0))();
+  TextColumn get dailyPreviewDate => text().nullable()();
+
   // VACUUM
   BoolColumn get pendingDbReplacement =>
       boolean().withDefault(const Constant(false))();

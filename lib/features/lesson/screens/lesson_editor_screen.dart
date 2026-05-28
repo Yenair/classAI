@@ -56,6 +56,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   String? _teacherId;
   String? _schoolId;
   String _subscriptionTier = 'free';
+  String _teacherName = 'Teacher';
+  String _schoolName = 'School';
 
   /// Loaded from subjectsDao, falls back to [_subjects] if empty.
   List<String> _loadedSubjects = [];
@@ -166,10 +168,12 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       final authData = ref.read(authProvider);
       if (authData.currentTeacher?.serverId != null) {
         _teacherId = authData.currentTeacher!.serverId;
+        _teacherName = authData.currentTeacher!.teacherName;
       }
       if (authData.currentSchool != null) {
         _schoolId = authData.currentSchool!.serverId;
         _subscriptionTier = authData.currentSchool!.subscriptionTier;
+        _schoolName = authData.currentSchool!.schoolName;
       }
       // Fallback: read from DB if auth provider has null data
       if (_teacherId == null || _schoolId == null) {
@@ -178,6 +182,14 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         if (school != null) {
           _schoolId ??= school.serverId;
           _subscriptionTier = school.subscriptionTier;
+          _schoolName = school.schoolName;
+        }
+        // Try to get teacher name from DB
+        final teachers = await db.teachersDao.getAll();
+        if (teachers.isNotEmpty) {
+          final teacher = teachers.first;
+          _teacherId ??= teacher.serverId;
+          _teacherName = teacher.teacherName;
         }
       }
       if (mounted) setState(() {});
@@ -197,17 +209,26 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   Future<void> _handleGenerate() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (_creditBalance < 1) {
-      showErrorToast(context: context, message: 'Insufficient credits');
-      return;
-    }
-
     setState(() => _isGenerating = true);
 
     try {
       final db = ref.read(databaseProvider);
 
-      // Build prompt (without teacher/school for now - attribution added via template)
+      // Check daily preview limit before generating
+      final previewAllowed = await db.securityConfigDao
+          .checkAndIncrementDailyPreviews(tier: _subscriptionTier);
+      if (!previewAllowed) {
+        if (mounted) {
+          setState(() => _isGenerating = false);
+          showErrorToast(
+            context: context,
+            message: 'Daily preview limit reached (10/day). Try again tomorrow.',
+          );
+        }
+        return;
+      }
+
+      // Build prompt with teacher/school attribution
       final bloomsStr =
           _selectedBlooms.isEmpty ? 'All levels' : _selectedBlooms.join(', ');
       final prompt = PromptTemplates.lessonNote(
@@ -218,6 +239,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         _topicController.text.trim(),
         _difficulty,
         bloomsStr,
+        teacherName: _teacherName,
+        schoolName: _schoolName,
       );
 
       // Generate via callback or fallback to AiService
@@ -314,6 +337,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         _creditBalance = _creditBalance - 1;
       });
 
+      ref.read(creditStateProvider.notifier).refresh();
+
       if (mounted) {
         showInfoToast(context: context, message: 'Lesson unlocked!');
       }
@@ -390,6 +415,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           content: _encryptedContent ?? jsonEncode(content),
           teacherServerId: Value(_teacherId),
           schoolServerId: Value(_schoolId),
+          isUnlocked: Value(_isUnlocked),
         ),
       );
 
@@ -1179,20 +1205,6 @@ class _ConfigColumn extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.info_outline_rounded, size: 14, color: cs.onSurfaceVariant),
-            const SizedBox(width: 4),
-            Text(
-              'Estimated Cost: 20 Credits',
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: cs.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
       ],
     );
   }
@@ -1369,6 +1381,33 @@ class _PreviewColumn extends StatelessWidget {
             ),
           ),
 
+          // Unlocked banner
+          if (isUnlocked)
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                border: Border.all(
+                  color: Colors.green.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: Colors.green, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Unlocked — You can edit and save this lesson',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: Colors.green.shade700,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           // Preview canvas
           if (!isUnlocked) ...[
             // Locked overlay
@@ -1376,23 +1415,23 @@ class _PreviewColumn extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               margin: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: cs.tertiary.withValues(alpha: 0.08),
+                color: Colors.amber.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(AppTheme.radiusXl),
                 border: Border.all(
-                  color: cs.tertiary.withValues(alpha: 0.3),
+                  color: Colors.amber.withValues(alpha: 0.3),
                 ),
               ),
               child: Column(
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.lock_rounded, color: cs.tertiary, size: 20),
+                      Icon(Icons.lock_rounded, color: Colors.amber.shade700, size: 20),
                       const SizedBox(width: 8),
                       Text(
-                        'Locked — Unlock for 1 credit',
+                        'Locked — Preview only',
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w600,
-                          color: cs.tertiary,
+                          color: Colors.amber.shade700,
                         ),
                       ),
                     ],
@@ -1422,6 +1461,8 @@ class _PreviewColumn extends StatelessWidget {
                     child: FilledButton.icon(
                       onPressed: onUnlock,
                       style: FilledButton.styleFrom(
+                        backgroundColor: Colors.amber.shade700,
+                        foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(AppTheme.radiusXl),
                         ),

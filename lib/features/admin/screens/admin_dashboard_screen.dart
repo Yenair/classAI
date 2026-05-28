@@ -11,7 +11,6 @@ import 'package:classai/core/services/auth_service.dart';
 import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/core/widgets/sync_indicator.dart';
-import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
 import 'package:classai/features/settings/providers/theme_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
@@ -58,7 +57,6 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   Widget build(BuildContext context) {
     final dashboardData = ref.watch(adminDashboardProvider);
     final authData = ref.watch(authProvider);
-    final creditData = ref.watch(creditStateProvider);
     final cs = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final isWide = MediaQuery.of(context).size.width >= 768;
@@ -79,8 +77,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 children: [
                   // === TopAppBar (desktop only) ===
                   if (isWide)
-                    _buildTopAppBar(
-                        cs, textTheme, authData, creditData, themeMode),
+                    _buildTopAppBar(cs, textTheme, authData, themeMode),
 
                   // === Main canvas ===
                   Expanded(
@@ -210,7 +207,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   // Top App Bar (Desktop)
   // ---------------------------------------------------------------
   Widget _buildTopAppBar(ColorScheme cs, TextTheme textTheme,
-      AuthStateData authData, CreditStateData creditData, ThemeMode themeMode) {
+      AuthStateData authData, ThemeMode themeMode) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       decoration: BoxDecoration(
@@ -239,37 +236,6 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
             children: [
               // Sync status chip (live from syncStatusProvider) — clickable to trigger sync
               const _AdminSyncChip(),
-              const SizedBox(width: 12),
-              // Credit chip (live from creditStateProvider)
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: cs.outlineVariant.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.lock_open_rounded,
-                      size: 18,
-                      color: cs.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      creditData.loading ? '…' : '${creditData.currentCredits}',
-                      style: textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: cs.primary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
               const SizedBox(width: 12),
               // Sync Indicator (opens sync details sheet)
               const SyncIndicator(),
@@ -593,8 +559,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: items.map((item) {
-          final isActive = item.label == 'More';
+        children: items.asMap().entries.map((entry) {
+          final i = entry.key;
+          final item = entry.value;
+          final isActive = _selectedTabIndex == i;
           return Container(
             padding: const EdgeInsets.symmetric(vertical: 6),
             decoration: BoxDecoration(
@@ -607,7 +575,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 item.icon,
                 color: isActive ? cs.onSecondaryContainer : cs.onSurfaceVariant,
               ),
-              onPressed: () {},
+              onPressed: () => setState(() => _selectedTabIndex = i),
             ),
           );
         }).toList(),
