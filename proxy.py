@@ -64,7 +64,7 @@ async def handle_chat(request: Request):
         except Exception as e:
             print(f"Git checkpoint failed: {e}")
 
-    # --- Truncate prompt to avoid "command line too long" ---
+    # Truncate prompt to avoid "command line too long"
     MAX_PROMPT_LENGTH = 500
     if len(prompt_text) > MAX_PROMPT_LENGTH:
         prompt_text = prompt_text[:MAX_PROMPT_LENGTH] + "... [truncated]"
@@ -73,10 +73,64 @@ async def handle_chat(request: Request):
     cmd_list = ["command-code", "-p", prompt_text]
     try:
         process = subprocess.run(cmd_list, capture_output=True, text=True, check=True, shell=True)
-        final_output = process.stdout
+        final_output = process.stdout.strip()
     except subprocess.CalledProcessError as error:
-        final_output = f"Error: {error.stderr}"
+        final_output = f"Error: {error.stderr.strip()}"
 
+    # ---- TOOL CALLING LOGIC ----
+    tools = data.get("tools", None)
+    # Check if the request includes tools and if attempt_completion is among them
+    use_tools = False
+    if tools:
+        for tool in tools:
+            if tool.get("function", {}).get("name") == "attempt_completion":
+                use_tools = True
+                break
+
+    if use_tools:
+        # Build a tool_calls response for attempt_completion
+        tool_call_id = f"call_{uuid.uuid4().hex[:8]}"
+        tool_calls = [
+            {
+                "id": tool_call_id,
+                "type": "function",
+                "function": {
+                    "name": "attempt_completion",
+                    "arguments": json.dumps({
+                        "result": final_output,
+                        "command": ""   # optional, Roo Code usually expects this
+                    })
+                }
+            }
+        ]
+
+        # Non‑streaming tool call response
+        reply = {
+            "id": f"chatcmpl-{uuid.uuid4()}",
+            "object": "chat.completion",
+            "created": int(time.time()),
+            "model": "command-code-proxy",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": None,          # no text content when using tools
+                        "tool_calls": tool_calls
+                    },
+                    "finish_reason": "tool_calls"
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0
+            }
+        }
+        return JSONResponse(content=reply)
+    # ---------------------------------
+
+    # No tools requested -> original plain‑text flow (streaming or not)
     stream = data.get("stream", False)
 
     if stream:
