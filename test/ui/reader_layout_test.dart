@@ -3,6 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:classai/features/dashboard/screens/dashboard_screen.dart';
+import 'package:classai/core/database/database.dart';
+import 'package:classai/features/auth/providers/auth_provider.dart';
+import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
+import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
+import 'package:classai/main.dart' show databaseProvider;
 
 /// Increase the test viewport so the dashboard content does not
 /// overflow the default 800×600 surface.  The dashboard's Row at line 425
@@ -24,7 +29,36 @@ Widget _wrapApp(Widget child) {
   );
 }
 
+class TestAuthNotifier extends AuthNotifier {
+  @override
+  AuthStateData build() => const AuthStateData(
+        state: AuthState.authenticated,
+      );
+}
+
+class TestCreditStateNotifier extends CreditStateNotifier {
+  @override
+  CreditStateData build() => const CreditStateData();
+}
+
+class TestSyncStatusNotifier extends SyncStatusNotifier {
+  final SyncStatusData fixedData;
+
+  TestSyncStatusNotifier(this.fixedData);
+
+  @override
+  SyncStatusData build() => fixedData;
+
+  @override
+  Future<void> refresh() async {}
+
+  @override
+  Future<void> syncNow() async {}
+}
+
 void main() {
+  final testDb = AppDatabase.forTesting();
+
   testWidgets('ReaderLayout shows bottom navigation with 4 items',
       (tester) async {
     await ensureViewportHeight(tester);
@@ -34,6 +68,16 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(testDb),
+          authProvider.overrideWith(() => TestAuthNotifier()),
+          syncStatusProvider.overrideWith(() => TestSyncStatusNotifier(
+                const SyncStatusData(status: SyncStatus.synced),
+              )),
+          creditStateProvider.overrideWith(
+            () => TestCreditStateNotifier(),
+          ),
+        ],
         child: _wrapApp(const ReaderLayout()),
       ),
     );
@@ -61,6 +105,16 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(testDb),
+          authProvider.overrideWith(() => TestAuthNotifier()),
+          syncStatusProvider.overrideWith(() => TestSyncStatusNotifier(
+                const SyncStatusData(status: SyncStatus.synced),
+              )),
+          creditStateProvider.overrideWith(
+            () => TestCreditStateNotifier(),
+          ),
+        ],
         child: _wrapApp(const ReaderLayout()),
       ),
     );
@@ -83,6 +137,16 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(testDb),
+          authProvider.overrideWith(() => TestAuthNotifier()),
+          syncStatusProvider.overrideWith(() => TestSyncStatusNotifier(
+                const SyncStatusData(status: SyncStatus.synced),
+              )),
+          creditStateProvider.overrideWith(
+            () => TestCreditStateNotifier(),
+          ),
+        ],
         child: _wrapApp(const ReaderLayout()),
       ),
     );
