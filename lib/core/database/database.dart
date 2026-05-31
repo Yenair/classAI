@@ -42,6 +42,7 @@ import 'daos/teachers_dao.dart';
 import 'daos/lessons_dao.dart';
 import 'daos/exams_dao.dart';
 import 'daos/progress_logs_dao.dart';
+import 'daos/scheme_of_work_dao.dart';
 import 'daos/audit_logs_dao.dart';
 
 part 'database.g.dart'; // generated
@@ -86,6 +87,7 @@ class AppDatabase extends _$AppDatabase {
   LessonsDao get lessonsDao => LessonsDao(this);
   ExamsDao get examsDao => ExamsDao(this);
   ProgressLogsDao get progressLogsDao => ProgressLogsDao(this);
+  SchemeOfWorkDao get schemeOfWorkDao => SchemeOfWorkDao(this);
   TermsDao get termsDao => TermsDao(this);
   AuditLogsDao get auditLogsDao => AuditLogsDao(this);
 
@@ -93,7 +95,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   static QueryExecutor _openConnection() {
     return LazyDatabase(() async {
@@ -429,6 +431,56 @@ class AppDatabase extends _$AppDatabase {
             // Add temp_password column to teachers table for pending teachers
             await customStatement(
               'ALTER TABLE teachers ADD COLUMN temp_password TEXT',
+            );
+          }
+          if (from < 15) {
+            // Add status + admin edits to scheme_of_work
+            await customStatement(
+              "ALTER TABLE scheme_of_work ADD COLUMN teacher_id INTEGER NOT NULL DEFAULT 0",
+            );
+            await customStatement(
+              "ALTER TABLE scheme_of_work ADD COLUMN status TEXT NOT NULL DEFAULT 'draft'",
+            );
+            await customStatement(
+              'ALTER TABLE scheme_of_work ADD COLUMN admin_edited_topic TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE scheme_of_work ADD COLUMN admin_comment TEXT',
+            );
+            // Add status column to lessons
+            await customStatement(
+              "ALTER TABLE lessons ADD COLUMN status TEXT NOT NULL DEFAULT 'draft'",
+            );
+            // Expand progress_logs table from stub (id-only) to full schema
+            await customStatement(
+              'ALTER TABLE progress_logs ADD COLUMN server_id TEXT',
+            );
+            await customStatement(
+              "ALTER TABLE progress_logs ADD COLUMN event_type TEXT NOT NULL DEFAULT ''",
+            );
+            await customStatement(
+              'ALTER TABLE progress_logs ADD COLUMN lesson_id INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              'ALTER TABLE progress_logs ADD COLUMN teacher_id INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              'ALTER TABLE progress_logs ADD COLUMN school_id INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              "ALTER TABLE progress_logs ADD COLUMN event_date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+            );
+            await customStatement(
+              'ALTER TABLE progress_logs ADD COLUMN update_counter INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              'ALTER TABLE progress_logs ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0',
+            );
+            await customStatement(
+              "ALTER TABLE progress_logs ADD COLUMN created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+            );
+            await customStatement(
+              "ALTER TABLE progress_logs ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
             );
           }
         },

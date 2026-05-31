@@ -42,6 +42,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   final _formKey = GlobalKey<FormState>();
   final _topicController = TextEditingController();
   int? _lessonId;
+  String _lessonStatus = 'draft';
   int _week = 1;
   String _subject = 'Mathematics';
   String _classLevel = 'JSS 1';
@@ -183,6 +184,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       if (lesson != null && mounted) {
         setState(() {
           _topicController.text = lesson.topic;
+          _lessonStatus = lesson.status;
           _week = lesson.week;
           _subject = lesson.subject;
           _classLevel = lesson.classLevel;
@@ -488,6 +490,88 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     }
   }
 
+  Future<void> _handleToggleComplete() async {
+    if (_lessonId == null || _schoolId == null || _teacherId == null) return;
+    final newStatus = _lessonStatus == 'completed' ? 'draft' : 'completed';
+    try {
+      final db = ref.read(databaseProvider);
+      await db.lessonsDao.updateStatus(_lessonId!, newStatus);
+      final school = await db.schoolsDao.get();
+      final logId = await db.progressLogsDao.insert(
+        ProgressLogsCompanion.insert(
+          eventType: newStatus == 'completed' ? 'lesson_completed' : 'lesson_reopened',
+          lessonId: Value(_lessonId!),
+          teacherId: Value(int.tryParse(_teacherId ?? '0') ?? 0),
+          schoolId: Value(school?.localId ?? 0),
+        ),
+      );
+      await db.syncQueueDao.insertEntry(
+        queueTable: 'progress_logs',
+        recordLocalId: logId,
+        operation: 'INSERT',
+        payload: {
+          'event_type': newStatus == 'completed' ? 'lesson_completed' : 'lesson_reopened',
+          'lesson_id': _lessonId,
+          'teacher_id': _teacherId,
+          'school_id': _schoolId,
+        },
+      );
+      setState(() => _lessonStatus = newStatus);
+      if (mounted) {
+        showInfoToast(context: context, message: newStatus == 'completed' ? 'Lesson marked as completed!' : 'Lesson reopened');
+      }
+    } catch (e) {
+      if (mounted) {
+        showErrorToast(context: context, message: 'Failed to update status: $e');
+      }
+    }
+  }
+
+  Future<void> _pickFromSoW() async {
+    try {
+      final db = ref.read(databaseProvider);
+      final approved = await db.schemeOfWorkDao.getApproved();
+      if (!mounted) return;
+      final school = await db.schoolsDao.get();
+      final schoolLocalId = school?.localId ?? 0;
+      showModalBottomSheet(
+        context: context,
+        builder: (ctx) {
+          final filtered = approved.where((s) => s.schoolId == schoolLocalId).toList();
+          if (filtered.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.all(32),
+              child: Text('No approved schemes available.'),
+            );
+          }
+          return ListView.builder(
+            itemCount: filtered.length,
+            itemBuilder: (ctx, i) {
+              final s = filtered[i];
+              final displayTopic = s.adminEditedTopic ?? s.topic;
+              return ListTile(
+                leading: CircleAvatar(child: Text('\${s.weekNumber}')),
+                title: Text(displayTopic),
+                subtitle: Text('\${s.term} Term'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() {
+                    _week = s.weekNumber;
+                    _topicController.text = displayTopic;
+                  });
+                },
+              );
+            },
+          );
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        showErrorToast(context: context, message: 'Failed to load SoW: \$e');
+      }
+    }
+  }
+
   void _discard() {
     setState(() {
       _topicController.clear();
@@ -625,6 +709,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                                   });
                                                 },
                                                 onGenerate: _handleGenerate,
+                                                onFromSchemeOfWork: _pickFromSoW,
                                               ),
                                           ),
                                           const SizedBox(width: 24),
@@ -663,6 +748,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                               onUnlock: _handleUnlock,
                                               onSave: _saveLesson,
                                               onDiscard: _discard,
+                                              lessonStatus: _lessonStatus,
+                                              onToggleComplete: _isUnlocked ? _handleToggleComplete : null,
                                             ),
                                           ),
                                         ],
@@ -1079,6 +1166,7 @@ class _ConfigColumn extends StatelessWidget {
   final ValueChanged<String> onBloomToggled;
   final VoidCallback onGenerate;
   final VoidCallback? onAddNewSubject;
+  final VoidCallback? onFromSchemeOfWork;
 
   const _ConfigColumn({
     required this.cs,
@@ -1104,6 +1192,7 @@ class _ConfigColumn extends StatelessWidget {
     required this.onBloomToggled,
     required this.onGenerate,
     this.onAddNewSubject,
+    this.onFromSchemeOfWork,
   });
 
   @override
@@ -1250,6 +1339,23 @@ class _ConfigColumn extends StatelessWidget {
             ),
           ),
         ),
+        if (onFromSchemeOfWork != null) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            height: AppTheme.touchTarget,
+            child: OutlinedButton.icon(
+              onPressed: onFromSchemeOfWork!,
+              style: OutlinedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                ),
+              ),
+              icon: const Icon(Icons.calendar_month),
+              label: const Text('From Scheme of Work'),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -1283,6 +1389,8 @@ class _PreviewColumn extends StatelessWidget {
   final VoidCallback onUnlock;
   final VoidCallback onSave;
   final VoidCallback onDiscard;
+  final String lessonStatus;
+  final VoidCallback? onToggleComplete;
 
   const _PreviewColumn({
     required this.cs,
@@ -1304,6 +1412,8 @@ class _PreviewColumn extends StatelessWidget {
     required this.onUnlock,
     required this.onSave,
     required this.onDiscard,
+    this.lessonStatus = 'draft',
+    this.onToggleComplete,
   });
 
   @override
@@ -1598,6 +1708,23 @@ class _PreviewColumn extends StatelessWidget {
                     child: const Text('Discard'),
                   ),
                 ),
+                if (onToggleComplete != null) ...[
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    height: AppTheme.touchTarget,
+                    child: FilledButton.tonalIcon(
+                      onPressed: onToggleComplete,
+                      style: FilledButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                      ),
+                      icon: Icon(lessonStatus == 'completed' ? Icons.refresh : Icons.check_circle),
+                      label: Text(lessonStatus == 'completed' ? 'Mark Draft' : 'Mark Completed'),
+                    ),
+                  ),
+                ],
                 const SizedBox(width: 12),
                 SizedBox(
                   height: AppTheme.touchTarget,

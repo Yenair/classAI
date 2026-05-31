@@ -19,6 +19,8 @@ class TeacherAdminData {
   final int pendingSyncCount;
   final int conflictCount;
   final String? schoolSubscriptionTier;
+  final int generatedCount;
+  final int completedCount;
 
   const TeacherAdminData({
     required this.localId,
@@ -32,6 +34,8 @@ class TeacherAdminData {
     this.pendingSyncCount = 0,
     this.conflictCount = 0,
     this.schoolSubscriptionTier,
+    this.generatedCount = 0,
+    this.completedCount = 0,
   });
 
   /// Status indicator color:
@@ -138,6 +142,12 @@ class AdminDashboardNotifier extends Notifier<AdminDashboardData> {
       for (final t in teachers.where((t) => !t.isDeleted)) {
         final deviceCount =
             await _db.teacherDevicesDao.countActiveByTeacher(t.localId);
+        final generatedCount = t.serverId != null
+            ? await _db.lessonsDao.countByTeacher(t.serverId!)
+            : 0;
+        final completedCount = t.serverId != null
+            ? await _db.lessonsDao.countCompletedByTeacher(t.serverId!)
+            : 0;
 
         teacherDataList.add(TeacherAdminData(
           localId: t.localId,
@@ -150,6 +160,8 @@ class AdminDashboardNotifier extends Notifier<AdminDashboardData> {
           deviceCount: deviceCount,
           pendingSyncCount: totalPendingCount,
           conflictCount: totalConflictCount,
+          generatedCount: generatedCount,
+          completedCount: completedCount,
         ));
       }
 

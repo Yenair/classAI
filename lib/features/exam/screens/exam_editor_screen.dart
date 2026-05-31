@@ -527,6 +527,50 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     }
   }
 
+  Future<void> _pickFromSoW() async {
+    try {
+      final db = ref.read(databaseProvider);
+      final approved = await db.schemeOfWorkDao.getApproved();
+      if (!mounted) return;
+      final school = await db.schoolsDao.get();
+      final schoolLocalId = school?.localId ?? 0;
+      showModalBottomSheet(
+        context: context,
+        builder: (ctx) {
+          final filtered = approved.where((s) => s.schoolId == schoolLocalId).toList();
+          if (filtered.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.all(32),
+              child: Text('No approved schemes available.'),
+            );
+          }
+          return ListView.builder(
+            itemCount: filtered.length,
+            itemBuilder: (ctx, i) {
+              final s = filtered[i];
+              final displayTopic = s.adminEditedTopic ?? s.topic;
+              return ListTile(
+                leading: CircleAvatar(child: Text('\${s.weekNumber}')),
+                title: Text(displayTopic),
+                subtitle: Text('\${s.term} Term'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() {
+                    _topicController.text = displayTopic;
+                  });
+                },
+              );
+            },
+          );
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load SoW: \$e')));
+      }
+    }
+  }
+
   void _discard() {
     setState(() {
       _topicController.clear();
@@ -644,6 +688,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                             _questionCounts[type] = count;
                                           }),
                                           onGenerate: _handleGenerate,
+                                            onFromSchemeOfWork: _pickFromSoW,
                                           onAddNewSubject: _showAddSubjectDialog,
                                         ),
                                     ),
@@ -990,6 +1035,7 @@ class _ConfigPanel extends StatelessWidget {
   final void Function(String, int) onCountChanged;
   final VoidCallback onGenerate;
   final VoidCallback? onAddNewSubject;
+  final VoidCallback? onFromSchemeOfWork;
 
   const _ConfigPanel({
     required this.cs,
@@ -1012,6 +1058,7 @@ class _ConfigPanel extends StatelessWidget {
     required this.onCountChanged,
     required this.onGenerate,
     this.onAddNewSubject,
+    this.onFromSchemeOfWork,
   });
 
   @override
@@ -1262,6 +1309,23 @@ class _ConfigPanel extends StatelessWidget {
             ],
           ),
         ),
+        if (onFromSchemeOfWork != null) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            height: AppTheme.touchTarget,
+            child: OutlinedButton.icon(
+              onPressed: onFromSchemeOfWork!,
+              style: OutlinedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                ),
+              ),
+              icon: const Icon(Icons.calendar_month),
+              label: const Text('From Scheme of Work'),
+            ),
+          ),
+        ],
       ],
     );
   }

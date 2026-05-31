@@ -98,4 +98,21 @@ class PromptTemplates {
         'Include detailed prompt and marking rubric. Return ONLY valid JSON: '
         '{"questions":[{"question":"...","prompt":"...","rubric":"..."}],"attribution":"$attribution"}';
   }
+
+  /// Generate a Scheme of Work for a NERDC subject across a full term.
+  static String schemeOfWork(String subject, String classLevel, String term,
+      {String teacherName = 'Teacher', String schoolName = 'School'}) {
+    final attribution =
+        '— Generated for $teacherName, $schoolName. Not for redistribution.';
+    return 'You are a curriculum planner for the Nigerian Educational Research and Development Council (NERDC). '
+        'Generate a complete Scheme of Work for $subject, $classLevel, $term Term. '
+        'Create exactly 13 weeks of content, each with a clear topic and 2-3 specific learning objectives. '
+        'Follow the official NERDC curriculum for Nigerian secondary schools. '
+        'Each week should build logically on the previous weeks. '
+        'Use the following clear section heading in the output:\n'
+        '## Scheme of Work\n'
+        'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
+        'Return ONLY valid JSON: '
+        '{"weeks":[{"week":1,"topic":"...","objectives":["...","..."]},{"week":2,"topic":"...","objectives":["...","..."]},...],"attribution":"$attribution"}';
+  }
 }

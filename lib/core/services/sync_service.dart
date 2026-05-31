@@ -711,6 +711,7 @@ class SyncService {
         .get();
 
     for (final teacher in localTeachers) {
+      if (teacher.forcePasswordReset) continue;
       if (teacher.serverId != null &&
           !activeServerIds.contains(teacher.serverId)) {
         await (db.delete(db.teachers)
@@ -980,6 +981,10 @@ class SyncService {
             ..where((s) => s.serverId.equals(schoolServerId)))
           .getSingleOrNull();
       resolvedSchoolLocalId = schoolRow?.localId;
+    }
+    if (resolvedSchoolLocalId == null || resolvedSchoolLocalId == 0) {
+      final anySchool = await (db.select(db.schools)).getSingleOrNull();
+      resolvedSchoolLocalId = anySchool?.localId;
     }
 
     debugPrint(

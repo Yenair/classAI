@@ -2442,6 +2442,13 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('CHECK ("is_unlocked" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+      'status', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('draft'));
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -2462,7 +2469,8 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
         lastModifiedBy,
         teacherServerId,
         schoolServerId,
-        isUnlocked
+        isUnlocked,
+        status
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2585,6 +2593,10 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
           isUnlocked.isAcceptableOrUnknown(
               data['is_unlocked']!, _isUnlockedMeta));
     }
+    if (data.containsKey('status')) {
+      context.handle(_statusMeta,
+          status.isAcceptableOrUnknown(data['status']!, _statusMeta));
+    }
     return context;
   }
 
@@ -2632,6 +2644,8 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
           DriftSqlType.string, data['${effectivePrefix}school_server_id']),
       isUnlocked: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_unlocked'])!,
+      status: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
     );
   }
 
@@ -2661,6 +2675,7 @@ class Lesson extends DataClass implements Insertable<Lesson> {
   final String? teacherServerId;
   final String? schoolServerId;
   final bool isUnlocked;
+  final String status;
   const Lesson(
       {required this.id,
       this.serverId,
@@ -2680,7 +2695,8 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       this.lastModifiedBy,
       this.teacherServerId,
       this.schoolServerId,
-      required this.isUnlocked});
+      required this.isUnlocked,
+      required this.status});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -2713,6 +2729,7 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       map['school_server_id'] = Variable<String>(schoolServerId);
     }
     map['is_unlocked'] = Variable<bool>(isUnlocked);
+    map['status'] = Variable<String>(status);
     return map;
   }
 
@@ -2747,6 +2764,7 @@ class Lesson extends DataClass implements Insertable<Lesson> {
           ? const Value.absent()
           : Value(schoolServerId),
       isUnlocked: Value(isUnlocked),
+      status: Value(status),
     );
   }
 
@@ -2773,6 +2791,7 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       teacherServerId: serializer.fromJson<String?>(json['teacherServerId']),
       schoolServerId: serializer.fromJson<String?>(json['schoolServerId']),
       isUnlocked: serializer.fromJson<bool>(json['isUnlocked']),
+      status: serializer.fromJson<String>(json['status']),
     );
   }
   @override
@@ -2798,6 +2817,7 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       'teacherServerId': serializer.toJson<String?>(teacherServerId),
       'schoolServerId': serializer.toJson<String?>(schoolServerId),
       'isUnlocked': serializer.toJson<bool>(isUnlocked),
+      'status': serializer.toJson<String>(status),
     };
   }
 
@@ -2820,7 +2840,8 @@ class Lesson extends DataClass implements Insertable<Lesson> {
           Value<String?> lastModifiedBy = const Value.absent(),
           Value<String?> teacherServerId = const Value.absent(),
           Value<String?> schoolServerId = const Value.absent(),
-          bool? isUnlocked}) =>
+          bool? isUnlocked,
+          String? status}) =>
       Lesson(
         id: id ?? this.id,
         serverId: serverId.present ? serverId.value : this.serverId,
@@ -2845,6 +2866,7 @@ class Lesson extends DataClass implements Insertable<Lesson> {
         schoolServerId:
             schoolServerId.present ? schoolServerId.value : this.schoolServerId,
         isUnlocked: isUnlocked ?? this.isUnlocked,
+        status: status ?? this.status,
       );
   Lesson copyWithCompanion(LessonsCompanion data) {
     return Lesson(
@@ -2881,6 +2903,7 @@ class Lesson extends DataClass implements Insertable<Lesson> {
           : this.schoolServerId,
       isUnlocked:
           data.isUnlocked.present ? data.isUnlocked.value : this.isUnlocked,
+      status: data.status.present ? data.status.value : this.status,
     );
   }
 
@@ -2905,7 +2928,8 @@ class Lesson extends DataClass implements Insertable<Lesson> {
           ..write('lastModifiedBy: $lastModifiedBy, ')
           ..write('teacherServerId: $teacherServerId, ')
           ..write('schoolServerId: $schoolServerId, ')
-          ..write('isUnlocked: $isUnlocked')
+          ..write('isUnlocked: $isUnlocked, ')
+          ..write('status: $status')
           ..write(')'))
         .toString();
   }
@@ -2930,7 +2954,8 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       lastModifiedBy,
       teacherServerId,
       schoolServerId,
-      isUnlocked);
+      isUnlocked,
+      status);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2953,7 +2978,8 @@ class Lesson extends DataClass implements Insertable<Lesson> {
           other.lastModifiedBy == this.lastModifiedBy &&
           other.teacherServerId == this.teacherServerId &&
           other.schoolServerId == this.schoolServerId &&
-          other.isUnlocked == this.isUnlocked);
+          other.isUnlocked == this.isUnlocked &&
+          other.status == this.status);
 }
 
 class LessonsCompanion extends UpdateCompanion<Lesson> {
@@ -2976,6 +3002,7 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
   final Value<String?> teacherServerId;
   final Value<String?> schoolServerId;
   final Value<bool> isUnlocked;
+  final Value<String> status;
   const LessonsCompanion({
     this.id = const Value.absent(),
     this.serverId = const Value.absent(),
@@ -2996,6 +3023,7 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     this.teacherServerId = const Value.absent(),
     this.schoolServerId = const Value.absent(),
     this.isUnlocked = const Value.absent(),
+    this.status = const Value.absent(),
   });
   LessonsCompanion.insert({
     this.id = const Value.absent(),
@@ -3017,6 +3045,7 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     this.teacherServerId = const Value.absent(),
     this.schoolServerId = const Value.absent(),
     this.isUnlocked = const Value.absent(),
+    this.status = const Value.absent(),
   })  : subject = Value(subject),
         classLevel = Value(classLevel),
         week = Value(week),
@@ -3045,6 +3074,7 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     Expression<String>? teacherServerId,
     Expression<String>? schoolServerId,
     Expression<bool>? isUnlocked,
+    Expression<String>? status,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -3066,6 +3096,7 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
       if (teacherServerId != null) 'teacher_server_id': teacherServerId,
       if (schoolServerId != null) 'school_server_id': schoolServerId,
       if (isUnlocked != null) 'is_unlocked': isUnlocked,
+      if (status != null) 'status': status,
     });
   }
 
@@ -3088,7 +3119,8 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
       Value<String?>? lastModifiedBy,
       Value<String?>? teacherServerId,
       Value<String?>? schoolServerId,
-      Value<bool>? isUnlocked}) {
+      Value<bool>? isUnlocked,
+      Value<String>? status}) {
     return LessonsCompanion(
       id: id ?? this.id,
       serverId: serverId ?? this.serverId,
@@ -3109,6 +3141,7 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
       teacherServerId: teacherServerId ?? this.teacherServerId,
       schoolServerId: schoolServerId ?? this.schoolServerId,
       isUnlocked: isUnlocked ?? this.isUnlocked,
+      status: status ?? this.status,
     );
   }
 
@@ -3172,6 +3205,9 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     if (isUnlocked.present) {
       map['is_unlocked'] = Variable<bool>(isUnlocked.value);
     }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
     return map;
   }
 
@@ -3196,7 +3232,8 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
           ..write('lastModifiedBy: $lastModifiedBy, ')
           ..write('teacherServerId: $teacherServerId, ')
           ..write('schoolServerId: $schoolServerId, ')
-          ..write('isUnlocked: $isUnlocked')
+          ..write('isUnlocked: $isUnlocked, ')
+          ..write('status: $status')
           ..write(')'))
         .toString();
   }
@@ -3228,6 +3265,14 @@ class $SchemeOfWorkTable extends SchemeOfWork
   @override
   late final GeneratedColumn<int> schoolId = GeneratedColumn<int>(
       'school_id', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _teacherIdMeta =
+      const VerificationMeta('teacherId');
+  @override
+  late final GeneratedColumn<int> teacherId = GeneratedColumn<int>(
+      'teacher_id', aliasedName, false,
       type: DriftSqlType.int,
       requiredDuringInsert: false,
       defaultValue: const Constant(0));
@@ -3269,6 +3314,25 @@ class $SchemeOfWorkTable extends SchemeOfWork
       type: DriftSqlType.string,
       requiredDuringInsert: false,
       defaultValue: const Constant(''));
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+      'status', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('draft'));
+  static const VerificationMeta _adminEditedTopicMeta =
+      const VerificationMeta('adminEditedTopic');
+  @override
+  late final GeneratedColumn<String> adminEditedTopic = GeneratedColumn<String>(
+      'admin_edited_topic', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _adminCommentMeta =
+      const VerificationMeta('adminComment');
+  @override
+  late final GeneratedColumn<String> adminComment = GeneratedColumn<String>(
+      'admin_comment', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _updateCounterMeta =
       const VerificationMeta('updateCounter');
   @override
@@ -3308,11 +3372,15 @@ class $SchemeOfWorkTable extends SchemeOfWork
         id,
         serverId,
         schoolId,
+        teacherId,
         subjectId,
         term,
         weekNumber,
         topic,
         objectives,
+        status,
+        adminEditedTopic,
+        adminComment,
         updateCounter,
         isDeleted,
         createdAt,
@@ -3339,6 +3407,10 @@ class $SchemeOfWorkTable extends SchemeOfWork
       context.handle(_schoolIdMeta,
           schoolId.isAcceptableOrUnknown(data['school_id']!, _schoolIdMeta));
     }
+    if (data.containsKey('teacher_id')) {
+      context.handle(_teacherIdMeta,
+          teacherId.isAcceptableOrUnknown(data['teacher_id']!, _teacherIdMeta));
+    }
     if (data.containsKey('subject_id')) {
       context.handle(_subjectIdMeta,
           subjectId.isAcceptableOrUnknown(data['subject_id']!, _subjectIdMeta));
@@ -3362,6 +3434,22 @@ class $SchemeOfWorkTable extends SchemeOfWork
           _objectivesMeta,
           objectives.isAcceptableOrUnknown(
               data['objectives']!, _objectivesMeta));
+    }
+    if (data.containsKey('status')) {
+      context.handle(_statusMeta,
+          status.isAcceptableOrUnknown(data['status']!, _statusMeta));
+    }
+    if (data.containsKey('admin_edited_topic')) {
+      context.handle(
+          _adminEditedTopicMeta,
+          adminEditedTopic.isAcceptableOrUnknown(
+              data['admin_edited_topic']!, _adminEditedTopicMeta));
+    }
+    if (data.containsKey('admin_comment')) {
+      context.handle(
+          _adminCommentMeta,
+          adminComment.isAcceptableOrUnknown(
+              data['admin_comment']!, _adminCommentMeta));
     }
     if (data.containsKey('update_counter')) {
       context.handle(
@@ -3396,6 +3484,8 @@ class $SchemeOfWorkTable extends SchemeOfWork
           .read(DriftSqlType.string, data['${effectivePrefix}server_id']),
       schoolId: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}school_id'])!,
+      teacherId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}teacher_id'])!,
       subjectId: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}subject_id'])!,
       term: attachedDatabase.typeMapping
@@ -3406,6 +3496,12 @@ class $SchemeOfWorkTable extends SchemeOfWork
           .read(DriftSqlType.string, data['${effectivePrefix}topic'])!,
       objectives: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}objectives'])!,
+      status: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
+      adminEditedTopic: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}admin_edited_topic']),
+      adminComment: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}admin_comment']),
       updateCounter: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}update_counter'])!,
       isDeleted: attachedDatabase.typeMapping
@@ -3428,11 +3524,15 @@ class SchemeOfWorkData extends DataClass
   final int id;
   final String? serverId;
   final int schoolId;
+  final int teacherId;
   final int subjectId;
   final String term;
   final int weekNumber;
   final String topic;
   final String objectives;
+  final String status;
+  final String? adminEditedTopic;
+  final String? adminComment;
   final int updateCounter;
   final bool isDeleted;
   final DateTime createdAt;
@@ -3441,11 +3541,15 @@ class SchemeOfWorkData extends DataClass
       {required this.id,
       this.serverId,
       required this.schoolId,
+      required this.teacherId,
       required this.subjectId,
       required this.term,
       required this.weekNumber,
       required this.topic,
       required this.objectives,
+      required this.status,
+      this.adminEditedTopic,
+      this.adminComment,
       required this.updateCounter,
       required this.isDeleted,
       required this.createdAt,
@@ -3458,11 +3562,19 @@ class SchemeOfWorkData extends DataClass
       map['server_id'] = Variable<String>(serverId);
     }
     map['school_id'] = Variable<int>(schoolId);
+    map['teacher_id'] = Variable<int>(teacherId);
     map['subject_id'] = Variable<int>(subjectId);
     map['term'] = Variable<String>(term);
     map['week_number'] = Variable<int>(weekNumber);
     map['topic'] = Variable<String>(topic);
     map['objectives'] = Variable<String>(objectives);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || adminEditedTopic != null) {
+      map['admin_edited_topic'] = Variable<String>(adminEditedTopic);
+    }
+    if (!nullToAbsent || adminComment != null) {
+      map['admin_comment'] = Variable<String>(adminComment);
+    }
     map['update_counter'] = Variable<int>(updateCounter);
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -3477,11 +3589,19 @@ class SchemeOfWorkData extends DataClass
           ? const Value.absent()
           : Value(serverId),
       schoolId: Value(schoolId),
+      teacherId: Value(teacherId),
       subjectId: Value(subjectId),
       term: Value(term),
       weekNumber: Value(weekNumber),
       topic: Value(topic),
       objectives: Value(objectives),
+      status: Value(status),
+      adminEditedTopic: adminEditedTopic == null && nullToAbsent
+          ? const Value.absent()
+          : Value(adminEditedTopic),
+      adminComment: adminComment == null && nullToAbsent
+          ? const Value.absent()
+          : Value(adminComment),
       updateCounter: Value(updateCounter),
       isDeleted: Value(isDeleted),
       createdAt: Value(createdAt),
@@ -3496,11 +3616,15 @@ class SchemeOfWorkData extends DataClass
       id: serializer.fromJson<int>(json['id']),
       serverId: serializer.fromJson<String?>(json['serverId']),
       schoolId: serializer.fromJson<int>(json['schoolId']),
+      teacherId: serializer.fromJson<int>(json['teacherId']),
       subjectId: serializer.fromJson<int>(json['subjectId']),
       term: serializer.fromJson<String>(json['term']),
       weekNumber: serializer.fromJson<int>(json['weekNumber']),
       topic: serializer.fromJson<String>(json['topic']),
       objectives: serializer.fromJson<String>(json['objectives']),
+      status: serializer.fromJson<String>(json['status']),
+      adminEditedTopic: serializer.fromJson<String?>(json['adminEditedTopic']),
+      adminComment: serializer.fromJson<String?>(json['adminComment']),
       updateCounter: serializer.fromJson<int>(json['updateCounter']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -3514,11 +3638,15 @@ class SchemeOfWorkData extends DataClass
       'id': serializer.toJson<int>(id),
       'serverId': serializer.toJson<String?>(serverId),
       'schoolId': serializer.toJson<int>(schoolId),
+      'teacherId': serializer.toJson<int>(teacherId),
       'subjectId': serializer.toJson<int>(subjectId),
       'term': serializer.toJson<String>(term),
       'weekNumber': serializer.toJson<int>(weekNumber),
       'topic': serializer.toJson<String>(topic),
       'objectives': serializer.toJson<String>(objectives),
+      'status': serializer.toJson<String>(status),
+      'adminEditedTopic': serializer.toJson<String?>(adminEditedTopic),
+      'adminComment': serializer.toJson<String?>(adminComment),
       'updateCounter': serializer.toJson<int>(updateCounter),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -3530,11 +3658,15 @@ class SchemeOfWorkData extends DataClass
           {int? id,
           Value<String?> serverId = const Value.absent(),
           int? schoolId,
+          int? teacherId,
           int? subjectId,
           String? term,
           int? weekNumber,
           String? topic,
           String? objectives,
+          String? status,
+          Value<String?> adminEditedTopic = const Value.absent(),
+          Value<String?> adminComment = const Value.absent(),
           int? updateCounter,
           bool? isDeleted,
           DateTime? createdAt,
@@ -3543,11 +3675,18 @@ class SchemeOfWorkData extends DataClass
         id: id ?? this.id,
         serverId: serverId.present ? serverId.value : this.serverId,
         schoolId: schoolId ?? this.schoolId,
+        teacherId: teacherId ?? this.teacherId,
         subjectId: subjectId ?? this.subjectId,
         term: term ?? this.term,
         weekNumber: weekNumber ?? this.weekNumber,
         topic: topic ?? this.topic,
         objectives: objectives ?? this.objectives,
+        status: status ?? this.status,
+        adminEditedTopic: adminEditedTopic.present
+            ? adminEditedTopic.value
+            : this.adminEditedTopic,
+        adminComment:
+            adminComment.present ? adminComment.value : this.adminComment,
         updateCounter: updateCounter ?? this.updateCounter,
         isDeleted: isDeleted ?? this.isDeleted,
         createdAt: createdAt ?? this.createdAt,
@@ -3558,6 +3697,7 @@ class SchemeOfWorkData extends DataClass
       id: data.id.present ? data.id.value : this.id,
       serverId: data.serverId.present ? data.serverId.value : this.serverId,
       schoolId: data.schoolId.present ? data.schoolId.value : this.schoolId,
+      teacherId: data.teacherId.present ? data.teacherId.value : this.teacherId,
       subjectId: data.subjectId.present ? data.subjectId.value : this.subjectId,
       term: data.term.present ? data.term.value : this.term,
       weekNumber:
@@ -3565,6 +3705,13 @@ class SchemeOfWorkData extends DataClass
       topic: data.topic.present ? data.topic.value : this.topic,
       objectives:
           data.objectives.present ? data.objectives.value : this.objectives,
+      status: data.status.present ? data.status.value : this.status,
+      adminEditedTopic: data.adminEditedTopic.present
+          ? data.adminEditedTopic.value
+          : this.adminEditedTopic,
+      adminComment: data.adminComment.present
+          ? data.adminComment.value
+          : this.adminComment,
       updateCounter: data.updateCounter.present
           ? data.updateCounter.value
           : this.updateCounter,
@@ -3580,11 +3727,15 @@ class SchemeOfWorkData extends DataClass
           ..write('id: $id, ')
           ..write('serverId: $serverId, ')
           ..write('schoolId: $schoolId, ')
+          ..write('teacherId: $teacherId, ')
           ..write('subjectId: $subjectId, ')
           ..write('term: $term, ')
           ..write('weekNumber: $weekNumber, ')
           ..write('topic: $topic, ')
           ..write('objectives: $objectives, ')
+          ..write('status: $status, ')
+          ..write('adminEditedTopic: $adminEditedTopic, ')
+          ..write('adminComment: $adminComment, ')
           ..write('updateCounter: $updateCounter, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
@@ -3598,11 +3749,15 @@ class SchemeOfWorkData extends DataClass
       id,
       serverId,
       schoolId,
+      teacherId,
       subjectId,
       term,
       weekNumber,
       topic,
       objectives,
+      status,
+      adminEditedTopic,
+      adminComment,
       updateCounter,
       isDeleted,
       createdAt,
@@ -3614,11 +3769,15 @@ class SchemeOfWorkData extends DataClass
           other.id == this.id &&
           other.serverId == this.serverId &&
           other.schoolId == this.schoolId &&
+          other.teacherId == this.teacherId &&
           other.subjectId == this.subjectId &&
           other.term == this.term &&
           other.weekNumber == this.weekNumber &&
           other.topic == this.topic &&
           other.objectives == this.objectives &&
+          other.status == this.status &&
+          other.adminEditedTopic == this.adminEditedTopic &&
+          other.adminComment == this.adminComment &&
           other.updateCounter == this.updateCounter &&
           other.isDeleted == this.isDeleted &&
           other.createdAt == this.createdAt &&
@@ -3629,11 +3788,15 @@ class SchemeOfWorkCompanion extends UpdateCompanion<SchemeOfWorkData> {
   final Value<int> id;
   final Value<String?> serverId;
   final Value<int> schoolId;
+  final Value<int> teacherId;
   final Value<int> subjectId;
   final Value<String> term;
   final Value<int> weekNumber;
   final Value<String> topic;
   final Value<String> objectives;
+  final Value<String> status;
+  final Value<String?> adminEditedTopic;
+  final Value<String?> adminComment;
   final Value<int> updateCounter;
   final Value<bool> isDeleted;
   final Value<DateTime> createdAt;
@@ -3642,11 +3805,15 @@ class SchemeOfWorkCompanion extends UpdateCompanion<SchemeOfWorkData> {
     this.id = const Value.absent(),
     this.serverId = const Value.absent(),
     this.schoolId = const Value.absent(),
+    this.teacherId = const Value.absent(),
     this.subjectId = const Value.absent(),
     this.term = const Value.absent(),
     this.weekNumber = const Value.absent(),
     this.topic = const Value.absent(),
     this.objectives = const Value.absent(),
+    this.status = const Value.absent(),
+    this.adminEditedTopic = const Value.absent(),
+    this.adminComment = const Value.absent(),
     this.updateCounter = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -3656,11 +3823,15 @@ class SchemeOfWorkCompanion extends UpdateCompanion<SchemeOfWorkData> {
     this.id = const Value.absent(),
     this.serverId = const Value.absent(),
     this.schoolId = const Value.absent(),
+    this.teacherId = const Value.absent(),
     this.subjectId = const Value.absent(),
     this.term = const Value.absent(),
     this.weekNumber = const Value.absent(),
     this.topic = const Value.absent(),
     this.objectives = const Value.absent(),
+    this.status = const Value.absent(),
+    this.adminEditedTopic = const Value.absent(),
+    this.adminComment = const Value.absent(),
     this.updateCounter = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -3670,11 +3841,15 @@ class SchemeOfWorkCompanion extends UpdateCompanion<SchemeOfWorkData> {
     Expression<int>? id,
     Expression<String>? serverId,
     Expression<int>? schoolId,
+    Expression<int>? teacherId,
     Expression<int>? subjectId,
     Expression<String>? term,
     Expression<int>? weekNumber,
     Expression<String>? topic,
     Expression<String>? objectives,
+    Expression<String>? status,
+    Expression<String>? adminEditedTopic,
+    Expression<String>? adminComment,
     Expression<int>? updateCounter,
     Expression<bool>? isDeleted,
     Expression<DateTime>? createdAt,
@@ -3684,11 +3859,15 @@ class SchemeOfWorkCompanion extends UpdateCompanion<SchemeOfWorkData> {
       if (id != null) 'id': id,
       if (serverId != null) 'server_id': serverId,
       if (schoolId != null) 'school_id': schoolId,
+      if (teacherId != null) 'teacher_id': teacherId,
       if (subjectId != null) 'subject_id': subjectId,
       if (term != null) 'term': term,
       if (weekNumber != null) 'week_number': weekNumber,
       if (topic != null) 'topic': topic,
       if (objectives != null) 'objectives': objectives,
+      if (status != null) 'status': status,
+      if (adminEditedTopic != null) 'admin_edited_topic': adminEditedTopic,
+      if (adminComment != null) 'admin_comment': adminComment,
       if (updateCounter != null) 'update_counter': updateCounter,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (createdAt != null) 'created_at': createdAt,
@@ -3700,11 +3879,15 @@ class SchemeOfWorkCompanion extends UpdateCompanion<SchemeOfWorkData> {
       {Value<int>? id,
       Value<String?>? serverId,
       Value<int>? schoolId,
+      Value<int>? teacherId,
       Value<int>? subjectId,
       Value<String>? term,
       Value<int>? weekNumber,
       Value<String>? topic,
       Value<String>? objectives,
+      Value<String>? status,
+      Value<String?>? adminEditedTopic,
+      Value<String?>? adminComment,
       Value<int>? updateCounter,
       Value<bool>? isDeleted,
       Value<DateTime>? createdAt,
@@ -3713,11 +3896,15 @@ class SchemeOfWorkCompanion extends UpdateCompanion<SchemeOfWorkData> {
       id: id ?? this.id,
       serverId: serverId ?? this.serverId,
       schoolId: schoolId ?? this.schoolId,
+      teacherId: teacherId ?? this.teacherId,
       subjectId: subjectId ?? this.subjectId,
       term: term ?? this.term,
       weekNumber: weekNumber ?? this.weekNumber,
       topic: topic ?? this.topic,
       objectives: objectives ?? this.objectives,
+      status: status ?? this.status,
+      adminEditedTopic: adminEditedTopic ?? this.adminEditedTopic,
+      adminComment: adminComment ?? this.adminComment,
       updateCounter: updateCounter ?? this.updateCounter,
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt ?? this.createdAt,
@@ -3737,6 +3924,9 @@ class SchemeOfWorkCompanion extends UpdateCompanion<SchemeOfWorkData> {
     if (schoolId.present) {
       map['school_id'] = Variable<int>(schoolId.value);
     }
+    if (teacherId.present) {
+      map['teacher_id'] = Variable<int>(teacherId.value);
+    }
     if (subjectId.present) {
       map['subject_id'] = Variable<int>(subjectId.value);
     }
@@ -3751,6 +3941,15 @@ class SchemeOfWorkCompanion extends UpdateCompanion<SchemeOfWorkData> {
     }
     if (objectives.present) {
       map['objectives'] = Variable<String>(objectives.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (adminEditedTopic.present) {
+      map['admin_edited_topic'] = Variable<String>(adminEditedTopic.value);
+    }
+    if (adminComment.present) {
+      map['admin_comment'] = Variable<String>(adminComment.value);
     }
     if (updateCounter.present) {
       map['update_counter'] = Variable<int>(updateCounter.value);
@@ -3773,11 +3972,15 @@ class SchemeOfWorkCompanion extends UpdateCompanion<SchemeOfWorkData> {
           ..write('id: $id, ')
           ..write('serverId: $serverId, ')
           ..write('schoolId: $schoolId, ')
+          ..write('teacherId: $teacherId, ')
           ..write('subjectId: $subjectId, ')
           ..write('term: $term, ')
           ..write('weekNumber: $weekNumber, ')
           ..write('topic: $topic, ')
           ..write('objectives: $objectives, ')
+          ..write('status: $status, ')
+          ..write('adminEditedTopic: $adminEditedTopic, ')
+          ..write('adminComment: $adminComment, ')
           ..write('updateCounter: $updateCounter, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
@@ -4573,8 +4776,98 @@ class $ProgressLogsTable extends ProgressLogs
       requiredDuringInsert: false,
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _serverIdMeta =
+      const VerificationMeta('serverId');
   @override
-  List<GeneratedColumn> get $columns => [id];
+  late final GeneratedColumn<String> serverId = GeneratedColumn<String>(
+      'server_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _eventTypeMeta =
+      const VerificationMeta('eventType');
+  @override
+  late final GeneratedColumn<String> eventType = GeneratedColumn<String>(
+      'event_type', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _lessonIdMeta =
+      const VerificationMeta('lessonId');
+  @override
+  late final GeneratedColumn<int> lessonId = GeneratedColumn<int>(
+      'lesson_id', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _teacherIdMeta =
+      const VerificationMeta('teacherId');
+  @override
+  late final GeneratedColumn<int> teacherId = GeneratedColumn<int>(
+      'teacher_id', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _schoolIdMeta =
+      const VerificationMeta('schoolId');
+  @override
+  late final GeneratedColumn<int> schoolId = GeneratedColumn<int>(
+      'school_id', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _eventDateMeta =
+      const VerificationMeta('eventDate');
+  @override
+  late final GeneratedColumn<DateTime> eventDate = GeneratedColumn<DateTime>(
+      'event_date', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updateCounterMeta =
+      const VerificationMeta('updateCounter');
+  @override
+  late final GeneratedColumn<int> updateCounter = GeneratedColumn<int>(
+      'update_counter', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _isDeletedMeta =
+      const VerificationMeta('isDeleted');
+  @override
+  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
+      'is_deleted', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_deleted" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        serverId,
+        eventType,
+        lessonId,
+        teacherId,
+        schoolId,
+        eventDate,
+        updateCounter,
+        isDeleted,
+        createdAt,
+        updatedAt
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -4588,6 +4881,50 @@ class $ProgressLogsTable extends ProgressLogs
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
     }
+    if (data.containsKey('server_id')) {
+      context.handle(_serverIdMeta,
+          serverId.isAcceptableOrUnknown(data['server_id']!, _serverIdMeta));
+    }
+    if (data.containsKey('event_type')) {
+      context.handle(_eventTypeMeta,
+          eventType.isAcceptableOrUnknown(data['event_type']!, _eventTypeMeta));
+    } else if (isInserting) {
+      context.missing(_eventTypeMeta);
+    }
+    if (data.containsKey('lesson_id')) {
+      context.handle(_lessonIdMeta,
+          lessonId.isAcceptableOrUnknown(data['lesson_id']!, _lessonIdMeta));
+    }
+    if (data.containsKey('teacher_id')) {
+      context.handle(_teacherIdMeta,
+          teacherId.isAcceptableOrUnknown(data['teacher_id']!, _teacherIdMeta));
+    }
+    if (data.containsKey('school_id')) {
+      context.handle(_schoolIdMeta,
+          schoolId.isAcceptableOrUnknown(data['school_id']!, _schoolIdMeta));
+    }
+    if (data.containsKey('event_date')) {
+      context.handle(_eventDateMeta,
+          eventDate.isAcceptableOrUnknown(data['event_date']!, _eventDateMeta));
+    }
+    if (data.containsKey('update_counter')) {
+      context.handle(
+          _updateCounterMeta,
+          updateCounter.isAcceptableOrUnknown(
+              data['update_counter']!, _updateCounterMeta));
+    }
+    if (data.containsKey('is_deleted')) {
+      context.handle(_isDeletedMeta,
+          isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
     return context;
   }
 
@@ -4599,6 +4936,26 @@ class $ProgressLogsTable extends ProgressLogs
     return ProgressLog(
       id: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      serverId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}server_id']),
+      eventType: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}event_type'])!,
+      lessonId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}lesson_id'])!,
+      teacherId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}teacher_id'])!,
+      schoolId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}school_id'])!,
+      eventDate: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}event_date'])!,
+      updateCounter: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}update_counter'])!,
+      isDeleted: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_deleted'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
     );
   }
 
@@ -4610,17 +4967,62 @@ class $ProgressLogsTable extends ProgressLogs
 
 class ProgressLog extends DataClass implements Insertable<ProgressLog> {
   final int id;
-  const ProgressLog({required this.id});
+  final String? serverId;
+  final String eventType;
+  final int lessonId;
+  final int teacherId;
+  final int schoolId;
+  final DateTime eventDate;
+  final int updateCounter;
+  final bool isDeleted;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const ProgressLog(
+      {required this.id,
+      this.serverId,
+      required this.eventType,
+      required this.lessonId,
+      required this.teacherId,
+      required this.schoolId,
+      required this.eventDate,
+      required this.updateCounter,
+      required this.isDeleted,
+      required this.createdAt,
+      required this.updatedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
+    if (!nullToAbsent || serverId != null) {
+      map['server_id'] = Variable<String>(serverId);
+    }
+    map['event_type'] = Variable<String>(eventType);
+    map['lesson_id'] = Variable<int>(lessonId);
+    map['teacher_id'] = Variable<int>(teacherId);
+    map['school_id'] = Variable<int>(schoolId);
+    map['event_date'] = Variable<DateTime>(eventDate);
+    map['update_counter'] = Variable<int>(updateCounter);
+    map['is_deleted'] = Variable<bool>(isDeleted);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
 
   ProgressLogsCompanion toCompanion(bool nullToAbsent) {
     return ProgressLogsCompanion(
       id: Value(id),
+      serverId: serverId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(serverId),
+      eventType: Value(eventType),
+      lessonId: Value(lessonId),
+      teacherId: Value(teacherId),
+      schoolId: Value(schoolId),
+      eventDate: Value(eventDate),
+      updateCounter: Value(updateCounter),
+      isDeleted: Value(isDeleted),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
     );
   }
 
@@ -4629,6 +5031,16 @@ class ProgressLog extends DataClass implements Insertable<ProgressLog> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return ProgressLog(
       id: serializer.fromJson<int>(json['id']),
+      serverId: serializer.fromJson<String?>(json['serverId']),
+      eventType: serializer.fromJson<String>(json['eventType']),
+      lessonId: serializer.fromJson<int>(json['lessonId']),
+      teacherId: serializer.fromJson<int>(json['teacherId']),
+      schoolId: serializer.fromJson<int>(json['schoolId']),
+      eventDate: serializer.fromJson<DateTime>(json['eventDate']),
+      updateCounter: serializer.fromJson<int>(json['updateCounter']),
+      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
   @override
@@ -4636,52 +5048,190 @@ class ProgressLog extends DataClass implements Insertable<ProgressLog> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
+      'serverId': serializer.toJson<String?>(serverId),
+      'eventType': serializer.toJson<String>(eventType),
+      'lessonId': serializer.toJson<int>(lessonId),
+      'teacherId': serializer.toJson<int>(teacherId),
+      'schoolId': serializer.toJson<int>(schoolId),
+      'eventDate': serializer.toJson<DateTime>(eventDate),
+      'updateCounter': serializer.toJson<int>(updateCounter),
+      'isDeleted': serializer.toJson<bool>(isDeleted),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
 
-  ProgressLog copyWith({int? id}) => ProgressLog(
+  ProgressLog copyWith(
+          {int? id,
+          Value<String?> serverId = const Value.absent(),
+          String? eventType,
+          int? lessonId,
+          int? teacherId,
+          int? schoolId,
+          DateTime? eventDate,
+          int? updateCounter,
+          bool? isDeleted,
+          DateTime? createdAt,
+          DateTime? updatedAt}) =>
+      ProgressLog(
         id: id ?? this.id,
+        serverId: serverId.present ? serverId.value : this.serverId,
+        eventType: eventType ?? this.eventType,
+        lessonId: lessonId ?? this.lessonId,
+        teacherId: teacherId ?? this.teacherId,
+        schoolId: schoolId ?? this.schoolId,
+        eventDate: eventDate ?? this.eventDate,
+        updateCounter: updateCounter ?? this.updateCounter,
+        isDeleted: isDeleted ?? this.isDeleted,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
       );
   ProgressLog copyWithCompanion(ProgressLogsCompanion data) {
     return ProgressLog(
       id: data.id.present ? data.id.value : this.id,
+      serverId: data.serverId.present ? data.serverId.value : this.serverId,
+      eventType: data.eventType.present ? data.eventType.value : this.eventType,
+      lessonId: data.lessonId.present ? data.lessonId.value : this.lessonId,
+      teacherId: data.teacherId.present ? data.teacherId.value : this.teacherId,
+      schoolId: data.schoolId.present ? data.schoolId.value : this.schoolId,
+      eventDate: data.eventDate.present ? data.eventDate.value : this.eventDate,
+      updateCounter: data.updateCounter.present
+          ? data.updateCounter.value
+          : this.updateCounter,
+      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
 
   @override
   String toString() {
     return (StringBuffer('ProgressLog(')
-          ..write('id: $id')
+          ..write('id: $id, ')
+          ..write('serverId: $serverId, ')
+          ..write('eventType: $eventType, ')
+          ..write('lessonId: $lessonId, ')
+          ..write('teacherId: $teacherId, ')
+          ..write('schoolId: $schoolId, ')
+          ..write('eventDate: $eventDate, ')
+          ..write('updateCounter: $updateCounter, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => Object.hash(id, serverId, eventType, lessonId, teacherId,
+      schoolId, eventDate, updateCounter, isDeleted, createdAt, updatedAt);
   @override
   bool operator ==(Object other) =>
-      identical(this, other) || (other is ProgressLog && other.id == this.id);
+      identical(this, other) ||
+      (other is ProgressLog &&
+          other.id == this.id &&
+          other.serverId == this.serverId &&
+          other.eventType == this.eventType &&
+          other.lessonId == this.lessonId &&
+          other.teacherId == this.teacherId &&
+          other.schoolId == this.schoolId &&
+          other.eventDate == this.eventDate &&
+          other.updateCounter == this.updateCounter &&
+          other.isDeleted == this.isDeleted &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
 }
 
 class ProgressLogsCompanion extends UpdateCompanion<ProgressLog> {
   final Value<int> id;
+  final Value<String?> serverId;
+  final Value<String> eventType;
+  final Value<int> lessonId;
+  final Value<int> teacherId;
+  final Value<int> schoolId;
+  final Value<DateTime> eventDate;
+  final Value<int> updateCounter;
+  final Value<bool> isDeleted;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
   const ProgressLogsCompanion({
     this.id = const Value.absent(),
+    this.serverId = const Value.absent(),
+    this.eventType = const Value.absent(),
+    this.lessonId = const Value.absent(),
+    this.teacherId = const Value.absent(),
+    this.schoolId = const Value.absent(),
+    this.eventDate = const Value.absent(),
+    this.updateCounter = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
   });
   ProgressLogsCompanion.insert({
     this.id = const Value.absent(),
-  });
+    this.serverId = const Value.absent(),
+    required String eventType,
+    this.lessonId = const Value.absent(),
+    this.teacherId = const Value.absent(),
+    this.schoolId = const Value.absent(),
+    this.eventDate = const Value.absent(),
+    this.updateCounter = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : eventType = Value(eventType);
   static Insertable<ProgressLog> custom({
     Expression<int>? id,
+    Expression<String>? serverId,
+    Expression<String>? eventType,
+    Expression<int>? lessonId,
+    Expression<int>? teacherId,
+    Expression<int>? schoolId,
+    Expression<DateTime>? eventDate,
+    Expression<int>? updateCounter,
+    Expression<bool>? isDeleted,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
+      if (serverId != null) 'server_id': serverId,
+      if (eventType != null) 'event_type': eventType,
+      if (lessonId != null) 'lesson_id': lessonId,
+      if (teacherId != null) 'teacher_id': teacherId,
+      if (schoolId != null) 'school_id': schoolId,
+      if (eventDate != null) 'event_date': eventDate,
+      if (updateCounter != null) 'update_counter': updateCounter,
+      if (isDeleted != null) 'is_deleted': isDeleted,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
     });
   }
 
-  ProgressLogsCompanion copyWith({Value<int>? id}) {
+  ProgressLogsCompanion copyWith(
+      {Value<int>? id,
+      Value<String?>? serverId,
+      Value<String>? eventType,
+      Value<int>? lessonId,
+      Value<int>? teacherId,
+      Value<int>? schoolId,
+      Value<DateTime>? eventDate,
+      Value<int>? updateCounter,
+      Value<bool>? isDeleted,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt}) {
     return ProgressLogsCompanion(
       id: id ?? this.id,
+      serverId: serverId ?? this.serverId,
+      eventType: eventType ?? this.eventType,
+      lessonId: lessonId ?? this.lessonId,
+      teacherId: teacherId ?? this.teacherId,
+      schoolId: schoolId ?? this.schoolId,
+      eventDate: eventDate ?? this.eventDate,
+      updateCounter: updateCounter ?? this.updateCounter,
+      isDeleted: isDeleted ?? this.isDeleted,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 
@@ -4691,13 +5241,53 @@ class ProgressLogsCompanion extends UpdateCompanion<ProgressLog> {
     if (id.present) {
       map['id'] = Variable<int>(id.value);
     }
+    if (serverId.present) {
+      map['server_id'] = Variable<String>(serverId.value);
+    }
+    if (eventType.present) {
+      map['event_type'] = Variable<String>(eventType.value);
+    }
+    if (lessonId.present) {
+      map['lesson_id'] = Variable<int>(lessonId.value);
+    }
+    if (teacherId.present) {
+      map['teacher_id'] = Variable<int>(teacherId.value);
+    }
+    if (schoolId.present) {
+      map['school_id'] = Variable<int>(schoolId.value);
+    }
+    if (eventDate.present) {
+      map['event_date'] = Variable<DateTime>(eventDate.value);
+    }
+    if (updateCounter.present) {
+      map['update_counter'] = Variable<int>(updateCounter.value);
+    }
+    if (isDeleted.present) {
+      map['is_deleted'] = Variable<bool>(isDeleted.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
     return map;
   }
 
   @override
   String toString() {
     return (StringBuffer('ProgressLogsCompanion(')
-          ..write('id: $id')
+          ..write('id: $id, ')
+          ..write('serverId: $serverId, ')
+          ..write('eventType: $eventType, ')
+          ..write('lessonId: $lessonId, ')
+          ..write('teacherId: $teacherId, ')
+          ..write('schoolId: $schoolId, ')
+          ..write('eventDate: $eventDate, ')
+          ..write('updateCounter: $updateCounter, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
@@ -14261,6 +14851,7 @@ typedef $$LessonsTableCreateCompanionBuilder = LessonsCompanion Function({
   Value<String?> teacherServerId,
   Value<String?> schoolServerId,
   Value<bool> isUnlocked,
+  Value<String> status,
 });
 typedef $$LessonsTableUpdateCompanionBuilder = LessonsCompanion Function({
   Value<int> id,
@@ -14282,6 +14873,7 @@ typedef $$LessonsTableUpdateCompanionBuilder = LessonsCompanion Function({
   Value<String?> teacherServerId,
   Value<String?> schoolServerId,
   Value<bool> isUnlocked,
+  Value<String> status,
 });
 
 class $$LessonsTableFilterComposer
@@ -14352,6 +14944,9 @@ class $$LessonsTableFilterComposer
 
   ColumnFilters<bool> get isUnlocked => $composableBuilder(
       column: $table.isUnlocked, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnFilters(column));
 }
 
 class $$LessonsTableOrderingComposer
@@ -14423,6 +15018,9 @@ class $$LessonsTableOrderingComposer
 
   ColumnOrderings<bool> get isUnlocked => $composableBuilder(
       column: $table.isUnlocked, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnOrderings(column));
 }
 
 class $$LessonsTableAnnotationComposer
@@ -14490,6 +15088,9 @@ class $$LessonsTableAnnotationComposer
 
   GeneratedColumn<bool> get isUnlocked => $composableBuilder(
       column: $table.isUnlocked, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
 }
 
 class $$LessonsTableTableManager extends RootTableManager<
@@ -14534,6 +15135,7 @@ class $$LessonsTableTableManager extends RootTableManager<
             Value<String?> teacherServerId = const Value.absent(),
             Value<String?> schoolServerId = const Value.absent(),
             Value<bool> isUnlocked = const Value.absent(),
+            Value<String> status = const Value.absent(),
           }) =>
               LessonsCompanion(
             id: id,
@@ -14555,6 +15157,7 @@ class $$LessonsTableTableManager extends RootTableManager<
             teacherServerId: teacherServerId,
             schoolServerId: schoolServerId,
             isUnlocked: isUnlocked,
+            status: status,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -14576,6 +15179,7 @@ class $$LessonsTableTableManager extends RootTableManager<
             Value<String?> teacherServerId = const Value.absent(),
             Value<String?> schoolServerId = const Value.absent(),
             Value<bool> isUnlocked = const Value.absent(),
+            Value<String> status = const Value.absent(),
           }) =>
               LessonsCompanion.insert(
             id: id,
@@ -14597,6 +15201,7 @@ class $$LessonsTableTableManager extends RootTableManager<
             teacherServerId: teacherServerId,
             schoolServerId: schoolServerId,
             isUnlocked: isUnlocked,
+            status: status,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
@@ -14622,11 +15227,15 @@ typedef $$SchemeOfWorkTableCreateCompanionBuilder = SchemeOfWorkCompanion
   Value<int> id,
   Value<String?> serverId,
   Value<int> schoolId,
+  Value<int> teacherId,
   Value<int> subjectId,
   Value<String> term,
   Value<int> weekNumber,
   Value<String> topic,
   Value<String> objectives,
+  Value<String> status,
+  Value<String?> adminEditedTopic,
+  Value<String?> adminComment,
   Value<int> updateCounter,
   Value<bool> isDeleted,
   Value<DateTime> createdAt,
@@ -14637,11 +15246,15 @@ typedef $$SchemeOfWorkTableUpdateCompanionBuilder = SchemeOfWorkCompanion
   Value<int> id,
   Value<String?> serverId,
   Value<int> schoolId,
+  Value<int> teacherId,
   Value<int> subjectId,
   Value<String> term,
   Value<int> weekNumber,
   Value<String> topic,
   Value<String> objectives,
+  Value<String> status,
+  Value<String?> adminEditedTopic,
+  Value<String?> adminComment,
   Value<int> updateCounter,
   Value<bool> isDeleted,
   Value<DateTime> createdAt,
@@ -14666,6 +15279,9 @@ class $$SchemeOfWorkTableFilterComposer
   ColumnFilters<int> get schoolId => $composableBuilder(
       column: $table.schoolId, builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<int> get teacherId => $composableBuilder(
+      column: $table.teacherId, builder: (column) => ColumnFilters(column));
+
   ColumnFilters<int> get subjectId => $composableBuilder(
       column: $table.subjectId, builder: (column) => ColumnFilters(column));
 
@@ -14680,6 +15296,16 @@ class $$SchemeOfWorkTableFilterComposer
 
   ColumnFilters<String> get objectives => $composableBuilder(
       column: $table.objectives, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get adminEditedTopic => $composableBuilder(
+      column: $table.adminEditedTopic,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get adminComment => $composableBuilder(
+      column: $table.adminComment, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get updateCounter => $composableBuilder(
       column: $table.updateCounter, builder: (column) => ColumnFilters(column));
@@ -14712,6 +15338,9 @@ class $$SchemeOfWorkTableOrderingComposer
   ColumnOrderings<int> get schoolId => $composableBuilder(
       column: $table.schoolId, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get teacherId => $composableBuilder(
+      column: $table.teacherId, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<int> get subjectId => $composableBuilder(
       column: $table.subjectId, builder: (column) => ColumnOrderings(column));
 
@@ -14726,6 +15355,17 @@ class $$SchemeOfWorkTableOrderingComposer
 
   ColumnOrderings<String> get objectives => $composableBuilder(
       column: $table.objectives, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get adminEditedTopic => $composableBuilder(
+      column: $table.adminEditedTopic,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get adminComment => $composableBuilder(
+      column: $table.adminComment,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<int> get updateCounter => $composableBuilder(
       column: $table.updateCounter,
@@ -14759,6 +15399,9 @@ class $$SchemeOfWorkTableAnnotationComposer
   GeneratedColumn<int> get schoolId =>
       $composableBuilder(column: $table.schoolId, builder: (column) => column);
 
+  GeneratedColumn<int> get teacherId =>
+      $composableBuilder(column: $table.teacherId, builder: (column) => column);
+
   GeneratedColumn<int> get subjectId =>
       $composableBuilder(column: $table.subjectId, builder: (column) => column);
 
@@ -14773,6 +15416,15 @@ class $$SchemeOfWorkTableAnnotationComposer
 
   GeneratedColumn<String> get objectives => $composableBuilder(
       column: $table.objectives, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get adminEditedTopic => $composableBuilder(
+      column: $table.adminEditedTopic, builder: (column) => column);
+
+  GeneratedColumn<String> get adminComment => $composableBuilder(
+      column: $table.adminComment, builder: (column) => column);
 
   GeneratedColumn<int> get updateCounter => $composableBuilder(
       column: $table.updateCounter, builder: (column) => column);
@@ -14816,11 +15468,15 @@ class $$SchemeOfWorkTableTableManager extends RootTableManager<
             Value<int> id = const Value.absent(),
             Value<String?> serverId = const Value.absent(),
             Value<int> schoolId = const Value.absent(),
+            Value<int> teacherId = const Value.absent(),
             Value<int> subjectId = const Value.absent(),
             Value<String> term = const Value.absent(),
             Value<int> weekNumber = const Value.absent(),
             Value<String> topic = const Value.absent(),
             Value<String> objectives = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<String?> adminEditedTopic = const Value.absent(),
+            Value<String?> adminComment = const Value.absent(),
             Value<int> updateCounter = const Value.absent(),
             Value<bool> isDeleted = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
@@ -14830,11 +15486,15 @@ class $$SchemeOfWorkTableTableManager extends RootTableManager<
             id: id,
             serverId: serverId,
             schoolId: schoolId,
+            teacherId: teacherId,
             subjectId: subjectId,
             term: term,
             weekNumber: weekNumber,
             topic: topic,
             objectives: objectives,
+            status: status,
+            adminEditedTopic: adminEditedTopic,
+            adminComment: adminComment,
             updateCounter: updateCounter,
             isDeleted: isDeleted,
             createdAt: createdAt,
@@ -14844,11 +15504,15 @@ class $$SchemeOfWorkTableTableManager extends RootTableManager<
             Value<int> id = const Value.absent(),
             Value<String?> serverId = const Value.absent(),
             Value<int> schoolId = const Value.absent(),
+            Value<int> teacherId = const Value.absent(),
             Value<int> subjectId = const Value.absent(),
             Value<String> term = const Value.absent(),
             Value<int> weekNumber = const Value.absent(),
             Value<String> topic = const Value.absent(),
             Value<String> objectives = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<String?> adminEditedTopic = const Value.absent(),
+            Value<String?> adminComment = const Value.absent(),
             Value<int> updateCounter = const Value.absent(),
             Value<bool> isDeleted = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
@@ -14858,11 +15522,15 @@ class $$SchemeOfWorkTableTableManager extends RootTableManager<
             id: id,
             serverId: serverId,
             schoolId: schoolId,
+            teacherId: teacherId,
             subjectId: subjectId,
             term: term,
             weekNumber: weekNumber,
             topic: topic,
             objectives: objectives,
+            status: status,
+            adminEditedTopic: adminEditedTopic,
+            adminComment: adminComment,
             updateCounter: updateCounter,
             isDeleted: isDeleted,
             createdAt: createdAt,
@@ -15223,10 +15891,30 @@ typedef $$ExamsTableProcessedTableManager = ProcessedTableManager<
 typedef $$ProgressLogsTableCreateCompanionBuilder = ProgressLogsCompanion
     Function({
   Value<int> id,
+  Value<String?> serverId,
+  required String eventType,
+  Value<int> lessonId,
+  Value<int> teacherId,
+  Value<int> schoolId,
+  Value<DateTime> eventDate,
+  Value<int> updateCounter,
+  Value<bool> isDeleted,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
 });
 typedef $$ProgressLogsTableUpdateCompanionBuilder = ProgressLogsCompanion
     Function({
   Value<int> id,
+  Value<String?> serverId,
+  Value<String> eventType,
+  Value<int> lessonId,
+  Value<int> teacherId,
+  Value<int> schoolId,
+  Value<DateTime> eventDate,
+  Value<int> updateCounter,
+  Value<bool> isDeleted,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
 });
 
 class $$ProgressLogsTableFilterComposer
@@ -15240,6 +15928,36 @@ class $$ProgressLogsTableFilterComposer
   });
   ColumnFilters<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get serverId => $composableBuilder(
+      column: $table.serverId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get eventType => $composableBuilder(
+      column: $table.eventType, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get lessonId => $composableBuilder(
+      column: $table.lessonId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get teacherId => $composableBuilder(
+      column: $table.teacherId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get schoolId => $composableBuilder(
+      column: $table.schoolId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get eventDate => $composableBuilder(
+      column: $table.eventDate, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get updateCounter => $composableBuilder(
+      column: $table.updateCounter, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isDeleted => $composableBuilder(
+      column: $table.isDeleted, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
 }
 
 class $$ProgressLogsTableOrderingComposer
@@ -15253,6 +15971,37 @@ class $$ProgressLogsTableOrderingComposer
   });
   ColumnOrderings<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get serverId => $composableBuilder(
+      column: $table.serverId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get eventType => $composableBuilder(
+      column: $table.eventType, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get lessonId => $composableBuilder(
+      column: $table.lessonId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get teacherId => $composableBuilder(
+      column: $table.teacherId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get schoolId => $composableBuilder(
+      column: $table.schoolId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get eventDate => $composableBuilder(
+      column: $table.eventDate, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get updateCounter => $composableBuilder(
+      column: $table.updateCounter,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get isDeleted => $composableBuilder(
+      column: $table.isDeleted, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
 }
 
 class $$ProgressLogsTableAnnotationComposer
@@ -15266,6 +16015,36 @@ class $$ProgressLogsTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get serverId =>
+      $composableBuilder(column: $table.serverId, builder: (column) => column);
+
+  GeneratedColumn<String> get eventType =>
+      $composableBuilder(column: $table.eventType, builder: (column) => column);
+
+  GeneratedColumn<int> get lessonId =>
+      $composableBuilder(column: $table.lessonId, builder: (column) => column);
+
+  GeneratedColumn<int> get teacherId =>
+      $composableBuilder(column: $table.teacherId, builder: (column) => column);
+
+  GeneratedColumn<int> get schoolId =>
+      $composableBuilder(column: $table.schoolId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get eventDate =>
+      $composableBuilder(column: $table.eventDate, builder: (column) => column);
+
+  GeneratedColumn<int> get updateCounter => $composableBuilder(
+      column: $table.updateCounter, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDeleted =>
+      $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 }
 
 class $$ProgressLogsTableTableManager extends RootTableManager<
@@ -15295,15 +16074,55 @@ class $$ProgressLogsTableTableManager extends RootTableManager<
               $$ProgressLogsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            Value<String?> serverId = const Value.absent(),
+            Value<String> eventType = const Value.absent(),
+            Value<int> lessonId = const Value.absent(),
+            Value<int> teacherId = const Value.absent(),
+            Value<int> schoolId = const Value.absent(),
+            Value<DateTime> eventDate = const Value.absent(),
+            Value<int> updateCounter = const Value.absent(),
+            Value<bool> isDeleted = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
           }) =>
               ProgressLogsCompanion(
             id: id,
+            serverId: serverId,
+            eventType: eventType,
+            lessonId: lessonId,
+            teacherId: teacherId,
+            schoolId: schoolId,
+            eventDate: eventDate,
+            updateCounter: updateCounter,
+            isDeleted: isDeleted,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            Value<String?> serverId = const Value.absent(),
+            required String eventType,
+            Value<int> lessonId = const Value.absent(),
+            Value<int> teacherId = const Value.absent(),
+            Value<int> schoolId = const Value.absent(),
+            Value<DateTime> eventDate = const Value.absent(),
+            Value<int> updateCounter = const Value.absent(),
+            Value<bool> isDeleted = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
           }) =>
               ProgressLogsCompanion.insert(
             id: id,
+            serverId: serverId,
+            eventType: eventType,
+            lessonId: lessonId,
+            teacherId: teacherId,
+            schoolId: schoolId,
+            eventDate: eventDate,
+            updateCounter: updateCounter,
+            isDeleted: isDeleted,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

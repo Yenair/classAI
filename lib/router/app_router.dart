@@ -22,6 +22,7 @@ import 'package:classai/features/vault/screens/vault_publisher_screen.dart';
 import 'package:classai/features/payment/screens/payment_screen.dart';
 import 'package:classai/features/settings/screens/settings_screen.dart';
 import 'package:classai/features/credit/screens/insufficient_credit_screen.dart';
+import 'package:classai/features/scheme_of_work/screens/scheme_of_work_screen.dart';
 
 /// GoRouter configuration for the ClassAI app.
 ///
@@ -68,6 +69,9 @@ final appRouter = GoRouter(
         location == '/exam-editor';
     final isAdminRoute =
         location == '/admin' || location.startsWith('/admin/teachers/');
+
+    // Override: /scheme-of-work is accessible by both roles so skip redirect
+    if (location == '/scheme-of-work') return null;
 
     if (role == 'admin') {
       // Teacher-only routes — admins should never access these.
@@ -187,6 +191,11 @@ final appRouter = GoRouter(
       path: '/insufficient-credit',
       name: 'insufficient-credit',
       builder: (context, state) => const InsufficientCreditScreen(),
+    ),
+    GoRoute(
+      path: '/scheme-of-work',
+      name: 'scheme-of-work',
+      builder: (context, state) => const SchemeOfWorkScreen(),
     ),
   ],
 );

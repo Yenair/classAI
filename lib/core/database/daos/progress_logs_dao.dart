@@ -10,8 +10,20 @@ class ProgressLogsDao extends DatabaseAccessor<AppDatabase>
     with _$ProgressLogsDaoMixin {
   ProgressLogsDao(AppDatabase db) : super(db);
 
-  /// Get all progress logs.
   Future<List<ProgressLog>> getAll() {
-    return (select(progressLogs)).get();
+    return (select(progressLogs)
+          ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)]))
+        .get();
+  }
+
+  Future<List<ProgressLog>> getByTeacher(int teacherId) {
+    return (select(progressLogs)
+          ..where((t) => t.teacherId.equals(teacherId))
+          ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)]))
+        .get();
+  }
+
+  Future<int> insert(ProgressLogsCompanion companion) {
+    return into(progressLogs).insert(companion);
   }
 }

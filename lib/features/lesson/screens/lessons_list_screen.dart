@@ -330,6 +330,20 @@ class _LessonCard extends StatelessWidget {
               size: 20,
               color: cs.onSurfaceVariant.withValues(alpha: 0.5),
             ),
+            if (lesson.isUnlocked && lesson.status == 'draft')
+              GestureDetector(
+                onTap: () {},
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  margin: const EdgeInsets.only(left: 4),
+                  decoration: BoxDecoration(
+                    color: cs.primaryContainer.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.check_circle_outline, size: 20, color: cs.primary),
+                ),
+              ),
           ],
         ),
       ),

@@ -1365,6 +1365,8 @@ class _TeacherCardWidget extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   '${teacher.email} \u00b7 ${teacher.role}'
+                                    '${teacher.generatedCount > 0 ? ' · ${teacher.generatedCount} generated' : ''}'
+                  '${teacher.completedCount > 0 ? ' · ${teacher.completedCount} completed' : ''}'
                   '${teacher.deviceCount > 0 ? ' \u00b7 ${teacher.deviceCount} device(s)' : ''}',
                   style: textTheme.labelMedium?.copyWith(
                     color: cs.onSurfaceVariant,

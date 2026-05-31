@@ -43,4 +43,33 @@ class LessonsDao extends DatabaseAccessor<AppDatabase>
     final results = await (select(lessons)..where((t) => t.id.equals(id))).get();
     return results.isNotEmpty ? results.first : null;
   }
+
+  /// Count lessons by teacher server ID.
+  Future<int> countByTeacher(String teacherServerId) async {
+    final query = selectOnly(lessons)
+      ..addColumns([lessons.id.count()])
+      ..where(lessons.teacherServerId.equals(teacherServerId));
+    final row = await query.getSingle();
+    return row.read<int>(lessons.id.count()) ?? 0;
+  }
+
+  /// Count completed lessons by teacher server ID.
+  Future<int> countCompletedByTeacher(String teacherServerId) async {
+    final query = selectOnly(lessons)
+      ..addColumns([lessons.id.count()])
+      ..where(lessons.teacherServerId.equals(teacherServerId))
+      ..where(lessons.status.equals('completed'));
+    final row = await query.getSingle();
+    return row.read<int>(lessons.id.count()) ?? 0;
+  }
+
+  /// Update a lesson's status.
+  Future<void> updateStatus(int id, String status) {
+    return (update(lessons)..where((t) => t.id.equals(id))).write(
+      LessonsCompanion(
+        status: Value(status),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
 }
