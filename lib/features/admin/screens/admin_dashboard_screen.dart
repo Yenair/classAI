@@ -28,6 +28,7 @@ class AdminDashboardScreen extends ConsumerStatefulWidget {
 
 class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   int _selectedTabIndex = 0;
+  bool _sidebarOpen = true;
   Timer? _autoRefreshTimer;
 
   @override
@@ -121,14 +122,17 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   // Navigation Drawer (Desktop)
   // ---------------------------------------------------------------
   Widget _buildNavDrawer(ColorScheme cs, TextTheme textTheme) {
-    return Container(
-      width: 288,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+      width: _sidebarOpen ? 288 : 0,
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
         border: Border(
           right: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.3)),
         ),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
           const SizedBox(height: 24),
@@ -249,12 +253,30 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Title
-          Text(
-            'Admin Dashboard',
-            style: textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: cs.primary,
+          // Sidebar toggle + Title
+          Flexible(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  onPressed: () => setState(() => _sidebarOpen = !_sidebarOpen),
+                  icon: Icon(_sidebarOpen ? Icons.menu_open_rounded : Icons.menu_rounded),
+                  tooltip: _sidebarOpen ? 'Close sidebar' : 'Open sidebar',
+                  style: IconButton.styleFrom(
+                    foregroundColor: cs.onSurfaceVariant,
+                  ),
+                ),
+                Flexible(
+                  child: Text(
+                    'Admin Dashboard',
+                    style: textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: cs.primary,
+                      overflow: TextOverflow.clip,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(width: 24),
@@ -2110,10 +2132,13 @@ class _SyncHealthTab extends StatelessWidget {
             children: [
               Icon(Icons.sync_rounded, size: 22, color: cs.primary),
               const SizedBox(width: 8),
-              Text(
-                'Sync Health Summary',
-                style: textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
+              Flexible(
+                child: Text(
+                  'Sync Health Summary',
+                  style: textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    overflow: TextOverflow.clip,
+                  ),
                 ),
               ),
             ],
@@ -2122,11 +2147,14 @@ class _SyncHealthTab extends StatelessWidget {
           // Sync percentage bar
           Row(
             children: [
-              Text(
-                '$syncPercent%',
-                style: textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  color: cs.primary,
+              Flexible(
+                child: Text(
+                  '$syncPercent%',
+                  style: textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: cs.primary,
+                    overflow: TextOverflow.clip,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
