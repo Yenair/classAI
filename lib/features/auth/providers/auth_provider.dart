@@ -1276,8 +1276,15 @@ class AuthNotifier extends Notifier<AuthStateData> {
     // `upsertByServerId` SELECTs by serverId, UPDATEs the existing row, or
     // INSERTs a new one — in all cases the returned School has the correct
     // persistent localId that can safely be used as the teacher's foreign key.
+    final schoolServerId = result.school.serverId;
+    if (schoolServerId == null) {
+      throw AuthException(
+        code: AuthErrorCode.networkError,
+        message: 'Invalid server response: missing school ID.',
+      );
+    }
     final schoolRow = await _db.schoolsDao.upsertByServerId(
-      serverId: result.school.serverId!,
+      serverId: schoolServerId,
       schoolName: result.school.schoolName,
       shortCode: result.school.shortCode,
       subscriptionTier: result.school.subscriptionTier,
