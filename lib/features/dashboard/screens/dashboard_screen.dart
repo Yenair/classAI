@@ -74,6 +74,7 @@ class EditorLayout extends ConsumerStatefulWidget {
 
 class _EditorLayoutState extends ConsumerState<EditorLayout> {
   int _selectedIndex = 0;
+  bool _isSidebarOpen = true;
 
   List<_NavItem> get _navItems {
     final authData = ref.read(authProvider);
@@ -138,12 +139,17 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ── Navigation Drawer ───────────────────────────────────
-          Container(
-            width: 288,
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeInOut,
+            width: _isSidebarOpen ? 288 : 0,
             color: cs.surfaceContainerLow,
-            child: Column(
-              children: [
-                const SizedBox(height: 24),
+            clipBehavior: Clip.antiAlias,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 24),
                 // Logo area
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -260,6 +266,7 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                 }),
               ],
             ),
+            ),
           ),
 
           // ── Main Content Area ───────────────────────────────────
@@ -282,6 +289,14 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                   ),
                   child: Row(
                     children: [
+                      IconButton(
+                        onPressed: () => setState(() => _isSidebarOpen = !_isSidebarOpen),
+                        icon: Icon(_isSidebarOpen ? Icons.menu_open_rounded : Icons.menu_rounded),
+                        tooltip: _isSidebarOpen ? 'Close sidebar' : 'Open sidebar',
+                        style: IconButton.styleFrom(
+                          foregroundColor: cs.onSurfaceVariant,
+                        ),
+                      ),
                       Text(
                         'Dashboard',
                         style: theme.textTheme.titleLarge?.copyWith(
@@ -1921,9 +1936,8 @@ class _ReaderBottomNav extends StatelessWidget {
         ],
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _BottomNavItem(
+          Expanded(child: _BottomNavItem(
             icon: Icons.home_rounded,
             label: 'Home',
             isActive: selectedIndex == 0,
@@ -1931,8 +1945,8 @@ class _ReaderBottomNav extends StatelessWidget {
             cs: cs,
             theme: theme,
             onTap: () => onTap(0),
-          ),
-          _BottomNavItem(
+          )),
+          Expanded(child: _BottomNavItem(
             icon: Icons.menu_book_rounded,
             label: 'Lessons',
             isActive: selectedIndex == 1,
@@ -1940,8 +1954,8 @@ class _ReaderBottomNav extends StatelessWidget {
             cs: cs,
             theme: theme,
             onTap: () => onTap(1),
-          ),
-          _BottomNavItem(
+          )),
+          Expanded(child: _BottomNavItem(
             icon: Icons.quiz_rounded,
             label: 'Exams',
             isActive: selectedIndex == 2,
@@ -1949,8 +1963,8 @@ class _ReaderBottomNav extends StatelessWidget {
             cs: cs,
             theme: theme,
             onTap: () => onTap(2),
-          ),
-          _BottomNavItem(
+          )),
+          Expanded(child: _BottomNavItem(
             icon: Icons.more_horiz_rounded,
             label: 'More',
             isActive: selectedIndex == 3,
@@ -1958,7 +1972,7 @@ class _ReaderBottomNav extends StatelessWidget {
             cs: cs,
             theme: theme,
             onTap: () => onTap(3),
-          ),
+          )),
         ],
       ),
     );
@@ -1988,6 +2002,7 @@ class _BottomNavItem extends StatelessWidget {
   Widget build(BuildContext context) {
     if (isFilled && isActive) {
       return GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
@@ -2014,9 +2029,10 @@ class _BottomNavItem extends StatelessWidget {
     }
 
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        width: 64,
+        width: double.infinity,
         padding: const EdgeInsets.all(8),
         child: Column(
           mainAxisSize: MainAxisSize.min,

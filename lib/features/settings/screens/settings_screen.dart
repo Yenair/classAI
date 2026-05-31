@@ -1,10 +1,8 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:classai/core/constants/curriculum_types.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
@@ -20,17 +18,13 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  static const _subjectsKey = 'selected_subjects';
   static const _interfaceModeKey = 'interface_mode';
-  List<String> _selectedSubjects = List.from(defaultSubjects);
-  bool _loadingSubjects = true;
   String _appVersion = '';
   String _interfaceMode = 'auto';
 
   @override
   void initState() {
     super.initState();
-    _loadSubjects();
     _loadAppVersion();
     _loadInterfaceMode();
   }
@@ -52,31 +46,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  Future<void> _loadSubjects() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final stored = prefs.getString(_subjectsKey);
-      if (stored != null) {
-        final decoded =
-            (jsonDecode(stored) as List).map((e) => e as String).toList();
-        if (mounted) {
-          setState(() {
-            _selectedSubjects = decoded;
-            _loadingSubjects = false;
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() => _loadingSubjects = false);
-        }
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() => _loadingSubjects = false);
-      }
-    }
-  }
-
   Future<void> _loadInterfaceMode() async {
     final prefs = await SharedPreferences.getInstance();
     final mode = prefs.getString(_interfaceModeKey) ?? 'auto';
@@ -90,58 +59,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await prefs.setString(_interfaceModeKey, mode);
     if (mounted) {
       setState(() => _interfaceMode = mode);
-    }
-  }
-
-  Future<void> _saveSubjects() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_subjectsKey, jsonEncode(_selectedSubjects));
-  }
-
-  void _addSubject(String subject) {
-    setState(() {
-      _selectedSubjects.add(subject);
-      _selectedSubjects.sort();
-    });
-    _saveSubjects();
-  }
-
-  void _removeSubject(String subject) {
-    setState(() {
-      _selectedSubjects.remove(subject);
-    });
-    _saveSubjects();
-  }
-
-  Future<void> _showAddSubjectDialog() async {
-    final available = nerdcSubjects
-        .where((s) => !_selectedSubjects.contains(s))
-        .toList()
-      ..sort();
-
-    if (available.isEmpty) {
-      if (mounted) {
-        showInfoToast(
-            context: context, message: 'All subjects are already added');
-      }
-      return;
-    }
-
-    final selected = await showDialog<String>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Add Subject'),
-        children: available.map((subject) {
-          return SimpleDialogOption(
-            onPressed: () => Navigator.of(ctx).pop(subject),
-            child: Text(subject),
-          );
-        }).toList(),
-      ),
-    );
-
-    if (selected != null) {
-      _addSubject(selected);
     }
   }
 
@@ -520,11 +437,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             context, cs, textTheme, syncData),
         const SizedBox(height: 16),
 
-        // Row 4: Manage Subjects (full width)
-        _buildSubjectsCard(cs, textTheme),
-        const SizedBox(height: 16),
-
-        // Row 5: About + System Actions
+        // Row 4: About + System Actions
         _buildAboutCard(context, cs, textTheme),
       ],
     );
@@ -1011,71 +924,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               label: const Text('Sync Now'),
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------
-  // Manage Subjects Card
-  // ---------------------------------------------------------------
-  Widget _buildSubjectsCard(ColorScheme cs, TextTheme textTheme) {
-    return _StitchCard(
-      cs: cs,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.auto_stories_rounded,
-                size: 28,
-                color: cs.primary,
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Manage Subjects',
-                style: textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Select the subjects your school teaches:',
-            style: textTheme.bodySmall?.copyWith(
-              color: cs.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 16),
-          if (_loadingSubjects)
-            const Center(child: CircularProgressIndicator())
-          else ...[
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _selectedSubjects.map((subject) {
-                return Chip(
-                  label: Text(subject,
-                      style: const TextStyle(fontSize: 13)),
-                  deleteIcon:
-                      const Icon(Icons.close_rounded, size: 16),
-                  onDeleted: () => _removeSubject(subject),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              height: 44,
-              child: OutlinedButton.icon(
-                onPressed: _showAddSubjectDialog,
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Add Subject'),
-              ),
-            ),
-          ],
         ],
       ),
     );

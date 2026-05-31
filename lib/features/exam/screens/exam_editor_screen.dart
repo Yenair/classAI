@@ -110,6 +110,44 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     });
   }
 
+  Future<void> _showAddSubjectDialog() async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add New Subject'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Subject Name',
+            hintText: 'e.g., Physics',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    if (result != null && result.isNotEmpty) {
+      try {
+        final db = ref.read(databaseProvider);
+        await db.subjectsDao.insert(name: result);
+        await _loadSubjects();
+        setState(() => _subject = result);
+      } catch (_) {
+        await _loadSubjects();
+      }
+    }
+  }
+
   Future<void> _loadSubjects() async {
     try {
       final db = ref.read(databaseProvider);
@@ -296,6 +334,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         _isGenerating = false;
       });
 
+      await _saveExam(notify: false);
+
       if (mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
@@ -451,7 +491,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
               content: jsonEncode(content),
               teacherServerId: Value(_teacherId),
               schoolServerId: Value(_schoolId),
-              isUnlocked: Value(true),
+              isUnlocked: Value(_isUnlocked),
             ),
           );
 
@@ -604,6 +644,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                             _questionCounts[type] = count;
                                           }),
                                           onGenerate: _handleGenerate,
+                                          onAddNewSubject: _showAddSubjectDialog,
                                         ),
                                     ),
                                     const SizedBox(width: 24),
@@ -661,6 +702,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                         _questionCounts[type] = count;
                                       }),
                                       onGenerate: _handleGenerate,
+                                      onAddNewSubject: _showAddSubjectDialog,
                                     ),
                                     const SizedBox(height: 24),
                                     _PreviewPanel(
@@ -947,6 +989,7 @@ class _ConfigPanel extends StatelessWidget {
   final ValueChanged<String> onTypeToggled;
   final void Function(String, int) onCountChanged;
   final VoidCallback onGenerate;
+  final VoidCallback? onAddNewSubject;
 
   const _ConfigPanel({
     required this.cs,
@@ -968,6 +1011,7 @@ class _ConfigPanel extends StatelessWidget {
     required this.onTypeToggled,
     required this.onCountChanged,
     required this.onGenerate,
+    this.onAddNewSubject,
   });
 
   @override
@@ -1055,6 +1099,7 @@ class _ConfigPanel extends StatelessWidget {
                 cs: cs,
                 theme: theme,
                 label: 'Subject',
+                onAddNewSubject: onAddNewSubject,
                 value: subject,
                 items: subjects,
                 onChanged: onSubjectChanged,
@@ -1917,6 +1962,7 @@ class _SimpleDropdown extends StatelessWidget {
   final String value;
   final List<String> items;
   final ValueChanged<String> onChanged;
+  final VoidCallback? onAddNewSubject;
 
   const _SimpleDropdown({
     required this.cs,
@@ -1925,6 +1971,7 @@ class _SimpleDropdown extends StatelessWidget {
     required this.value,
     required this.items,
     required this.onChanged,
+    this.onAddNewSubject,
   });
 
   @override
@@ -1950,19 +1997,37 @@ class _SimpleDropdown extends StatelessWidget {
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: cs.onSurface,
               ),
-              items: items.map((item) {
-                return DropdownMenuItem(
-                  value: item,
-                  child: Text(
-                    item,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: cs.onSurface,
+              items: [
+                ...items.map((item) {
+                  return DropdownMenuItem(
+                    value: item,
+                    child: Text(
+                      item,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurface,
+                      ),
                     ),
+                  );
+                }),
+                const DropdownMenuItem<String>(
+                  value: '__add_new__',
+                  child: Row(
+                    children: [
+                      Icon(Icons.add_rounded, size: 18),
+                      SizedBox(width: 8),
+                      Text('Add new subject…'),
+                    ],
                   ),
-                );
-              }).toList(),
+                ),
+              ],
               onChanged: (v) {
-                if (v != null) onChanged(v);
+                if (v != null) {
+                  if (v == '__add_new__') {
+                    onAddNewSubject?.call();
+                  } else {
+                    onChanged(v);
+                  }
+                }
               },
             ),
           ),

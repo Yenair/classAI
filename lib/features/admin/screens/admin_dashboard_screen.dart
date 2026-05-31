@@ -195,6 +195,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   isActive: _selectedTabIndex == 3,
                   onTap: () => setState(() => _selectedTabIndex = 3),
                 ),
+                const SizedBox(height: 4),
+                _NavItem(
+                  icon: Icons.settings_rounded,
+                  label: 'Settings',
+                  isActive: false,
+                  onTap: () => context.push('/settings'),
+                ),
               ],
             ),
           ),
@@ -553,6 +560,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       (icon: Icons.person_add_rounded, label: 'Pending'),
       (icon: Icons.verified_rounded, label: 'Vault Queue'),
       (icon: Icons.sync_rounded, label: 'Sync'),
+      (icon: Icons.settings_rounded, label: 'Settings'),
     ];
 
     return Container(
@@ -585,7 +593,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 item.icon,
                 color: isActive ? cs.onSecondaryContainer : cs.onSurfaceVariant,
               ),
-              onPressed: () => setState(() => _selectedTabIndex = i),
+              onPressed: () {
+                if (i == 4) {
+                  context.push('/settings');
+                } else {
+                  setState(() => _selectedTabIndex = i);
+                }
+              },
             ),
           );
         }).toList(),

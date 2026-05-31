@@ -123,6 +123,45 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     });
   }
 
+  Future<void> _showAddSubjectDialog() async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add New Subject'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Subject Name',
+            hintText: 'e.g., Physics',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    if (result != null && result.isNotEmpty) {
+      try {
+        final db = ref.read(databaseProvider);
+        await db.subjectsDao.insert(name: result);
+        await _loadSubjects();
+        setState(() => _subject = result);
+      } catch (_) {
+        // Subject may already exist
+        await _loadSubjects();
+      }
+    }
+  }
+
   Future<void> _loadSubjects() async {
     try {
       final db = ref.read(databaseProvider);
@@ -288,6 +327,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         _isUnlocked = false;
         _isGenerating = false;
       });
+
+      await _saveLesson(notify: false);
 
       if (mounted) {
         showInfoToast(
@@ -668,6 +709,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                               });
                                             },
                                             onGenerate: _handleGenerate,
+                                            onAddNewSubject: _showAddSubjectDialog,
                                           ),
                                           const SizedBox(height: 24),
                                           _PreviewColumn(
@@ -1036,6 +1078,7 @@ class _ConfigColumn extends StatelessWidget {
   final ValueChanged<String> onAssessmentFormatChanged;
   final ValueChanged<String> onBloomToggled;
   final VoidCallback onGenerate;
+  final VoidCallback? onAddNewSubject;
 
   const _ConfigColumn({
     required this.cs,
@@ -1060,6 +1103,7 @@ class _ConfigColumn extends StatelessWidget {
     required this.onAssessmentFormatChanged,
     required this.onBloomToggled,
     required this.onGenerate,
+    this.onAddNewSubject,
   });
 
   @override
@@ -1082,6 +1126,7 @@ class _ConfigColumn extends StatelessWidget {
                       cs: cs,
                       theme: theme,
                       label: 'Subject',
+                      onAddNewSubject: onAddNewSubject,
                       value: subject,
                       items: subjects,
                       onChanged: onSubjectChanged,
@@ -1856,6 +1901,7 @@ class _StyledDropdown<T> extends StatelessWidget {
   final T value;
   final List<T> items;
   final ValueChanged<T> onChanged;
+  final VoidCallback? onAddNewSubject;
 
   const _StyledDropdown({
     required this.cs,
@@ -1864,6 +1910,7 @@ class _StyledDropdown<T> extends StatelessWidget {
     required this.value,
     required this.items,
     required this.onChanged,
+    this.onAddNewSubject,
   });
 
   @override
@@ -1894,19 +1941,37 @@ class _StyledDropdown<T> extends StatelessWidget {
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: cs.onSurface,
               ),
-              items: items.map((item) {
-                return DropdownMenuItem(
-                  value: item,
-                  child: Text(
-                    item.toString(),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: cs.onSurface,
+              items: [
+                ...items.map((item) {
+                  return DropdownMenuItem(
+                    value: item,
+                    child: Text(
+                      item.toString(),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurface,
+                      ),
                     ),
+                  );
+                }),
+                DropdownMenuItem<T>(
+                  value: '__add_new__' as T,
+                  child: const Row(
+                    children: [
+                      Icon(Icons.add_rounded, size: 18),
+                      SizedBox(width: 8),
+                      Text('Add new subject…'),
+                    ],
                   ),
-                );
-              }).toList(),
+                ),
+              ],
               onChanged: (v) {
-                if (v != null) onChanged(v);
+                if (v != null) {
+                  if (v == '__add_new__') {
+                    onAddNewSubject?.call();
+                  } else {
+                    onChanged(v);
+                  }
+                }
               },
             ),
           ),
