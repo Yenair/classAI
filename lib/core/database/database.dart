@@ -95,7 +95,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   static QueryExecutor _openConnection() {
     return LazyDatabase(() async {
@@ -481,6 +481,30 @@ class AppDatabase extends _$AppDatabase {
             );
             await customStatement(
               "ALTER TABLE progress_logs ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+            );
+          }
+          if (from < 16) {
+            final deviceId = const Uuid().v4();
+            await customStatement(
+              "ALTER TABLE security_config ADD COLUMN sync_pending_after_biometric_timeout INTEGER NOT NULL DEFAULT 0",
+            );
+            await customStatement(
+              "ALTER TABLE security_config ADD COLUMN current_device_id TEXT NOT NULL DEFAULT ''",
+            );
+            await customStatement(
+              "ALTER TABLE security_config ADD COLUMN daily_preview_count INTEGER NOT NULL DEFAULT 0",
+            );
+            await customStatement(
+              "ALTER TABLE security_config ADD COLUMN daily_preview_date TEXT",
+            );
+            await customStatement(
+              "ALTER TABLE security_config ADD COLUMN pending_db_replacement INTEGER NOT NULL DEFAULT 0",
+            );
+            await customStatement(
+              "ALTER TABLE security_config ADD COLUMN vacuumed_db_path TEXT",
+            );
+            await customStatement(
+              "UPDATE security_config SET current_device_id = '$deviceId' WHERE id = 1",
             );
           }
         },

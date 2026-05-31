@@ -349,7 +349,6 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
   @override
   Widget build(BuildContext context) {
     final authData = ref.watch(authProvider);
-
     // ── Loading state ──────────────────────────────────────────────────
     // Still checking for stored credentials or performing offline login.
     if (authData.state == AuthState.uninitialized ||

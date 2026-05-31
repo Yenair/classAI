@@ -111,14 +111,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, _) {
-          // Prevent back-button dismissal — the user must
-          // explicitly Cancel (which logs out) or Verify.
-        },
-        child: const EmailVerificationDialog(),
-      ),
+      builder: (_) {
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            // Prevent back-button dismissal — the user must
+            // explicitly Cancel (which logs out) or Verify.
+          },
+          child: const EmailVerificationDialog(),
+        );
+      },
     ).whenComplete(() {
       _emailVerificationDialogShowing = false;
     });
@@ -136,7 +138,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
 
     setState(() => _isLoggingIn = true);
 
@@ -155,7 +159,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             deviceId: _cachedDeviceId!,
           );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       final authState = ref.read(authProvider).state;
       if (authState == AuthState.forcePasswordResetRequired) {
         ref.read(authProvider.notifier).clearError();
