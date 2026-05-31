@@ -200,17 +200,17 @@ class VaultItemDetailScreen extends ConsumerWidget {
             // Credit cost
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.monetization_on_rounded,
                   size: 20,
-                  color: Colors.amber,
+                  color: cs.tertiary,
                 ),
                 const SizedBox(width: 4),
                 Text(
                   '${item.creditCost} credits',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
-                        color: Colors.amber,
+                        color: cs.tertiary,
                       ),
                 ),
               ],
@@ -220,13 +220,13 @@ class VaultItemDetailScreen extends ConsumerWidget {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  const Icon(Icons.check_circle_rounded,
-                      size: 20, color: Colors.green),
+                  Icon(Icons.check_circle_rounded,
+                      size: 20, color: cs.primary),
                   const SizedBox(width: 4),
                   Text(
                     'Acquired on ${_formatDate(item.acquisitionDate!)}',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.green,
+                          color: cs.primary,
                         ),
                   ),
                 ],

@@ -8,19 +8,69 @@ import 'package:classai/features/dashboard/providers/credit_state_provider.dart'
 ///
 /// Stitch style: compact pill container, primary tint background when
 /// credits are positive, thin mono-style numerics for the count.
-class CreditCounter extends ConsumerWidget {
+class CreditCounter extends ConsumerStatefulWidget {
   const CreditCounter({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CreditCounter> createState() => _CreditCounterState();
+}
+
+class _CreditCounterState extends ConsumerState<CreditCounter>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseController;
+  late final Animation<double> _pulseAnimation;
+  int _previousBalance = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _pulseAnimation = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.0, end: 1.15)
+            .chain(CurveTween(curve: Curves.easeOut)),
+        weight: 40,
+      ),
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.15, end: 1.0)
+            .chain(CurveTween(curve: Curves.elasticOut)),
+        weight: 60,
+      ),
+    ]).animate(_pulseController);
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final creditData = ref.watch(creditStateProvider);
+    final balance = creditData.currentCredits;
+
+    if (_previousBalance >= 0 && balance != _previousBalance) {
+      _pulseController.forward(from: 0);
+    }
+    _previousBalance = balance;
+
     final cs = Theme.of(context).colorScheme;
 
     final hasError = creditData.errorMessage != null;
     final isPositive = !hasError && creditData.currentCredits > 0;
     final labelColor = hasError ? cs.error : (isPositive ? cs.primary : cs.error);
 
-    return ActionChip(
+    return AnimatedBuilder(
+      animation: _pulseAnimation,
+      builder: (context, child) => Transform.scale(
+        scale: _pulseAnimation.value,
+        child: child,
+      ),
+      child: ActionChip(
       backgroundColor: labelColor.withValues(alpha: isPositive ? 0.10 : 0.12),
       side: BorderSide(
         color: labelColor.withValues(alpha: isPositive ? 0.24 : 0.30),
@@ -60,6 +110,7 @@ class CreditCounter extends ConsumerWidget {
           _showCreditDetailsDialog(context, creditData);
         }
       },
+      ),
     );
   }
 

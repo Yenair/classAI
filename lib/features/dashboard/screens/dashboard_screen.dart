@@ -126,6 +126,17 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
     );
   }
 
+  String _greeting(String? teacherName) {
+    final hour = DateTime.now().hour;
+    final timeGreeting = hour < 12
+        ? 'Good Morning'
+        : hour < 17
+            ? 'Good Afternoon'
+            : 'Good Evening';
+    final name = teacherName ?? 'Educator';
+    return '$timeGreeting, $name';
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -146,6 +157,9 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
             color: cs.surfaceContainerLow,
             clipBehavior: Clip.antiAlias,
             child: SingleChildScrollView(
+              physics: (Platform.isAndroid || Platform.isIOS)
+                  ? const BouncingScrollPhysics()
+                  : null,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -297,11 +311,14 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                           foregroundColor: cs.onSurfaceVariant,
                         ),
                       ),
-                      Text(
-                        'Dashboard',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: cs.primary,
+                      Flexible(
+                        child: Text(
+                          'Dashboard',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: cs.primary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const Spacer(),
@@ -434,6 +451,10 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                 // ── Canvas ─────────────────────────────────────────
                 Expanded(
                   child: SingleChildScrollView(
+
+                    physics: (Platform.isAndroid || Platform.isIOS)
+                        ? const BouncingScrollPhysics()
+                        : null,
                     padding: const EdgeInsets.all(
                       AppTheme.spacingMarginTablet,
                     ),
@@ -453,7 +474,7 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'Good Morning, Educator',
+                                        _greeting(authData.currentTeacher?.teacherName),
                                         style: theme
                                             .textTheme.headlineMedium
                                             ?.copyWith(
@@ -477,7 +498,9 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                                 // (redirect already blocks admins from this screen,
                                 //  this is defense-in-depth)
                                 if (authData.currentTeacher?.role != 'admin')
-                                  Row(
+                                  Wrap(
+                                    spacing: 12,
+                                    runSpacing: 8,
                                     children: [
                                       _ActionButton(
                                         icon: Icons.add_rounded,
@@ -488,7 +511,6 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                                         onTap: () =>
                                             context.push('/lesson-editor'),
                                       ),
-                                      const SizedBox(width: 12),
                                       _ActionButton(
                                         icon: Icons.assignment_rounded,
                                         label: 'Generate Exam',
@@ -1653,6 +1675,9 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
         ),
       ),
       body: SingleChildScrollView(
+        physics: (Platform.isAndroid || Platform.isIOS)
+            ? const BouncingScrollPhysics()
+            : null,
         padding: const EdgeInsets.all(AppTheme.spacingMarginMobile),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,6 +1,7 @@
 // lib/features/admin/screens/admin_dashboard_screen.dart
 import 'dart:async';
 
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -166,6 +167,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           // Navigation items — admin-specific sidebar
           Expanded(
             child: ListView(
+
+              physics: (Platform.isAndroid || Platform.isIOS)
+                  ? const BouncingScrollPhysics()
+                  : null,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               children: [
                 _NavItem(
@@ -482,6 +487,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     return SizedBox(
       height: 44,
       child: ListView.separated(
+
+        physics: (Platform.isAndroid || Platform.isIOS)
+            ? const BouncingScrollPhysics()
+            : null,
         scrollDirection: Axis.horizontal,
         itemCount: tabs.length,
         separatorBuilder: (_, __) => const SizedBox(width: 0),
@@ -846,6 +855,10 @@ class _AddTeacherDialogState extends ConsumerState<_AddTeacherDialog> {
       content: Form(
         key: _formKey,
         child: SingleChildScrollView(
+
+          physics: (Platform.isAndroid || Platform.isIOS)
+              ? const BouncingScrollPhysics()
+              : null,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -957,12 +970,12 @@ class _AddTeacherDialogState extends ConsumerState<_AddTeacherDialog> {
         FilledButton(
           onPressed: _isSubmitting ? null : _handleSubmit,
           child: _isSubmitting
-              ? const SizedBox(
+              ? SizedBox(
                   height: 18,
                   width: 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: Theme.of(context).colorScheme.onPrimary,
                   ),
                 )
               : const Text('Add'),
@@ -1050,6 +1063,10 @@ class _TeacherManagementTabState extends ConsumerState<_TeacherManagementTab> {
 
     // -- Teacher Roster Card --
     return SingleChildScrollView(
+
+      physics: (Platform.isAndroid || Platform.isIOS)
+          ? const BouncingScrollPhysics()
+          : null,
       padding: const EdgeInsets.only(bottom: 80),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1553,6 +1570,10 @@ class _PendingTeachersTabState extends ConsumerState<_PendingTeachersTab> {
     }
 
     return SingleChildScrollView(
+
+      physics: (Platform.isAndroid || Platform.isIOS)
+          ? const BouncingScrollPhysics()
+          : null,
       padding: const EdgeInsets.only(bottom: 80),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1822,6 +1843,10 @@ class _VaultApprovalTab extends ConsumerWidget {
         }
 
         return ListView.builder(
+
+          physics: (Platform.isAndroid || Platform.isIOS)
+              ? const BouncingScrollPhysics()
+              : null,
           padding: const EdgeInsets.all(16),
           itemCount: items.length,
           itemBuilder: (context, index) {
@@ -1973,6 +1998,10 @@ class _SyncHealthTab extends StatelessWidget {
         totalTeachers > 0 ? ((greenCount / totalTeachers) * 100).round() : 0;
 
     return SingleChildScrollView(
+
+      physics: (Platform.isAndroid || Platform.isIOS)
+          ? const BouncingScrollPhysics()
+          : null,
       padding: const EdgeInsets.only(bottom: 80),
       child: isWide
           ? _buildWideLayout(context, cs, textTheme, greenCount, yellowCount,

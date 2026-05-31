@@ -511,7 +511,7 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
             'Credit Cost: $_creditCost',
             style: tt.bodyMedium?.copyWith(
               fontWeight: FontWeight.w600,
-              color: Colors.amber,
+              color: cs.tertiary,
             ),
           ),
           const SizedBox(height: 16),
@@ -947,17 +947,17 @@ class _FormContent extends StatelessWidget {
                           borderRadius:
                               BorderRadius.circular(AppTheme.radiusLg),
                           child: Image.memory(
-                            _getImageBytes(),
+                            Uint8List(0),
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const Icon(
+                            errorBuilder: (_, __, ___) => Icon(
                               Icons.image_rounded,
-                              color: Colors.grey,
+                              color: cs.onSurfaceVariant.withValues(alpha: 0.45),
                             ),
                           ),
                         )
-                      : const Icon(
+                      : Icon(
                           Icons.image_rounded,
-                          color: Colors.grey,
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.45),
                         ),
                 ),
                 const SizedBox(width: 16),
@@ -984,16 +984,16 @@ class _FormContent extends StatelessWidget {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.warning_rounded,
                             size: 14,
-                            color: Colors.red,
+                            color: cs.error,
                           ),
                           const SizedBox(width: 4),
                           Text(
                             'Strict limit: 50KB for remote school access.',
                             style: tt.labelMedium?.copyWith(
-                              color: Colors.red,
+                              color: cs.error,
                             ),
                           ),
                         ],
@@ -1098,12 +1098,12 @@ class _FormContent extends StatelessWidget {
                       ),
                     ),
                     icon: submitting
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Colors.white,
+                              color: cs.onPrimary,
                             ),
                           )
                         : const Icon(Icons.publish_rounded, size: 20),
@@ -1121,11 +1121,6 @@ class _FormContent extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Uint8List _getImageBytes() {
-    // stub - never called when pickedImage is null due to conditional
-    return Uint8List(0);
   }
 
   InputDecoration _inputDecoration(String hint) {
@@ -1445,6 +1440,7 @@ class _BottomNav extends StatelessWidget {
             icon: Icons.home_outlined,
             label: 'Home',
             isActive: false,
+            onTap: () => context.go('/dashboard'),
           ),
           _bottomItem(
             cs: cs,
@@ -1452,6 +1448,7 @@ class _BottomNav extends StatelessWidget {
             icon: Icons.menu_book_rounded,
             label: 'Lessons',
             isActive: false,
+            onTap: () => context.go('/lessons'),
           ),
           _bottomItem(
             cs: cs,
@@ -1459,6 +1456,7 @@ class _BottomNav extends StatelessWidget {
             icon: Icons.quiz_outlined,
             label: 'Exams',
             isActive: false,
+            onTap: () => context.go('/exams'),
           ),
           _bottomItem(
             cs: cs,
@@ -1466,6 +1464,7 @@ class _BottomNav extends StatelessWidget {
             icon: Icons.more_horiz_rounded,
             label: 'More',
             isActive: true,
+            onTap: () => context.go('/settings'),
           ),
         ],
       ),
@@ -1478,56 +1477,63 @@ class _BottomNav extends StatelessWidget {
     required IconData icon,
     required String label,
     required bool isActive,
+    required VoidCallback onTap,
   }) {
     if (isActive) {
-      return Container(
-        width: 80,
-        height: 48,
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        decoration: BoxDecoration(
-          color: cs.secondaryContainer,
-          borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+      return GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 80,
+          height: 48,
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          decoration: BoxDecoration(
+            color: cs.secondaryContainer,
+            borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 22,
+                color: cs.onSecondaryContainer,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: tt.labelMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: cs.onSecondaryContainer,
+                ),
+              ),
+            ],
+          ),
         ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 64,
+        height: 48,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               icon,
               size: 22,
-              color: cs.onSecondaryContainer,
+              color: cs.onSurfaceVariant,
             ),
             const SizedBox(height: 2),
             Text(
               label,
               style: tt.labelMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: cs.onSecondaryContainer,
+                color: cs.onSurfaceVariant,
               ),
             ),
           ],
         ),
-      );
-    }
-
-    return SizedBox(
-      width: 64,
-      height: 48,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            icon,
-            size: 22,
-            color: cs.onSurfaceVariant,
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: tt.labelMedium?.copyWith(
-              color: cs.onSurfaceVariant,
-            ),
-          ),
-        ],
       ),
     );
   }

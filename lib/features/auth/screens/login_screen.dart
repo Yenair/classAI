@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:classai/core/constants/app_constants.dart';
+import 'package:classai/core/widgets/animated_pressable.dart';
 import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/core/services/emergency_flush_service.dart';
 import 'package:classai/core/theme/app_theme.dart';
@@ -511,7 +512,9 @@ class _LoginCard extends StatelessWidget {
                 // ── Sign In button ─────────────────────────────────
                 SizedBox(
                   height: AppTheme.touchTarget,
-                  child: FilledButton(
+                  child: AnimatedPressable(
+                    onPressed: isLoggingIn ? null : onLogin,
+                    child: FilledButton(
                     onPressed: isLoggingIn ? null : onLogin,
                     style: FilledButton.styleFrom(
                       backgroundColor: cs.primary,
@@ -535,6 +538,7 @@ class _LoginCard extends StatelessWidget {
                               color: cs.onPrimary,
                             ),
                           ),
+                  ),
                   ),
                 ),
               ],

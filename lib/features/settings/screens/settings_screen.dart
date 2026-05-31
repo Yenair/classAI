@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -129,6 +130,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   // === Canvas ===
                   Expanded(
                     child: SingleChildScrollView(
+
+                      physics: (Platform.isAndroid || Platform.isIOS)
+                          ? const BouncingScrollPhysics()
+                          : null,
                       padding: const EdgeInsets.fromLTRB(16, 24, 16, 100),
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 896),
@@ -243,6 +248,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           // Nav items
           Expanded(
             child: ListView(
+
+              physics: (Platform.isAndroid || Platform.isIOS)
+                  ? const BouncingScrollPhysics()
+                  : null,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               children: [
                 // Teacher-only nav items — hidden for admins
@@ -1414,9 +1423,9 @@ class _ModeOption extends StatelessWidget {
                       child: Container(
                         width: 8,
                         height: 8,
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Colors.white,
+                          color: cs.onPrimary,
                         ),
                       ),
                     )

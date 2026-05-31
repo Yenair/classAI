@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'package:drift/drift.dart' hide Column;
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:classai/core/widgets/animated_pressable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:classai/core/database/database.dart';
@@ -545,6 +548,10 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             );
           }
           return ListView.builder(
+
+            physics: (Platform.isAndroid || Platform.isIOS)
+                ? const BouncingScrollPhysics()
+                : null,
             itemCount: filtered.length,
             itemBuilder: (ctx, i) {
               final s = filtered[i];
@@ -644,6 +651,10 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                     builder: (context, constraints) {
                       final isWide = constraints.maxWidth >= 1024;
                       return SingleChildScrollView(
+
+                        physics: (Platform.isAndroid || Platform.isIOS)
+                            ? const BouncingScrollPhysics()
+                            : null,
                         child: Column(
                           children: [
                             // ── Tool Header Area ────────────────────
@@ -908,9 +919,9 @@ class _NavigationDrawer extends StatelessWidget {
                               AppTheme.radiusFull,
                             ),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.person_rounded,
-                            color: Colors.white,
+                            color: cs.onPrimaryContainer,
                             size: 22,
                           ),
                         ),
@@ -958,9 +969,7 @@ class _NavigationDrawer extends StatelessWidget {
                   ),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                    onTap: () {
-                      // Navigation handled by router in real app
-                    },
+                    onTap: () => _navigateTo(context, item.label),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
@@ -997,6 +1006,26 @@ class _NavigationDrawer extends StatelessWidget {
         );
       },
     );
+  }
+
+  void _navigateTo(BuildContext context, String label) {
+    switch (label) {
+      case 'Home':
+        context.go('/dashboard');
+        break;
+      case 'Lessons':
+        context.go('/lessons');
+        break;
+      case 'Exams':
+        context.go('/exams');
+        break;
+      case 'Vault':
+        context.go('/vault');
+        break;
+      case 'Admin':
+        context.go('/admin');
+        break;
+    }
   }
 }
 
@@ -1040,7 +1069,7 @@ class _MobileHeader extends StatelessWidget {
                   color: cs.primaryContainer,
                   borderRadius: BorderRadius.circular(AppTheme.radiusFull),
                 ),
-                child: const Icon(Icons.person_rounded, size: 18, color: Colors.white),
+                child: Icon(Icons.person_rounded, size: 18, color: cs.onPrimaryContainer),
               ),
               const SizedBox(width: 12),
               Text(
@@ -1321,13 +1350,16 @@ class _ConfigColumn extends StatelessWidget {
               ),
             ),
             icon: isGenerating
-                ? const SizedBox(
+                ? AnimatedPressable(
+                    onPressed: null,
+                    child: SizedBox(
                     height: 22,
                     width: 22,
                     child: CircularProgressIndicator(
                       strokeWidth: 2.5,
-                      color: Colors.white,
+                      color: cs.onPrimary,
                     ),
+                  )
                   )
                 : const Icon(Icons.auto_awesome_rounded),
             label: Text(
@@ -1542,20 +1574,20 @@ class _PreviewColumn extends StatelessWidget {
               margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.1),
+                color: cs.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(AppTheme.radiusXl),
                 border: Border.all(
-                  color: Colors.green.withValues(alpha: 0.3),
+                  color: cs.primary.withValues(alpha: 0.3),
                 ),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.check_circle_rounded, color: Colors.green, size: 20),
+                  Icon(Icons.check_circle_rounded, color: cs.primary, size: 20),
                   const SizedBox(width: 8),
                   Text(
                     'Unlocked — You can edit and save this lesson',
                     style: theme.textTheme.labelLarge?.copyWith(
-                      color: Colors.green.shade700,
+                      color: cs.primary,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -1570,23 +1602,23 @@ class _PreviewColumn extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               margin: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.amber.withValues(alpha: 0.08),
+                color: cs.tertiary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(AppTheme.radiusXl),
                 border: Border.all(
-                  color: Colors.amber.withValues(alpha: 0.3),
+                  color: cs.tertiary.withValues(alpha: 0.3),
                 ),
               ),
               child: Column(
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.lock_rounded, color: Colors.amber.shade700, size: 20),
+                      Icon(Icons.lock_rounded, color: cs.tertiary, size: 20),
                       const SizedBox(width: 8),
                       Text(
                         'Locked — Preview only',
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w600,
-                          color: Colors.amber.shade700,
+                          color: cs.tertiary,
                         ),
                       ),
                     ],
@@ -1610,14 +1642,16 @@ class _PreviewColumn extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 16),
-                  SizedBox(
+                  AnimatedPressable(
+                    onPressed: onUnlock,
+                    child: SizedBox(
                     width: double.infinity,
                     height: AppTheme.touchTarget,
                     child: FilledButton.icon(
                       onPressed: onUnlock,
                       style: FilledButton.styleFrom(
-                        backgroundColor: Colors.amber.shade700,
-                        foregroundColor: Colors.white,
+                        backgroundColor: cs.tertiary,
+                        foregroundColor: cs.onTertiary,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(AppTheme.radiusXl),
                         ),
@@ -1625,6 +1659,7 @@ class _PreviewColumn extends StatelessWidget {
                       icon: const Icon(Icons.lock_open_rounded),
                       label: const Text('Unlock for 1 Credit'),
                     ),
+                  )
                   ),
                 ],
               ),
@@ -1726,7 +1761,9 @@ class _PreviewColumn extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(width: 12),
-                SizedBox(
+                AnimatedPressable(
+                    onPressed: onSave,
+                    child: SizedBox(
                   height: AppTheme.touchTarget,
                   child: FilledButton(
                     onPressed: onSave,
@@ -1738,7 +1775,8 @@ class _PreviewColumn extends StatelessWidget {
                     ),
                     child: const Text('Save to Vault'),
                   ),
-                ),
+                )
+                  ),
               ],
             ),
           ),
@@ -1911,7 +1949,10 @@ class _BottomNavBar extends StatelessWidget {
               selectedFontSize: 0,
               unselectedFontSize: 0,
               currentIndex: 1,
-              onTap: (_) {},
+              onTap: (index) {
+                final label = _LessonEditorScreenState._bottomNavItems[index].label;
+                _navigateTo(context, label);
+              },
               items: _LessonEditorScreenState._bottomNavItems.map((item) {
                 return BottomNavigationBarItem(
                   icon: item.isActive
@@ -1959,6 +2000,23 @@ class _BottomNavBar extends StatelessWidget {
         );
       },
     );
+  }
+
+  void _navigateTo(BuildContext context, String label) {
+    switch (label) {
+      case 'Home':
+        context.go('/dashboard');
+        break;
+      case 'Lessons':
+        context.go('/lessons');
+        break;
+      case 'Exams':
+        context.go('/exams');
+        break;
+      case 'More':
+        context.go('/settings');
+        break;
+    }
   }
 }
 

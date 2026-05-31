@@ -85,22 +85,22 @@ final appRouter = GoRouter(
     return null; // allow navigation
   },
   routes: [
-    GoRoute(
+    _route(
       path: '/',
       name: 'dashboard',
       builder: (context, state) => const DashboardScreen(),
     ),
-    GoRoute(
+    _route(
       path: '/login',
       name: 'login',
       builder: (context, state) => const LoginScreen(),
     ),
-    GoRoute(
+    _route(
       path: '/lessons',
       name: 'lessons',
       builder: (context, state) => const LessonsListScreen(),
     ),
-    GoRoute(
+    _route(
       path: '/lessons/:id',
       name: 'lesson-editor',
       builder: (context, state) {
@@ -108,37 +108,37 @@ final appRouter = GoRouter(
         return LessonEditorScreen(lessonId: lessonId);
       },
     ),
-    GoRoute(
+    _route(
       path: '/lesson-editor',
       name: 'lesson-creator',
       builder: (context, state) => const LessonEditorScreen(),
     ),
-    GoRoute(
+    _route(
       path: '/exams',
       name: 'exams',
       builder: (context, state) => const ExamsListScreen(),
     ),
-    GoRoute(
+    _route(
       path: '/exams/:id',
       name: 'exam-editor',
       builder: (context, state) => const ExamEditorScreen(),
     ),
-    GoRoute(
+    _route(
       path: '/exam-editor',
       name: 'exam-creator',
       builder: (context, state) => const ExamEditorScreen(),
     ),
-    GoRoute(
+    _route(
       path: '/conflicts',
       name: 'conflicts',
       builder: (context, state) => const ConflictResolutionScreen(),
     ),
-    GoRoute(
+    _route(
       path: '/admin',
       name: 'admin',
       builder: (context, state) => const AdminDashboardScreen(),
     ),
-    GoRoute(
+    _route(
       path: '/admin/teachers/:id',
       name: 'teacher-detail',
       builder: (context, state) {
@@ -152,53 +152,75 @@ final appRouter = GoRouter(
         return TeacherDetailScreen(teacherLocalId: teacherLocalId);
       },
     ),
-    GoRoute(
+    _route(
       path: '/vault',
       name: 'vault',
       builder: (context, state) => const VaultBrowserScreen(),
     ),
-    GoRoute(
+    _route(
       path: '/vault/publish',
       name: 'vault-publish',
       builder: (context, state) => const VaultPublisherScreen(),
     ),
-    GoRoute(
+    _route(
       path: '/settings',
       name: 'settings',
       builder: (context, state) => const SettingsScreen(),
     ),
-    GoRoute(
+    _route(
       path: '/signup',
       name: 'signup',
       builder: (context, state) => const SignupScreen(),
     ),
-    GoRoute(
+    _route(
       path: '/admin-recovery',
       name: 'admin-recovery',
       builder: (context, state) => const AdminRecoveryScreen(),
     ),
-    GoRoute(
+    _route(
       path: '/change-password',
       name: 'change-password',
       builder: (context, state) => const ChangePasswordScreen(),
     ),
-    GoRoute(
+    _route(
       path: '/payment',
       name: 'payment',
       builder: (context, state) => const PaymentScreen(),
     ),
-    GoRoute(
+    _route(
       path: '/insufficient-credit',
       name: 'insufficient-credit',
       builder: (context, state) => const InsufficientCreditScreen(),
     ),
-    GoRoute(
+    _route(
       path: '/scheme-of-work',
       name: 'scheme-of-work',
       builder: (context, state) => const SchemeOfWorkScreen(),
     ),
   ],
 );
+
+/// Helper that wraps a GoRoute's pageBuilder in a [CustomTransitionPage]
+/// with a 250 ms fade-through transition.
+GoRoute _route({
+  required String path,
+  required String name,
+  required Widget Function(BuildContext, GoRouterState) builder,
+  List<GoRoute> routes = const [],
+}) {
+  return GoRoute(
+    path: path,
+    name: name,
+    routes: routes,
+    pageBuilder: (context, state) => CustomTransitionPage(
+      key: state.pageKey,
+      child: builder(context, state),
+      transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+          FadeTransition(opacity: animation, child: child),
+      transitionDuration: const Duration(milliseconds: 250),
+    ),
+  );
+}
 
 /// Handles parsing and navigation for `classai://` deep links that arrive
 /// outside of the GoRouter lifecycle (e.g., cold start, app links stream).

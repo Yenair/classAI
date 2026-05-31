@@ -62,8 +62,38 @@ class _ToastOverlay extends StatefulWidget {
   State<_ToastOverlay> createState() => _ToastOverlayState();
 }
 
-class _ToastOverlayState extends State<_ToastOverlay> {
+class _ToastOverlayState extends State<_ToastOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<Offset> _slideAnimation;
   bool _isCopied = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 1),
+      end: Offset.zero,
+    ).chain(CurveTween(curve: Curves.elasticOut)).animate(_controller);
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _dismiss() async {
+    await _controller.reverse();
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -71,7 +101,9 @@ class _ToastOverlayState extends State<_ToastOverlay> {
       backgroundColor: Colors.transparent,
       body: Align(
         alignment: Alignment.bottomCenter,
-        child: Container(
+        child: SlideTransition(
+          position: _slideAnimation,
+          child: Container(
           width: double.infinity,
           margin: const EdgeInsets.all(16),
           padding: const EdgeInsets.all(16),
@@ -158,7 +190,7 @@ class _ToastOverlayState extends State<_ToastOverlay> {
                   ),
                   const SizedBox(width: 4),
                   TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: _dismiss,
                     style: TextButton.styleFrom(
                       foregroundColor: widget.foregroundColor,
                       padding: const EdgeInsets.symmetric(
@@ -180,6 +212,7 @@ class _ToastOverlayState extends State<_ToastOverlay> {
               ),
             ],
           ),
+        ),
         ),
       ),
     );

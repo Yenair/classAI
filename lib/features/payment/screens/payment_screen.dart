@@ -390,7 +390,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                       Text(
                         'Processing payment\u2026',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: cs.onPrimary,
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
                         ),

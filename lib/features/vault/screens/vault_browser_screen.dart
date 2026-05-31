@@ -1,4 +1,5 @@
 // lib/features/vault/screens/vault_browser_screen.dart
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -631,7 +632,10 @@ class _VaultContent extends StatelessWidget {
                     ? 2
                     : 1;
 
-        return SingleChildScrollView(
+        return SingleChildScrollView(
+          physics: (Platform.isAndroid || Platform.isIOS)
+              ? const BouncingScrollPhysics()
+              : null,
           padding: const EdgeInsets.only(
             left: AppTheme.spacingMarginMobile,
             right: AppTheme.spacingMarginMobile,
@@ -836,7 +840,10 @@ class _FilterChipsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
+    return SingleChildScrollView(
+      physics: (Platform.isAndroid || Platform.isIOS)
+          ? const BouncingScrollPhysics()
+          : null,
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [

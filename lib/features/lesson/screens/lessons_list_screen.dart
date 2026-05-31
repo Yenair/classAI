@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -70,7 +71,10 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
           const ConflictBanner(),
           Expanded(
             child: lessonsAsync.when(
-              loading: () => ListView(
+              loading: () => ListView(
+                physics: (Platform.isAndroid || Platform.isIOS)
+                    ? const BouncingScrollPhysics()
+                    : null,
                 padding: const EdgeInsets.all(16),
                 children: List.generate(
                   4,
@@ -163,7 +167,10 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
 
                 return RefreshIndicator(
                   onRefresh: () async => ref.invalidate(lessonsListProvider),
-                  child: ListView.builder(
+                  child: ListView.builder(
+                    physics: (Platform.isAndroid || Platform.isIOS)
+                        ? const BouncingScrollPhysics()
+                        : null,
                     padding: const EdgeInsets.all(16),
                     itemCount: lessons.length,
                     itemBuilder: (context, index) {

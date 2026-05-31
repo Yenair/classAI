@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'package:drift/drift.dart' hide Column;
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:classai/core/widgets/animated_pressable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:classai/core/database/database.dart';
@@ -545,6 +548,10 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
             );
           }
           return ListView.builder(
+
+            physics: (Platform.isAndroid || Platform.isIOS)
+                ? const BouncingScrollPhysics()
+                : null,
             itemCount: filtered.length,
             itemBuilder: (ctx, i) {
               final s = filtered[i];
@@ -643,6 +650,10 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                     builder: (context, constraints) {
                       final isWide = constraints.maxWidth >= 1024;
                       return SingleChildScrollView(
+
+                        physics: (Platform.isAndroid || Platform.isIOS)
+                            ? const BouncingScrollPhysics()
+                            : null,
                         padding: EdgeInsets.all(
                           isWide
                               ? AppTheme.spacingMarginTablet
@@ -834,10 +845,10 @@ class _NavDrawer extends StatelessWidget {
                           AppTheme.radiusFull,
                         ),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.person_rounded,
                         size: 24,
-                        color: Colors.white54,
+                        color: cs.onSurface.withValues(alpha: 0.54),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -881,6 +892,7 @@ class _NavDrawer extends StatelessWidget {
                       ),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                        onTap: () => _navigateTo(context, item.label),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
@@ -920,6 +932,26 @@ class _NavDrawer extends StatelessWidget {
         );
       },
     );
+  }
+
+  void _navigateTo(BuildContext context, String label) {
+    switch (label) {
+      case 'Home':
+        context.go('/dashboard');
+        break;
+      case 'Lessons':
+        context.go('/lessons');
+        break;
+      case 'Exams':
+        context.go('/exams');
+        break;
+      case 'Vault':
+        context.go('/vault');
+        break;
+      case 'Admin':
+        context.go('/admin');
+        break;
+    }
   }
 }
 
@@ -966,10 +998,10 @@ class _TopBar extends StatelessWidget {
                     color: cs.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(AppTheme.radiusFull),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.person_rounded,
                     size: 22,
-                    color: Colors.white54,
+                    color: cs.onSurface.withValues(alpha: 0.54),
                   ),
                 ),
               );
@@ -1188,7 +1220,7 @@ class _ConfigPanel extends StatelessWidget {
                 theme: theme,
                 cs: cs,
                 label: 'Question Types',
-                color: Colors.white70,
+                color: cs.onSurface.withValues(alpha: 0.70),
               ),
               const SizedBox(height: 8),
               Wrap(
@@ -1211,7 +1243,7 @@ class _ConfigPanel extends StatelessWidget {
                     onSelected: (_) => onTypeToggled(type),
                     selectedColor: cs.secondary,
                     checkmarkColor: cs.onSecondaryFixed,
-                    backgroundColor: Colors.white.withValues(alpha: 0.10),
+                    backgroundColor: cs.onSurface.withValues(alpha: 0.10),
                     side: BorderSide.none,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(AppTheme.radiusFull),
@@ -1239,7 +1271,7 @@ class _ConfigPanel extends StatelessWidget {
                         theme: theme,
                         cs: cs,
                         label: labels[type] ?? type,
-                        color: Colors.white70,
+                        color: cs.onSurface.withValues(alpha: 0.70),
                       ),
                       const SizedBox(height: 4),
                       SizedBox(
@@ -1253,7 +1285,7 @@ class _ConfigPanel extends StatelessWidget {
                               borderSide: BorderSide.none,
                             ),
                             filled: true,
-                            fillColor: Colors.white.withValues(alpha: 0.15),
+                            fillColor: cs.onSurface.withValues(alpha: 0.15),
                             contentPadding:
                                 const EdgeInsets.symmetric(horizontal: 16),
                           ),
@@ -1286,14 +1318,17 @@ class _ConfigPanel extends StatelessWidget {
                     ),
                   ),
                   icon: isGenerating
-                      ? const SizedBox(
-                          height: 22,
-                          width: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: Colors.white,
-                          ),
-                        )
+                      ? AnimatedPressable(
+                        onPressed: null,
+                        child: SizedBox(
+                              height: 22,
+                              width: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: cs.onPrimary,
+                              ),
+                            )
+                      )
                       : const Icon(Icons.bolt_rounded),
                   label: Text(
                     isGenerating
@@ -1427,20 +1462,20 @@ class _PreviewPanel extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: Colors.green.withValues(alpha: 0.1),
+                  color: cs.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(AppTheme.radiusXl),
                   border: Border.all(
-                    color: Colors.green.withValues(alpha: 0.3),
+                    color: cs.primary.withValues(alpha: 0.3),
                   ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.check_circle_rounded, color: Colors.green, size: 20),
+                    Icon(Icons.check_circle_rounded, color: cs.primary, size: 20),
                     const SizedBox(width: 8),
                     Text(
                       'Unlocked — You can edit and save this exam',
                       style: theme.textTheme.labelLarge?.copyWith(
-                        color: Colors.green.shade700,
+                        color: cs.primary,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -1456,24 +1491,24 @@ class _PreviewPanel extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.amber.withValues(alpha: 0.08),
+                  color: cs.tertiary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(AppTheme.radiusXl),
                   border: Border.all(
-                    color: Colors.amber.withValues(alpha: 0.3),
+                    color: cs.tertiary.withValues(alpha: 0.3),
                   ),
                 ),
                 child: Column(
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.lock_rounded,
-                            color: Colors.amber, size: 20),
+                        Icon(Icons.lock_rounded,
+                            color: cs.tertiary, size: 20),
                         const SizedBox(width: 8),
                         Text(
                           'Locked — Preview only',
                           style: theme.textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.w600,
-                            color: Colors.amber.shade700,
+                            color: cs.tertiary,
                           ),
                         ),
                       ],
@@ -1486,14 +1521,16 @@ class _PreviewPanel extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    SizedBox(
+                    AnimatedPressable(
+                    onPressed: onUnlock,
+                    child: SizedBox(
                       width: double.infinity,
                       height: AppTheme.touchTarget,
                       child: FilledButton.icon(
                         onPressed: onUnlock,
                         style: FilledButton.styleFrom(
-                          backgroundColor: Colors.amber.shade700,
-                          foregroundColor: Colors.white,
+                          backgroundColor: cs.tertiary,
+                          foregroundColor: cs.onTertiary,
                           shape: RoundedRectangleBorder(
                             borderRadius:
                                 BorderRadius.circular(AppTheme.radiusXl),
@@ -1502,7 +1539,8 @@ class _PreviewPanel extends StatelessWidget {
                         icon: const Icon(Icons.lock_open_rounded),
                         label: const Text('Unlock for 1 Credit'),
                       ),
-                    ),
+                    )
+                  ),
                   ],
                 ),
               ),
@@ -1598,7 +1636,9 @@ class _PreviewPanel extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  SizedBox(
+                  AnimatedPressable(
+                    onPressed: onSave,
+                    child: SizedBox(
                     height: AppTheme.touchTarget,
                     child: FilledButton.icon(
                       onPressed: onSave,
@@ -1612,6 +1652,7 @@ class _PreviewPanel extends StatelessWidget {
                       icon: const Icon(Icons.save_rounded),
                       label: const Text('Save to Vault'),
                     ),
+                  )
                   ),
                 ],
               ),
@@ -1940,7 +1981,10 @@ class _BottomBar extends StatelessWidget {
               selectedFontSize: 0,
               unselectedFontSize: 0,
               currentIndex: 2,
-              onTap: (_) {},
+              onTap: (index) {
+                final label = _ExamEditorScreenState._bottomNavItems[index].label;
+                _navigateTo(context, label);
+              },
               items: _ExamEditorScreenState._bottomNavItems.map((item) {
                 return BottomNavigationBarItem(
                   icon: item.isActive
@@ -1988,6 +2032,23 @@ class _BottomBar extends StatelessWidget {
         );
       },
     );
+  }
+
+  void _navigateTo(BuildContext context, String label) {
+    switch (label) {
+      case 'Home':
+        context.go('/dashboard');
+        break;
+      case 'Lessons':
+        context.go('/lessons');
+        break;
+      case 'Exams':
+        context.go('/exams');
+        break;
+      case 'More':
+        context.go('/settings');
+        break;
+    }
   }
 }
 

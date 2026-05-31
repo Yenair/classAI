@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' show Value;
@@ -284,6 +285,10 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
         foregroundColor: cs.onSurface,
       ),
       body: SingleChildScrollView(
+
+        physics: (Platform.isAndroid || Platform.isIOS)
+            ? const BouncingScrollPhysics()
+            : null,
         padding: const EdgeInsets.all(16),
         child: isWide
             ? Row(
@@ -346,7 +351,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
                 child: FilledButton.icon(
                   onPressed: _isGenerating ? null : _handleGenerate,
                   icon: _isGenerating
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: cs.onPrimary))
                       : const Icon(Icons.auto_awesome),
                   label: Text(_isGenerating ? 'Generating...' : 'Generate Scheme'),
                 ),
@@ -630,14 +635,14 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
                 if (record.status != 'approved')
                   TextButton.icon(
                     onPressed: () => _adminApprove(record.id),
-                    icon: const Icon(Icons.check_circle, color: Colors.green),
+                    icon: Icon(Icons.check_circle, color: cs.primary),
                     label: const Text('Approve'),
                   ),
                 const SizedBox(width: 8),
                 if (record.status != 'rejected')
                   TextButton.icon(
                     onPressed: () => _adminReject(record.id),
-                    icon: const Icon(Icons.cancel, color: Colors.red),
+                    icon: Icon(Icons.cancel, color: cs.error),
                     label: const Text('Reject'),
                   ),
               ],
