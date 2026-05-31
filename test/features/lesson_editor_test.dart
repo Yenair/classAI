@@ -230,19 +230,7 @@ void main() {
       await tester.tap(find.text('Close'));
       await tester.pumpAndSettle();
 
-      // Scroll Save button into view (it's below preview cards)
-      await tester.scrollUntilVisible(
-        find.text('Save to Vault'),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.pumpAndSettle();
-
-      // Tap Save to Vault
-      await tester.tap(find.text('Save to Vault'));
-      await tester.pumpAndSettle();
-
-      // Verify saved in database
+      // Verify lesson was auto-saved to database during generation
       final lessons = await db.select(db.lessons).get();
       expect(lessons.length, equals(1));
       expect(lessons.first.subject, equals('Mathematics'));

@@ -228,12 +228,12 @@ serve(async (req) => {
         // Look up school name
         const { data: school } = await supabase
           .from("schools")
-          .select("name, subscription_tier")
+          .select("school_name, subscription_tier")
           .eq("id", teacher.school_id)
           .maybeSingle();
 
         const status = teacher.is_active ? "Active" : "Inactive";
-        const schoolName = school?.name ?? "Unknown";
+        const schoolName = school?.school_name ?? "Unknown";
         const tier = school?.subscription_tier ?? "Unknown";
 
         return new Response(

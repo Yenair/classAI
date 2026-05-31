@@ -34,7 +34,23 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // First load whatever is already in the local DB
       ref.read(adminDashboardProvider.notifier).refresh();
+
+      // Then trigger a direct pull (bypasses biometric/session gate)
+      // Pass the JWT so the edge function can authenticate, and
+      // override the schoolId with the correct one from auth state
+      // (the local DB may have a stale school record).
+      ref.read(syncServiceProvider.future).then((syncService) {
+        final jwt = ref.read(authServiceProvider).currentJwt;
+        final adminSchoolId = ref.read(authProvider).currentSchool?.serverId;
+        syncService.pullNow(jwt: jwt, overrideSchoolId: adminSchoolId).then((_) {
+          // Refresh the admin UI after the pull completes
+          if (mounted) {
+            ref.read(adminDashboardProvider.notifier).refresh();
+          }
+        });
+      });
     });
 
     // Auto-refresh admin data every 30 seconds to stay in sync

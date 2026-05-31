@@ -706,17 +706,25 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Selected Plan',
-                style: textTheme.bodyMedium?.copyWith(
-                  color: cs.onSurfaceVariant,
+              Flexible(
+                child: Text(
+                  'Selected Plan',
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    overflow: TextOverflow.clip,
+                  ),
                 ),
               ),
-              Text(
-                plan.name,
-                style: textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
-                  color: cs.onSurface,
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  plan.name,
+                  textAlign: TextAlign.end,
+                  style: textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: cs.onSurface,
+                    overflow: TextOverflow.clip,
+                  ),
                 ),
               ),
             ],
@@ -727,17 +735,25 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Duration',
-                style: textTheme.bodyMedium?.copyWith(
-                  color: cs.onSurfaceVariant,
+              Flexible(
+                child: Text(
+                  'Duration',
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    overflow: TextOverflow.clip,
+                  ),
                 ),
               ),
-              Text(
-                '1 Academic Term',
-                style: textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
-                  color: cs.onSurface,
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  '1 Academic Term',
+                  textAlign: TextAlign.end,
+                  style: textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: cs.onSurface,
+                    overflow: TextOverflow.clip,
+                  ),
                 ),
               ),
             ],
@@ -754,18 +770,26 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Total Due',
-                style: textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: cs.onSurface,
+              Flexible(
+                child: Text(
+                  'Total Due',
+                  style: textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: cs.onSurface,
+                    overflow: TextOverflow.clip,
+                  ),
                 ),
               ),
-              Text(
-                plan.price,
-                style: textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: cs.primary,
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  plan.price,
+                  textAlign: TextAlign.end,
+                  style: textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: cs.primary,
+                    overflow: TextOverflow.clip,
+                  ),
                 ),
               ),
             ],

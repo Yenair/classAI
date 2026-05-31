@@ -217,6 +217,11 @@ abstract class SyncRemoteApi {
 class SupabaseSyncRemoteApi implements SyncRemoteApi {
   final SupabaseClient client;
   final String schoolId;
+  String? _jwt;
+
+  void setJwt(String? jwt) {
+    _jwt = jwt;
+  }
 
   static const List<String> _syncableTables = [
     'subjects',
@@ -241,10 +246,19 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
     int limit = 50,
   }) async {
     try {
-      final response = await client.functions.invoke('sync-pull', body: {
-        'lastSyncTimestamp': cursor ?? '',
-        'tables': _syncableTables,
-      });
+      final headers = <String, String>{};
+      if (_jwt != null && _jwt!.isNotEmpty) {
+        headers['x-classai-jwt'] = _jwt!;
+      }
+      final response = await client.functions.invoke(
+        'sync-pull',
+        headers: headers.isNotEmpty ? headers : null,
+        body: {
+          'lastSyncTimestamp': cursor ?? '',
+          'tables': _syncableTables,
+          'school_id': schoolId,
+        },
+      );
       final data = response.data as Map<String, dynamic>?;
       if (data != null) {
         return SyncPullPage.fromJson(data);
@@ -635,10 +649,45 @@ class SyncService {
     await _pullChanges();
   }
 
-  Future<void> _pullChanges() async {
+  /// Performs a full sync cycle without biometric/session authentication.
+  /// Used by the admin dashboard to pull teacher data on initial load
+  /// without being blocked by the biometric gate.
+  ///
+  /// If [jwt] is provided, it will be set on the remote API for
+  /// authenticated requests to the sync-pull edge function.
+  ///
+  /// If [overrideSchoolId] is provided, it overrides [schoolId] for this pull.
+  /// This is needed when the local DB has a stale school record and the
+  /// caller has the correct school serverId from auth state.
+  Future<void> pullNow({String? jwt, String? overrideSchoolId}) async {
+    if (jwt != null && jwt.isNotEmpty && remoteApi is SupabaseSyncRemoteApi) {
+      (remoteApi as SupabaseSyncRemoteApi).setJwt(jwt);
+    }
+    final config = await store.loadSecurityConfig();
+    // Clear any stale cooldown — pullNow is explicitly designed to bypass
+    // biometric/session gates and should not be blocked by a cooldown that
+    // was set by a previous biometric failure.
+    if (config.syncCooldownUntil != null) {
+      await store.updateSecurityConfig(syncCooldownUntil: null);
+    }
+    await _pullChanges(schoolIdOverride: overrideSchoolId);
+  }
+
+  Future<void> _pullChanges({String? schoolIdOverride}) async {
     _setState(SyncState.pulling);
+
+    // ── One-shot duplicate cleanup ──────────────────────────────────────
+    // Previous buggy sync runs (before school_id was correctly passed to
+    // the edge function) may have inserted duplicate teacher rows because
+    // the Teachers table has no unique constraint on server_id. Clean up
+    // any duplicates now: keep the row with the lowest localId for each
+    // non-null serverId.
+    await _deduplicateTeachers();
+    // ────────────────────────────────────────────────────────────────────
+
     final config = await store.loadSecurityConfig();
     String? cursor = config.syncCursor;
+    final effectiveSchoolId = schoolIdOverride ?? schoolId;
 
     // Collect reconciliation metadata across all pages (Issues 1 & 3)
     Set<String>? activeTeacherIds;
@@ -646,10 +695,41 @@ class SyncService {
 
     while (true) {
       final page = await remoteApi.pullChanges(
-        schoolId: schoolId,
+        schoolId: effectiveSchoolId,
         cursor: cursor,
         limit: 50,
       );
+
+      debugPrint(
+        '[SYNC-DEBUG] Pull page: schoolId=$effectiveSchoolId, cursor=$cursor, '
+        'changes=${page.changes.length}, '
+        'activeTeacherIds=${page.activeTeacherIds?.length ?? 0}, '
+        'pendingTeachers=${page.pendingTeachers?.length ?? 0}',
+      );
+
+      // Log teacher changes specifically
+      final teacherChanges = page.changes
+          .where((c) => c.table == 'teachers')
+          .toList();
+      if (teacherChanges.isNotEmpty) {
+        debugPrint(
+          '[SYNC-DEBUG] Teacher changes in this page: ${teacherChanges.length}',
+        );
+        for (final tc in teacherChanges) {
+          debugPrint(
+            '[SYNC-DEBUG]   Teacher: id=${tc.row['id']}, '
+            'email=${tc.row['email']}, school_id=${tc.row['school_id']}',
+          );
+        }
+      }
+
+      // Log active teacher IDs
+      if (page.activeTeacherIds != null && page.activeTeacherIds!.isNotEmpty) {
+        debugPrint(
+          '[SYNC-DEBUG] Active teacher IDs (first 5): '
+          '${page.activeTeacherIds!.take(5).join(', ')}',
+        );
+      }
 
       for (final change in page.changes) {
         await _mergeRemoteChange(change);
@@ -676,6 +756,11 @@ class SyncService {
         break;
       }
     }
+
+    debugPrint(
+      '[SYNC-DEBUG] Final totals: pendingTeachers=${pendingTeachers?.length ?? 0}, '
+      'activeTeacherIds=${activeTeacherIds?.length ?? 0}',
+    );
 
     // ── Post-pull reconciliation ──────────────────────────────────────
     // Issue 1: Remove local teachers that were hard-deleted on the server
@@ -1067,6 +1152,60 @@ class SyncService {
       ));
       debugPrint('[sync] _upsertTeacherFromSync: INSERTED teacher $serverId');
     }
+  }
+
+  /// Removes duplicate teacher rows that share the same non-null [serverId],
+  /// keeping only the row with the lowest [localId] for each serverId.
+  ///
+  /// Previous buggy sync runs (before school_id filtering was added) could
+  /// insert the same teacher multiple times because there was no unique
+  /// constraint on the server_id column. This method cleans up any such
+  /// duplicates in a single pass using raw SQL.
+  Future<void> _deduplicateTeachers() async {
+    // Use raw SQL to find duplicate serverIds
+    final dupRows = await db.customSelect(
+      'SELECT server_id, COUNT(*) AS cnt '
+      'FROM teachers '
+      'WHERE server_id IS NOT NULL '
+      'GROUP BY server_id '
+      'HAVING COUNT(*) > 1',
+    ).get();
+
+    if (dupRows.isEmpty) return;
+
+    int totalDeleted = 0;
+    for (final row in dupRows) {
+      final serverId = row.data['server_id'] as String;
+      final count = row.data['cnt'] as int;
+
+      // Get all localIds for this serverId, ordered ascending
+      final idRows = await db.customSelect(
+        'SELECT local_id FROM teachers '
+        'WHERE server_id = ? '
+        'ORDER BY local_id ASC',
+        variables: [Variable(serverId)],
+      ).get();
+
+      if (idRows.length <= 1) continue;
+
+      final ids = idRows.map((r) => r.data['local_id'] as int).toList();
+      final keepLocalId = ids.first;
+      final deleteIds = ids.skip(1).toList();
+
+      // Delete duplicate rows (keep lowest localId)
+      await db.customStatement(
+        'DELETE FROM teachers WHERE local_id IN (${deleteIds.join(',')})',
+      );
+
+      totalDeleted += deleteIds.length;
+      debugPrint(
+        '[sync] _deduplicateTeachers: kept localId=$keepLocalId, '
+        'deleted ${deleteIds.length} duplicate(s) for serverId=$serverId',
+      );
+    }
+    debugPrint(
+      '[sync] _deduplicateTeachers: deleted $totalDeleted duplicate row(s) total',
+    );
   }
 
   Future<String?> _loadBaseHash(String tableName, int localId) async {

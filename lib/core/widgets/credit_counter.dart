@@ -170,19 +170,27 @@ class _CreditDetailsDialog extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Available credits',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: cs.onSurfaceVariant,
-                    ),
+              Flexible(
+                child: Text(
+                  'Available credits',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                        overflow: TextOverflow.clip,
+                      ),
+                ),
               ),
-              Text(
-                '${data.currentCredits}',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: cs.primary,
-                      letterSpacing: -0.25,
-                    ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  '${data.currentCredits}',
+                  textAlign: TextAlign.end,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: cs.primary,
+                        letterSpacing: -0.25,
+                        overflow: TextOverflow.clip,
+                      ),
+                ),
               ),
             ],
           ),
@@ -192,23 +200,30 @@ class _CreditDetailsDialog extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Tier',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: cs.onSurfaceVariant,
-                    ),
-              ),
-              Chip(
-                label: Text(
-                  data.tierName,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: cs.onPrimaryContainer,
+              Flexible(
+                child: Text(
+                  'Tier',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                        overflow: TextOverflow.clip,
                       ),
                 ),
-                backgroundColor: cs.primaryContainer,
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Chip(
+                  label: Text(
+                    data.tierName,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: cs.onPrimaryContainer,
+                          overflow: TextOverflow.clip,
+                        ),
+                  ),
+                  backgroundColor: cs.primaryContainer,
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                ),
               ),
             ],
           ),
@@ -218,19 +233,27 @@ class _CreditDetailsDialog extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Next refill',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: cs.onSurfaceVariant,
-                    ),
+              Flexible(
+                child: Text(
+                  'Next refill',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                        overflow: TextOverflow.clip,
+                      ),
+                ),
               ),
-              Text(
-                data.nextRefillTime != null
-                    ? dateFormat.format(data.nextRefillTime!)
-                    : 'N/A',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w500,
-                    ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  data.nextRefillTime != null
+                      ? dateFormat.format(data.nextRefillTime!)
+                      : 'N/A',
+                  textAlign: TextAlign.end,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        overflow: TextOverflow.clip,
+                      ),
+                ),
               ),
             ],
           ),

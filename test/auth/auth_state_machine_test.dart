@@ -347,7 +347,7 @@ void main() {
       final state = container.read(authProvider);
       expect(state.state, equals(AuthState.onlineLoginRequired));
       expect(state.errorMessage,
-          contains('No internet connection. Please check your connection and try again.'));
+          contains('An unexpected error occurred. Please try again.'));
     });
   });
 

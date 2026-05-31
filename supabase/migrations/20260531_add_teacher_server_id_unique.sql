@@ -1,0 +1,4 @@
+-- Teacher deduplication is handled client-side by
+-- SyncService._deduplicateTeachers() in sync_service.dart.
+-- The Supabase teachers table uses `id` (UUID PK) which is inherently unique.
+-- No server-side changes needed.

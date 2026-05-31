@@ -168,7 +168,7 @@ serve(async (req) => {
           // Soft delete
           const { error } = await supabase
             .from(table)
-            .update({ deleted_at: new Date().toISOString(), is_deleted: true })
+            .update({ is_deleted: true })
             .eq("id", serverId);
           if (error) {
             console.warn(`sync-push: DELETE error on "${table}": ${error.message}`);

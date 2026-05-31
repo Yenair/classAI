@@ -37,7 +37,7 @@ serve(async (req) => {
     }
 
     // ── 2. Process sync-pull request ───────────────────────────────────────
-    const { lastSyncTimestamp, tables } = await req.json();
+    const { lastSyncTimestamp, tables, school_id } = await req.json();
 
     if (!Array.isArray(tables) || tables.length === 0) {
       return new Response(
@@ -60,6 +60,11 @@ serve(async (req) => {
         .select("*")
         .order("updated_at", { ascending: true })
         .limit(PAGE_SIZE);
+
+      // Scope teacher records to the admin's school
+      if (table === 'teachers' && school_id) {
+        query = query.eq("school_id", school_id);
+      }
 
       if (lastSyncTimestamp) {
         query = query.gt("updated_at", lastSyncTimestamp);
@@ -104,24 +109,31 @@ serve(async (req) => {
     let pendingTeachers: Record<string, unknown>[] = [];
 
     try {
-      // All teacher IDs that are not soft-deleted
-      const { data: teacherData } = await supabase
-        .from("teachers")
-        .select("id")
-        .or("is_deleted.is.null,is_deleted.eq.false");
+      // Scope all teacher metadata queries to the admin's school
+      if (!school_id) {
+        console.warn("sync-pull: no school_id provided, skipping teacher metadata queries");
+      } else {
+        // All teacher IDs that are not soft-deleted (scoped to school)
+        const { data: teacherData } = await supabase
+          .from("teachers")
+          .select("id")
+          .eq("school_id", school_id)
+          .or("is_deleted.is.null,is_deleted.eq.false");
 
-      if (teacherData && teacherData.length > 0) {
-        activeTeacherIds = teacherData.map((t: Record<string, unknown>) => t.id as string);
-      }
+        if (teacherData && teacherData.length > 0) {
+          activeTeacherIds = teacherData.map((t: Record<string, unknown>) => t.id as string);
+        }
 
-      // All teachers with force_password_reset = true (pending sign-in)
-      const { data: pendingData } = await supabase
-        .from("teachers")
-        .select("*")
-        .eq("force_password_reset", true);
+        // All teachers with force_password_reset = true (pending sign-in, scoped to school)
+        const { data: pendingData } = await supabase
+          .from("teachers")
+          .select("*")
+          .eq("school_id", school_id)
+          .eq("force_password_reset", true);
 
-      if (pendingData && pendingData.length > 0) {
-        pendingTeachers = pendingData;
+        if (pendingData && pendingData.length > 0) {
+          pendingTeachers = pendingData;
+        }
       }
     } catch (e) {
       console.warn("sync-pull: error fetching teacher metadata:", e);

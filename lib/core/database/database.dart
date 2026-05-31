@@ -95,7 +95,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   static QueryExecutor _openConnection() {
     return LazyDatabase(() async {
@@ -166,6 +166,12 @@ class AppDatabase extends _$AppDatabase {
             );
             await customStatement(
               "ALTER TABLE conflicts ADD COLUMN updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP",
+            );
+            await customStatement(
+              'ALTER TABLE conflicts ADD COLUMN local_value TEXT NULL',
+            );
+            await customStatement(
+              'ALTER TABLE conflicts ADD COLUMN remote_value TEXT NULL',
             );
           }
           if (from < 3) {
@@ -320,6 +326,15 @@ class AppDatabase extends _$AppDatabase {
             await customStatement(
               'ALTER TABLE lessons ADD COLUMN last_modified_by TEXT',
             );
+            await customStatement(
+              'ALTER TABLE lessons ADD COLUMN teacher_server_id TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE lessons ADD COLUMN school_server_id TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE lessons ADD COLUMN is_unlocked INTEGER NOT NULL DEFAULT 0',
+            );
             // Add sync columns to exams table
             await customStatement(
               'ALTER TABLE exams ADD COLUMN server_id TEXT',
@@ -332,6 +347,15 @@ class AppDatabase extends _$AppDatabase {
             );
             await customStatement(
               'ALTER TABLE exams ADD COLUMN last_modified_by TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE exams ADD COLUMN teacher_server_id TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE exams ADD COLUMN school_server_id TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE exams ADD COLUMN is_unlocked INTEGER NOT NULL DEFAULT 0',
             );
             // Expand sync_queue_snapshot stub table
             await customStatement(
@@ -485,27 +509,143 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 16) {
             final deviceId = const Uuid().v4();
-            await customStatement(
-              "ALTER TABLE security_config ADD COLUMN sync_pending_after_biometric_timeout INTEGER NOT NULL DEFAULT 0",
-            );
-            await customStatement(
-              "ALTER TABLE security_config ADD COLUMN current_device_id TEXT NOT NULL DEFAULT ''",
-            );
-            await customStatement(
-              "ALTER TABLE security_config ADD COLUMN daily_preview_count INTEGER NOT NULL DEFAULT 0",
-            );
-            await customStatement(
-              "ALTER TABLE security_config ADD COLUMN daily_preview_date TEXT",
-            );
-            await customStatement(
-              "ALTER TABLE security_config ADD COLUMN pending_db_replacement INTEGER NOT NULL DEFAULT 0",
-            );
-            await customStatement(
-              "ALTER TABLE security_config ADD COLUMN vacuumed_db_path TEXT",
-            );
+            // Query existing columns to make migration idempotent
+            final existingColumns = await customSelect(
+              "SELECT name FROM pragma_table_info('security_config')",
+            ).get();
+            final columnNames =
+                existingColumns.map((r) => r.read<String>('name')).toSet();
+
+            if (!columnNames.contains('sync_pending_after_biometric_timeout')) {
+              await customStatement(
+                "ALTER TABLE security_config ADD COLUMN sync_pending_after_biometric_timeout INTEGER NOT NULL DEFAULT 0",
+              );
+            }
+            if (!columnNames.contains('current_device_id')) {
+              await customStatement(
+                "ALTER TABLE security_config ADD COLUMN current_device_id TEXT NOT NULL DEFAULT ''",
+              );
+            }
+            if (!columnNames.contains('daily_preview_count')) {
+              await customStatement(
+                "ALTER TABLE security_config ADD COLUMN daily_preview_count INTEGER NOT NULL DEFAULT 0",
+              );
+            }
+            if (!columnNames.contains('daily_preview_date')) {
+              await customStatement(
+                "ALTER TABLE security_config ADD COLUMN daily_preview_date TEXT",
+              );
+            }
+            if (!columnNames.contains('pending_db_replacement')) {
+              await customStatement(
+                "ALTER TABLE security_config ADD COLUMN pending_db_replacement INTEGER NOT NULL DEFAULT 0",
+              );
+            }
+            if (!columnNames.contains('vacuumed_db_path')) {
+              await customStatement(
+                "ALTER TABLE security_config ADD COLUMN vacuumed_db_path TEXT",
+              );
+            }
             await customStatement(
               "UPDATE security_config SET current_device_id = '$deviceId' WHERE id = 1",
             );
+          }
+          if (from < 17) {
+            // Backfill columns missing from earlier migrations
+            final v17Columns = await customSelect(
+              "SELECT name FROM pragma_table_info('conflicts')",
+            ).get();
+            final v17ColNames =
+                v17Columns.map((r) => r.read<String>('name')).toSet();
+
+            if (!v17ColNames.contains('local_value')) {
+              await customStatement(
+                'ALTER TABLE conflicts ADD COLUMN local_value TEXT NULL',
+              );
+            }
+            if (!v17ColNames.contains('remote_value')) {
+              await customStatement(
+                'ALTER TABLE conflicts ADD COLUMN remote_value TEXT NULL',
+              );
+            }
+
+            final teacherCols = await customSelect(
+              "SELECT name FROM pragma_table_info('teachers')",
+            ).get();
+            final teacherColNames =
+                teacherCols.map((r) => r.read<String>('name')).toSet();
+
+            if (!teacherColNames.contains('last_credit_refill_date')) {
+              await customStatement(
+                'ALTER TABLE teachers ADD COLUMN last_credit_refill_date TEXT NULL',
+              );
+            }
+            if (!teacherColNames.contains('salt')) {
+              await customStatement(
+                'ALTER TABLE teachers ADD COLUMN salt TEXT NULL',
+              );
+            }
+            if (!teacherColNames.contains('last_modified_by')) {
+              await customStatement(
+                'ALTER TABLE teachers ADD COLUMN last_modified_by TEXT NULL',
+              );
+            }
+
+            final schoolCols = await customSelect(
+              "SELECT name FROM pragma_table_info('schools')",
+            ).get();
+            final schoolColNames =
+                schoolCols.map((r) => r.read<String>('name')).toSet();
+
+            if (!schoolColNames.contains('last_modified_by')) {
+              await customStatement(
+                'ALTER TABLE schools ADD COLUMN last_modified_by TEXT NULL',
+              );
+            }
+
+            final lessonCols = await customSelect(
+              "SELECT name FROM pragma_table_info('lessons')",
+            ).get();
+            final lessonColNames =
+                lessonCols.map((r) => r.read<String>('name')).toSet();
+
+            if (!lessonColNames.contains('teacher_server_id')) {
+              await customStatement(
+                'ALTER TABLE lessons ADD COLUMN teacher_server_id TEXT NULL',
+              );
+            }
+            if (!lessonColNames.contains('school_server_id')) {
+              await customStatement(
+                'ALTER TABLE lessons ADD COLUMN school_server_id TEXT NULL',
+              );
+            }
+            if (!lessonColNames.contains('is_unlocked')) {
+              await customStatement(
+                'ALTER TABLE lessons ADD COLUMN is_unlocked INTEGER NOT NULL DEFAULT 0',
+              );
+            }
+
+            final examCols = await customSelect(
+              "SELECT name FROM pragma_table_info('exams')",
+            ).get();
+            final examColNames =
+                examCols.map((r) => r.read<String>('name')).toSet();
+
+            if (!examColNames.contains('teacher_server_id')) {
+              await customStatement(
+                'ALTER TABLE exams ADD COLUMN teacher_server_id TEXT NULL',
+              );
+            }
+            if (!examColNames.contains('school_server_id')) {
+              await customStatement(
+                'ALTER TABLE exams ADD COLUMN school_server_id TEXT NULL',
+              );
+            }
+            if (!examColNames.contains('is_unlocked')) {
+              await customStatement(
+                'ALTER TABLE exams ADD COLUMN is_unlocked INTEGER NOT NULL DEFAULT 0',
+              );
+            }
           }
         },
         beforeOpen: (details) async {

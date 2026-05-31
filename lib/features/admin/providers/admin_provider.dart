@@ -123,11 +123,42 @@ class AdminDashboardNotifier extends Notifier<AdminDashboardData> {
       debugPrint('[admin] refresh: authState.state=${authState.state}, '
           'currentSchool=${authState.currentSchool?.toString() ?? 'null'}');
 
-      final school = await _db.schoolsDao.get();
-      final schoolLocalId = school?.localId ?? 0;
+      // Look up the school by serverId from auth state rather than using
+      // schoolsDao.get() (which returns the first non-deleted school). The
+      // local DB may contain multiple school records, and the admin's actual
+      // school may not be the first one — causing teachers to be stored under
+      // the wrong schoolLocalId.
+      final schoolServerId = authState.currentSchool?.serverId;
+      int schoolLocalId;
+      if (schoolServerId != null) {
+        final schoolByServerId = await (_db.select(_db.schools)
+              ..where((s) => s.serverId.equals(schoolServerId)))
+            .getSingleOrNull();
+        schoolLocalId = schoolByServerId?.localId ?? 0;
+        if (schoolByServerId == null) {
+          debugPrint('[admin] WARNING: school with serverId=$schoolServerId '
+              'not found in local DB; using fallback');
+        }
+      } else {
+        final school = await _db.schoolsDao.get();
+        schoolLocalId = school?.localId ?? 0;
+      }
       final teachers = await _db.teachersDao.getBySchool(schoolLocalId);
+      debugPrint(
+        '[ADMIN-DEBUG] Teachers in local DB for school $schoolLocalId: ${teachers.length}',
+      );
       final pendingTeachersFromDao =
           await _db.teachersDao.getPendingTeachers(schoolLocalId: schoolLocalId);
+      debugPrint(
+        '[ADMIN-DEBUG] Pending teachers for school $schoolLocalId: ${pendingTeachersFromDao.length}',
+      );
+      for (final t in pendingTeachersFromDao) {
+        debugPrint(
+          '[ADMIN-DEBUG] Pending: ${t.email}, '
+          'forcePasswordReset=${t.forcePasswordReset}, '
+          'tempPassword=${t.tempPassword}',
+        );
+      }
       final pendingItems = await _db.vaultItemsDao.getPendingApproval();
 
       // Build teacher data with real device counts, sync counts, conflicts

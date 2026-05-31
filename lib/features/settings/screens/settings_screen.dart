@@ -1432,11 +1432,14 @@ class _ModeOption extends StatelessWidget {
                   : null,
             ),
             const SizedBox(width: 12),
-            Text(
-              label,
-              style: textTheme.bodyMedium?.copyWith(
-                color: cs.onSurface,
-                fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
+            Flexible(
+              child: Text(
+                label,
+                style: textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurface,
+                  fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
+                  overflow: TextOverflow.clip,
+                ),
               ),
             ),
           ],
