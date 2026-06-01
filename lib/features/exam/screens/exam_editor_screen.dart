@@ -1589,9 +1589,7 @@ class _PreviewPanel extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    AnimatedPressable(
-                    onPressed: onUnlock,
-                    child: SizedBox(
+                    SizedBox(
                       width: double.infinity,
                       height: AppTheme.touchTarget,
                       child: FilledButton.icon(
@@ -1607,8 +1605,7 @@ class _PreviewPanel extends StatelessWidget {
                         icon: const Icon(Icons.lock_open_rounded),
                         label: const Text('Unlock for 1 Credit'),
                       ),
-                    )
-                  ),
+                    ),
                   ],
                 ),
               ),
@@ -1704,9 +1701,7 @@ class _PreviewPanel extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  AnimatedPressable(
-                    onPressed: onSave,
-                    child: SizedBox(
+                  SizedBox(
                     height: AppTheme.touchTarget,
                     child: FilledButton.icon(
                       onPressed: onSave,
@@ -1720,7 +1715,6 @@ class _PreviewPanel extends StatelessWidget {
                       icon: const Icon(Icons.save_rounded),
                       label: const Text('Save to Vault'),
                     ),
-                  )
                   ),
                 ],
               ),
