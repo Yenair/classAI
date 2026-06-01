@@ -95,7 +95,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 19;
 
   static QueryExecutor _openConnection() {
     return LazyDatabase(() async {
@@ -716,6 +716,18 @@ class AppDatabase extends _$AppDatabase {
             if (!examColNames.contains('week_number')) {
               await customStatement(
                 'ALTER TABLE exams ADD COLUMN week_number INTEGER',
+              );
+            }
+          }
+          if (from < 19) {
+            final teacherCols = await customSelect(
+              "SELECT name FROM pragma_table_info('teachers')",
+            ).get();
+            final teacherColNames =
+                teacherCols.map((r) => r.read<String>('name')).toSet();
+            if (!teacherColNames.contains('theme_mode')) {
+              await customStatement(
+                "ALTER TABLE teachers ADD COLUMN theme_mode TEXT NOT NULL DEFAULT 'system'",
               );
             }
           }

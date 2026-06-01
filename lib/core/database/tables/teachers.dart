@@ -32,6 +32,9 @@ class Teachers extends Table {
 
   // Temporary password for pending teachers who haven't logged in yet
   TextColumn get tempPassword => text().nullable()();
+
+  // Theme preference: 'light', 'dark', or 'system'
+  TextColumn get themeMode => text().withDefault(const Constant('system'))();
 }
 
 

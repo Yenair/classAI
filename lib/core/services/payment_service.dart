@@ -36,7 +36,7 @@ class PaymentService {
   static const String _baseUrl = 'https://api.paystack.co';
 
   /// Paystack secret key loaded from [paystack_keys.dart].
-  static const String _secretKey = paystackTestSecretKey;
+  static const String _secretKey = paystackSecretKey;
 
   PaymentService(this._db, this._dio);
 

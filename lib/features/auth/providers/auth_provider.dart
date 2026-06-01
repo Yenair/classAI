@@ -13,6 +13,7 @@ import 'package:classai/core/services/auth_service.dart';
 import 'package:classai/core/services/emergency_flush_service.dart';
 import 'package:classai/core/services/security_service.dart';
 import 'package:classai/core/utils/platform_helper.dart';
+import 'package:classai/features/settings/providers/theme_provider.dart';
 import 'package:classai/main.dart' show databaseProvider, navigatorKey;
 
 // ---------------------------------------------------------------------------
@@ -237,6 +238,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
           // Session is valid — save to local DB and transition to authenticated
           await _saveAuthResultToLocalDb(result);
+          _applyThemeFromTeacher(result);
           state = state.copyWith(
             state: AuthState.authenticated,
             currentTeacher: result.teacher,
@@ -330,6 +332,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
       // Update local database with server state
       await _saveAuthResultToLocalDb(result);
+      _applyThemeFromTeacher(result);
 
       if (result.forcePasswordReset == true) {
         // Server flagged this account for forced password reset.
@@ -443,6 +446,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
       await _securityService.storePasswordHash(password);
       await _saveAuthResultToLocalDb(result);
+      _applyThemeFromTeacher(result);
 
       state = state.copyWith(
         state: AuthState.authenticated,
@@ -562,6 +566,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
       await _securityService.storePasswordHash(newPassword);
       await _saveAuthResultToLocalDb(result);
+      _applyThemeFromTeacher(result);
 
       state = state.copyWith(
         state: AuthState.authenticated,
@@ -624,6 +629,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
       await _securityService.storePasswordHash(newPassword);
       await _saveAuthResultToLocalDb(result);
+      _applyThemeFromTeacher(result);
 
       state = state.copyWith(
         state: AuthState.authenticated,
@@ -681,6 +687,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
       await _securityService.storePasswordHash(adminPassword);
       await _saveAuthResultToLocalDb(result);
+      _applyThemeFromTeacher(result);
 
       if (!result.emailVerified) {
         state = state.copyWith(
@@ -961,6 +968,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
       await _securityService.storePasswordHash(adminPassword);
       await _saveAuthResultToLocalDb(result);
+      _applyThemeFromTeacher(result);
 
       state = state.copyWith(
         state: AuthState.authenticated,
@@ -1304,6 +1312,12 @@ class AuthNotifier extends Notifier<AuthStateData> {
   // -----------------------------------------------------------------------
   // Helpers
   // -----------------------------------------------------------------------
+
+  void _applyThemeFromTeacher(AuthResult result) {
+    ref.read(themeProvider.notifier).applyTeacherThemeMode(
+          result.teacher.themeMode,
+        );
+  }
 
   Future<void> _saveAuthResultToLocalDb(AuthResult result) async {
     // Guaranteed to return a School row with a valid non-zero localId.

@@ -950,6 +950,7 @@ class SupabaseAuthService implements AuthService {
       isDeleted: false,
       salt: null,
       lastModifiedBy: null,
+      themeMode: teacherMap['theme_mode'] as String? ?? 'system',
     );
 
     final serverTimeStr = data['last_credit_refill_server_time'] as String?;

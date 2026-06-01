@@ -220,6 +220,7 @@ void main() {
           updateCounter: 0,
           isDeleted: false,
           lastModifiedBy: null,
+          themeMode: 'system',
         ),
         school: School(
           localId: 1,
@@ -496,6 +497,7 @@ void main() {
           updateCounter: 0,
           isDeleted: false,
           lastModifiedBy: null,
+          themeMode: 'system',
         ),
         school: School(
           localId: 1,
@@ -631,6 +633,7 @@ void main() {
           updateCounter: 1,
           isDeleted: false,
           lastModifiedBy: null,
+          themeMode: 'system',
         ),
         school: School(
           localId: 1,

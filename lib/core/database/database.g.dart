@@ -1093,6 +1093,14 @@ class $TeachersTable extends Teachers with TableInfo<$TeachersTable, Teacher> {
   late final GeneratedColumn<String> tempPassword = GeneratedColumn<String>(
       'temp_password', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _themeModeMeta =
+      const VerificationMeta('themeMode');
+  @override
+  late final GeneratedColumn<String> themeMode = GeneratedColumn<String>(
+      'theme_mode', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('system'));
   @override
   List<GeneratedColumn> get $columns => [
         localId,
@@ -1114,7 +1122,8 @@ class $TeachersTable extends Teachers with TableInfo<$TeachersTable, Teacher> {
         salt,
         lastModifiedBy,
         currentDeviceId,
-        tempPassword
+        tempPassword,
+        themeMode
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1234,6 +1243,10 @@ class $TeachersTable extends Teachers with TableInfo<$TeachersTable, Teacher> {
           tempPassword.isAcceptableOrUnknown(
               data['temp_password']!, _tempPasswordMeta));
     }
+    if (data.containsKey('theme_mode')) {
+      context.handle(_themeModeMeta,
+          themeMode.isAcceptableOrUnknown(data['theme_mode']!, _themeModeMeta));
+    }
     return context;
   }
 
@@ -1284,6 +1297,8 @@ class $TeachersTable extends Teachers with TableInfo<$TeachersTable, Teacher> {
           DriftSqlType.string, data['${effectivePrefix}current_device_id']),
       tempPassword: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}temp_password']),
+      themeMode: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}theme_mode'])!,
     );
   }
 
@@ -1314,6 +1329,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
   final String? lastModifiedBy;
   final String? currentDeviceId;
   final String? tempPassword;
+  final String themeMode;
   const Teacher(
       {required this.localId,
       this.serverId,
@@ -1334,7 +1350,8 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       this.salt,
       this.lastModifiedBy,
       this.currentDeviceId,
-      this.tempPassword});
+      this.tempPassword,
+      required this.themeMode});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1374,6 +1391,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
     if (!nullToAbsent || tempPassword != null) {
       map['temp_password'] = Variable<String>(tempPassword);
     }
+    map['theme_mode'] = Variable<String>(themeMode);
     return map;
   }
 
@@ -1413,6 +1431,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       tempPassword: tempPassword == null && nullToAbsent
           ? const Value.absent()
           : Value(tempPassword),
+      themeMode: Value(themeMode),
     );
   }
 
@@ -1442,6 +1461,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       lastModifiedBy: serializer.fromJson<String?>(json['lastModifiedBy']),
       currentDeviceId: serializer.fromJson<String?>(json['currentDeviceId']),
       tempPassword: serializer.fromJson<String?>(json['tempPassword']),
+      themeMode: serializer.fromJson<String>(json['themeMode']),
     );
   }
   @override
@@ -1469,6 +1489,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       'lastModifiedBy': serializer.toJson<String?>(lastModifiedBy),
       'currentDeviceId': serializer.toJson<String?>(currentDeviceId),
       'tempPassword': serializer.toJson<String?>(tempPassword),
+      'themeMode': serializer.toJson<String>(themeMode),
     };
   }
 
@@ -1492,7 +1513,8 @@ class Teacher extends DataClass implements Insertable<Teacher> {
           Value<String?> salt = const Value.absent(),
           Value<String?> lastModifiedBy = const Value.absent(),
           Value<String?> currentDeviceId = const Value.absent(),
-          Value<String?> tempPassword = const Value.absent()}) =>
+          Value<String?> tempPassword = const Value.absent(),
+          String? themeMode}) =>
       Teacher(
         localId: localId ?? this.localId,
         serverId: serverId.present ? serverId.value : this.serverId,
@@ -1523,6 +1545,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
             : this.currentDeviceId,
         tempPassword:
             tempPassword.present ? tempPassword.value : this.tempPassword,
+        themeMode: themeMode ?? this.themeMode,
       );
   Teacher copyWithCompanion(TeachersCompanion data) {
     return Teacher(
@@ -1567,6 +1590,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       tempPassword: data.tempPassword.present
           ? data.tempPassword.value
           : this.tempPassword,
+      themeMode: data.themeMode.present ? data.themeMode.value : this.themeMode,
     );
   }
 
@@ -1592,33 +1616,36 @@ class Teacher extends DataClass implements Insertable<Teacher> {
           ..write('salt: $salt, ')
           ..write('lastModifiedBy: $lastModifiedBy, ')
           ..write('currentDeviceId: $currentDeviceId, ')
-          ..write('tempPassword: $tempPassword')
+          ..write('tempPassword: $tempPassword, ')
+          ..write('themeMode: $themeMode')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
-      localId,
-      serverId,
-      email,
-      teacherName,
-      role,
-      schoolLocalId,
-      schoolServerId,
-      isActive,
-      forcePasswordReset,
-      passwordHashVersion,
-      schoolKeyWrapped,
-      lastCreditRefillDate,
-      createdAt,
-      updatedAt,
-      updateCounter,
-      isDeleted,
-      salt,
-      lastModifiedBy,
-      currentDeviceId,
-      tempPassword);
+  int get hashCode => Object.hashAll([
+        localId,
+        serverId,
+        email,
+        teacherName,
+        role,
+        schoolLocalId,
+        schoolServerId,
+        isActive,
+        forcePasswordReset,
+        passwordHashVersion,
+        schoolKeyWrapped,
+        lastCreditRefillDate,
+        createdAt,
+        updatedAt,
+        updateCounter,
+        isDeleted,
+        salt,
+        lastModifiedBy,
+        currentDeviceId,
+        tempPassword,
+        themeMode
+      ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1642,7 +1669,8 @@ class Teacher extends DataClass implements Insertable<Teacher> {
           other.salt == this.salt &&
           other.lastModifiedBy == this.lastModifiedBy &&
           other.currentDeviceId == this.currentDeviceId &&
-          other.tempPassword == this.tempPassword);
+          other.tempPassword == this.tempPassword &&
+          other.themeMode == this.themeMode);
 }
 
 class TeachersCompanion extends UpdateCompanion<Teacher> {
@@ -1666,6 +1694,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
   final Value<String?> lastModifiedBy;
   final Value<String?> currentDeviceId;
   final Value<String?> tempPassword;
+  final Value<String> themeMode;
   const TeachersCompanion({
     this.localId = const Value.absent(),
     this.serverId = const Value.absent(),
@@ -1687,6 +1716,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
     this.lastModifiedBy = const Value.absent(),
     this.currentDeviceId = const Value.absent(),
     this.tempPassword = const Value.absent(),
+    this.themeMode = const Value.absent(),
   });
   TeachersCompanion.insert({
     this.localId = const Value.absent(),
@@ -1709,6 +1739,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
     this.lastModifiedBy = const Value.absent(),
     this.currentDeviceId = const Value.absent(),
     this.tempPassword = const Value.absent(),
+    this.themeMode = const Value.absent(),
   })  : email = Value(email),
         teacherName = Value(teacherName),
         schoolLocalId = Value(schoolLocalId);
@@ -1733,6 +1764,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
     Expression<String>? lastModifiedBy,
     Expression<String>? currentDeviceId,
     Expression<String>? tempPassword,
+    Expression<String>? themeMode,
   }) {
     return RawValuesInsertable({
       if (localId != null) 'local_id': localId,
@@ -1758,6 +1790,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
       if (lastModifiedBy != null) 'last_modified_by': lastModifiedBy,
       if (currentDeviceId != null) 'current_device_id': currentDeviceId,
       if (tempPassword != null) 'temp_password': tempPassword,
+      if (themeMode != null) 'theme_mode': themeMode,
     });
   }
 
@@ -1781,7 +1814,8 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
       Value<String?>? salt,
       Value<String?>? lastModifiedBy,
       Value<String?>? currentDeviceId,
-      Value<String?>? tempPassword}) {
+      Value<String?>? tempPassword,
+      Value<String>? themeMode}) {
     return TeachersCompanion(
       localId: localId ?? this.localId,
       serverId: serverId ?? this.serverId,
@@ -1803,6 +1837,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
       lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,
       currentDeviceId: currentDeviceId ?? this.currentDeviceId,
       tempPassword: tempPassword ?? this.tempPassword,
+      themeMode: themeMode ?? this.themeMode,
     );
   }
 
@@ -1870,6 +1905,9 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
     if (tempPassword.present) {
       map['temp_password'] = Variable<String>(tempPassword.value);
     }
+    if (themeMode.present) {
+      map['theme_mode'] = Variable<String>(themeMode.value);
+    }
     return map;
   }
 
@@ -1895,7 +1933,8 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
           ..write('salt: $salt, ')
           ..write('lastModifiedBy: $lastModifiedBy, ')
           ..write('currentDeviceId: $currentDeviceId, ')
-          ..write('tempPassword: $tempPassword')
+          ..write('tempPassword: $tempPassword, ')
+          ..write('themeMode: $themeMode')
           ..write(')'))
         .toString();
   }
@@ -13913,6 +13952,7 @@ typedef $$TeachersTableCreateCompanionBuilder = TeachersCompanion Function({
   Value<String?> lastModifiedBy,
   Value<String?> currentDeviceId,
   Value<String?> tempPassword,
+  Value<String> themeMode,
 });
 typedef $$TeachersTableUpdateCompanionBuilder = TeachersCompanion Function({
   Value<int> localId,
@@ -13935,6 +13975,7 @@ typedef $$TeachersTableUpdateCompanionBuilder = TeachersCompanion Function({
   Value<String?> lastModifiedBy,
   Value<String?> currentDeviceId,
   Value<String?> tempPassword,
+  Value<String> themeMode,
 });
 
 final class $$TeachersTableReferences
@@ -14099,6 +14140,9 @@ class $$TeachersTableFilterComposer
 
   ColumnFilters<String> get tempPassword => $composableBuilder(
       column: $table.tempPassword, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get themeMode => $composableBuilder(
+      column: $table.themeMode, builder: (column) => ColumnFilters(column));
 
   $$SchoolsTableFilterComposer get schoolLocalId {
     final $$SchoolsTableFilterComposer composer = $composerBuilder(
@@ -14282,6 +14326,9 @@ class $$TeachersTableOrderingComposer
       column: $table.tempPassword,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get themeMode => $composableBuilder(
+      column: $table.themeMode, builder: (column) => ColumnOrderings(column));
+
   $$SchoolsTableOrderingComposer get schoolLocalId {
     final $$SchoolsTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -14368,6 +14415,9 @@ class $$TeachersTableAnnotationComposer
 
   GeneratedColumn<String> get tempPassword => $composableBuilder(
       column: $table.tempPassword, builder: (column) => column);
+
+  GeneratedColumn<String> get themeMode =>
+      $composableBuilder(column: $table.themeMode, builder: (column) => column);
 
   $$SchoolsTableAnnotationComposer get schoolLocalId {
     final $$SchoolsTableAnnotationComposer composer = $composerBuilder(
@@ -14524,6 +14574,7 @@ class $$TeachersTableTableManager extends RootTableManager<
             Value<String?> lastModifiedBy = const Value.absent(),
             Value<String?> currentDeviceId = const Value.absent(),
             Value<String?> tempPassword = const Value.absent(),
+            Value<String> themeMode = const Value.absent(),
           }) =>
               TeachersCompanion(
             localId: localId,
@@ -14546,6 +14597,7 @@ class $$TeachersTableTableManager extends RootTableManager<
             lastModifiedBy: lastModifiedBy,
             currentDeviceId: currentDeviceId,
             tempPassword: tempPassword,
+            themeMode: themeMode,
           ),
           createCompanionCallback: ({
             Value<int> localId = const Value.absent(),
@@ -14568,6 +14620,7 @@ class $$TeachersTableTableManager extends RootTableManager<
             Value<String?> lastModifiedBy = const Value.absent(),
             Value<String?> currentDeviceId = const Value.absent(),
             Value<String?> tempPassword = const Value.absent(),
+            Value<String> themeMode = const Value.absent(),
           }) =>
               TeachersCompanion.insert(
             localId: localId,
@@ -14590,6 +14643,7 @@ class $$TeachersTableTableManager extends RootTableManager<
             lastModifiedBy: lastModifiedBy,
             currentDeviceId: currentDeviceId,
             tempPassword: tempPassword,
+            themeMode: themeMode,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) =>

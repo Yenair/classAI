@@ -117,6 +117,7 @@ serve(async (req) => {
             name: teacher.teacher_name,
             role: teacher.role,
             school_id: teacher.school_id,
+            theme_mode: teacher.theme_mode ?? "system",
           },
           school: {
             id: school.id,
@@ -155,6 +156,7 @@ serve(async (req) => {
           role: teacher.role,
           school_id: teacher.school_id,
           email_verified: responseEmailVerified,
+          theme_mode: teacher.theme_mode ?? "system",
         },
         school: {
           id: school.id,
