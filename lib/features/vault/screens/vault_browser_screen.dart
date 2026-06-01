@@ -632,7 +632,8 @@ class _VaultContent extends StatelessWidget {
                     ? 2
                     : 1;
 
-        return SingleChildScrollView(
+        return SingleChildScrollView(
+
           physics: (Platform.isAndroid || Platform.isIOS)
               ? const BouncingScrollPhysics()
               : null,
@@ -840,7 +841,8 @@ class _FilterChipsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
+    return SingleChildScrollView(
+
       physics: (Platform.isAndroid || Platform.isIOS)
           ? const BouncingScrollPhysics()
           : null,
@@ -1293,7 +1295,7 @@ class _BottomNav extends StatelessWidget {
             icon: Icons.home_outlined,
             label: 'Home',
             isActive: false,
-            onTap: () => context.go('/dashboard'),
+            onTap: () => context.go('/'),
           ),
           _bottomItem(
             cs: cs,

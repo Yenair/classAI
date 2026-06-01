@@ -599,7 +599,7 @@ class _NavDrawer extends StatelessWidget {
             icon: Icons.home_outlined,
             label: 'Home',
             isActive: false,
-            onTap: () => context.go('/dashboard'),
+            onTap: () => context.go('/'),
           ),
           _navItem(
             cs: cs,
@@ -1450,7 +1450,7 @@ class _BottomNav extends StatelessWidget {
             icon: Icons.home_outlined,
             label: 'Home',
             isActive: false,
-            onTap: () => context.go('/dashboard'),
+            onTap: () => context.go('/'),
           ),
           _bottomItem(
             cs: cs,

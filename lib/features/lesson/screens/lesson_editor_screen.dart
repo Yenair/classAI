@@ -1174,7 +1174,7 @@ class _NavigationDrawer extends StatelessWidget {
   void _navigateTo(BuildContext context, String label) {
     switch (label) {
       case 'Home':
-        context.go('/dashboard');
+        context.go('/');
         break;
       case 'Lessons':
         context.go('/lessons');
@@ -2243,7 +2243,7 @@ class _BottomNavBar extends StatelessWidget {
   void _navigateTo(BuildContext context, String label) {
     switch (label) {
       case 'Home':
-        context.go('/dashboard');
+        context.go('/');
         break;
       case 'Lessons':
         context.go('/lessons');
