@@ -1,10 +1,10 @@
 // lib/core/services/payment_service.dart
-import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
 import 'package:drift/drift.dart';
 import '../database/database.dart';
+import '../constants/paystack_keys.dart';
 
 /// Result returned by [PaymentService.initializePayment].
 class PaymentInitResult {
@@ -32,18 +32,11 @@ class PaymentService {
   final Dio _dio;
   final _uuid = const Uuid();
 
-  /// Monnify sandbox base URL.
-  static const String _baseUrl = 'https://sandbox.monnify.com';
+  /// Paystack base URL.
+  static const String _baseUrl = 'https://api.paystack.co';
 
-  /// Monnify test API keys — replace with actual sandbox keys from the
-  /// Monnify dashboard (Settings ⇨ API Keys).
-  // TODO: Replace with live Monnify keys after KYC approval
-  static const String _apiKey = 'MK_TEST_ZRD477KLNN';
-  static const String _secretKey = 'XYBJ75MD6WPXFUB17EAMJNRZGTXD5WCA';
-
-  /// Default contract code — replace with the one from the Monnify sandbox
-  /// dashboard (Settings ⇨ API Keys ⇨ Contract Code).
-  static const String _contractCode = '1855674442';
+  /// Paystack secret key loaded from [paystack_keys.dart].
+  static const String _secretKey = paystackTestSecretKey;
 
   PaymentService(this._db, this._dio);
 
@@ -52,10 +45,9 @@ class PaymentService {
   // ---------------------------------------------------------------------------
 
   Options _getOptions() {
-    final credentials = base64Encode(utf8.encode('$_apiKey:$_secretKey'));
     return Options(
       headers: {
-        'Authorization': 'Basic $credentials',
+        'Authorization': 'Bearer $_secretKey',
         'Content-Type': 'application/json',
       },
     );
@@ -65,8 +57,8 @@ class PaymentService {
   // Initialize payment
   // ---------------------------------------------------------------------------
 
-  /// Initialize a Monnify payment.
-  /// Returns a [PaymentInitResult] with the checkout URL and transaction reference.
+  /// Initialize a Paystack payment.
+  /// Returns a [PaymentInitResult] with the authorization URL and transaction reference.
   Future<PaymentInitResult> initializePayment({
     required String email,
     required int amountNaira, // in NGN
@@ -74,18 +66,15 @@ class PaymentService {
     required String schoolId,
   }) async {
     final reference = _uuid.v4();
+    final amountKobo = amountNaira * 100; // Paystack expects amount in kobo
     final response = await _dio.post(
-      '$_baseUrl/api/v1/merchant/transactions/init-transaction',
+      '$_baseUrl/transaction/initialize',
       data: {
-        'amount': amountNaira,
-        'customerName': 'School Name',
-        'customerEmail': email,
-        'paymentReference': reference,
-        'paymentDescription': 'ClassAI $plan subscription',
-        'currencyCode': 'NGN',
-        'contractCode': _contractCode,
-        'redirectUrl': 'classai://payment/complete',
-        'paymentMethods': ['CARD', 'ACCOUNT_TRANSFER'],
+        'email': email,
+        'amount': amountKobo,
+        'reference': reference,
+        'currency': 'NGN',
+        'callback_url': 'classai://payment/complete',
       },
       options: _getOptions(),
     );
@@ -100,7 +89,7 @@ class PaymentService {
     );
 
     return PaymentInitResult(
-      checkoutUrl: response.data['responseBody']['checkoutUrl'],
+      checkoutUrl: response.data['data']['authorization_url'],
       reference: reference,
     );
   }
@@ -109,21 +98,17 @@ class PaymentService {
   // Verify payment
   // ---------------------------------------------------------------------------
 
-  /// Verify a payment with Monnify.
+  /// Verify a payment with Paystack.
   Future<bool> verifyPayment(String reference) async {
     final response = await _dio.get(
-      '$_baseUrl/api/v1/merchant/transactions/query',
-      queryParameters: {'transactionReference': reference},
+      '$_baseUrl/transaction/verify/$reference',
       options: _getOptions(),
     );
 
-    final requestSuccessful =
-        response.data['requestSuccessful'] as bool? ?? false;
-    final responseBody =
-        response.data['responseBody'] as Map<String, dynamic>?;
-    final status = responseBody?['transactionStatus'] as String?;
+    final data = response.data['data'] as Map<String, dynamic>?;
+    final status = data?['status'] as String?;
 
-    if (requestSuccessful && status == 'SUCCESS') {
+    if (status == 'success') {
       await _db.paymentEventsDao.markConfirmed(reference);
       return true;
     }

@@ -123,6 +123,7 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
       _NavItem(icon: Icons.menu_book_rounded, label: 'Lessons', route: '/lessons'),
       _NavItem(icon: Icons.quiz_rounded, label: 'Exams', route: '/exams'),
       _NavItem(icon: Icons.inventory_2_rounded, label: 'Vault', route: '/vault'),
+      _NavItem(icon: Icons.calendar_month_rounded, label: 'Scheme of Work', route: '/scheme-of-work'),
       if (isAdmin)
         _NavItem(icon: Icons.admin_panel_settings_rounded, label: 'Admin', route: '/admin'),
     ];
@@ -1780,6 +1781,9 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
         context.push('/exams');
         break;
       case 3:
+        context.push('/scheme-of-work');
+        break;
+      case 4:
         context.push('/settings');
         break;
     }
@@ -2049,13 +2053,22 @@ class _ReaderBottomNav extends StatelessWidget {
             onTap: () => onTap(2),
           )),
           Expanded(child: _BottomNavItem(
-            icon: Icons.more_horiz_rounded,
-            label: 'More',
+            icon: Icons.calendar_month_rounded,
+            label: 'Scheme of Work',
             isActive: selectedIndex == 3,
             isFilled: false,
             cs: cs,
             theme: theme,
             onTap: () => onTap(3),
+          )),
+          Expanded(child: _BottomNavItem(
+            icon: Icons.more_horiz_rounded,
+            label: 'More',
+            isActive: selectedIndex == 4,
+            isFilled: false,
+            cs: cs,
+            theme: theme,
+            onTap: () => onTap(4),
           )),
         ],
       ),

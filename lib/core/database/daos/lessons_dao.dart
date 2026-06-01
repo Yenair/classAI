@@ -10,16 +10,18 @@ class LessonsDao extends DatabaseAccessor<AppDatabase>
     with _$LessonsDaoMixin {
   LessonsDao(AppDatabase db) : super(db);
 
-  /// Get all lessons ordered by week.
+  /// Get all **non‑deleted** lessons ordered by week.
   Future<List<Lesson>> getAll() {
     return (select(lessons)
+          ..where((t) => t.isDeleted.equals(false))
           ..orderBy([(t) => OrderingTerm(expression: t.week, mode: OrderingMode.asc)]))
         .get();
   }
 
-  /// Get the most recent lessons, ordered by createdAt descending, limited to [limit].
+  /// Get the most recent **non‑deleted** lessons, ordered by createdAt descending, limited to [limit].
   Future<List<Lesson>> getRecentLessons({int limit = 5}) {
     return (select(lessons)
+          ..where((t) => t.isDeleted.equals(false))
           ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)])
           ..limit(limit))
         .get();

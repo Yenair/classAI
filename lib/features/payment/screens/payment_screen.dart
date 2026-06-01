@@ -14,7 +14,7 @@ import 'package:classai/main.dart' show databaseProvider;
 /// Payment screen that shows plan selection options — Google Stitch design.
 ///
 /// Selecting a plan calls [PaymentService.initializePayment]
-/// and opens the returned Monnify checkout URL in a browser/WebView.
+/// and opens the returned Paystack authorization URL in a browser/WebView.
 /// After the user completes payment in the browser, the screen polls
 /// for confirmation and displays the activation code.
 class PaymentScreen extends ConsumerStatefulWidget {
@@ -66,7 +66,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
       if (!context.mounted) return;
 
-      // Open the Monnify checkout URL in browser
+      // Open the Paystack authorization URL in browser
       final uri = Uri.parse(initResult.checkoutUrl);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -796,7 +796,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           ),
           const SizedBox(height: 24),
 
-          // Monnify placeholder
+          // Payment provider placeholder
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -817,7 +817,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Secure checkout powered by Monnify.',
+                  'Secure checkout powered by Paystack.',
                   style: textTheme.bodyMedium?.copyWith(
                     color: cs.onSurfaceVariant,
                   ),

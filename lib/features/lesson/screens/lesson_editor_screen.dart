@@ -3,7 +3,6 @@ import 'package:drift/drift.dart' hide Column;
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:classai/core/widgets/animated_pressable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:classai/core/database/database.dart';
@@ -1225,6 +1224,15 @@ class _MobileHeader extends StatelessWidget {
           ),
           child: Row(
             children: [
+              if (Navigator.of(context).canPop())
+                IconButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  tooltip: 'Back',
+                  style: IconButton.styleFrom(
+                    foregroundColor: cs.onSurfaceVariant,
+                  ),
+                ),
               Container(
                 width: 32,
                 height: 32,
@@ -1243,11 +1251,13 @@ class _MobileHeader extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              Text(
-                '$creditBalance',
-                style: theme.textTheme.labelLarge?.copyWith(
-                  fontWeight: FontWeight.w500,
-                  color: cs.onSurfaceVariant,
+              RepaintBoundary(
+                child: Text(
+                  '$creditBalance',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: cs.onSurfaceVariant,
+                  ),
                 ),
               ),
             ],
@@ -1295,7 +1305,33 @@ class _ToolHeader extends StatelessWidget {
           // Back link + Toggle
           Row(
             children: [
-              // Sidebar toggle (tablet+) - moved to left
+              // Back button (when navigable)
+              if (Navigator.of(context).canPop())
+                InkWell(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                  onTap: () => Navigator.of(context).maybePop(),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.arrow_back_rounded,
+                          size: 20,
+                          color: cs.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Back',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              // Sidebar toggle (tablet+)
               if (onToggleSidebar != null)
                 IconButton(
                   onPressed: onToggleSidebar,
@@ -1307,30 +1343,6 @@ class _ToolHeader extends StatelessWidget {
                     foregroundColor: cs.onSurfaceVariant,
                   ),
                 ),
-              InkWell(
-                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                onTap: () => Navigator.of(context).pop(),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.arrow_back_rounded,
-                        size: 16,
-                        color: cs.onSurfaceVariant,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Back to Lessons',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
               const Spacer(),
             ],
           ),
@@ -1471,7 +1483,7 @@ class _ConfigColumn extends StatelessWidget {
                   SizedBox(
                     height: AppTheme.touchTarget,
                     child: DropdownButtonFormField<int>(
-                      value: schemeOfWorkLocalId,
+                      initialValue: schemeOfWorkLocalId,
                       decoration: InputDecoration(
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
@@ -1602,16 +1614,13 @@ class _ConfigColumn extends StatelessWidget {
               ),
             ),
             icon: isGenerating
-                ? AnimatedPressable(
-                    onPressed: null,
-                    child: SizedBox(
+                ? SizedBox(
                     height: 22,
                     width: 22,
                     child: CircularProgressIndicator(
                       strokeWidth: 2.5,
                       color: cs.onPrimary,
                     ),
-                  )
                   )
                 : const Icon(Icons.auto_awesome_rounded),
             label: Text(
@@ -1839,70 +1848,72 @@ class _PreviewColumn extends StatelessWidget {
           // Preview canvas
           if (!isUnlocked) ...[
             // Locked overlay
-            Container(
-              padding: const EdgeInsets.all(16),
-              margin: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: cs.tertiary.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                border: Border.all(
-                  color: cs.tertiary.withValues(alpha: 0.3),
+            RepaintBoundary(
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                margin: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: cs.tertiary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                  border: Border.all(
+                    color: cs.tertiary.withValues(alpha: 0.3),
+                  ),
                 ),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.lock_rounded, color: cs.tertiary, size: 20),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          'Locked — Preview only',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: cs.tertiary,
-                            overflow: TextOverflow.clip,
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.lock_rounded, color: cs.tertiary, size: 20),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            'Locked — Preview only',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: cs.tertiary,
+                              overflow: TextOverflow.clip,
+                            ),
                           ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Objectives: $objectivesText',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Objectives: $objectivesText',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: cs.onSurfaceVariant,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Presentation: $presentationText',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: cs.onSurfaceVariant,
+                    const SizedBox(height: 8),
+                    Text(
+                      'Presentation: $presentationText',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    height: AppTheme.touchTarget,
-                    child: FilledButton.icon(
-                      onPressed: onUnlock,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: cs.tertiary,
-                        foregroundColor: cs.onTertiary,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      height: AppTheme.touchTarget,
+                      child: FilledButton.icon(
+                        onPressed: onUnlock,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: cs.tertiary,
+                          foregroundColor: cs.onTertiary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                          ),
                         ),
+                        icon: const Icon(Icons.lock_open_rounded),
+                        label: const Text('Unlock for 1 Credit'),
                       ),
-                      icon: const Icon(Icons.lock_open_rounded),
-                      label: const Text('Unlock for 1 Credit'),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],

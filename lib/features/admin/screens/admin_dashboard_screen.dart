@@ -257,6 +257,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 ),
                 const SizedBox(height: 4),
                 _NavItem(
+                  icon: Icons.calendar_month_rounded,
+                  label: 'Scheme of Work',
+                  isActive: false,
+                  onTap: () => context.push('/scheme-of-work'),
+                ),
+                const SizedBox(height: 4),
+                _NavItem(
                   icon: Icons.settings_rounded,
                   label: 'Settings',
                   isActive: false,
@@ -642,6 +649,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       (icon: Icons.person_add_rounded, label: 'Pending'),
       (icon: Icons.verified_rounded, label: 'Vault Queue'),
       (icon: Icons.sync_rounded, label: 'Sync'),
+      (icon: Icons.calendar_month_rounded, label: 'Scheme of Work'),
       (icon: Icons.settings_rounded, label: 'Settings'),
     ];
 
@@ -677,6 +685,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               ),
               onPressed: () {
                 if (i == 4) {
+                  context.push('/scheme-of-work');
+                } else if (i == 5) {
                   context.push('/settings');
                 } else {
                   setState(() => _selectedTabIndex = i);

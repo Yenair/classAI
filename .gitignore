@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Paystack secret key (never commit)
+lib/core/constants/paystack_keys.dart

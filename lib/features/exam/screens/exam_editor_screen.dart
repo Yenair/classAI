@@ -3,7 +3,6 @@ import 'package:drift/drift.dart' hide Column;
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:classai/core/widgets/animated_pressable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:classai/core/database/database.dart';
@@ -43,6 +42,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   bool _isGenerating = false;
   bool _hasGenerated = false;
   bool _isUnlocked = false;
+  int? _examId;
   bool _editorSidebarOpen = true;
   int _creditBalance = 3;
   String? _teacherId;
@@ -574,33 +574,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       );
 
       // Check for existing exam (dedup)
-      final existing = widget.examId != null
-          ? await db.examsDao.getById(widget.examId!)
-          : await db.examsDao.findByTopicSubjectTeacher(
-              topic: topic,
-              subject: _subject,
-              teacherServerId: _teacherId ?? '',
-            );
-
-      int id;
-      String operation;
-      if (existing != null) {
-        id = existing.id;
-        await db.examsDao.updateExam(id, companion);
-        operation = 'UPDATE';
-      } else {
-        id = db.examsDao.insertExam(companion.copyWith(
-          createdAt: Value(DateTime.now()),
-          isDeleted: const Value(false),
-          isUnlocked: Value(_isUnlocked),
-        )) as int;
-        // HACK: insertExam returns Future<int>, but the copyWith above rebuilds companion
-        // Actually do insert separately
-      }
-
-      // Re-do logic properly:
-      final existingExam = widget.examId != null
-          ? await db.examsDao.getById(widget.examId!)
+      final existingId = _examId ?? widget.examId;
+      final existingExam = existingId != null
+          ? await db.examsDao.getById(existingId)
           : await db.examsDao.findByTopicSubjectTeacher(
               topic: topic,
               subject: _subject,
@@ -608,6 +584,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
             );
 
       int localId;
+      String operation;
       if (existingExam != null) {
         // Update existing
         await db.examsDao.updateExam(existingExam.id, companion);
@@ -637,6 +614,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         localId = await db.examsDao.insertExam(insertCompanion);
         operation = 'INSERT';
       }
+
+      // Update local state with the saved exam ID
+      _examId = localId;
 
       // Queue sync entry
       final payload = <String, dynamic>{
@@ -1153,6 +1133,16 @@ class _TopBar extends StatelessWidget {
       ),
       child: Row(
         children: [
+          // Back button (when navigable)
+          if (Navigator.of(context).canPop())
+            IconButton(
+              onPressed: () => Navigator.of(context).maybePop(),
+              icon: const Icon(Icons.arrow_back_rounded),
+              tooltip: 'Back',
+              style: IconButton.styleFrom(
+                foregroundColor: cs.onSurfaceVariant,
+              ),
+            ),
           // Sidebar toggle (tablet+)
           if (onToggleSidebar != null)
             IconButton(
@@ -1196,25 +1186,27 @@ class _TopBar extends StatelessWidget {
           ),
           const Spacer(),
           // Credit chip
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.stars_rounded, size: 20, color: cs.primary),
-                const SizedBox(width: 6),
-                Text(
-                  '$creditBalance',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: cs.primary,
+          RepaintBoundary(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.stars_rounded, size: 20, color: cs.primary),
+                  const SizedBox(width: 6),
+                  Text(
+                    '$creditBalance',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: cs.primary,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -1556,17 +1548,14 @@ class _ConfigPanel extends StatelessWidget {
                     ),
                   ),
                   icon: isGenerating
-                      ? AnimatedPressable(
-                        onPressed: null,
-                        child: SizedBox(
-                              height: 22,
-                              width: 22,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                color: cs.onPrimary,
-                              ),
-                            )
-                      )
+                      ? SizedBox(
+                            height: 22,
+                            width: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: cs.onPrimary,
+                            ),
+                          )
                       : const Icon(Icons.bolt_rounded),
                   label: Text(
                     isGenerating
@@ -1707,59 +1696,61 @@ class _PreviewPanel extends StatelessWidget {
 
           // Locked overlay
           if (hasGenerated && !isUnlocked) ...[
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Container(
+            RepaintBoundary(
+              child: Padding(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: cs.tertiary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                  border: Border.all(
-                    color: cs.tertiary.withValues(alpha: 0.3),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: cs.tertiary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                    border: Border.all(
+                      color: cs.tertiary.withValues(alpha: 0.3),
+                    ),
                   ),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.lock_rounded,
-                            color: cs.tertiary, size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Locked — Preview only',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: cs.tertiary,
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.lock_rounded,
+                              color: cs.tertiary, size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Locked — Preview only',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: cs.tertiary,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      _buildSummaryText(),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: cs.onSurfaceVariant,
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      height: AppTheme.touchTarget,
-                      child: FilledButton.icon(
-                        onPressed: onUnlock,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: cs.tertiary,
-                          foregroundColor: cs.onTertiary,
-                          shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(AppTheme.radiusXl),
+                      const SizedBox(height: 12),
+                      Text(
+                        _buildSummaryText(),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        height: AppTheme.touchTarget,
+                        child: FilledButton.icon(
+                          onPressed: onUnlock,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: cs.tertiary,
+                            foregroundColor: cs.onTertiary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.radiusXl),
+                            ),
                           ),
+                          icon: const Icon(Icons.lock_open_rounded),
+                          label: const Text('Unlock for 1 Credit'),
                         ),
-                        icon: const Icon(Icons.lock_open_rounded),
-                        label: const Text('Unlock for 1 Credit'),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

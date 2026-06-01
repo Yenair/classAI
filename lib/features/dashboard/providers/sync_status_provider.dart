@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:classai/core/database/database.dart';
@@ -123,6 +124,7 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
 
   /// Silent background sync — no error toasts, just status updates.
   Future<void> _autoSync() async {
+    debugPrint('[sync] _autoSync called: _isSyncing=$_isSyncing, isOnline=${state.isOnline}');
     if (_isSyncing) return;
     _isSyncing = true;
 
