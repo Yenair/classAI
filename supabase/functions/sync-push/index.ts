@@ -137,12 +137,19 @@ serve(async (req) => {
         if (op === "INSERT") {
           // Remove local-only fields; let server generate UUIDs
           const { local_id, localId, ...insertData } = fullRowData;
-          const { error } = await supabase
+          const { data: insertData_, error } = await supabase
             .from(table)
-            .insert(insertData);
+            .insert(insertData)
+            .select("id");
           if (error) {
             console.warn(`sync-push: INSERT error on "${table}": ${error.message}`);
             continue;
+          }
+          // Capture the server-generated UUID so it can be returned in results
+          const generatedId = insertData_?.[0]?.id as string | undefined;
+          if (generatedId) {
+            // Store in a per-change map keyed by local_id
+            (change as Record<string, unknown>)["__generated_id"] = generatedId;
           }
         } else if (op === "UPDATE") {
           const serverId = getValue(fullRowData, "server_id", "serverId", "id");
@@ -192,7 +199,9 @@ serve(async (req) => {
     for (const change of changes) {
       const fullRowData = decompressRow(change.rowData as Record<string, unknown>);
       const localId = getValue(fullRowData, "local_id", "localId", "id");
-      const serverId = getValue(fullRowData, "server_id", "serverId", "id");
+      // Use the generated ID from INSERT, or fall back to the incoming server_id
+      const generatedId = (change as Record<string, unknown>)["__generated_id"] as string | undefined;
+      const serverId = generatedId ?? getValue(fullRowData, "server_id", "serverId", "id");
       results.push({
         local_id: localId ?? 0,
         status: "updated",

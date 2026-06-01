@@ -55,6 +55,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   bool _isGenerating = false;
   bool _hasGenerated = false;
   bool _isUnlocked = false;
+  bool _editorSidebarOpen = true;
   int _creditBalance = 0;
   String? _encryptedContent;
   String? _teacherId;
@@ -632,7 +633,11 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ── Navigation Drawer (tablet+) ─────────────────────────
-          _NavigationDrawer(cs: cs, theme: theme),
+          _NavigationDrawer(
+            cs: cs,
+            theme: theme,
+            isOpen: _editorSidebarOpen,
+          ),
 
           // ── Main Content ────────────────────────────────────────
           Expanded(
@@ -658,7 +663,13 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                         child: Column(
                           children: [
                             // ── Tool Header Area ────────────────────
-                            _ToolHeader(cs: cs, theme: theme),
+                            _ToolHeader(
+                              cs: cs,
+                              theme: theme,
+                              onToggleSidebar: () => setState(
+                                  () => _editorSidebarOpen = !_editorSidebarOpen),
+                              sidebarOpen: _editorSidebarOpen,
+                            ),
 
                             // ── Two-column layout ───────────────────
                             Padding(
@@ -889,118 +900,163 @@ class _BottomNavDef {
 class _NavigationDrawer extends StatelessWidget {
   final ColorScheme cs;
   final ThemeData theme;
-  const _NavigationDrawer({required this.cs, required this.theme});
+  final bool isOpen;
+  const _NavigationDrawer({
+    required this.cs,
+    required this.theme,
+    required this.isOpen,
+  });
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth < 768) return const SizedBox.shrink();
-        return Container(
-          width: 288,
-          color: cs.surfaceContainerLow,
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          width: isOpen ? 288 : 72,
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerLow,
+          ),
+          clipBehavior: Clip.antiAlias,
           child: Column(
             children: [
-              const SizedBox(height: 24),
+              SizedBox(height: isOpen ? 24 : 16),
               // Logo area
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: cs.primaryContainer,
-                            borderRadius: BorderRadius.circular(
-                              AppTheme.radiusFull,
-                            ),
-                          ),
-                          child: Icon(
-                            Icons.person_rounded,
-                            color: cs.onPrimaryContainer,
-                            size: 22,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          'ClassAI',
-                          style: theme.textTheme.headlineMedium?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            color: cs.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 52),
-                      child: Text(
-                        'Nigerian Academic Partner',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 32),
-              // Nav items
-              ..._LessonEditorScreenState._navItems.map((item) {
-                return Container(
-                  margin: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 2,
-                  ),
-                  transform: item.isActive
-                      ? Matrix4.translationValues(4.0, 0.0, 0.0)
-                      : Matrix4.identity(),
-                  decoration: BoxDecoration(
-                    color: item.isActive
-                        ? cs.secondaryFixed
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(
-                      AppTheme.radiusFull,
-                    ),
-                  ),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                    onTap: () => _navigateTo(context, item.label),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      child: Row(
+              if (isOpen)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          Icon(
-                            item.icon,
-                            size: 22,
-                            color: item.isActive
-                                ? cs.onSecondaryFixed
-                                : cs.onSurfaceVariant,
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: cs.primaryContainer,
+                              borderRadius: BorderRadius.circular(
+                                AppTheme.radiusFull,
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.person_rounded,
+                              color: cs.onPrimaryContainer,
+                              size: 22,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Text(
-                            item.label,
-                            style: theme.textTheme.labelLarge?.copyWith(
-                              fontWeight:
-                                  item.isActive ? FontWeight.w700 : FontWeight.w500,
-                              color: item.isActive
-                                  ? cs.onSecondaryFixed
-                                  : cs.onSurfaceVariant,
+                            'ClassAI',
+                            style: theme.textTheme.headlineMedium?.copyWith(
+                              fontWeight: FontWeight.w900,
+                              color: cs.primary,
                             ),
                           ),
                         ],
                       ),
+                      const SizedBox(height: 4),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 52),
+                        child: Text(
+                          'Nigerian Academic Partner',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: cs.primaryContainer,
+                      borderRadius: BorderRadius.circular(
+                        AppTheme.radiusFull,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.person_rounded,
+                      color: cs.onPrimaryContainer,
+                      size: 22,
                     ),
                   ),
-                );
-              }),
+                ),
+              SizedBox(height: isOpen ? 32 : 16),
+              // Nav items
+              Expanded(
+                child: Column(
+                  children: _LessonEditorScreenState._navItems.map((item) {
+                    return Container(
+                        margin: EdgeInsets.symmetric(
+                          horizontal: isOpen ? 12 : 4,
+                        vertical: 2,
+                      ),
+                      transform: item.isActive
+                          ? Matrix4.translationValues(isOpen ? 4.0 : 0.0, 0.0, 0.0)
+                          : Matrix4.identity(),
+                      decoration: BoxDecoration(
+                        color: item.isActive
+                            ? cs.secondaryFixed
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(
+                          AppTheme.radiusFull,
+                        ),
+                      ),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                        onTap: () => _navigateTo(context, item.label),
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isOpen ? 16 : 8,
+                            vertical: 12,
+                          ),
+                          child: isOpen
+                              ? Row(
+                                  children: [
+                                    Icon(
+                                      item.icon,
+                                      size: 22,
+                                      color: item.isActive
+                                          ? cs.onSecondaryFixed
+                                          : cs.onSurfaceVariant,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      item.label,
+                                      style: theme.textTheme.labelLarge?.copyWith(
+                                        fontWeight: item.isActive
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                        color: item.isActive
+                                            ? cs.onSecondaryFixed
+                                            : cs.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Center(
+                                  child: Icon(
+                                    item.icon,
+                                    size: 22,
+                                    color: item.isActive
+                                        ? cs.onSecondaryFixed
+                                        : cs.onSurfaceVariant,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
             ],
           ),
         );
@@ -1101,7 +1157,14 @@ class _MobileHeader extends StatelessWidget {
 class _ToolHeader extends StatelessWidget {
   final ColorScheme cs;
   final ThemeData theme;
-  const _ToolHeader({required this.cs, required this.theme});
+  final VoidCallback? onToggleSidebar;
+  final bool sidebarOpen;
+  const _ToolHeader({
+    required this.cs,
+    required this.theme,
+    this.onToggleSidebar,
+    required this.sidebarOpen,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1122,30 +1185,47 @@ class _ToolHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Back link
-          InkWell(
-            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-            onTap: () => Navigator.of(context).pop(),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.arrow_back_rounded,
-                    size: 16,
-                    color: cs.onSurfaceVariant,
+          // Back link + Toggle
+          Row(
+            children: [
+              InkWell(
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                onTap: () => Navigator.of(context).pop(),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.arrow_back_rounded,
+                        size: 16,
+                        color: cs.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Back to Lessons',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Back to Lessons',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: cs.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
+              const Spacer(),
+              // Sidebar toggle (tablet+)
+              if (onToggleSidebar != null)
+                IconButton(
+                  onPressed: onToggleSidebar,
+                  icon: Icon(sidebarOpen
+                      ? Icons.menu_open_rounded
+                      : Icons.menu_rounded),
+                  tooltip: sidebarOpen ? 'Close sidebar' : 'Open sidebar',
+                  style: IconButton.styleFrom(
+                    foregroundColor: cs.onSurfaceVariant,
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 8),
           Text(

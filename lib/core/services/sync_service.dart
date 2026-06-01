@@ -12,6 +12,17 @@ import 'package:classai/core/services/merge_strategies.dart';
 import 'package:classai/core/services/security_service.dart';
 import 'package:classai/core/utils/payload_compressor.dart';
 
+/// Thrown when the server reports that the current session has been invalidated
+/// by a login on another device (token_version_mismatch).
+class SessionMismatchException implements Exception {
+  final String message;
+  const SessionMismatchException(
+      [this.message = 'Session expired due to login on another device']);
+
+  @override
+  String toString() => 'SessionMismatchException: $message';
+}
+
 enum SyncState {
   idle,
   acquiringSession,
@@ -263,6 +274,18 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
       if (data != null) {
         return SyncPullPage.fromJson(data);
       }
+    } on FunctionException catch (e) {
+      if (e.status == 401) {
+        final code = (e.details is Map)
+            ? (e.details as Map)['code'] as String?
+            : null;
+        if (code == 'token_version_mismatch') {
+          throw SessionMismatchException();
+        }
+      }
+      // Other FunctionExceptions — log and fall through to empty page
+      debugPrint('SupabaseSyncRemoteApi.pullChanges failed: $e');
+      await Sentry.captureException(e);
     } catch (e, stackTrace) {
       // Edge Function not deployed or call failed — log and fall through.
       // The sync loop (_pullChanges) relies on empty pages as a graceful
@@ -285,15 +308,23 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
     required String deviceId,
   }) async {
     try {
-      final response = await client.functions.invoke('sync-push', body: {
-        'changes': batches
-            .map((b) => {
-                  'table': b.table,
-                  'operation': b.operation,
-                  'rowData': b.record,
-                })
-            .toList(),
-      });
+      final headers = <String, String>{};
+      if (_jwt != null && _jwt!.isNotEmpty) {
+        headers['x-classai-jwt'] = _jwt!;
+      }
+      final response = await client.functions.invoke(
+        'sync-push',
+        headers: headers.isNotEmpty ? headers : null,
+        body: {
+          'changes': batches
+              .map((b) => {
+                    'table': b.table,
+                    'operation': b.operation,
+                    'rowData': b.record,
+                  })
+              .toList(),
+        },
+      );
       final data = response.data as Map<String, dynamic>?;
       if (data != null) {
         final success = data['success'] as bool? ?? false;
@@ -319,6 +350,17 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
           }).toList(),
         );
       }
+    } on FunctionException catch (e) {
+      if (e.status == 401) {
+        final code = (e.details is Map)
+            ? (e.details as Map)['code'] as String?
+            : null;
+        if (code == 'token_version_mismatch') {
+          throw SessionMismatchException();
+        }
+      }
+      // Other FunctionExceptions — log and fall through
+      await Sentry.captureException(e);
     } catch (e) {
       // Edge Function not deployed — log and fall through
       await Sentry.captureException(
@@ -364,6 +406,18 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
         // which will result in an empty page from SyncRealtimePage.fromJson().
         return SyncRealtimePage.fromJson(data);
       }
+    } on FunctionException catch (e) {
+      if (e.status == 401) {
+        final code = (e.details is Map)
+            ? (e.details as Map)['code'] as String?
+            : null;
+        if (code == 'token_version_mismatch') {
+          throw SessionMismatchException();
+        }
+      }
+      // Log and fall through
+      // ignore: avoid_print
+      print('[sync] sync-realtime-events call failed: $e');
     } catch (e) {
       // Edge Function not deployed or call failed — log and fall through.
       // The pull-based sync cycle (SyncService._pullChanges()) serves as
@@ -875,6 +929,26 @@ class SyncService {
       if (result.status == 'created' ||
           result.status == 'updated' ||
           result.status == 'deleted') {
+        // ── Post-push bookkeeping ──────────────────────────────────
+        // 1. Update the local record's serverId if the server returned one
+        //    (especially important for INSERTs where the server generates the UUID).
+        // 2. Save a version_hash snapshot so the merge engine has a base for
+        //    future sync comparisons.
+        if (result.serverId != null && result.serverId!.isNotEmpty) {
+          await _updateLocalServerId(
+            tableName: entry.queueTable,
+            localId: entry.recordLocalId,
+            serverId: result.serverId!,
+          );
+        }
+        // Build a snapshot from the original payload to record in version_hashes.
+        final payload = _decodePayload(entry.payload);
+        await store.saveSyncedRecord(
+          tableName: entry.queueTable,
+          localId: entry.recordLocalId,
+          snapshot: payload,
+        );
+        // ───────────────────────────────────────────────────────────
         await store.removeQueueEntry(entry.id);
         continue;
       }
@@ -883,6 +957,35 @@ class SyncService {
       if (result.retryable && entry.attempts < 5) {
         _setState(SyncState.backoff);
       }
+    }
+  }
+
+  /// Updates the [serverId] column on a local record after a successful push.
+  Future<void> _updateLocalServerId({
+    required String tableName,
+    required int localId,
+    required String serverId,
+  }) async {
+    switch (tableName) {
+      case 'lessons':
+        await (db.update(db.lessons)
+              ..where((t) => t.id.equals(localId)))
+            .write(LessonsCompanion(
+              serverId: Value(serverId),
+              updatedAt: Value(DateTime.now()),
+            ));
+        break;
+      case 'exams':
+        await (db.update(db.exams)
+              ..where((t) => t.id.equals(localId)))
+            .write(ExamsCompanion(
+              serverId: Value(serverId),
+              updatedAt: Value(DateTime.now()),
+            ));
+        break;
+      // Extend with other tables as needed.
+      default:
+        break;
     }
   }
 

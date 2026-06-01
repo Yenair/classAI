@@ -6,7 +6,7 @@ import 'package:classai/core/database/database.dart';
 import 'package:classai/core/services/sync_service.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart'
-    show securityServiceProvider;
+    show authProvider, securityServiceProvider;
 import 'package:classai/main.dart' show databaseProvider, navigatorKey;
 
 /// Possible sync statuses for UI display.
@@ -139,6 +139,9 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
       final syncService = await ref.read(syncServiceProvider.future);
       await syncService.onConnectivityRestored();
       await refresh();
+    } on SessionMismatchException {
+      // Session was invalidated by a login on another device — force logout
+      await ref.read(authProvider.notifier).manualLogout();
     } catch (_) {
       // Silent fail for auto-sync — no user-visible toasts
       state = SyncStatusData(
@@ -178,6 +181,9 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
 
       // Run the full sync cycle
       await syncService.onConnectivityRestored();
+    } on SessionMismatchException {
+      // Session was invalidated by a login on another device — force logout
+      await ref.read(authProvider.notifier).manualLogout();
     } catch (e, _) {
       // Mark as error
       state = SyncStatusData(

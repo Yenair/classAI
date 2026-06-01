@@ -40,6 +40,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   bool _isGenerating = false;
   bool _hasGenerated = false;
   bool _isUnlocked = false;
+  bool _editorSidebarOpen = true;
   int _creditBalance = 3;
   String? _teacherId;
   String? _schoolId;
@@ -631,7 +632,11 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ── Navigation Drawer (tablet+) ──────────────────────────
-          _NavDrawer(cs: cs, theme: theme),
+          _NavDrawer(
+            cs: cs,
+            theme: theme,
+            isOpen: _editorSidebarOpen,
+          ),
 
           // ── Main Content ─────────────────────────────────────────
           Expanded(
@@ -642,6 +647,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                   cs: cs,
                   theme: theme,
                   creditBalance: _creditBalance,
+                  onToggleSidebar: () => setState(
+                      () => _editorSidebarOpen = !_editorSidebarOpen),
+                  sidebarOpen: _editorSidebarOpen,
                 ),
 
                 // ── Editor Workspace ────────────────────────────────
@@ -819,67 +827,98 @@ class _BottomDef {
 class _NavDrawer extends StatelessWidget {
   final ColorScheme cs;
   final ThemeData theme;
-  const _NavDrawer({required this.cs, required this.theme});
+  final bool isOpen;
+  const _NavDrawer({
+    required this.cs,
+    required this.theme,
+    required this.isOpen,
+  });
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth < 768) return const SizedBox.shrink();
-        return Container(
-          width: 288,
-          color: cs.surfaceContainerLow,
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          width: isOpen ? 288 : 72,
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerLow,
+          ),
+          clipBehavior: Clip.antiAlias,
           child: Column(
             children: [
-              const SizedBox(height: 32),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: cs.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(
-                          AppTheme.radiusFull,
-                        ),
-                      ),
-                      child: Icon(
-                        Icons.person_rounded,
-                        size: 24,
-                        color: cs.onSurface.withValues(alpha: 0.54),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'ClassAI',
-                          style: theme.textTheme.headlineMedium?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            color: cs.primary,
+              SizedBox(height: isOpen ? 32 : 16),
+              // Logo area
+              if (isOpen)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: cs.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(
+                            AppTheme.radiusFull,
                           ),
                         ),
-                        Text(
-                          'Nigerian Academic Partner',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: cs.onSurfaceVariant,
-                          ),
+                        child: Icon(
+                          Icons.person_rounded,
+                          size: 24,
+                          color: cs.onSurface.withValues(alpha: 0.54),
                         ),
-                      ],
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'ClassAI',
+                            style: theme.textTheme.headlineMedium?.copyWith(
+                              fontWeight: FontWeight.w900,
+                              color: cs.primary,
+                            ),
+                          ),
+                          Text(
+                            'Nigerian Academic Partner',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(
+                        AppTheme.radiusFull,
+                      ),
                     ),
-                  ],
+                    child: Icon(
+                      Icons.person_rounded,
+                      size: 24,
+                      color: cs.onSurface.withValues(alpha: 0.54),
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 32),
+              SizedBox(height: isOpen ? 32 : 16),
               Expanded(
                 child: Column(
                   children: _ExamEditorScreenState._navItems.map((item) {
                     return Container(
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: 12,
+                      margin: EdgeInsets.symmetric(
+                        horizontal: isOpen ? 12 : 4,
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
@@ -894,33 +933,43 @@ class _NavDrawer extends StatelessWidget {
                         borderRadius: BorderRadius.circular(AppTheme.radiusFull),
                         onTap: () => _navigateTo(context, item.label),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isOpen ? 16 : 8,
                             vertical: 12,
                           ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                item.icon,
-                                size: 22,
-                                color: item.isActive
-                                    ? cs.onSecondaryFixed
-                                    : cs.onSurfaceVariant,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                item.label,
-                                style: theme.textTheme.labelLarge?.copyWith(
-                                  fontWeight: item.isActive
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                  color: item.isActive
-                                      ? cs.onSecondaryFixed
-                                      : cs.onSurfaceVariant,
+                          child: isOpen
+                              ? Row(
+                                  children: [
+                                    Icon(
+                                      item.icon,
+                                      size: 22,
+                                      color: item.isActive
+                                          ? cs.onSecondaryFixed
+                                          : cs.onSurfaceVariant,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      item.label,
+                                      style: theme.textTheme.labelLarge?.copyWith(
+                                        fontWeight: item.isActive
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                        color: item.isActive
+                                            ? cs.onSecondaryFixed
+                                            : cs.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Center(
+                                  child: Icon(
+                                    item.icon,
+                                    size: 22,
+                                    color: item.isActive
+                                        ? cs.onSecondaryFixed
+                                        : cs.onSurfaceVariant,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
                         ),
                       ),
                     );
@@ -962,10 +1011,14 @@ class _TopBar extends StatelessWidget {
   final ColorScheme cs;
   final ThemeData theme;
   final int creditBalance;
+  final VoidCallback? onToggleSidebar;
+  final bool sidebarOpen;
   const _TopBar({
     required this.cs,
     required this.theme,
     required this.creditBalance,
+    this.onToggleSidebar,
+    required this.sidebarOpen,
   });
 
   @override
@@ -985,6 +1038,18 @@ class _TopBar extends StatelessWidget {
       ),
       child: Row(
         children: [
+          // Sidebar toggle (tablet+)
+          if (onToggleSidebar != null)
+            IconButton(
+              onPressed: onToggleSidebar,
+              icon: Icon(sidebarOpen
+                  ? Icons.menu_open_rounded
+                  : Icons.menu_rounded),
+              tooltip: sidebarOpen ? 'Close sidebar' : 'Open sidebar',
+              style: IconButton.styleFrom(
+                foregroundColor: cs.onSurfaceVariant,
+              ),
+            ),
           // Mobile avatar (hidden on desktop)
           LayoutBuilder(
             builder: (context, constraints) {

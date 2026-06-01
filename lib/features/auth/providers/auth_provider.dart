@@ -136,7 +136,9 @@ class AuthStateData {
 /// Notifier implementing the Auth State Machine defined in phase_03_auth.md.
 class AuthNotifier extends Notifier<AuthStateData> {
   static const int maxOfflineAttempts = 3;
+  static const _sessionCheckInterval = Duration(seconds: 30);
   bool _isResending = false;
+  Timer? _sessionTimer;
 
   @override
   AuthStateData build() {
@@ -241,6 +243,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
             currentSchool: result.school,
             clearError: true,
           );
+          _startSessionTimer();
 
           // Navigate based on role
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -362,6 +365,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
         offlineLoginAttempts: 0,
         clearPendingDeviceId: true,
       );
+      _startSessionTimer();
 
       // Navigate based on role — admin goes to /admin, teachers go to /
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -445,6 +449,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
         currentTeacher: result.teacher,
         currentSchool: result.school,
       );
+      _startSessionTimer();
     } on AuthException catch (e) {
       if (await _logoutIfSessionMismatch(e)) {
         return;
@@ -504,7 +509,30 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
     await _securityService.clearAll();
 
+    _stopSessionTimer();
     state = AuthStateData(state: targetState);
+  }
+
+  /// Starts a periodic timer that calls [validateSession] every 30 seconds
+  /// while the user is authenticated. If the server returns 401 with a
+  /// token_version_mismatch, the user is forcibly logged out.
+  void _startSessionTimer() {
+    _stopSessionTimer(); // cancel any existing timer first
+    _sessionTimer = Timer.periodic(_sessionCheckInterval, (_) async {
+      try {
+        await _authService.validateSession();
+      } catch (e) {
+        if (await _logoutIfSessionMismatch(e)) {
+          return;
+        }
+      }
+    });
+  }
+
+  /// Cancels the periodic session check timer.
+  void _stopSessionTimer() {
+    _sessionTimer?.cancel();
+    _sessionTimer = null;
   }
 
   /// Request OTP for admin password recovery.
@@ -540,6 +568,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
         currentTeacher: result.teacher,
         currentSchool: result.school,
       );
+      _startSessionTimer();
     } on AuthException catch (e) {
       if (await _logoutIfSessionMismatch(e)) {
         return;
@@ -601,6 +630,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
         currentTeacher: result.teacher,
         currentSchool: result.school,
       );
+      _startSessionTimer();
     } on AuthException catch (e) {
       if (await _logoutIfSessionMismatch(e)) {
         return;
@@ -666,6 +696,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
         currentTeacher: result.teacher,
         currentSchool: result.school,
       );
+      _startSessionTimer();
     } on AuthException catch (e) {
       if (await _logoutIfSessionMismatch(e)) {
         return;
@@ -867,6 +898,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
           clearError: true,
           clearPendingDeviceId: true,
         );
+        _startSessionTimer();
       } else {
         final error = data['error'] as String? ?? 'Verification failed.';
         state = state.copyWith(errorMessage: error, clearError: false);
@@ -938,6 +970,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
         isSignupFlow: false,
         clearError: true,
       );
+      _startSessionTimer();
 
       // Navigate to admin dashboard
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1173,6 +1206,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
         state: AuthState.authenticated,
         clearError: true,
       );
+      _startSessionTimer();
     } on AuthException catch (e) {
       if (await _logoutIfSessionMismatch(e)) {
         return;
