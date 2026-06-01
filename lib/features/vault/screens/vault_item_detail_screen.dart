@@ -126,13 +126,16 @@ class VaultItemDetailScreen extends ConsumerWidget {
             // Author + Tier badge
             Row(
               children: [
-                Text(
-                  'By ${item.authorName}',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: cs.onSurfaceVariant,
-                      ),
+                Flexible(
+                  child: Text(
+                    'By ${item.authorName}',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                          overflow: TextOverflow.clip,
+                        ),
+                  ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
                 _TierBadge(tier: item.minTier),
               ],
             ),
@@ -206,12 +209,15 @@ class VaultItemDetailScreen extends ConsumerWidget {
                   color: cs.tertiary,
                 ),
                 const SizedBox(width: 4),
-                Text(
-                  '${item.creditCost} credits',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: cs.tertiary,
-                      ),
+                Flexible(
+                  child: Text(
+                    '${item.creditCost} credits',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: cs.tertiary,
+                          overflow: TextOverflow.clip,
+                        ),
+                  ),
                 ),
               ],
             ),
@@ -223,11 +229,14 @@ class VaultItemDetailScreen extends ConsumerWidget {
                   Icon(Icons.check_circle_rounded,
                       size: 20, color: cs.primary),
                   const SizedBox(width: 4),
-                  Text(
-                    'Acquired on ${_formatDate(item.acquisitionDate!)}',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: cs.primary,
-                        ),
+                  Flexible(
+                    child: Text(
+                      'Acquired on ${_formatDate(item.acquisitionDate!)}',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: cs.primary,
+                            overflow: TextOverflow.clip,
+                          ),
+                    ),
                   ),
                 ],
               ),

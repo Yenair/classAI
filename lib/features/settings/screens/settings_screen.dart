@@ -790,15 +790,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Current Balance',
-                style: textTheme.bodyLarge,
+              Flexible(
+                child: Text(
+                  'Current Balance',
+                  style: textTheme.bodyLarge?.copyWith(
+                    overflow: TextOverflow.clip,
+                  ),
+                ),
               ),
-              Text(
-                '${creditData.currentCredits}',
-                style: textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: cs.primary,
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  '${creditData.currentCredits}',
+                  textAlign: TextAlign.end,
+                  style: textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: cs.primary,
+                    overflow: TextOverflow.clip,
+                  ),
                 ),
               ),
             ],
@@ -1477,9 +1486,13 @@ class _SyncStatusRow extends StatelessWidget {
         children: [
           Icon(icon, size: 18, color: iconColor),
           const SizedBox(width: 10),
-          Text(
-            '$label:',
-            style: textTheme.bodyMedium,
+          Flexible(
+            child: Text(
+              '$label:',
+              style: textTheme.bodyMedium?.copyWith(
+                overflow: TextOverflow.clip,
+              ),
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -1487,6 +1500,7 @@ class _SyncStatusRow extends StatelessWidget {
               value,
               style: textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.w600,
+                overflow: TextOverflow.clip,
               ),
               textAlign: TextAlign.right,
             ),

@@ -170,7 +170,18 @@ class AdminDashboardNotifier extends Notifier<AdminDashboardData> {
           .get();
       final totalConflictCount = conflictRows.length;
 
+      // Deduplicate teachers by serverId (keep first occurrence) so that
+      // even if duplicates remain in the database, the count is accurate.
+      final seenServerIds = <String>{};
+      final uniqueTeachers = <Teacher>[];
       for (final t in teachers.where((t) => !t.isDeleted)) {
+        if (t.serverId != null) {
+          if (!seenServerIds.add(t.serverId!)) continue;
+        }
+        uniqueTeachers.add(t);
+      }
+
+      for (final t in uniqueTeachers) {
         final deviceCount =
             await _db.teacherDevicesDao.countActiveByTeacher(t.localId);
         final generatedCount = t.serverId != null

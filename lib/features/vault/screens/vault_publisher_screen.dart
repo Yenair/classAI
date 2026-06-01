@@ -1036,9 +1036,13 @@ class _FormContent extends StatelessWidget {
             const SizedBox(height: 4),
             Row(
               children: [
-                Text(
-                  'Credits required to acquire:',
-                  style: tt.bodyMedium,
+                Flexible(
+                  child: Text(
+                    'Credits required to acquire:',
+                    style: tt.bodyMedium?.copyWith(
+                      overflow: TextOverflow.clip,
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 12),
                 SizedBox(
@@ -1198,10 +1202,13 @@ class _RecentSubmissionsPanel extends StatelessWidget {
             children: [
               const Icon(Icons.history_rounded, size: 22),
               const SizedBox(width: 8),
-              Text(
-                'Recent Submissions',
-                style: tt.titleLarge?.copyWith(
-                  color: cs.onSurface,
+              Flexible(
+                child: Text(
+                  'Recent Submissions',
+                  style: tt.titleLarge?.copyWith(
+                    color: cs.onSurface,
+                    overflow: TextOverflow.clip,
+                  ),
                 ),
               ),
             ],
@@ -1263,11 +1270,14 @@ class _RecentSubmissionsPanel extends StatelessWidget {
                   color: cs.primary,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  'EmergencyFlushService: Background Sync Active',
-                  style: tt.labelMedium?.copyWith(
-                    color: cs.outline,
-                    fontWeight: FontWeight.w500,
+                Flexible(
+                  child: Text(
+                    'EmergencyFlushService: Background Sync Active',
+                    style: tt.labelMedium?.copyWith(
+                      color: cs.outline,
+                      fontWeight: FontWeight.w500,
+                      overflow: TextOverflow.clip,
+                    ),
                   ),
                 ),
               ],

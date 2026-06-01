@@ -222,18 +222,15 @@ class AppTheme {
         fontSize: 18,
         fontWeight: FontWeight.w400,
         height: 28 / 18,
-        overflow: TextOverflow.ellipsis,
       ),
       bodyMedium: inter.bodyMedium?.copyWith(
         fontSize: 16,
         fontWeight: FontWeight.w400,
         height: 24 / 16,
-        overflow: TextOverflow.ellipsis,
       ),
       bodySmall: inter.bodySmall?.copyWith(
         fontSize: 14,
         fontWeight: FontWeight.w400,
-        overflow: TextOverflow.ellipsis,
       ),
 
       // ── Label ───────────────────────────────────────────────────
@@ -242,18 +239,15 @@ class AppTheme {
         fontWeight: FontWeight.w500,
         height: 20 / 14,
         letterSpacing: 0.1,
-        overflow: TextOverflow.ellipsis,
       ),
       labelMedium: inter.labelMedium?.copyWith(
         fontSize: 12,
         fontWeight: FontWeight.w500,
         height: 16 / 12,
-        overflow: TextOverflow.ellipsis,
       ),
       labelSmall: inter.labelSmall?.copyWith(
         fontSize: 11,
         fontWeight: FontWeight.w500,
-        overflow: TextOverflow.ellipsis,
       ),
     );
   }

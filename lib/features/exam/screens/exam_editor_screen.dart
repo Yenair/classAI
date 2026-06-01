@@ -1205,11 +1205,14 @@ class _ConfigPanel extends StatelessWidget {
                   Icon(Icons.auto_awesome_rounded,
                       color: cs.onPrimaryContainer, size: 22),
                   const SizedBox(width: 8),
-                  Text(
-                    'Generation Engine',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: cs.onPrimaryContainer,
-                      fontWeight: FontWeight.w600,
+                  Flexible(
+                    child: Text(
+                      'Generation Engine',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: cs.onPrimaryContainer,
+                        fontWeight: FontWeight.w600,
+                        overflow: TextOverflow.clip,
+                      ),
                     ),
                   ),
                 ],
@@ -1682,15 +1685,18 @@ class _PreviewPanel extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Text(
-            'Preview Draft',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: cs.onSurface,
+          Flexible(
+            child: Text(
+              'Preview Draft',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: cs.onSurface,
+                overflow: TextOverflow.clip,
+              ),
             ),
           ),
           if (totalQuestions != null) ...[
-            const Spacer(),
+            const SizedBox(width: 8),
             Text(
               '$totalQuestions Questions Total',
               style: theme.textTheme.bodyMedium?.copyWith(
@@ -2194,11 +2200,14 @@ class _SectionHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        Text(
-          subtitle,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: cs.onSurface,
+        Flexible(
+          child: Text(
+            subtitle,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: cs.onSurface,
+              overflow: TextOverflow.clip,
+            ),
           ),
         ),
       ],

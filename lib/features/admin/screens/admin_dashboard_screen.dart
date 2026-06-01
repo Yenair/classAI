@@ -31,6 +31,37 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   bool _sidebarOpen = true;
   Timer? _autoRefreshTimer;
 
+  /// Shows a confirmation dialog when the system back button is pressed on the
+  /// admin home route (`/admin`). If the user confirms, the app is closed.
+  void _onBackPressed(bool didPop) {
+    if (didPop) return;
+    showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        title: const Text('Quit App'),
+        content: const Text('Are you sure you want to quit the app?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(ctx).pop(true);
+              SystemNavigator.pop();
+            },
+            child: const Text('Quit'),
+          ),
+        ],
+      ),
+    );
+  }
+
+
   @override
   void initState() {
     super.initState();
@@ -80,39 +111,43 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     final isWide = MediaQuery.of(context).size.width >= 768;
     final themeMode = ref.watch(themeProvider);
 
-    return Scaffold(
-      backgroundColor: cs.surface,
-      body: SafeArea(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // === Desktop Nav Drawer ===
-            if (isWide) _buildNavDrawer(cs, textTheme),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) => _onBackPressed(didPop),
+      child: Scaffold(
+        backgroundColor: cs.surface,
+        body: SafeArea(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // === Desktop Nav Drawer ===
+              if (isWide) _buildNavDrawer(cs, textTheme),
 
-            // === Main Content Area ===
-            Expanded(
-              child: Column(
-                children: [
-                  // === TopAppBar (desktop only) ===
-                  if (isWide)
-                    _buildTopAppBar(cs, textTheme, authData, themeMode),
+              // === Main Content Area ===
+              Expanded(
+                child: Column(
+                  children: [
+                    // === TopAppBar (desktop only) ===
+                    if (isWide)
+                      _buildTopAppBar(cs, textTheme, authData, themeMode),
 
-                  // === Main canvas ===
-                  Expanded(
-                    child: dashboardData.loading
-                        ? const Center(child: CircularProgressIndicator())
-                        : dashboardData.errorMessage != null
-                            ? _buildErrorState(cs, textTheme, dashboardData)
-                            : _buildCanvas(context, cs, textTheme,
-                                dashboardData, authData),
-                  ),
+                    // === Main canvas ===
+                    Expanded(
+                      child: dashboardData.loading
+                          ? const Center(child: CircularProgressIndicator())
+                          : dashboardData.errorMessage != null
+                              ? _buildErrorState(cs, textTheme, dashboardData)
+                              : _buildCanvas(context, cs, textTheme,
+                                  dashboardData, authData),
+                    ),
 
-                  // === BottomNav (mobile only) ===
-                  if (!isWide) _buildBottomNav(cs, textTheme),
-                ],
+                    // === BottomNav (mobile only) ===
+                    if (!isWide) _buildBottomNav(cs, textTheme),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

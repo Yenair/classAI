@@ -1,5 +1,6 @@
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -29,6 +30,36 @@ class DashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  /// Shows a confirmation dialog when the system back button is pressed on the
+  /// home route (`/`). If the user confirms, the app is closed.
+  void _onBackPressed(bool didPop) {
+    if (didPop) return;
+    showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        title: const Text('Quit App'),
+        content: const Text('Are you sure you want to quit the app?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(ctx).pop(true);
+              SystemNavigator.pop();
+            },
+            child: const Text('Quit'),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// null = still loading, true = EditorLayout, false = ReaderLayout
   bool? _isEditorMode;
 
@@ -47,7 +78,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget build(BuildContext context) {
     // Platform gate: non-mobile platforms always use the editor layout
     if (!Platform.isAndroid && !Platform.isIOS) {
-      return const EditorLayout();
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) => _onBackPressed(didPop),
+        child: const EditorLayout(),
+      );
     }
 
     if (_isEditorMode == null) {
@@ -56,7 +91,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       );
     }
 
-    return _isEditorMode! ? const EditorLayout() : const ReaderLayout();
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) => _onBackPressed(didPop),
+      child: _isEditorMode! ? const EditorLayout() : const ReaderLayout(),
+    );
   }
 }
 
@@ -915,12 +954,16 @@ class _RecentLessonsSection extends ConsumerWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Recent Lessons',
-              style: theme.textTheme.titleLarge?.copyWith(
-                color: cs.primary,
+            Flexible(
+              child: Text(
+                'Recent Lessons',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: cs.primary,
+                  overflow: TextOverflow.clip,
+                ),
               ),
             ),
+            const SizedBox(width: 8),
             TextButton(
               onPressed: () => context.push('/lessons'),
               style: TextButton.styleFrom(
@@ -1157,12 +1200,16 @@ class _LessonCard extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  timeAgo,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: cs.onSurfaceVariant,
+                Flexible(
+                  child: Text(
+                    timeAgo,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      overflow: TextOverflow.clip,
+                    ),
                   ),
                 ),
+                const SizedBox(width: 8),
                 IconButton(
                   onPressed: () => context.push('/lessons/$lessonId'),
                   icon: Icon(
@@ -1908,14 +1955,18 @@ class _ReaderLessonCard extends StatelessWidget {
                     color: cs.outline,
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    duration,
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: cs.outline,
+                  Flexible(
+                    child: Text(
+                      duration,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: cs.outline,
+                        overflow: TextOverflow.clip,
+                      ),
                     ),
                   ),
                 ],
               ),
+              const SizedBox(width: 8),
               SizedBox(
                 height: AppTheme.touchTarget,
                 child: FilledButton(

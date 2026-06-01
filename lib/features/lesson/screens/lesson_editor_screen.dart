@@ -1475,11 +1475,14 @@ class _PreviewColumn extends StatelessWidget {
                 children: [
                   Icon(Icons.visibility_rounded, color: cs.primary, size: 20),
                   const SizedBox(width: 8),
-                  Text(
-                    'Preview Generated Content',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: cs.onSurface,
+                  Flexible(
+                    child: Text(
+                      'Preview Generated Content',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: cs.onSurface,
+                        overflow: TextOverflow.clip,
+                      ),
                     ),
                   ),
                 ],
@@ -1540,14 +1543,17 @@ class _PreviewColumn extends StatelessWidget {
               children: [
                 Icon(Icons.visibility_rounded, color: cs.primary, size: 20),
                 const SizedBox(width: 8),
-                Text(
-                  'Preview Generated Content',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: cs.onSurface,
+                Flexible(
+                  child: Text(
+                    'Preview Generated Content',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface,
+                      overflow: TextOverflow.clip,
+                    ),
                   ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
                 Container(
                   width: 8,
                   height: 8,
@@ -1614,11 +1620,14 @@ class _PreviewColumn extends StatelessWidget {
                     children: [
                       Icon(Icons.lock_rounded, color: cs.tertiary, size: 20),
                       const SizedBox(width: 8),
-                      Text(
-                        'Locked — Preview only',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: cs.tertiary,
+                      Flexible(
+                        child: Text(
+                          'Locked — Preview only',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: cs.tertiary,
+                            overflow: TextOverflow.clip,
+                          ),
                         ),
                       ),
                     ],
