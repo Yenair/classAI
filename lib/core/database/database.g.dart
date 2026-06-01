@@ -2380,6 +2380,18 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
   late final GeneratedColumn<String> contentHash = GeneratedColumn<String>(
       'content_hash', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _schemeOfWorkIdMeta =
+      const VerificationMeta('schemeOfWorkId');
+  @override
+  late final GeneratedColumn<String> schemeOfWorkId = GeneratedColumn<String>(
+      'scheme_of_work_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _weekNumberMeta =
+      const VerificationMeta('weekNumber');
+  @override
+  late final GeneratedColumn<int> weekNumber = GeneratedColumn<int>(
+      'week_number', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -2462,6 +2474,8 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
         curriculum,
         content,
         contentHash,
+        schemeOfWorkId,
+        weekNumber,
         createdAt,
         updatedAt,
         updateCounter,
@@ -2551,6 +2565,18 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
           contentHash.isAcceptableOrUnknown(
               data['content_hash']!, _contentHashMeta));
     }
+    if (data.containsKey('scheme_of_work_id')) {
+      context.handle(
+          _schemeOfWorkIdMeta,
+          schemeOfWorkId.isAcceptableOrUnknown(
+              data['scheme_of_work_id']!, _schemeOfWorkIdMeta));
+    }
+    if (data.containsKey('week_number')) {
+      context.handle(
+          _weekNumberMeta,
+          weekNumber.isAcceptableOrUnknown(
+              data['week_number']!, _weekNumberMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -2628,6 +2654,10 @@ class $LessonsTable extends Lessons with TableInfo<$LessonsTable, Lesson> {
           .read(DriftSqlType.string, data['${effectivePrefix}content'])!,
       contentHash: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}content_hash']),
+      schemeOfWorkId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}scheme_of_work_id']),
+      weekNumber: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}week_number']),
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
@@ -2667,6 +2697,8 @@ class Lesson extends DataClass implements Insertable<Lesson> {
   final String curriculum;
   final String content;
   final String? contentHash;
+  final String? schemeOfWorkId;
+  final int? weekNumber;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int updateCounter;
@@ -2688,6 +2720,8 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       required this.curriculum,
       required this.content,
       this.contentHash,
+      this.schemeOfWorkId,
+      this.weekNumber,
       required this.createdAt,
       required this.updatedAt,
       required this.updateCounter,
@@ -2714,6 +2748,12 @@ class Lesson extends DataClass implements Insertable<Lesson> {
     map['content'] = Variable<String>(content);
     if (!nullToAbsent || contentHash != null) {
       map['content_hash'] = Variable<String>(contentHash);
+    }
+    if (!nullToAbsent || schemeOfWorkId != null) {
+      map['scheme_of_work_id'] = Variable<String>(schemeOfWorkId);
+    }
+    if (!nullToAbsent || weekNumber != null) {
+      map['week_number'] = Variable<int>(weekNumber);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -2750,6 +2790,12 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       contentHash: contentHash == null && nullToAbsent
           ? const Value.absent()
           : Value(contentHash),
+      schemeOfWorkId: schemeOfWorkId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(schemeOfWorkId),
+      weekNumber: weekNumber == null && nullToAbsent
+          ? const Value.absent()
+          : Value(weekNumber),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       updateCounter: Value(updateCounter),
@@ -2783,6 +2829,8 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       curriculum: serializer.fromJson<String>(json['curriculum']),
       content: serializer.fromJson<String>(json['content']),
       contentHash: serializer.fromJson<String?>(json['contentHash']),
+      schemeOfWorkId: serializer.fromJson<String?>(json['schemeOfWorkId']),
+      weekNumber: serializer.fromJson<int?>(json['weekNumber']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       updateCounter: serializer.fromJson<int>(json['updateCounter']),
@@ -2809,6 +2857,8 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       'curriculum': serializer.toJson<String>(curriculum),
       'content': serializer.toJson<String>(content),
       'contentHash': serializer.toJson<String?>(contentHash),
+      'schemeOfWorkId': serializer.toJson<String?>(schemeOfWorkId),
+      'weekNumber': serializer.toJson<int?>(weekNumber),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'updateCounter': serializer.toJson<int>(updateCounter),
@@ -2833,6 +2883,8 @@ class Lesson extends DataClass implements Insertable<Lesson> {
           String? curriculum,
           String? content,
           Value<String?> contentHash = const Value.absent(),
+          Value<String?> schemeOfWorkId = const Value.absent(),
+          Value<int?> weekNumber = const Value.absent(),
           DateTime? createdAt,
           DateTime? updatedAt,
           int? updateCounter,
@@ -2854,6 +2906,9 @@ class Lesson extends DataClass implements Insertable<Lesson> {
         curriculum: curriculum ?? this.curriculum,
         content: content ?? this.content,
         contentHash: contentHash.present ? contentHash.value : this.contentHash,
+        schemeOfWorkId:
+            schemeOfWorkId.present ? schemeOfWorkId.value : this.schemeOfWorkId,
+        weekNumber: weekNumber.present ? weekNumber.value : this.weekNumber,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
         updateCounter: updateCounter ?? this.updateCounter,
@@ -2886,6 +2941,11 @@ class Lesson extends DataClass implements Insertable<Lesson> {
       content: data.content.present ? data.content.value : this.content,
       contentHash:
           data.contentHash.present ? data.contentHash.value : this.contentHash,
+      schemeOfWorkId: data.schemeOfWorkId.present
+          ? data.schemeOfWorkId.value
+          : this.schemeOfWorkId,
+      weekNumber:
+          data.weekNumber.present ? data.weekNumber.value : this.weekNumber,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       updateCounter: data.updateCounter.present
@@ -2921,6 +2981,8 @@ class Lesson extends DataClass implements Insertable<Lesson> {
           ..write('curriculum: $curriculum, ')
           ..write('content: $content, ')
           ..write('contentHash: $contentHash, ')
+          ..write('schemeOfWorkId: $schemeOfWorkId, ')
+          ..write('weekNumber: $weekNumber, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('updateCounter: $updateCounter, ')
@@ -2935,27 +2997,30 @@ class Lesson extends DataClass implements Insertable<Lesson> {
   }
 
   @override
-  int get hashCode => Object.hash(
-      id,
-      serverId,
-      subject,
-      classLevel,
-      week,
-      topic,
-      difficulty,
-      bloomsVerbs,
-      curriculum,
-      content,
-      contentHash,
-      createdAt,
-      updatedAt,
-      updateCounter,
-      isDeleted,
-      lastModifiedBy,
-      teacherServerId,
-      schoolServerId,
-      isUnlocked,
-      status);
+  int get hashCode => Object.hashAll([
+        id,
+        serverId,
+        subject,
+        classLevel,
+        week,
+        topic,
+        difficulty,
+        bloomsVerbs,
+        curriculum,
+        content,
+        contentHash,
+        schemeOfWorkId,
+        weekNumber,
+        createdAt,
+        updatedAt,
+        updateCounter,
+        isDeleted,
+        lastModifiedBy,
+        teacherServerId,
+        schoolServerId,
+        isUnlocked,
+        status
+      ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2971,6 +3036,8 @@ class Lesson extends DataClass implements Insertable<Lesson> {
           other.curriculum == this.curriculum &&
           other.content == this.content &&
           other.contentHash == this.contentHash &&
+          other.schemeOfWorkId == this.schemeOfWorkId &&
+          other.weekNumber == this.weekNumber &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.updateCounter == this.updateCounter &&
@@ -2994,6 +3061,8 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
   final Value<String> curriculum;
   final Value<String> content;
   final Value<String?> contentHash;
+  final Value<String?> schemeOfWorkId;
+  final Value<int?> weekNumber;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> updateCounter;
@@ -3015,6 +3084,8 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     this.curriculum = const Value.absent(),
     this.content = const Value.absent(),
     this.contentHash = const Value.absent(),
+    this.schemeOfWorkId = const Value.absent(),
+    this.weekNumber = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.updateCounter = const Value.absent(),
@@ -3037,6 +3108,8 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     required String curriculum,
     required String content,
     this.contentHash = const Value.absent(),
+    this.schemeOfWorkId = const Value.absent(),
+    this.weekNumber = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.updateCounter = const Value.absent(),
@@ -3066,6 +3139,8 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     Expression<String>? curriculum,
     Expression<String>? content,
     Expression<String>? contentHash,
+    Expression<String>? schemeOfWorkId,
+    Expression<int>? weekNumber,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? updateCounter,
@@ -3088,6 +3163,8 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
       if (curriculum != null) 'curriculum': curriculum,
       if (content != null) 'content': content,
       if (contentHash != null) 'content_hash': contentHash,
+      if (schemeOfWorkId != null) 'scheme_of_work_id': schemeOfWorkId,
+      if (weekNumber != null) 'week_number': weekNumber,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (updateCounter != null) 'update_counter': updateCounter,
@@ -3112,6 +3189,8 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
       Value<String>? curriculum,
       Value<String>? content,
       Value<String?>? contentHash,
+      Value<String?>? schemeOfWorkId,
+      Value<int?>? weekNumber,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
       Value<int>? updateCounter,
@@ -3133,6 +3212,8 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
       curriculum: curriculum ?? this.curriculum,
       content: content ?? this.content,
       contentHash: contentHash ?? this.contentHash,
+      schemeOfWorkId: schemeOfWorkId ?? this.schemeOfWorkId,
+      weekNumber: weekNumber ?? this.weekNumber,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       updateCounter: updateCounter ?? this.updateCounter,
@@ -3181,6 +3262,12 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
     if (contentHash.present) {
       map['content_hash'] = Variable<String>(contentHash.value);
     }
+    if (schemeOfWorkId.present) {
+      map['scheme_of_work_id'] = Variable<String>(schemeOfWorkId.value);
+    }
+    if (weekNumber.present) {
+      map['week_number'] = Variable<int>(weekNumber.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -3225,6 +3312,8 @@ class LessonsCompanion extends UpdateCompanion<Lesson> {
           ..write('curriculum: $curriculum, ')
           ..write('content: $content, ')
           ..write('contentHash: $contentHash, ')
+          ..write('schemeOfWorkId: $schemeOfWorkId, ')
+          ..write('weekNumber: $weekNumber, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('updateCounter: $updateCounter, ')
@@ -4045,6 +4134,18 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
   late final GeneratedColumn<String> content = GeneratedColumn<String>(
       'content', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _schemeOfWorkIdMeta =
+      const VerificationMeta('schemeOfWorkId');
+  @override
+  late final GeneratedColumn<String> schemeOfWorkId = GeneratedColumn<String>(
+      'scheme_of_work_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _weekNumberMeta =
+      const VerificationMeta('weekNumber');
+  @override
+  late final GeneratedColumn<int> weekNumber = GeneratedColumn<int>(
+      'week_number', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -4117,6 +4218,8 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
         difficulty,
         curriculum,
         content,
+        schemeOfWorkId,
+        weekNumber,
         createdAt,
         updatedAt,
         updateCounter,
@@ -4185,6 +4288,18 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
     } else if (isInserting) {
       context.missing(_contentMeta);
     }
+    if (data.containsKey('scheme_of_work_id')) {
+      context.handle(
+          _schemeOfWorkIdMeta,
+          schemeOfWorkId.isAcceptableOrUnknown(
+              data['scheme_of_work_id']!, _schemeOfWorkIdMeta));
+    }
+    if (data.containsKey('week_number')) {
+      context.handle(
+          _weekNumberMeta,
+          weekNumber.isAcceptableOrUnknown(
+              data['week_number']!, _weekNumberMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -4252,6 +4367,10 @@ class $ExamsTable extends Exams with TableInfo<$ExamsTable, Exam> {
           .read(DriftSqlType.string, data['${effectivePrefix}curriculum'])!,
       content: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}content'])!,
+      schemeOfWorkId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}scheme_of_work_id']),
+      weekNumber: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}week_number']),
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
@@ -4286,6 +4405,8 @@ class Exam extends DataClass implements Insertable<Exam> {
   final String difficulty;
   final String curriculum;
   final String content;
+  final String? schemeOfWorkId;
+  final int? weekNumber;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int updateCounter;
@@ -4303,6 +4424,8 @@ class Exam extends DataClass implements Insertable<Exam> {
       required this.difficulty,
       required this.curriculum,
       required this.content,
+      this.schemeOfWorkId,
+      this.weekNumber,
       required this.createdAt,
       required this.updatedAt,
       required this.updateCounter,
@@ -4324,6 +4447,12 @@ class Exam extends DataClass implements Insertable<Exam> {
     map['difficulty'] = Variable<String>(difficulty);
     map['curriculum'] = Variable<String>(curriculum);
     map['content'] = Variable<String>(content);
+    if (!nullToAbsent || schemeOfWorkId != null) {
+      map['scheme_of_work_id'] = Variable<String>(schemeOfWorkId);
+    }
+    if (!nullToAbsent || weekNumber != null) {
+      map['week_number'] = Variable<int>(weekNumber);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['update_counter'] = Variable<int>(updateCounter);
@@ -4353,6 +4482,12 @@ class Exam extends DataClass implements Insertable<Exam> {
       difficulty: Value(difficulty),
       curriculum: Value(curriculum),
       content: Value(content),
+      schemeOfWorkId: schemeOfWorkId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(schemeOfWorkId),
+      weekNumber: weekNumber == null && nullToAbsent
+          ? const Value.absent()
+          : Value(weekNumber),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       updateCounter: Value(updateCounter),
@@ -4382,6 +4517,8 @@ class Exam extends DataClass implements Insertable<Exam> {
       difficulty: serializer.fromJson<String>(json['difficulty']),
       curriculum: serializer.fromJson<String>(json['curriculum']),
       content: serializer.fromJson<String>(json['content']),
+      schemeOfWorkId: serializer.fromJson<String?>(json['schemeOfWorkId']),
+      weekNumber: serializer.fromJson<int?>(json['weekNumber']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       updateCounter: serializer.fromJson<int>(json['updateCounter']),
@@ -4404,6 +4541,8 @@ class Exam extends DataClass implements Insertable<Exam> {
       'difficulty': serializer.toJson<String>(difficulty),
       'curriculum': serializer.toJson<String>(curriculum),
       'content': serializer.toJson<String>(content),
+      'schemeOfWorkId': serializer.toJson<String?>(schemeOfWorkId),
+      'weekNumber': serializer.toJson<int?>(weekNumber),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'updateCounter': serializer.toJson<int>(updateCounter),
@@ -4424,6 +4563,8 @@ class Exam extends DataClass implements Insertable<Exam> {
           String? difficulty,
           String? curriculum,
           String? content,
+          Value<String?> schemeOfWorkId = const Value.absent(),
+          Value<int?> weekNumber = const Value.absent(),
           DateTime? createdAt,
           DateTime? updatedAt,
           int? updateCounter,
@@ -4441,6 +4582,9 @@ class Exam extends DataClass implements Insertable<Exam> {
         difficulty: difficulty ?? this.difficulty,
         curriculum: curriculum ?? this.curriculum,
         content: content ?? this.content,
+        schemeOfWorkId:
+            schemeOfWorkId.present ? schemeOfWorkId.value : this.schemeOfWorkId,
+        weekNumber: weekNumber.present ? weekNumber.value : this.weekNumber,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
         updateCounter: updateCounter ?? this.updateCounter,
@@ -4467,6 +4611,11 @@ class Exam extends DataClass implements Insertable<Exam> {
       curriculum:
           data.curriculum.present ? data.curriculum.value : this.curriculum,
       content: data.content.present ? data.content.value : this.content,
+      schemeOfWorkId: data.schemeOfWorkId.present
+          ? data.schemeOfWorkId.value
+          : this.schemeOfWorkId,
+      weekNumber:
+          data.weekNumber.present ? data.weekNumber.value : this.weekNumber,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       updateCounter: data.updateCounter.present
@@ -4498,6 +4647,8 @@ class Exam extends DataClass implements Insertable<Exam> {
           ..write('difficulty: $difficulty, ')
           ..write('curriculum: $curriculum, ')
           ..write('content: $content, ')
+          ..write('schemeOfWorkId: $schemeOfWorkId, ')
+          ..write('weekNumber: $weekNumber, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('updateCounter: $updateCounter, ')
@@ -4520,6 +4671,8 @@ class Exam extends DataClass implements Insertable<Exam> {
       difficulty,
       curriculum,
       content,
+      schemeOfWorkId,
+      weekNumber,
       createdAt,
       updatedAt,
       updateCounter,
@@ -4540,6 +4693,8 @@ class Exam extends DataClass implements Insertable<Exam> {
           other.difficulty == this.difficulty &&
           other.curriculum == this.curriculum &&
           other.content == this.content &&
+          other.schemeOfWorkId == this.schemeOfWorkId &&
+          other.weekNumber == this.weekNumber &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.updateCounter == this.updateCounter &&
@@ -4559,6 +4714,8 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
   final Value<String> difficulty;
   final Value<String> curriculum;
   final Value<String> content;
+  final Value<String?> schemeOfWorkId;
+  final Value<int?> weekNumber;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> updateCounter;
@@ -4576,6 +4733,8 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     this.difficulty = const Value.absent(),
     this.curriculum = const Value.absent(),
     this.content = const Value.absent(),
+    this.schemeOfWorkId = const Value.absent(),
+    this.weekNumber = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.updateCounter = const Value.absent(),
@@ -4594,6 +4753,8 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     required String difficulty,
     required String curriculum,
     required String content,
+    this.schemeOfWorkId = const Value.absent(),
+    this.weekNumber = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.updateCounter = const Value.absent(),
@@ -4617,6 +4778,8 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     Expression<String>? difficulty,
     Expression<String>? curriculum,
     Expression<String>? content,
+    Expression<String>? schemeOfWorkId,
+    Expression<int>? weekNumber,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? updateCounter,
@@ -4635,6 +4798,8 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
       if (difficulty != null) 'difficulty': difficulty,
       if (curriculum != null) 'curriculum': curriculum,
       if (content != null) 'content': content,
+      if (schemeOfWorkId != null) 'scheme_of_work_id': schemeOfWorkId,
+      if (weekNumber != null) 'week_number': weekNumber,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (updateCounter != null) 'update_counter': updateCounter,
@@ -4655,6 +4820,8 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
       Value<String>? difficulty,
       Value<String>? curriculum,
       Value<String>? content,
+      Value<String?>? schemeOfWorkId,
+      Value<int?>? weekNumber,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
       Value<int>? updateCounter,
@@ -4672,6 +4839,8 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
       difficulty: difficulty ?? this.difficulty,
       curriculum: curriculum ?? this.curriculum,
       content: content ?? this.content,
+      schemeOfWorkId: schemeOfWorkId ?? this.schemeOfWorkId,
+      weekNumber: weekNumber ?? this.weekNumber,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       updateCounter: updateCounter ?? this.updateCounter,
@@ -4709,6 +4878,12 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
     }
     if (content.present) {
       map['content'] = Variable<String>(content.value);
+    }
+    if (schemeOfWorkId.present) {
+      map['scheme_of_work_id'] = Variable<String>(schemeOfWorkId.value);
+    }
+    if (weekNumber.present) {
+      map['week_number'] = Variable<int>(weekNumber.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -4748,6 +4923,8 @@ class ExamsCompanion extends UpdateCompanion<Exam> {
           ..write('difficulty: $difficulty, ')
           ..write('curriculum: $curriculum, ')
           ..write('content: $content, ')
+          ..write('schemeOfWorkId: $schemeOfWorkId, ')
+          ..write('weekNumber: $weekNumber, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('updateCounter: $updateCounter, ')
@@ -14843,6 +15020,8 @@ typedef $$LessonsTableCreateCompanionBuilder = LessonsCompanion Function({
   required String curriculum,
   required String content,
   Value<String?> contentHash,
+  Value<String?> schemeOfWorkId,
+  Value<int?> weekNumber,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<int> updateCounter,
@@ -14865,6 +15044,8 @@ typedef $$LessonsTableUpdateCompanionBuilder = LessonsCompanion Function({
   Value<String> curriculum,
   Value<String> content,
   Value<String?> contentHash,
+  Value<String?> schemeOfWorkId,
+  Value<int?> weekNumber,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<int> updateCounter,
@@ -14917,6 +15098,13 @@ class $$LessonsTableFilterComposer
 
   ColumnFilters<String> get contentHash => $composableBuilder(
       column: $table.contentHash, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get schemeOfWorkId => $composableBuilder(
+      column: $table.schemeOfWorkId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get weekNumber => $composableBuilder(
+      column: $table.weekNumber, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
@@ -14990,6 +15178,13 @@ class $$LessonsTableOrderingComposer
 
   ColumnOrderings<String> get contentHash => $composableBuilder(
       column: $table.contentHash, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get schemeOfWorkId => $composableBuilder(
+      column: $table.schemeOfWorkId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get weekNumber => $composableBuilder(
+      column: $table.weekNumber, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
@@ -15065,6 +15260,12 @@ class $$LessonsTableAnnotationComposer
   GeneratedColumn<String> get contentHash => $composableBuilder(
       column: $table.contentHash, builder: (column) => column);
 
+  GeneratedColumn<String> get schemeOfWorkId => $composableBuilder(
+      column: $table.schemeOfWorkId, builder: (column) => column);
+
+  GeneratedColumn<int> get weekNumber => $composableBuilder(
+      column: $table.weekNumber, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -15127,6 +15328,8 @@ class $$LessonsTableTableManager extends RootTableManager<
             Value<String> curriculum = const Value.absent(),
             Value<String> content = const Value.absent(),
             Value<String?> contentHash = const Value.absent(),
+            Value<String?> schemeOfWorkId = const Value.absent(),
+            Value<int?> weekNumber = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<int> updateCounter = const Value.absent(),
@@ -15149,6 +15352,8 @@ class $$LessonsTableTableManager extends RootTableManager<
             curriculum: curriculum,
             content: content,
             contentHash: contentHash,
+            schemeOfWorkId: schemeOfWorkId,
+            weekNumber: weekNumber,
             createdAt: createdAt,
             updatedAt: updatedAt,
             updateCounter: updateCounter,
@@ -15171,6 +15376,8 @@ class $$LessonsTableTableManager extends RootTableManager<
             required String curriculum,
             required String content,
             Value<String?> contentHash = const Value.absent(),
+            Value<String?> schemeOfWorkId = const Value.absent(),
+            Value<int?> weekNumber = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<int> updateCounter = const Value.absent(),
@@ -15193,6 +15400,8 @@ class $$LessonsTableTableManager extends RootTableManager<
             curriculum: curriculum,
             content: content,
             contentHash: contentHash,
+            schemeOfWorkId: schemeOfWorkId,
+            weekNumber: weekNumber,
             createdAt: createdAt,
             updatedAt: updatedAt,
             updateCounter: updateCounter,
@@ -15567,6 +15776,8 @@ typedef $$ExamsTableCreateCompanionBuilder = ExamsCompanion Function({
   required String difficulty,
   required String curriculum,
   required String content,
+  Value<String?> schemeOfWorkId,
+  Value<int?> weekNumber,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<int> updateCounter,
@@ -15585,6 +15796,8 @@ typedef $$ExamsTableUpdateCompanionBuilder = ExamsCompanion Function({
   Value<String> difficulty,
   Value<String> curriculum,
   Value<String> content,
+  Value<String?> schemeOfWorkId,
+  Value<int?> weekNumber,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<int> updateCounter,
@@ -15626,6 +15839,13 @@ class $$ExamsTableFilterComposer extends Composer<_$AppDatabase, $ExamsTable> {
 
   ColumnFilters<String> get content => $composableBuilder(
       column: $table.content, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get schemeOfWorkId => $composableBuilder(
+      column: $table.schemeOfWorkId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get weekNumber => $composableBuilder(
+      column: $table.weekNumber, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
@@ -15687,6 +15907,13 @@ class $$ExamsTableOrderingComposer
 
   ColumnOrderings<String> get content => $composableBuilder(
       column: $table.content, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get schemeOfWorkId => $composableBuilder(
+      column: $table.schemeOfWorkId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get weekNumber => $composableBuilder(
+      column: $table.weekNumber, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
@@ -15750,6 +15977,12 @@ class $$ExamsTableAnnotationComposer
   GeneratedColumn<String> get content =>
       $composableBuilder(column: $table.content, builder: (column) => column);
 
+  GeneratedColumn<String> get schemeOfWorkId => $composableBuilder(
+      column: $table.schemeOfWorkId, builder: (column) => column);
+
+  GeneratedColumn<int> get weekNumber => $composableBuilder(
+      column: $table.weekNumber, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -15806,6 +16039,8 @@ class $$ExamsTableTableManager extends RootTableManager<
             Value<String> difficulty = const Value.absent(),
             Value<String> curriculum = const Value.absent(),
             Value<String> content = const Value.absent(),
+            Value<String?> schemeOfWorkId = const Value.absent(),
+            Value<int?> weekNumber = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<int> updateCounter = const Value.absent(),
@@ -15824,6 +16059,8 @@ class $$ExamsTableTableManager extends RootTableManager<
             difficulty: difficulty,
             curriculum: curriculum,
             content: content,
+            schemeOfWorkId: schemeOfWorkId,
+            weekNumber: weekNumber,
             createdAt: createdAt,
             updatedAt: updatedAt,
             updateCounter: updateCounter,
@@ -15842,6 +16079,8 @@ class $$ExamsTableTableManager extends RootTableManager<
             required String difficulty,
             required String curriculum,
             required String content,
+            Value<String?> schemeOfWorkId = const Value.absent(),
+            Value<int?> weekNumber = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<int> updateCounter = const Value.absent(),
@@ -15860,6 +16099,8 @@ class $$ExamsTableTableManager extends RootTableManager<
             difficulty: difficulty,
             curriculum: curriculum,
             content: content,
+            schemeOfWorkId: schemeOfWorkId,
+            weekNumber: weekNumber,
             createdAt: createdAt,
             updatedAt: updatedAt,
             updateCounter: updateCounter,

@@ -72,4 +72,37 @@ class LessonsDao extends DatabaseAccessor<AppDatabase>
       ),
     );
   }
+
+  /// Find an existing lesson by topic + subject + week + teacher to prevent duplicates.
+  Future<Lesson?> findByTopicSubjectWeekTeacher({
+    required String topic,
+    required String subject,
+    required int week,
+    required String teacherServerId,
+  }) async {
+    final results = await (select(lessons)
+          ..where((t) => t.topic.equals(topic))
+          ..where((t) => t.subject.equals(subject))
+          ..where((t) => t.week.equals(week))
+          ..where((t) => t.teacherServerId.equals(teacherServerId))
+          ..where((t) => t.isDeleted.equals(false))
+          ..limit(1))
+        .get();
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  /// Update an existing lesson with new content and metadata.
+  Future<void> updateLesson(int id, LessonsCompanion companion) {
+    return (update(lessons)..where((t) => t.id.equals(id))).write(companion);
+  }
+
+  /// Soft-delete a lesson by marking it as deleted.
+  Future<void> deleteLesson(int id) {
+    return (update(lessons)..where((t) => t.id.equals(id))).write(
+      LessonsCompanion(
+        isDeleted: const Value(true),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
 }

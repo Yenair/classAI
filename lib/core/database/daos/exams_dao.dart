@@ -22,4 +22,40 @@ class ExamsDao extends DatabaseAccessor<AppDatabase>
     final results = await (select(exams)..where((t) => t.id.equals(id))).get();
     return results.isNotEmpty ? results.first : null;
   }
+
+  /// Insert a new exam and return its auto-generated ID.
+  Future<int> insertExam(ExamsCompanion companion) {
+    return into(exams).insert(companion);
+  }
+
+  /// Update an existing exam with new content and metadata.
+  Future<void> updateExam(int id, ExamsCompanion companion) {
+    return (update(exams)..where((t) => t.id.equals(id))).write(companion);
+  }
+
+  /// Soft-delete an exam by marking it as deleted.
+  Future<void> deleteExam(int id) {
+    return (update(exams)..where((t) => t.id.equals(id))).write(
+      ExamsCompanion(
+        isDeleted: const Value(true),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  /// Find an existing exam by topic + subject + teacher to prevent duplicates.
+  Future<Exam?> findByTopicSubjectTeacher({
+    required String topic,
+    required String subject,
+    required String teacherServerId,
+  }) async {
+    final results = await (select(exams)
+          ..where((t) => t.topic.equals(topic))
+          ..where((t) => t.subject.equals(subject))
+          ..where((t) => t.teacherServerId.equals(teacherServerId))
+          ..where((t) => t.isDeleted.equals(false))
+          ..limit(1))
+        .get();
+    return results.isNotEmpty ? results.first : null;
+  }
 }

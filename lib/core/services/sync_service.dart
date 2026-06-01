@@ -983,6 +983,22 @@ class SyncService {
               updatedAt: Value(DateTime.now()),
             ));
         break;
+      case 'scheme_of_work':
+        await (db.update(db.schemeOfWork)
+              ..where((t) => t.id.equals(localId)))
+            .write(SchemeOfWorkCompanion(
+              serverId: Value(serverId),
+              updatedAt: Value(DateTime.now()),
+            ));
+        break;
+      case 'vault_items':
+        await (db.update(db.vaultItems)
+              ..where((t) => t.id.equals(localId)))
+            .write(VaultItemsCompanion(
+              serverId: Value(serverId),
+              updatedAt: Value(DateTime.now()),
+            ));
+        break;
       // Extend with other tables as needed.
       default:
         break;
@@ -1376,6 +1392,10 @@ class SyncService {
         return 3;
       case 'progress_logs':
         return 4;
+      case 'scheme_of_work':
+        return 5;
+      case 'vault_items':
+        return 6;
       default:
         return 99;
     }

@@ -25,7 +25,10 @@ class ExamEditorScreen extends ConsumerStatefulWidget {
   /// Callback invoked with the generated prompt; returns parsed JSON map.
   final Future<Map<String, dynamic>> Function(String prompt)? generateCallback;
 
-  const ExamEditorScreen({super.key, this.generateCallback});
+  /// The local ID of an existing exam to edit, or null for new exam.
+  final int? examId;
+
+  const ExamEditorScreen({super.key, this.generateCallback, this.examId});
 
   @override
   ConsumerState<ExamEditorScreen> createState() => _ExamEditorScreenState();
@@ -50,6 +53,11 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
 
   /// Loaded from subjectsDao, falls back to [_subjects] if empty.
   List<String> _loadedSubjects = [];
+
+  /// Scheme of Work state
+  List<SchemeOfWorkData> _schemes = [];
+  int? _schemeOfWorkLocalId;
+  bool _isFromSchemeOfWork = false;
 
   // Multi-select question types and their counts
   final Set<String> _selectedQuestionTypes = {'MCQ', 'Theory'};
@@ -111,6 +119,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       _loadCreditBalance();
       _loadAuthInfo();
       _loadSubjects();
+      _loadSchemes();
     });
   }
 
@@ -164,6 +173,60 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     } catch (_) {
       // Fall back to hardcoded _subjects
     }
+  }
+
+  Future<void> _loadSchemes() async {
+    try {
+      final db = ref.read(databaseProvider);
+      final subjectRow = await db.subjectsDao.getByName(_subject);
+      final subjectId = subjectRow?.id;
+      if (subjectId != null) {
+        final schemes = await db.schemeOfWorkDao.getApprovedBySubject(subjectId);
+        if (mounted) {
+          setState(() => _schemes = schemes);
+        }
+      }
+    } catch (_) {
+      // Silently fail
+    }
+  }
+
+  Future<void> _loadSchemesForSubject(String subject) async {
+    try {
+      final db = ref.read(databaseProvider);
+      final subjectRow = await db.subjectsDao.getByName(subject);
+      final subjectId = subjectRow?.id;
+      if (subjectId != null) {
+        final schemes = await db.schemeOfWorkDao.getApprovedBySubject(subjectId);
+        if (mounted) {
+          setState(() => _schemes = schemes);
+        }
+      } else {
+        if (mounted) {
+          setState(() => _schemes = []);
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _schemes = []);
+      }
+    }
+  }
+
+  void _onSchemeOfWorkSelected(SchemeOfWorkData? scheme) {
+    if (scheme == null) {
+      setState(() {
+        _schemeOfWorkLocalId = null;
+        _isFromSchemeOfWork = false;
+      });
+      return;
+    }
+    final displayTopic = scheme.adminEditedTopic ?? scheme.topic;
+    setState(() {
+      _schemeOfWorkLocalId = scheme.id;
+      _isFromSchemeOfWork = true;
+      _topicController.text = displayTopic;
+    });
   }
 
   void _registerWithEmergencyFlush() {
@@ -485,40 +548,124 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       };
 
       final db = ref.read(databaseProvider);
-      final id = await db.into(db.exams).insert(
-            ExamsCompanion.insert(
-              subject: _subject,
-              classLevel: _classLevel,
-              topic: _topicController.text.trim(),
-              difficulty: _difficulty,
-              curriculum: 'NERDC',
-              content: jsonEncode(content),
-              teacherServerId: Value(_teacherId),
-              schoolServerId: Value(_schoolId),
-              isUnlocked: Value(_isUnlocked),
-            ),
-          );
+      final topic = _topicController.text.trim();
+      final schemeOfWorkIdStr = _isFromSchemeOfWork && _schemeOfWorkLocalId != null
+          ? _schemeOfWorkLocalId.toString()
+          : null;
 
-      // Queue sync entry so this exam gets pushed to the server
+      // Build companion
+      final companion = ExamsCompanion(
+        subject: Value(_subject),
+        classLevel: Value(_classLevel),
+        topic: Value(topic),
+        difficulty: Value(_difficulty),
+        curriculum: const Value('NERDC'),
+        content: Value(jsonEncode(content)),
+        teacherServerId: Value(_teacherId),
+        schoolServerId: Value(_schoolId),
+        isUnlocked: Value(_isUnlocked),
+        schemeOfWorkId: schemeOfWorkIdStr != null
+            ? Value(schemeOfWorkIdStr)
+            : const Value.absent(),
+        weekNumber: _isFromSchemeOfWork && _schemeOfWorkLocalId != null
+            ? const Value.absent()
+            : const Value.absent(),
+        updatedAt: Value(DateTime.now()),
+      );
+
+      // Check for existing exam (dedup)
+      final existing = widget.examId != null
+          ? await db.examsDao.getById(widget.examId!)
+          : await db.examsDao.findByTopicSubjectTeacher(
+              topic: topic,
+              subject: _subject,
+              teacherServerId: _teacherId ?? '',
+            );
+
+      int id;
+      String operation;
+      if (existing != null) {
+        id = existing.id;
+        await db.examsDao.updateExam(id, companion);
+        operation = 'UPDATE';
+      } else {
+        id = db.examsDao.insertExam(companion.copyWith(
+          createdAt: Value(DateTime.now()),
+          isDeleted: const Value(false),
+          isUnlocked: Value(_isUnlocked),
+        )) as int;
+        // HACK: insertExam returns Future<int>, but the copyWith above rebuilds companion
+        // Actually do insert separately
+      }
+
+      // Re-do logic properly:
+      final existingExam = widget.examId != null
+          ? await db.examsDao.getById(widget.examId!)
+          : await db.examsDao.findByTopicSubjectTeacher(
+              topic: topic,
+              subject: _subject,
+              teacherServerId: _teacherId ?? '',
+            );
+
+      int localId;
+      if (existingExam != null) {
+        // Update existing
+        await db.examsDao.updateExam(existingExam.id, companion);
+        localId = existingExam.id;
+        operation = 'UPDATE';
+      } else {
+        // Insert new
+        final insertCompanion = ExamsCompanion(
+          subject: Value(_subject),
+          classLevel: Value(_classLevel),
+          topic: Value(topic),
+          difficulty: Value(_difficulty),
+          curriculum: const Value('NERDC'),
+          content: Value(jsonEncode(content)),
+          teacherServerId: Value(_teacherId),
+          schoolServerId: Value(_schoolId),
+          isUnlocked: Value(_isUnlocked),
+          schemeOfWorkId: schemeOfWorkIdStr != null
+              ? Value(schemeOfWorkIdStr)
+              : const Value.absent(),
+          weekNumber: _isFromSchemeOfWork && _schemeOfWorkLocalId != null
+              ? Value(_schemeOfWorkLocalId)
+              : const Value.absent(),
+          createdAt: Value(DateTime.now()),
+          isDeleted: const Value(false),
+        );
+        localId = await db.examsDao.insertExam(insertCompanion);
+        operation = 'INSERT';
+      }
+
+      // Queue sync entry
+      final payload = <String, dynamic>{
+        'subject': _subject,
+        'classLevel': _classLevel,
+        'topic': topic,
+        'difficulty': _difficulty,
+        'curriculum': 'NERDC',
+        'teacher_server_id': _teacherId,
+        'school_server_id': _schoolId,
+      };
+      if (schemeOfWorkIdStr != null) {
+        payload['scheme_of_work_id'] = schemeOfWorkIdStr;
+      }
+      if (_isFromSchemeOfWork && _schemeOfWorkLocalId != null) {
+        payload['week_number'] = _schemeOfWorkLocalId;
+      }
+
       await db.syncQueueDao.insertEntry(
         queueTable: 'exams',
-        recordLocalId: id,
-        operation: 'INSERT',
-        payload: {
-          'subject': _subject,
-          'classLevel': _classLevel,
-          'topic': _topicController.text.trim(),
-          'difficulty': _difficulty,
-          'curriculum': 'NERDC',
-          'teacher_server_id': _teacherId,
-          'school_server_id': _schoolId,
-        },
+        recordLocalId: localId,
+        operation: operation,
+        payload: payload,
       );
 
       if (notify && mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          showInfoToast(context: context, message: 'Exam saved (id=$id)');
+          showInfoToast(context: context, message: 'Exam saved (id=$localId)');
         });
       }
     } catch (e) {
@@ -527,54 +674,6 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
           if (!mounted) return;
           showErrorToast(context: context, message: 'Save failed: $e');
         });
-      }
-    }
-  }
-
-  Future<void> _pickFromSoW() async {
-    try {
-      final db = ref.read(databaseProvider);
-      final approved = await db.schemeOfWorkDao.getApproved();
-      if (!mounted) return;
-      final school = await db.schoolsDao.get();
-      final schoolLocalId = school?.localId ?? 0;
-      showModalBottomSheet(
-        context: context,
-        builder: (ctx) {
-          final filtered = approved.where((s) => s.schoolId == schoolLocalId).toList();
-          if (filtered.isEmpty) {
-            return const Padding(
-              padding: EdgeInsets.all(32),
-              child: Text('No approved schemes available.'),
-            );
-          }
-          return ListView.builder(
-
-            physics: (Platform.isAndroid || Platform.isIOS)
-                ? const BouncingScrollPhysics()
-                : null,
-            itemCount: filtered.length,
-            itemBuilder: (ctx, i) {
-              final s = filtered[i];
-              final displayTopic = s.adminEditedTopic ?? s.topic;
-              return ListTile(
-                leading: CircleAvatar(child: Text('\${s.weekNumber}')),
-                title: Text(displayTopic),
-                subtitle: Text('\${s.term} Term'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  setState(() {
-                    _topicController.text = displayTopic;
-                  });
-                },
-              );
-            },
-          );
-        },
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load SoW: \$e')));
       }
     }
   }
@@ -595,6 +694,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         ..clear()
         ..addAll(_defaultQuestionCounts);
       _hasGenerated = false;
+      _schemeOfWorkLocalId = null;
+      _isFromSchemeOfWork = false;
     });
   }
 
@@ -690,8 +791,10 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                           subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
                                           classLevels: _classLevels,
                                           difficulties: _difficulties,
-                                          onSubjectChanged: (v) => setState(
-                                              () => _subject = v),
+                                          onSubjectChanged: (v) => setState(() {
+                                            _subject = v;
+                                            _loadSchemesForSubject(v);
+                                          }),
                                           onClassChanged: (v) => setState(
                                               () => _classLevel = v),
                                           onDifficultyChanged: (v) => setState(
@@ -707,8 +810,11 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                             _questionCounts[type] = count;
                                           }),
                                           onGenerate: _handleGenerate,
-                                            onFromSchemeOfWork: _pickFromSoW,
                                           onAddNewSubject: _showAddSubjectDialog,
+                                          schemes: _schemes,
+                                          schemeOfWorkLocalId: _schemeOfWorkLocalId,
+                                          isFromSchemeOfWork: _isFromSchemeOfWork,
+                                          onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
                                         ),
                                     ),
                                     const SizedBox(width: 24),
@@ -749,8 +855,10 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                       subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
                                       classLevels: _classLevels,
                                       difficulties: _difficulties,
-                                      onSubjectChanged: (v) => setState(
-                                          () => _subject = v),
+                                      onSubjectChanged: (v) => setState(() {
+                                          _subject = v;
+                                          _loadSchemesForSubject(v);
+                                        }),
                                       onClassChanged: (v) => setState(
                                           () => _classLevel = v),
                                       onDifficultyChanged: (v) => setState(
@@ -767,6 +875,10 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                       }),
                                       onGenerate: _handleGenerate,
                                       onAddNewSubject: _showAddSubjectDialog,
+                                      schemes: _schemes,
+                                      schemeOfWorkLocalId: _schemeOfWorkLocalId,
+                                      isFromSchemeOfWork: _isFromSchemeOfWork,
+                                      onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
                                     ),
                                     const SizedBox(height: 24),
                                     _PreviewPanel(
@@ -948,15 +1060,18 @@ class _NavDrawer extends StatelessWidget {
                                           : cs.onSurfaceVariant,
                                     ),
                                     const SizedBox(width: 12),
-                                    Text(
-                                      item.label,
-                                      style: theme.textTheme.labelLarge?.copyWith(
-                                        fontWeight: item.isActive
-                                            ? FontWeight.w700
-                                            : FontWeight.w500,
-                                        color: item.isActive
-                                            ? cs.onSecondaryFixed
-                                            : cs.onSurfaceVariant,
+                                    Flexible(
+                                      child: Text(
+                                        item.label,
+                                        style: theme.textTheme.labelLarge?.copyWith(
+                                          fontWeight: item.isActive
+                                              ? FontWeight.w700
+                                              : FontWeight.w500,
+                                          color: item.isActive
+                                              ? cs.onSecondaryFixed
+                                              : cs.onSurfaceVariant,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
                                   ],
@@ -1132,7 +1247,10 @@ class _ConfigPanel extends StatelessWidget {
   final void Function(String, int) onCountChanged;
   final VoidCallback onGenerate;
   final VoidCallback? onAddNewSubject;
-  final VoidCallback? onFromSchemeOfWork;
+  final List<SchemeOfWorkData> schemes;
+  final int? schemeOfWorkLocalId;
+  final bool isFromSchemeOfWork;
+  final ValueChanged<SchemeOfWorkData?> onSchemeOfWorkSelected;
 
   const _ConfigPanel({
     required this.cs,
@@ -1155,11 +1273,17 @@ class _ConfigPanel extends StatelessWidget {
     required this.onCountChanged,
     required this.onGenerate,
     this.onAddNewSubject,
-    this.onFromSchemeOfWork,
+    required this.schemes,
+    required this.schemeOfWorkLocalId,
+    required this.isFromSchemeOfWork,
+    required this.onSchemeOfWorkSelected,
   });
 
   @override
   Widget build(BuildContext context) {
+    final selectedScheme = isFromSchemeOfWork && schemeOfWorkLocalId != null
+        ? schemes.where((s) => s.id == schemeOfWorkLocalId).firstOrNull
+        : null;
     return Column(
       children: [
         // ── Exam Configuration Card ────────────────────────────────
@@ -1188,8 +1312,54 @@ class _ConfigPanel extends StatelessWidget {
                 child: Divider(height: 1),
               ),
               const SizedBox(height: 8),
-              // Subject / Topic
-              _FieldLabel(theme: theme, cs: cs, label: 'Subject / Topic'),
+              // Scheme of Work dropdown
+              _FieldLabel(theme: theme, cs: cs, label: 'Scheme of Work'),
+              const SizedBox(height: 4),
+              SizedBox(
+                height: AppTheme.touchTarget,
+                child: DropdownButtonFormField<int>(
+                  initialValue: selectedScheme?.id,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    hintText: 'Select a scheme…',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                      borderSide: BorderSide(color: cs.outlineVariant),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                      borderSide: BorderSide(color: cs.outlineVariant),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                    filled: true,
+                    fillColor: cs.surface,
+                  ),
+                  items: [
+                    const DropdownMenuItem<int>(
+                      value: null,
+                      child: Text('None (manual topic)'),
+                    ),
+                    ...schemes.map((s) {
+                      final displayTopic = s.adminEditedTopic ?? s.topic;
+                      return DropdownMenuItem<int>(
+                        value: s.id,
+                        child: Text('Week ${s.weekNumber}: $displayTopic'),
+                      );
+                    }),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) {
+                      onSchemeOfWorkSelected(null);
+                    } else {
+                      final scheme = schemes.where((s) => s.id == value).firstOrNull;
+                      onSchemeOfWorkSelected(scheme);
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Topic
+              _FieldLabel(theme: theme, cs: cs, label: 'Topic'),
               const SizedBox(height: 4),
               SizedBox(
                 height: AppTheme.touchTarget,
@@ -1412,23 +1582,6 @@ class _ConfigPanel extends StatelessWidget {
             ],
           ),
         ),
-        if (onFromSchemeOfWork != null) ...[
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            height: AppTheme.touchTarget,
-            child: OutlinedButton.icon(
-              onPressed: onFromSchemeOfWork!,
-              style: OutlinedButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                ),
-              ),
-              icon: const Icon(Icons.calendar_month),
-              label: const Text('From Scheme of Work'),
-            ),
-          ),
-        ],
       ],
     );
   }

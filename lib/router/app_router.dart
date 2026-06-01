@@ -121,7 +121,10 @@ final appRouter = GoRouter(
     _route(
       path: '/exams/:id',
       name: 'exam-editor',
-      builder: (context, state) => const ExamEditorScreen(),
+      builder: (context, state) {
+        final examId = int.tryParse(state.pathParameters['id'] ?? '');
+        return ExamEditorScreen(examId: examId);
+      },
     ),
     _route(
       path: '/exam-editor',

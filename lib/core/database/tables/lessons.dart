@@ -12,6 +12,8 @@ class Lessons extends Table {
   TextColumn get curriculum => text()();
   TextColumn get content => text()(); // encrypted JSON
   TextColumn get contentHash => text().nullable()();
+  TextColumn get schemeOfWorkId => text().nullable()();
+  IntColumn get weekNumber => integer().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   IntColumn get updateCounter => integer().withDefault(const Constant(0))();

@@ -71,7 +71,7 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
           const ConflictBanner(),
           Expanded(
             child: lessonsAsync.when(
-              loading: () => ListView(
+              loading: () => ListView(
                 physics: (Platform.isAndroid || Platform.isIOS)
                     ? const BouncingScrollPhysics()
                     : null,
@@ -167,7 +167,7 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
 
                 return RefreshIndicator(
                   onRefresh: () async => ref.invalidate(lessonsListProvider),
-                  child: ListView.builder(
+                  child: ListView.builder(
                     physics: (Platform.isAndroid || Platform.isIOS)
                         ? const BouncingScrollPhysics()
                         : null,
@@ -180,6 +180,8 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
                         child: _LessonCard(
                           lesson: lesson,
                           onTap: () => context.push('/lessons/${lesson.id}'),
+                          onEdit: () => context.push('/lessons/${lesson.id}'),
+                          onDelete: () => _confirmDeleteLesson(lesson),
                         ),
                       );
                     },
@@ -219,13 +221,75 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
       ),
     );
   }
+
+  Future<void> _confirmDeleteLesson(Lesson lesson) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Lesson'),
+        content: Text('Are you sure you want to delete "${lesson.topic}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Theme.of(ctx).colorScheme.onError,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        final db = ref.read(databaseProvider);
+        // Soft-delete the lesson locally
+        await db.lessonsDao.deleteLesson(lesson.id);
+        // Queue a DELETE sync entry so the server is notified
+        await db.syncQueueDao.insertEntry(
+          queueTable: 'lessons',
+          recordLocalId: lesson.id,
+          operation: 'DELETE',
+          payload: {
+            'id': lesson.id,
+            if (lesson.serverId != null) 'server_id': lesson.serverId,
+          },
+        );
+        // Refresh the list
+        ref.invalidate(lessonsListProvider);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Lesson deleted')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to delete: $e')),
+          );
+        }
+      }
+    }
+  }
 }
 
 class _LessonCard extends StatelessWidget {
   final Lesson lesson;
   final VoidCallback onTap;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
-  const _LessonCard({required this.lesson, required this.onTap});
+  const _LessonCard({
+    required this.lesson,
+    required this.onTap,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -332,25 +396,34 @@ class _LessonCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 20,
-              color: cs.onSurfaceVariant.withValues(alpha: 0.5),
-            ),
-            if (lesson.isUnlocked && lesson.status == 'draft')
-              GestureDetector(
-                onTap: () {},
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  margin: const EdgeInsets.only(left: 4),
-                  decoration: BoxDecoration(
-                    color: cs.primaryContainer.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(Icons.check_circle_outline, size: 20, color: cs.primary),
-                ),
+            // Edit button
+            IconButton(
+              onPressed: onEdit,
+              icon: Icon(
+                Icons.edit_rounded,
+                size: 20,
+                color: cs.primary,
               ),
+              tooltip: 'Edit lesson',
+              style: IconButton.styleFrom(
+                foregroundColor: cs.primary,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+            // Delete button
+            IconButton(
+              onPressed: onDelete,
+              icon: Icon(
+                Icons.delete_outline_rounded,
+                size: 20,
+                color: cs.error,
+              ),
+              tooltip: 'Delete lesson',
+              style: IconButton.styleFrom(
+                foregroundColor: cs.error,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
           ],
         ),
       ),

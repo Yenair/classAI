@@ -9,6 +9,8 @@ class Exams extends Table {
   TextColumn get difficulty => text()();
   TextColumn get curriculum => text()();
   TextColumn get content => text()(); // encrypted JSON (mcqs + theory)
+  TextColumn get schemeOfWorkId => text().nullable()();
+  IntColumn get weekNumber => integer().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
   IntColumn get updateCounter => integer().withDefault(const Constant(0))();

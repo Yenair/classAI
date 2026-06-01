@@ -67,6 +67,11 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   /// Loaded from subjectsDao, falls back to [_subjects] if empty.
   List<String> _loadedSubjects = [];
 
+  /// Scheme of Work state
+  List<SchemeOfWorkData> _schemes = [];
+  int? _schemeOfWorkLocalId;
+  bool _isFromSchemeOfWork = false;
+
   // Generated content (editable after generation)
   String _objectivesText = '';
   String _vocabularyText = '';
@@ -122,6 +127,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       _loadCreditBalance();
       _loadAuthInfo();
       _loadSubjects();
+      _loadSchemes();
       if (_lessonId != null) {
         _loadLesson(_lessonId!);
       }
@@ -181,6 +187,22 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     }
   }
 
+  Future<void> _loadSchemes() async {
+    try {
+      final db = ref.read(databaseProvider);
+      final subjectRow = await db.subjectsDao.getByName(_subject);
+      final subjectId = subjectRow?.id;
+      if (subjectId != null) {
+        final schemes = await db.schemeOfWorkDao.getApprovedBySubject(subjectId);
+        if (mounted) {
+          setState(() => _schemes = schemes);
+        }
+      }
+    } catch (_) {
+      // Silently fail
+    }
+  }
+
   Future<void> _loadLesson(int id) async {
     try {
       final db = ref.read(databaseProvider);
@@ -192,6 +214,13 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           _week = lesson.week;
           _subject = lesson.subject;
           _classLevel = lesson.classLevel;
+          _schemeOfWorkLocalId = lesson.schemeOfWorkId != null
+              ? int.tryParse(lesson.schemeOfWorkId!)
+              : null;
+          if (lesson.weekNumber != null) {
+            _week = lesson.weekNumber!;
+          }
+          _isFromSchemeOfWork = _schemeOfWorkLocalId != null;
         });
       }
     } catch (_) {
@@ -448,14 +477,82 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         'assessment': _assessmentText,
         'homework': _homeworkText,
       };
+      final topic = _topicController.text.trim();
 
       final db = ref.read(databaseProvider);
-      final id = await db.lessonsDao.insertLesson(
+
+      // Build companion with common fields
+      final schemeOfWorkIdStr = _schemeOfWorkLocalId?.toString();
+      LessonsCompanion companion = LessonsCompanion(
+        subject: Value(_subject),
+        classLevel: Value(_classLevel),
+        week: Value(_week),
+        topic: Value(topic),
+        difficulty: Value(_difficulty),
+        bloomsVerbs: Value(_selectedBlooms.join(', ')),
+        curriculum: Value('NERDC'),
+        content: Value(_encryptedContent ?? jsonEncode(content)),
+        teacherServerId: Value(_teacherId),
+        schoolServerId: Value(_schoolId),
+        isUnlocked: Value(_isUnlocked),
+        schemeOfWorkId: schemeOfWorkIdStr != null
+            ? Value(schemeOfWorkIdStr)
+            : const Value.absent(),
+        weekNumber: _isFromSchemeOfWork
+            ? Value(_week)
+            : const Value.absent(),
+        updatedAt: Value(DateTime.now()),
+      );
+
+      int id;
+
+      // Dedup: check for existing lesson with same topic/subject/week/teacher
+      if (_teacherId != null) {
+        final existing = await db.lessonsDao.findByTopicSubjectWeekTeacher(
+          topic: topic,
+          subject: _subject,
+          week: _week,
+          teacherServerId: _teacherId!,
+        );
+        if (existing != null) {
+          // Update existing lesson
+          id = existing.id;
+          await db.lessonsDao.updateLesson(id, companion);
+
+          // Queue UPDATE sync entry
+          await db.syncQueueDao.insertEntry(
+            queueTable: 'lessons',
+            recordLocalId: id,
+            operation: 'UPDATE',
+            payload: {
+              'subject': _subject,
+              'classLevel': _classLevel,
+              'week': _week,
+              'topic': topic,
+              'difficulty': _difficulty,
+              'bloomsVerbs': _selectedBlooms.join(', '),
+              'curriculum': 'NERDC',
+              'teacher_server_id': _teacherId,
+              'school_server_id': _schoolId,
+              if (schemeOfWorkIdStr != null) 'scheme_of_work_id': schemeOfWorkIdStr,
+              if (_isFromSchemeOfWork) 'week_number': _week,
+            },
+          );
+
+          if (notify && mounted) {
+            showInfoToast(context: context, message: 'Lesson updated (id=$id)');
+          }
+          return;
+        }
+      }
+
+      // No existing lesson found — insert new
+      id = await db.lessonsDao.insertLesson(
         LessonsCompanion.insert(
           subject: _subject,
           classLevel: _classLevel,
           week: _week,
-          topic: _topicController.text.trim(),
+          topic: topic,
           difficulty: _difficulty,
           bloomsVerbs: _selectedBlooms.join(', '),
           curriculum: 'NERDC',
@@ -463,10 +560,16 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           teacherServerId: Value(_teacherId),
           schoolServerId: Value(_schoolId),
           isUnlocked: Value(_isUnlocked),
+          schemeOfWorkId: schemeOfWorkIdStr != null
+              ? Value(schemeOfWorkIdStr)
+              : const Value.absent(),
+          weekNumber: _isFromSchemeOfWork
+              ? Value(_week)
+              : const Value.absent(),
         ),
       );
 
-      // Queue sync entry so this lesson gets pushed to the server
+      // Queue sync entry
       await db.syncQueueDao.insertEntry(
         queueTable: 'lessons',
         recordLocalId: id,
@@ -475,12 +578,14 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           'subject': _subject,
           'classLevel': _classLevel,
           'week': _week,
-          'topic': _topicController.text.trim(),
+          'topic': topic,
           'difficulty': _difficulty,
           'bloomsVerbs': _selectedBlooms.join(', '),
           'curriculum': 'NERDC',
           'teacher_server_id': _teacherId,
           'school_server_id': _schoolId,
+          if (schemeOfWorkIdStr != null) 'scheme_of_work_id': schemeOfWorkIdStr,
+          if (_isFromSchemeOfWork) 'week_number': _week,
         },
       );
 
@@ -531,51 +636,41 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     }
   }
 
-  Future<void> _pickFromSoW() async {
+  void _onSchemeOfWorkSelected(SchemeOfWorkData? scheme) {
+    if (scheme == null) {
+      setState(() {
+        _schemeOfWorkLocalId = null;
+        _isFromSchemeOfWork = false;
+      });
+      return;
+    }
+    final displayTopic = scheme.adminEditedTopic ?? scheme.topic;
+    setState(() {
+      _schemeOfWorkLocalId = scheme.id;
+      _isFromSchemeOfWork = true;
+      _week = scheme.weekNumber;
+      _topicController.text = displayTopic;
+    });
+  }
+
+  Future<void> _loadSchemesForSubject(String subject) async {
     try {
       final db = ref.read(databaseProvider);
-      final approved = await db.schemeOfWorkDao.getApproved();
-      if (!mounted) return;
-      final school = await db.schoolsDao.get();
-      final schoolLocalId = school?.localId ?? 0;
-      showModalBottomSheet(
-        context: context,
-        builder: (ctx) {
-          final filtered = approved.where((s) => s.schoolId == schoolLocalId).toList();
-          if (filtered.isEmpty) {
-            return const Padding(
-              padding: EdgeInsets.all(32),
-              child: Text('No approved schemes available.'),
-            );
-          }
-          return ListView.builder(
-
-            physics: (Platform.isAndroid || Platform.isIOS)
-                ? const BouncingScrollPhysics()
-                : null,
-            itemCount: filtered.length,
-            itemBuilder: (ctx, i) {
-              final s = filtered[i];
-              final displayTopic = s.adminEditedTopic ?? s.topic;
-              return ListTile(
-                leading: CircleAvatar(child: Text('\${s.weekNumber}')),
-                title: Text(displayTopic),
-                subtitle: Text('\${s.term} Term'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  setState(() {
-                    _week = s.weekNumber;
-                    _topicController.text = displayTopic;
-                  });
-                },
-              );
-            },
-          );
-        },
-      );
-    } catch (e) {
+      final subjectRow = await db.subjectsDao.getByName(subject);
+      final subjectId = subjectRow?.id;
+      if (subjectId != null) {
+        final schemes = await db.schemeOfWorkDao.getApprovedBySubject(subjectId);
+        if (mounted) {
+          setState(() => _schemes = schemes);
+        }
+      } else {
+        if (mounted) {
+          setState(() => _schemes = []);
+        }
+      }
+    } catch (_) {
       if (mounted) {
-        showErrorToast(context: context, message: 'Failed to load SoW: \$e');
+        setState(() => _schemes = []);
       }
     }
   }
@@ -596,6 +691,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       _homeworkText = '';
       _encryptedContent = null;
       _hasGenerated = false;
+      _schemeOfWorkLocalId = null;
+      _isFromSchemeOfWork = false;
     });
   }
 
@@ -689,50 +786,54 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                           SizedBox(
                                             width: 450,
                                             child: _ConfigColumn(
-                                                cs: cs,
-                                                theme: theme,
-                                                subject: _subject,
-                                                classLevel: _classLevel,
-                                                week: _week,
-                                                difficulty: _difficulty,
-                                                assessmentFormat:
-                                                    _assessmentFormat,
-                                                selectedBlooms: _selectedBlooms,
-                                                isGenerating: _isGenerating,
-                                                hasGenerated: _hasGenerated,
-                                                subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
-                                                classLevels: _classLevels,
-                                                difficulties: _difficulties,
-                                                bloomVerbs: _bloomVerbs,
-                                                topicController: _topicController,
-                                                onSubjectChanged: (v) =>
-                                                    setState(() =>
-                                                        _subject = v),
-                                                onClassChanged: (v) =>
-                                                    setState(() =>
-                                                        _classLevel = v),
-                                                onWeekChanged: (v) =>
-                                                    setState(() => _week = v),
-                                                onDifficultyChanged: (v) =>
-                                                    setState(() =>
-                                                        _difficulty = v),
-                                                onAssessmentFormatChanged: (v) =>
-                                                    setState(() =>
-                                                        _assessmentFormat = v),
-                                                onBloomToggled: (verb) {
-                                                  setState(() {
-                                                    if (_selectedBlooms
-                                                        .contains(verb)) {
-                                                      _selectedBlooms
-                                                          .remove(verb);
-                                                    } else {
-                                                      _selectedBlooms.add(verb);
-                                                    }
-                                                  });
-                                                },
-                                                onGenerate: _handleGenerate,
-                                                onFromSchemeOfWork: _pickFromSoW,
-                                              ),
+                                                  cs: cs,
+                                                  theme: theme,
+                                                  subject: _subject,
+                                                  classLevel: _classLevel,
+                                                  week: _week,
+                                                  difficulty: _difficulty,
+                                                  assessmentFormat:
+                                                      _assessmentFormat,
+                                                  selectedBlooms: _selectedBlooms,
+                                                  isGenerating: _isGenerating,
+                                                  hasGenerated: _hasGenerated,
+                                                  subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
+                                                  classLevels: _classLevels,
+                                                  difficulties: _difficulties,
+                                                  bloomVerbs: _bloomVerbs,
+                                                  topicController: _topicController,
+                                                  onSubjectChanged: (v) {
+                                                    setState(() => _subject = v);
+                                                    _loadSchemesForSubject(v);
+                                                  },
+                                                  onClassChanged: (v) =>
+                                                      setState(() =>
+                                                          _classLevel = v),
+                                                  onWeekChanged: (v) =>
+                                                      setState(() => _week = v),
+                                                  onDifficultyChanged: (v) =>
+                                                      setState(() =>
+                                                          _difficulty = v),
+                                                  onAssessmentFormatChanged: (v) =>
+                                                      setState(() =>
+                                                          _assessmentFormat = v),
+                                                  onBloomToggled: (verb) {
+                                                    setState(() {
+                                                      if (_selectedBlooms
+                                                          .contains(verb)) {
+                                                        _selectedBlooms
+                                                            .remove(verb);
+                                                      } else {
+                                                        _selectedBlooms.add(verb);
+                                                      }
+                                                    });
+                                                  },
+                                                  onGenerate: _handleGenerate,
+                                                  schemes: _schemes,
+                                                  schemeOfWorkLocalId: _schemeOfWorkLocalId,
+                                                  isFromSchemeOfWork: _isFromSchemeOfWork,
+                                                  onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
+                                                ),
                                           ),
                                           const SizedBox(width: 24),
                                           // Right column: preview
@@ -795,8 +896,10 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                             difficulties: _difficulties,
                                             bloomVerbs: _bloomVerbs,
                                             topicController: _topicController,
-                                            onSubjectChanged: (v) =>
-                                                setState(() => _subject = v),
+                                            onSubjectChanged: (v) {
+                                              setState(() => _subject = v);
+                                              _loadSchemesForSubject(v);
+                                            },
                                             onClassChanged: (v) => setState(
                                                 () => _classLevel = v),
                                             onWeekChanged: (v) =>
@@ -819,6 +922,10 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                             },
                                             onGenerate: _handleGenerate,
                                             onAddNewSubject: _showAddSubjectDialog,
+                                            schemes: _schemes,
+                                            schemeOfWorkLocalId: _schemeOfWorkLocalId,
+                                            isFromSchemeOfWork: _isFromSchemeOfWork,
+                                            onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
                                           ),
                                           const SizedBox(height: 24),
                                           _PreviewColumn(
@@ -1188,6 +1295,18 @@ class _ToolHeader extends StatelessWidget {
           // Back link + Toggle
           Row(
             children: [
+              // Sidebar toggle (tablet+) - moved to left
+              if (onToggleSidebar != null)
+                IconButton(
+                  onPressed: onToggleSidebar,
+                  icon: Icon(sidebarOpen
+                      ? Icons.menu_open_rounded
+                      : Icons.menu_rounded),
+                  tooltip: sidebarOpen ? 'Close sidebar' : 'Open sidebar',
+                  style: IconButton.styleFrom(
+                    foregroundColor: cs.onSurfaceVariant,
+                  ),
+                ),
               InkWell(
                 borderRadius: BorderRadius.circular(AppTheme.radiusLg),
                 onTap: () => Navigator.of(context).pop(),
@@ -1213,18 +1332,6 @@ class _ToolHeader extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              // Sidebar toggle (tablet+)
-              if (onToggleSidebar != null)
-                IconButton(
-                  onPressed: onToggleSidebar,
-                  icon: Icon(sidebarOpen
-                      ? Icons.menu_open_rounded
-                      : Icons.menu_rounded),
-                  tooltip: sidebarOpen ? 'Close sidebar' : 'Open sidebar',
-                  style: IconButton.styleFrom(
-                    foregroundColor: cs.onSurfaceVariant,
-                  ),
-                ),
             ],
           ),
           const SizedBox(height: 8),
@@ -1275,7 +1382,10 @@ class _ConfigColumn extends StatelessWidget {
   final ValueChanged<String> onBloomToggled;
   final VoidCallback onGenerate;
   final VoidCallback? onAddNewSubject;
-  final VoidCallback? onFromSchemeOfWork;
+  final List<SchemeOfWorkData> schemes;
+  final int? schemeOfWorkLocalId;
+  final bool isFromSchemeOfWork;
+  final ValueChanged<SchemeOfWorkData?> onSchemeOfWorkSelected;
 
   const _ConfigColumn({
     required this.cs,
@@ -1301,7 +1411,10 @@ class _ConfigColumn extends StatelessWidget {
     required this.onBloomToggled,
     required this.onGenerate,
     this.onAddNewSubject,
-    this.onFromSchemeOfWork,
+    required this.schemes,
+    required this.schemeOfWorkLocalId,
+    required this.isFromSchemeOfWork,
+    required this.onSchemeOfWorkSelected,
   });
 
   @override
@@ -1339,6 +1452,65 @@ class _ConfigColumn extends StatelessWidget {
                       value: classLevel,
                       items: classLevels,
                       onChanged: onClassChanged,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              // Scheme of Work dropdown
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Scheme of Work',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    height: AppTheme.touchTarget,
+                    child: DropdownButtonFormField<int>(
+                      value: schemeOfWorkLocalId,
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                          borderSide: BorderSide(color: cs.outline),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                      ),
+                      hint: Text(
+                        'Select scheme…',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: cs.outlineVariant,
+                        ),
+                      ),
+                      isExpanded: true,
+                      items: [
+                        ...schemes.map((s) {
+                          final displayTopic = s.adminEditedTopic ?? s.topic;
+                          return DropdownMenuItem<int>(
+                            value: s.id,
+                            child: Text(
+                              displayTopic,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: cs.onSurface,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }),
+                      ],
+                      onChanged: (id) {
+                        if (id == null) {
+                          onSchemeOfWorkSelected(null);
+                        } else {
+                          final scheme = schemes.where((s) => s.id == id).firstOrNull;
+                          if (scheme != null) {
+                            onSchemeOfWorkSelected(scheme);
+                          }
+                        }
+                      },
                     ),
                   ),
                 ],
@@ -1451,23 +1623,6 @@ class _ConfigColumn extends StatelessWidget {
             ),
           ),
         ),
-        if (onFromSchemeOfWork != null) ...[
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            height: AppTheme.touchTarget,
-            child: OutlinedButton.icon(
-              onPressed: onFromSchemeOfWork!,
-              style: OutlinedButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                ),
-              ),
-              icon: const Icon(Icons.calendar_month),
-              label: const Text('From Scheme of Work'),
-            ),
-          ),
-        ],
       ],
     );
   }

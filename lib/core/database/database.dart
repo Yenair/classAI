@@ -95,7 +95,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   static QueryExecutor _openConnection() {
     return LazyDatabase(() async {
@@ -683,6 +683,39 @@ class AppDatabase extends _$AppDatabase {
             if (!examColNames.contains('is_unlocked')) {
               await customStatement(
                 'ALTER TABLE exams ADD COLUMN is_unlocked INTEGER NOT NULL DEFAULT 0',
+              );
+            }
+          }
+          if (from < 18) {
+            // Add scheme_of_work_id and week_number columns to lessons and exams
+            final lessonCols = await customSelect(
+              "SELECT name FROM pragma_table_info('lessons')",
+            ).get();
+            final lessonColNames =
+                lessonCols.map((r) => r.read<String>('name')).toSet();
+            if (!lessonColNames.contains('scheme_of_work_id')) {
+              await customStatement(
+                'ALTER TABLE lessons ADD COLUMN scheme_of_work_id TEXT',
+              );
+            }
+            if (!lessonColNames.contains('week_number')) {
+              await customStatement(
+                'ALTER TABLE lessons ADD COLUMN week_number INTEGER',
+              );
+            }
+            final examCols = await customSelect(
+              "SELECT name FROM pragma_table_info('exams')",
+            ).get();
+            final examColNames =
+                examCols.map((r) => r.read<String>('name')).toSet();
+            if (!examColNames.contains('scheme_of_work_id')) {
+              await customStatement(
+                'ALTER TABLE exams ADD COLUMN scheme_of_work_id TEXT',
+              );
+            }
+            if (!examColNames.contains('week_number')) {
+              await customStatement(
+                'ALTER TABLE exams ADD COLUMN week_number INTEGER',
               );
             }
           }
