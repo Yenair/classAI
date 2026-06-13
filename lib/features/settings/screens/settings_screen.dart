@@ -63,6 +63,44 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Future<void> _showAboutClassAIDialog() async {
+    final info = await PackageInfo.fromPlatform();
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        title: const Text('About ClassAI'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('ClassAI'),
+            const SizedBox(height: 12),
+            Text('Version: ${info.version}'),
+            Text('Build number: ${info.buildNumber}'),
+            const SizedBox(height: 12),
+            const Text(
+              'Offline-first AI teaching assistant for Nigerian schools.',
+            ),
+            const SizedBox(height: 12),
+            Text('© ${DateTime.now().year} ClassAI'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showLogoutConfirmation() {
     showDialog(
       context: context,
@@ -1067,29 +1105,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 // About button
                 Expanded(
                   child: InkWell(
-                    onTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          backgroundColor: cs.surface,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                          title: const Text('About ClassAI'),
-                          content: const Text(
-                            'ClassAI helps Nigerian educators create lesson plans, '
-                            'generate exams, and share teaching resources.\n\n'
-                            'Version information is available in the About card above.',
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(ctx).pop(),
-                              child: const Text('Close'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                    onTap: _showAboutClassAIDialog,
                     borderRadius: BorderRadius.circular(8),
                     child: Container(
                       height: 48,
@@ -1207,9 +1223,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 item.icon,
                 color: isActive ? cs.onSecondaryContainer : cs.onSurfaceVariant,
               ),
-              onPressed: item.route != null
-                  ? () => context.push(item.route!)
-                  : null,
+              onPressed: item.route != null ? () => context.go(item.route!) : null,
             ),
           );
         }).toList(),

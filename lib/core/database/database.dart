@@ -608,40 +608,6 @@ class AppDatabase extends _$AppDatabase {
               );
             }
 
-            final teacherCols = await customSelect(
-              "SELECT name FROM pragma_table_info('teachers')",
-            ).get();
-            final teacherColNames =
-                teacherCols.map((r) => r.read<String>('name')).toSet();
-
-            if (!teacherColNames.contains('last_credit_refill_date')) {
-              await customStatement(
-                'ALTER TABLE teachers ADD COLUMN last_credit_refill_date TEXT NULL',
-              );
-            }
-            if (!teacherColNames.contains('salt')) {
-              await customStatement(
-                'ALTER TABLE teachers ADD COLUMN salt TEXT NULL',
-              );
-            }
-            if (!teacherColNames.contains('last_modified_by')) {
-              await customStatement(
-                'ALTER TABLE teachers ADD COLUMN last_modified_by TEXT NULL',
-              );
-            }
-
-            final schoolCols = await customSelect(
-              "SELECT name FROM pragma_table_info('schools')",
-            ).get();
-            final schoolColNames =
-                schoolCols.map((r) => r.read<String>('name')).toSet();
-
-            if (!schoolColNames.contains('last_modified_by')) {
-              await customStatement(
-                'ALTER TABLE schools ADD COLUMN last_modified_by TEXT NULL',
-              );
-            }
-
             final lessonCols = await customSelect(
               "SELECT name FROM pragma_table_info('lessons')",
             ).get();
@@ -716,6 +682,41 @@ class AppDatabase extends _$AppDatabase {
             if (!examColNames.contains('week_number')) {
               await customStatement(
                 'ALTER TABLE exams ADD COLUMN week_number INTEGER',
+              );
+            }
+          }
+          if (from < 19) {
+            final teacherCols = await customSelect(
+              "SELECT name FROM pragma_table_info('teachers')",
+            ).get();
+            final teacherColNames =
+                teacherCols.map((r) => r.read<String>('name')).toSet();
+
+            if (!teacherColNames.contains('last_credit_refill_date')) {
+              await customStatement(
+                'ALTER TABLE teachers ADD COLUMN last_credit_refill_date INTEGER NULL',
+              );
+            }
+            if (!teacherColNames.contains('salt')) {
+              await customStatement(
+                'ALTER TABLE teachers ADD COLUMN salt TEXT NULL',
+              );
+            }
+            if (!teacherColNames.contains('last_modified_by')) {
+              await customStatement(
+                'ALTER TABLE teachers ADD COLUMN last_modified_by TEXT NULL',
+              );
+            }
+
+            final schoolCols = await customSelect(
+              "SELECT name FROM pragma_table_info('schools')",
+            ).get();
+            final schoolColNames =
+                schoolCols.map((r) => r.read<String>('name')).toSet();
+
+            if (!schoolColNames.contains('last_modified_by')) {
+              await customStatement(
+                'ALTER TABLE schools ADD COLUMN last_modified_by TEXT NULL',
               );
             }
           }
