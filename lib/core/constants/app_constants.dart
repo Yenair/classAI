@@ -1,6 +1,7 @@
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import 'supabase_keys.dart';
 
 class AppConstants {
   static const String appName = 'ClassAI';
@@ -8,12 +9,10 @@ class AppConstants {
 
   // ── Supabase Configuration ──────────────────────────────────────────
   /// Supabase project URL.
-  static const String supabaseUrl =
-      'https://zbqhxqnkoggckxoyoqox.supabase.co';
+  static const String supabaseUrl = supabaseUrlConst;
 
   /// Supabase anon key (public) for the client.
-  static const String supabaseAnonKey =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpicWh4cW5rb2dnY2t4b3lvcW94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MzY3ODQsImV4cCI6MjA5NDUxMjc4NH0.RzcpDMMLwux0BFe4H4zSFCgHcIw4JPJSK9fuihI3-Y4';
+  static const String supabaseAnonKey = supabaseAnonKeyConst;
 
   static const int minTabletWidth = 600; // shortestSide for Editor mode
   static const int maxImageSizeKB = 50;

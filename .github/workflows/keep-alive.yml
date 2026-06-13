@@ -9,9 +9,8 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Supabase validate-session
+      - name: Ping Supabase
         run: |
           curl -s -o /dev/null -w "%{http_code}" \
-            "https://zbqhxqnkoggckxoyoqox.supabase.co/functions/v1/validate-session" \
-            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpicWh4cW5rb2dnY2t4b3lvcW94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MzY3ODQsImV4cCI6MjA5NDUxMjc4NH0.RzcpDMMLwux0BFe4H4zSFCgHcIw4JPJSK9fuihI3-Y4" \
-            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpicWh4cW5rb2dnY2t4b3lvcW94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MzY3ODQsImV4cCI6MjA5NDUxMjc4NH0.RzcpDMMLwux0BFe4H4zSFCgHcIw4JPJSK9fuihI3-Y4"
+            "${{ secrets.SUPABASE_URL }}/rest/v1/" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}"

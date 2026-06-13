@@ -46,3 +46,9 @@ app.*.map.json
 
 # Paystack secret key (never commit)
 lib/core/constants/paystack_keys.dart
+
+# Supabase keys (never commit)
+lib/core/constants/supabase_keys.dart
+
+# Supabase temporary files
+supabase/.temp/
