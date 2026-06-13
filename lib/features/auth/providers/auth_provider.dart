@@ -171,9 +171,10 @@ class AuthNotifier extends Notifier<AuthStateData> {
       }
       final original = error.originalError;
       if (original is supabase_pkg.FunctionException) {
-        if (original.status == 401) {
-          return true;
-        }
+        // Only check the details content for session-related keywords.
+        // Do NOT blindly treat every 401 as session mismatch — the login
+        // edge function also returns 401 for invalid credentials, and that
+        // must surface as an error message, not a force-logout.
         final details = original.details;
         if (details is Map<String, dynamic>) {
           return matchesText(details.toString());
@@ -186,9 +187,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
     }
 
     if (error is supabase_pkg.FunctionException) {
-      if (error.status == 401) {
-        return true;
-      }
+      // Do NOT blindly treat every 401 as session mismatch — the login
+      // edge function also returns 401 for invalid credentials.
       final details = error.details;
       if (details is Map<String, dynamic>) {
         return matchesText(details.toString());
