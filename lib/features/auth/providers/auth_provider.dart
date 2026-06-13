@@ -1372,9 +1372,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
             updateCounter: Value(existing.updateCounter + 1),
           ),
         );
-      } else {
+        return;
       }
-    } else {
     }
 
     // Insert new teacher with valid school localId
