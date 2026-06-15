@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -102,6 +103,63 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     if (mounted) setState(() {});
   }
 
+  int _normalizeWeekNumber(dynamic value, int fallback) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+
+    final weekText = value?.toString().trim() ?? '';
+    if (weekText.isEmpty) return fallback;
+
+    final directNumber = int.tryParse(weekText);
+    if (directNumber != null) return directNumber;
+
+    final weekMatch = RegExp(r'week\s*(\d+)', caseSensitive: false)
+        .firstMatch(weekText);
+    if (weekMatch != null) {
+      final matched = int.tryParse(weekMatch.group(1)!);
+      if (matched != null) return matched;
+    }
+
+    final numericChunk = RegExp(r'\b(\d+)\b').firstMatch(weekText);
+    if (numericChunk != null) {
+      final matched = int.tryParse(numericChunk.group(1)!);
+      if (matched != null) return matched;
+    }
+
+    return fallback;
+  }
+
+  Map<String, dynamic> _extractSchemePayload(dynamic response) {
+    dynamic candidate = response;
+    if (candidate is Map<String, dynamic>) {
+      candidate = candidate['raw'] ?? candidate['text'] ?? candidate;
+    }
+
+    if (candidate is Map<String, dynamic>) {
+      return candidate;
+    }
+
+    final text = candidate?.toString() ?? '';
+    if (text.isEmpty) {
+      throw FormatException('Empty scheme response');
+    }
+
+    final firstBrace = text.indexOf('{');
+    final lastBrace = text.lastIndexOf('}');
+    if (firstBrace != -1 && lastBrace != -1 && lastBrace > firstBrace) {
+      final jsonText = text.substring(firstBrace, lastBrace + 1);
+      final decoded = jsonDecode(jsonText);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return decoded.cast<String, dynamic>();
+    }
+
+    final decoded = jsonDecode(text);
+    if (decoded is Map<String, dynamic>) return decoded;
+    if (decoded is Map) return decoded.cast<String, dynamic>();
+
+    throw FormatException('Scheme response did not contain a JSON object');
+  }
+
   Future<void> _handleGenerate() async {
     setState(() => _isGenerating = true);
     try {
@@ -116,8 +174,14 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       );
 
       final result = await aiService.generate(prompt);
-      final raw = result['raw'] as Map<String, dynamic>? ?? result;
+      debugPrint('[SOW] AI response received, length: ${result.length}');
+      final rawResponse = result['raw'] ?? result;
+      try {
+        debugPrint('[SOW] Raw AI response: $rawResponse');
+      } catch (_) {}
+      final raw = _extractSchemePayload(rawResponse);
       final weeksData = (raw['weeks'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      debugPrint('[SOW] Parsed weeks: ${weeksData.length}');
 
       await aiService.logGeneration(
         teacherId: _teacherId?.toString(),
@@ -127,29 +191,33 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
 
       // Clear previous controllers
       _disposeControllers();
-      _weeks = [];
-      _topicControllers = {};
-      _objectivesControllers = {};
-      _adminEditControllers = {};
+      debugPrint('[SOW] Calling setState, weeks count: ${_weeks.length}');
+      setState(() {
+        _weeks = [];
+        _topicControllers = {};
+        _objectivesControllers = {};
+        _adminEditControllers = {};
 
-      for (final week in weeksData) {
-        final weekNum = week['week'] as int? ?? (_weeks.length + 1);
-        final topic = week['topic'] as String? ?? '';
-        final objectives = week['objectives'] as List? ?? [];
-        final objStr = objectives.map((e) => e.toString()).join('\n');
+        for (final week in weeksData) {
+          final weekNum = _normalizeWeekNumber(week['week'], _weeks.length + 1);
+          final topic = week['topic'] as String? ?? '';
+          final objectives = week['objectives'] as List? ?? [];
+          final objStr = objectives.map((e) => e.toString()).join('\n');
 
-        _topicControllers[weekNum] = TextEditingController(text: topic);
-        _objectivesControllers[weekNum] = TextEditingController(text: objStr);
-        _adminEditControllers[weekNum] = TextEditingController();
+          _topicControllers[weekNum] = TextEditingController(text: topic);
+          _objectivesControllers[weekNum] =
+              TextEditingController(text: objStr);
+          _adminEditControllers[weekNum] = TextEditingController();
 
-        _weeks.add({
-          'week': weekNum,
-          'topic': topic,
-          'objectives': objStr,
-        });
-      }
+          _weeks.add({
+            'week': weekNum,
+            'topic': topic,
+            'objectives': objStr,
+          });
+        }
 
-      setState(() => _isGenerating = false);
+        _isGenerating = false;
+      });
       if (mounted) {
         showInfoToast(context: context, message: 'Scheme generated! Edit and save.');
       }
@@ -165,16 +233,18 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     if (_schoolId == null || _teacherId == null) return;
     try {
       final db = ref.read(databaseProvider);
-      for (final week in _weeks) {
+      for (var index = 0; index < _weeks.length; index++) {
+        final week = _weeks[index];
+        final weekNumber = _normalizeWeekNumber(week['week'], index + 1);
         await db.schemeOfWorkDao.insert(
           SchemeOfWorkCompanion.insert(
             schoolId: Value(_schoolId!),
             teacherId: Value(_teacherId!),
             subjectId: const Value(0),
             term: Value(_term),
-            weekNumber: Value(week['week'] as int),
-            topic: Value(_topicControllers[week['week']]?.text ?? week['topic'] as String),
-            objectives: Value(_objectivesControllers[week['week']]?.text ?? week['objectives'] as String),
+            weekNumber: Value(weekNumber),
+            topic: Value(_topicControllers[weekNumber]?.text ?? week['topic'] as String),
+            objectives: Value(_objectivesControllers[weekNumber]?.text ?? week['objectives'] as String),
             status: const Value('draft'),
           ),
         );
@@ -412,6 +482,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
   }
 
   Widget _buildPreviewColumn(ThemeData theme, ColorScheme cs) {
+    debugPrint('[SOW] build: _weeks length = ${_weeks.length}, _isGenerating = $_isGenerating');
     if (_isAdmin) {
       return _buildAdminView(theme, cs);
     }
@@ -444,7 +515,17 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
           Text('Generated Scheme — $_subject $_term Term',
               style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
           const SizedBox(height: 12),
-          ..._weeks.map((week) => _buildWeekCard(theme, cs, week['week'] as int, week['topic'] as String, week['objectives'] as String)),
+            ..._weeks.asMap().entries.map((entry) {
+              final week = entry.value;
+              final weekNum = _normalizeWeekNumber(week['week'], entry.key + 1);
+              return _buildWeekCard(
+                theme,
+                cs,
+                weekNum,
+                week['topic'] as String,
+                week['objectives'] as String,
+              );
+            }),
         ],
       );
     }
