@@ -50,7 +50,9 @@ class SchoolsDao extends DatabaseAccessor<AppDatabase> with _$SchoolsDaoMixin {
     // ── UPDATE path: school already exists ───────────────────────────────────
     {
       final existing = await (select(schools)
-            ..where((s) => s.serverId.equals(serverId)))
+            ..where((s) => s.serverId.equals(serverId))
+            ..orderBy([(s) => OrderingTerm(expression: s.localId)])
+            ..limit(1))
           .getSingleOrNull();
 
       if (existing != null) {
@@ -95,7 +97,8 @@ class SchoolsDao extends DatabaseAccessor<AppDatabase> with _$SchoolsDaoMixin {
       // Re-fetch so the caller gets a fully populated row
       // (all NOT-NULL columns with DB defaults are fully materialised).
       return (await (select(schools)
-            ..where((s) => s.localId.equals(newLocalId)))
+            ..where((s) => s.localId.equals(newLocalId))
+            ..limit(1))
           .getSingle());
     }
   }

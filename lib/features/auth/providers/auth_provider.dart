@@ -1320,6 +1320,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
   }
 
   Future<void> _saveAuthResultToLocalDb(AuthResult result) async {
+    await _db.deduplicateAuthLoginRows();
+
     // Guaranteed to return a School row with a valid non-zero localId.
     // `upsertByServerId` SELECTs by serverId, UPDATEs the existing row, or
     // INSERTs a new one — in all cases the returned School has the correct

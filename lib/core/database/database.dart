@@ -152,23 +152,63 @@ class AppDatabase extends _$AppDatabase {
   
       for (final row in dupRows) {
         final serverId = row.data['server_id'] as String;
-  
+
         final idRows = await customSelect(
           'SELECT local_id FROM teachers '
           'WHERE server_id = ? '
           'ORDER BY local_id ASC',
           variables: [Variable(serverId)],
         ).get();
-  
+
         if (idRows.length <= 1) continue;
-  
+
         final ids = idRows.map((r) => r.data['local_id'] as int).toList();
         final deleteIds = ids.skip(1).toList();
-  
+
         await customStatement(
           'DELETE FROM teachers WHERE local_id IN (${deleteIds.join(',')})',
         );
       }
+    }
+
+    /// Removes duplicate school rows that share the same non-null [serverId],
+    /// keeping only the row with the lowest [localId] for each serverId.
+    Future<void> deduplicateSchools() async {
+      final dupRows = await customSelect(
+        'SELECT server_id '
+        'FROM schools '
+        'WHERE server_id IS NOT NULL '
+        'GROUP BY server_id '
+        'HAVING COUNT(*) > 1',
+      ).get();
+
+      for (final row in dupRows) {
+        final serverId = row.data['server_id'] as String;
+
+        final idRows = await customSelect(
+          'SELECT local_id FROM schools '
+          'WHERE server_id = ? '
+          'ORDER BY local_id ASC',
+          variables: [Variable(serverId)],
+        ).get();
+
+        if (idRows.length <= 1) continue;
+
+        final deleteIds = idRows
+            .map((r) => r.data['local_id'] as int)
+            .skip(1)
+            .toList();
+
+        await customStatement(
+          'DELETE FROM schools WHERE local_id IN (${deleteIds.join(',')})',
+        );
+      }
+    }
+
+    /// Cleans up duplicate auth rows before login reads them.
+    Future<void> deduplicateAuthLoginRows() async {
+      await deduplicateSchools();
+      await deduplicateTeachers();
     }
 
   // Migration support

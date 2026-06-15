@@ -10,7 +10,11 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
   SecurityConfigDao(AppDatabase db) : super(db);
 
   Future<SecurityConfigData> get() {
-    return (select(securityConfig)..where((t) => t.id.equals(1))).getSingle();
+    return (select(securityConfig)
+          ..where((t) => t.id.equals(1))
+          ..orderBy([(t) => OrderingTerm(expression: t.id)])
+          ..limit(1))
+        .getSingle();
   }
 
   Future<void> updateConfig({
