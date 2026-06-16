@@ -96,11 +96,20 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     } catch (_) {}
   }
 
-  Future<void> _loadExistingSow() async {
-    if (_schoolId == null) return;
+  Future<List<SchemeOfWorkData>?> _loadExistingSow() async {
+    if (_schoolId == null) return null;
     final db = ref.read(databaseProvider);
-    _existingSowRecords = await db.schemeOfWorkDao.getBySchool(_schoolId!);
-    if (mounted) setState(() {});
+    try {
+      _existingSowRecords = await db.schemeOfWorkDao.getBySchool(_schoolId!);
+      return _existingSowRecords;
+    } on FormatException catch (e) {
+      debugPrint('[SOW] Skipped corrupted scheme_of_work row: $e');
+      await db.customStatement(
+        "DELETE FROM scheme_of_work WHERE typeof(created_at) != 'integer' OR typeof(updated_at) != 'integer'",
+      );
+      _existingSowRecords = [];
+      return null;
+    }
   }
 
   int _normalizeWeekNumber(dynamic value, int fallback) {
@@ -235,7 +244,9 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       final db = ref.read(databaseProvider);
       for (var index = 0; index < _weeks.length; index++) {
         final week = _weeks[index];
-        final weekNumber = _normalizeWeekNumber(week['week'], index + 1);
+        final weekNumber = index + 1;
+        final topicText = _topicControllers[weekNumber]?.text ?? week['topic']?.toString() ?? '';
+        final objectivesText = _objectivesControllers[weekNumber]?.text ?? week['objectives']?.toString() ?? '';
         await db.schemeOfWorkDao.insert(
           SchemeOfWorkCompanion.insert(
             schoolId: Value(_schoolId!),
@@ -243,9 +254,11 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
             subjectId: const Value(0),
             term: Value(_term),
             weekNumber: Value(weekNumber),
-            topic: Value(_topicControllers[weekNumber]?.text ?? week['topic'] as String),
-            objectives: Value(_objectivesControllers[weekNumber]?.text ?? week['objectives'] as String),
+            topic: Value(topicText),
+            objectives: Value(objectivesText),
             status: const Value('draft'),
+            createdAt: Value(DateTime.now()),
+            updatedAt: Value(DateTime.now()),
           ),
         );
       }
@@ -253,7 +266,9 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       if (mounted) {
         showInfoToast(context: context, message: 'Scheme of Work saved!');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('[SOW] Save failed: $e');
+      debugPrint('[SOW] Save stack trace:\n$stackTrace');
       if (mounted) {
         showErrorToast(context: context, message: 'Save failed: $e');
       }

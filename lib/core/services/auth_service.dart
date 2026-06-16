@@ -916,6 +916,10 @@ class SupabaseAuthService implements AuthService {
       shortCode: '',
       logoUrl: null,
       subscriptionTier: schoolMap['subscription_tier'] as String? ?? 'free',
+      expiryDate: schoolMap['expiry_date'] != null
+          ? DateTime.tryParse(schoolMap['expiry_date'] as String)
+          : null,
+      activationCode: schoolMap['activation_code'] as String?,
       activeCurriculum: 'nerdc',
       activeCurriculumVersion: null,
       totalSeats: 5,

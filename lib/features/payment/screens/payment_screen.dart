@@ -159,6 +159,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
       if (!context.mounted) return;
 
+      // Refresh the auth provider so the free-plan banner, credit dialog tier,
+      // and other tier-dependent widgets react immediately.
+      ref.read(authProvider.notifier).refreshSchoolFromDb();
+
       // Show activation code dialog
       await _showActivationCodeDialog(context, confirmation.activationCode);
     } catch (e) {
@@ -645,7 +649,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                             ),
                           ),
                           Text(
-                            '/ term',
+                            '/yr',
                             style: textTheme.labelMedium?.copyWith(
                               color: cs.onSurfaceVariant,
                             ),
@@ -747,7 +751,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  '1 Academic Term',
+                  '1 Year',
                   textAlign: TextAlign.end,
                   style: textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w500,

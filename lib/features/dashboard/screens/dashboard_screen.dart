@@ -488,6 +488,14 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                 // ── Conflict Banner ────────────────────────────────
                 const ConflictBanner(),
 
+                // ── Free Plan Banner ──────────────────────────────
+                if (authData.currentSchool?.subscriptionTier == 'free')
+                  _FreePlanBanner(
+                    cs: cs,
+                    theme: theme,
+                    onUpgrade: () => context.push('/payment'),
+                  ),
+
                 // ── Canvas ─────────────────────────────────────────
                 Expanded(
                   child: SingleChildScrollView(
@@ -1730,33 +1738,46 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
           ),
         ),
       ),
-      body: SingleChildScrollView(
-        physics: (Platform.isAndroid || Platform.isIOS)
-            ? const BouncingScrollPhysics()
-            : null,
-        padding: const EdgeInsets.all(AppTheme.spacingMarginMobile),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 8),
-            Text(
-              "Today's Lessons",
-              style: theme.textTheme.headlineMedium?.copyWith(
-                color: cs.primary,
+      body: Column(
+        children: [
+          // ── Free Plan Banner ──────────────────────────────
+          if (authData.currentSchool?.subscriptionTier == 'free')
+            _FreePlanBanner(
+              cs: cs,
+              theme: theme,
+              onUpgrade: () => context.push('/payment'),
+            ),
+          Expanded(
+            child: SingleChildScrollView(
+              physics: (Platform.isAndroid || Platform.isIOS)
+                  ? const BouncingScrollPhysics()
+                  : null,
+              padding: const EdgeInsets.all(AppTheme.spacingMarginMobile),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 8),
+                  Text(
+                    "Today's Lessons",
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      color: cs.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Continue your reading materials for today's classes.",
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  // Recent lesson cards (live from lessons database)
+                  _RecentLessonsList(cs: cs, theme: theme),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              "Continue your reading materials for today's classes.",
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: cs.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 24),
-            // Recent lesson cards (live from lessons database)
-            _RecentLessonsList(cs: cs, theme: theme),
-          ],
-        ),
+          ),
+        ],
       ),
       bottomNavigationBar: _ReaderBottomNav(
         selectedIndex: _selectedIndex,
@@ -2148,6 +2169,64 @@ class _BottomNavItem extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Stitch-style banner displayed on the Free plan.
+///
+/// Renders an amber/yellow bar with an "Upgrade" CTA.  Disappears
+/// reactively when the school's [subscriptionTier] changes away from
+/// `'free'` because the widget is guarded by the caller with the same
+/// condition from the same authProvider watch.
+class _FreePlanBanner extends StatelessWidget {
+  const _FreePlanBanner({
+    required this.cs,
+    required this.theme,
+    required this.onUpgrade,
+  });
+
+  final ColorScheme cs;
+  final ThemeData theme;
+  final VoidCallback onUpgrade;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade50,
+        border: Border(
+          bottom: BorderSide(color: Colors.amber.shade200),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, size: 18, color: Colors.amber.shade800),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              "You're on the Free plan. Upgrade to unlock more features.",
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: Colors.amber.shade900,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: onUpgrade,
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.amber.shade800,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text('Upgrade'),
+          ),
+        ],
       ),
     );
   }

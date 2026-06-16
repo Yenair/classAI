@@ -46,6 +46,8 @@ class SchoolsDao extends DatabaseAccessor<AppDatabase> with _$SchoolsDaoMixin {
     String? schoolMasterKeyWrapped,
     String? adminRecoveryEmail,
     bool adminRecoveryEmailVerified = false,
+    DateTime? expiryDate,
+    String? activationCode,
   }) async {
     // ── UPDATE path: school already exists ───────────────────────────────────
     {
@@ -69,6 +71,8 @@ class SchoolsDao extends DatabaseAccessor<AppDatabase> with _$SchoolsDaoMixin {
             schoolMasterKeyWrapped: Value(schoolMasterKeyWrapped),
             adminRecoveryEmail: Value(adminRecoveryEmail),
             adminRecoveryEmailVerified: Value(adminRecoveryEmailVerified),
+            expiryDate: Value(expiryDate),
+            activationCode: Value(activationCode),
             updatedAt: Value(DateTime.now()),
             updateCounter: Value(existing.updateCounter + 1),
           ),
@@ -91,6 +95,8 @@ class SchoolsDao extends DatabaseAccessor<AppDatabase> with _$SchoolsDaoMixin {
           schoolMasterKeyWrapped: Value(schoolMasterKeyWrapped),
           adminRecoveryEmail: Value(adminRecoveryEmail),
           adminRecoveryEmailVerified: Value(adminRecoveryEmailVerified),
+          expiryDate: Value(expiryDate),
+          activationCode: Value(activationCode),
         ),
       );
 
@@ -101,5 +107,24 @@ class SchoolsDao extends DatabaseAccessor<AppDatabase> with _$SchoolsDaoMixin {
             ..limit(1))
           .getSingle());
     }
+  }
+
+  /// Updates subscription-related fields on the school identified by [serverId].
+  Future<void> updateSubscriptionFields({
+    required String serverId,
+    required String subscriptionTier,
+    DateTime? expiryDate,
+    String? activationCode,
+  }) async {
+    await (update(schools)
+          ..where((s) => s.serverId.equals(serverId)))
+        .write(
+      SchoolsCompanion(
+        subscriptionTier: Value(subscriptionTier),
+        expiryDate: Value(expiryDate),
+        activationCode: Value(activationCode),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 }

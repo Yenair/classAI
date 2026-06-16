@@ -835,8 +835,53 @@ class SyncService {
 
     _setState(SyncState.pushing);
     await _pushChanges();
+    // Check subscription expiry using server time after a successful pull.
+    await _checkSubscriptionExpiry();
     _setState(SyncState.applyingCredits);
     await _applyCreditState();
+  }
+
+  /// Calls the [server-time] edge function and checks whether the local
+  /// school's [expiryDate] has passed. If so, downgrades the subscription
+  /// to [free] so the UI shows the correct tier without waiting for the
+  /// next auth refresh cycle.
+  ///
+  /// Uses the server-provided time — never [DateTime.now].
+  Future<void> _checkSubscriptionExpiry() async {
+    try {
+      final client = Supabase.instance.client;
+      final response = await client.functions
+          .invoke('server-time')
+          .timeout(const Duration(seconds: 10));
+      final data = response.data as Map<String, dynamic>?;
+      if (data == null) return;
+      final timeStr = data['server_time'] as String?;
+      if (timeStr == null) return;
+      final serverTime = DateTime.tryParse(timeStr);
+      if (serverTime == null) return;
+
+      final school = await db.schoolsDao.get();
+      if (school == null) return;
+      final expiry = school.expiryDate;
+      if (expiry == null) return;
+
+      if (expiry.isBefore(serverTime)) {
+        debugPrint(
+          '[SyncService] Subscription expired: expiry=$expiry, serverTime=$serverTime',
+        );
+        if (school.serverId != null) {
+          await db.schoolsDao.updateSubscriptionFields(
+            serverId: school.serverId!,
+            subscriptionTier: 'free',
+            expiryDate: null,
+            activationCode: null,
+          );
+        }
+      }
+    } catch (e) {
+      // Silently ignore — the next sync cycle will re-check.
+      debugPrint('[SyncService] Failed to check subscription expiry: $e');
+    }
   }
 
   /// Removes locally-stored teachers whose [serverId] is not in the server's
@@ -954,8 +999,20 @@ class SyncService {
       }
 
       await store.markQueueAttempt(entry.id);
+
       if (result.retryable && entry.attempts < 5) {
         _setState(SyncState.backoff);
+      } else if (!result.retryable || entry.attempts >= 5) {
+        // ── Stuck item cleanup ──────────────────────────────────
+        // Items that have exhausted retries (attempts >= 5) or are
+        // non-retryable would remain in the queue forever, causing
+        // "stuck pending" displays. Remove them with a diagnostic log.
+        debugPrint(
+          '[SyncService] Removing stuck queue entry '
+          '(id=${entry.id}, table=${entry.queueTable}, '
+          'operation=${entry.operation}, attempts=${entry.attempts})',
+        );
+        await store.removeQueueEntry(entry.id);
       }
     }
   }

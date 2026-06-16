@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide AuthException;
 import 'package:classai/features/admin/providers/admin_provider.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/core/services/auth_service.dart';
@@ -360,6 +361,12 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               PopupMenuButton<String>(
                 onSelected: (value) {
                   switch (value) {
+                    case 'redeem_code':
+                      showDialog(
+                        context: context,
+                        builder: (_) => const _RedeemCodeDialog(),
+                      );
+                      break;
                     case 'settings':
                       context.push('/settings');
                       break;
@@ -436,6 +443,16 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                       checked: themeMode == ThemeMode.system,
                       value: 'theme_system',
                       child: const Text('System'),
+                    ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem<String>(
+                      value: 'redeem_code',
+                      child: ListTile(
+                        leading: Icon(Icons.vpn_key_rounded),
+                        title: Text('Redeem Code'),
+                        contentPadding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                      ),
                     ),
                     const PopupMenuDivider(),
                     const PopupMenuItem<String>(
@@ -1066,6 +1083,201 @@ class _AddTeacherDialogState extends ConsumerState<_AddTeacherDialog> {
       ],
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Redeem Activation Code Dialog
+// ---------------------------------------------------------------------------
+
+class _RedeemCodeDialog extends ConsumerStatefulWidget {
+const _RedeemCodeDialog();
+
+@override
+ConsumerState<_RedeemCodeDialog> createState() => _RedeemCodeDialogState();
+}
+
+class _RedeemCodeDialogState extends ConsumerState<_RedeemCodeDialog> {
+final _formKey = GlobalKey<FormState>();
+final _codeController = TextEditingController();
+bool _isSubmitting = false;
+String? _errorMessage;
+
+@override
+void dispose() {
+  _codeController.dispose();
+  super.dispose();
+}
+
+Future<void> _handleSubmit() async {
+  if (!_formKey.currentState!.validate()) return;
+
+  setState(() {
+    _isSubmitting = true;
+    _errorMessage = null;
+  });
+
+  try {
+    final school = await ref.read(databaseProvider).schoolsDao.get();
+    final serverId = school?.serverId;
+    if (serverId == null) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _errorMessage = 'School not found. Sync your data first.';
+      });
+      return;
+    }
+
+    final code = _codeController.text.trim().toUpperCase();
+    final response = await Supabase.instance.client.functions
+        .invoke('redeem-activation', body: {'activation_code': code});
+
+    if (response.data != null && response.data is Map) {
+      final data = response.data as Map<String, dynamic>;
+      final tier = data['subscription_tier'] as String? ?? 'premium';
+      final expiryStr = data['expiry_date'] as String?;
+      final expiry = expiryStr != null ? DateTime.tryParse(expiryStr) : null;
+
+      await ref.read(databaseProvider).schoolsDao.updateSubscriptionFields(
+            serverId: serverId,
+            subscriptionTier: tier,
+            expiryDate: expiry,
+            activationCode: code,
+          );
+    }
+
+    await ref.read(authProvider.notifier).refreshSchoolFromDb();
+
+    if (!mounted) return;
+    Navigator.of(context).pop();
+    showInfoToast(
+      context: context,
+      message: 'Activation code applied successfully!',
+    );
+  } catch (e) {
+    if (!mounted) return;
+    String message = 'Failed to redeem code. Please try again.';
+    final errorStr = e.toString();
+    if (errorStr.contains('409') || errorStr.contains('already been used')) {
+      message = 'This activation code has already been used.';
+    } else if (errorStr.contains('400') || errorStr.contains('Invalid code')) {
+      message = 'Invalid activation code format.';
+    } else if (errorStr.contains('404') || errorStr.contains('not found')) {
+      message = 'Activation code not found.';
+    }
+    setState(() {
+      _isSubmitting = false;
+      _errorMessage = message;
+    });
+  }
+}
+
+@override
+Widget build(BuildContext context) {
+  final cs = Theme.of(context).colorScheme;
+  final textTheme = Theme.of(context).textTheme;
+
+  return AlertDialog(
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(8),
+    ),
+    title: Text(
+      'Redeem Activation Code',
+      style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+    ),
+    content: Form(
+      key: _formKey,
+      child: SingleChildScrollView(
+        physics: (Platform.isAndroid || Platform.isIOS)
+            ? const BouncingScrollPhysics()
+            : null,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Error message
+            if (_errorMessage != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: cs.errorContainer.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: cs.error.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.error_outline_rounded,
+                      size: 18,
+                      color: cs.onErrorContainer,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _errorMessage!,
+                        style: TextStyle(
+                          color: cs.onErrorContainer,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            // Activation code field
+            TextFormField(
+              controller: _codeController,
+              textInputAction: TextInputAction.done,
+              textCapitalization: TextCapitalization.characters,
+              decoration: const InputDecoration(
+                labelText: 'Activation Code',
+                hintText: 'CLASS-XXXX-XXXX-XXXX',
+                prefixIcon: Icon(Icons.vpn_key_rounded),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Please enter an activation code';
+                }
+                if (!RegExp(
+                  r'^CLASS-[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$',
+                  caseSensitive: false,
+                ).hasMatch(value.trim())) {
+                  return 'Format: CLASS-XXXX-XXXX-XXXX';
+                }
+                return null;
+              },
+              onFieldSubmitted: _isSubmitting ? null : (_) => _handleSubmit(),
+            ),
+          ],
+        ),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: _isSubmitting ? null : _handleSubmit,
+        child: _isSubmitting
+            ? SizedBox(
+                height: 18,
+                width: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Theme.of(context).colorScheme.onPrimary,
+                ),
+              )
+            : const Text('Redeem'),
+      ),
+    ],
+  );
+}
 }
 
 // ---------------------------------------------------------------------------

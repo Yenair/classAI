@@ -69,6 +69,7 @@ final appRouter = GoRouter(
         location == '/exam-editor';
     final isAdminRoute =
         location == '/admin' || location.startsWith('/admin/teachers/');
+    final isPaymentRoute = location == '/payment';
 
     // Override: /scheme-of-work is accessible by both roles so skip redirect
     if (location == '/scheme-of-work') return null;
@@ -81,6 +82,9 @@ final appRouter = GoRouter(
 
     // Non-admin users should never reach admin-only routes.
     if (isAdminRoute) return '/';
+
+    // Payment route is admin-only
+    if (isPaymentRoute && role != 'admin') return '/';
 
     return null; // allow navigation
   },

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 
 /// Credit counter chip in the AppBar.
@@ -115,16 +116,25 @@ class _CreditCounterState extends ConsumerState<CreditCounter>
   }
 
   void _showCreditDetailsDialog(BuildContext context, dynamic data) {
+    final authData = ref.read(authProvider);
+    final schoolTier = authData.currentSchool?.subscriptionTier ?? 'free';
     showDialog(
       context: context,
-      builder: (_) => _CreditDetailsDialog(data: data),
+      builder: (_) => _CreditDetailsDialog(
+        data: data,
+        schoolTier: schoolTier,
+      ),
     );
   }
 }
 
 class _CreditDetailsDialog extends StatelessWidget {
-  const _CreditDetailsDialog({required this.data});
+  const _CreditDetailsDialog({
+    required this.data,
+    required this.schoolTier,
+  });
   final dynamic data;
+  final String schoolTier;
 
   @override
   Widget build(BuildContext context) {
@@ -221,6 +231,41 @@ class _CreditDetailsDialog extends StatelessWidget {
                         ),
                   ),
                   backgroundColor: cs.primaryContainer,
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // ── Plan (school subscription) ─────────────────────────
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: Text(
+                  'Plan',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                        overflow: TextOverflow.clip,
+                      ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Chip(
+                  label: Text(
+                    schoolTier == 'free'
+                        ? 'Free Plan'
+                        : '${schoolTier[0].toUpperCase()}${schoolTier.substring(1)} Plan',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: cs.onSecondaryContainer,
+                          overflow: TextOverflow.clip,
+                        ),
+                  ),
+                  backgroundColor: cs.secondaryContainer,
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                 ),

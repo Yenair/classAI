@@ -152,6 +152,58 @@ class AuthNotifier extends Notifier<AuthStateData> {
   EmergencyFlushService get _emergencyFlushService =>
       ref.read(emergencyFlushServiceProvider);
 
+  /// Calls the server-time edge function and returns the server timestamp.
+  /// Returns null if the call fails (network error, etc.).
+  Future<DateTime?> _fetchServerTime() async {
+    try {
+      final client = supabase_pkg.Supabase.instance.client;
+      final response = await client.functions
+          .invoke('server-time')
+          .timeout(const Duration(seconds: 10));
+      final data = response.data as Map<String, dynamic>?;
+      if (data == null) return null;
+      final timeStr = data['server_time'] as String?;
+      if (timeStr == null) return null;
+      return DateTime.tryParse(timeStr);
+    } catch (_) {
+      // Silently ignore — the next sync cycle or session timer will re-check.
+      return null;
+    }
+  }
+
+  /// Checks if the school's subscription has expired by comparing the server
+  /// time against [School.expiryDate]. If expired, downgrades the local school
+  /// record to 'free' and updates the notifier state.
+  ///
+  /// Uses the server-provided timestamp — NEVER [DateTime.now].
+  Future<void> _checkSubscriptionExpiry() async {
+    final serverTime = await _fetchServerTime();
+    if (serverTime == null) return; // offline or error — defer check
+
+    final school = state.currentSchool;
+    if (school == null) return;
+
+    final expiry = school.expiryDate;
+    if (expiry == null) return; // no expiry set (free tier) — no action needed.
+
+    if (expiry.isBefore(serverTime)) {
+      // Subscription expired — downgrade to free
+      debugPrint(
+        '[AuthNotifier] Subscription expired: expiry=$expiry, serverTime=$serverTime',
+      );
+      if (school.serverId != null) {
+        await _db.schoolsDao.updateSubscriptionFields(
+          serverId: school.serverId!,
+          subscriptionTier: 'free',
+          expiryDate: null,
+          activationCode: null,
+        );
+      }
+      // Reload school from local DB and update state
+      await refreshSchoolFromDb();
+    }
+  }
+
   bool _isSessionMismatchError(Object error) {
     bool matchesText(String text) {
       final normalized = text.toLowerCase();
@@ -246,6 +298,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
             clearError: true,
           );
           _startSessionTimer();
+          // Check subscription expiry using server time (fire-and-forget)
+          unawaited(_checkSubscriptionExpiry());
 
           // Navigate based on role
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -369,6 +423,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
         clearPendingDeviceId: true,
       );
       _startSessionTimer();
+      // Check subscription expiry using server time (fire-and-forget)
+      unawaited(_checkSubscriptionExpiry());
 
       // Navigate based on role — admin goes to /admin, teachers go to /
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1309,6 +1365,23 @@ class AuthNotifier extends Notifier<AuthStateData> {
     state = state.copyWith(clearError: true);
   }
 
+  /// Re-reads the school record from the local database and updates the
+  /// notifier state.  Called after a payment completes so that widgets
+  /// watching [authProvider] (free-plan banner, credit dialog tier, etc.)
+  /// react immediately without requiring an app restart.
+  Future<void> refreshSchoolFromDb() async {
+    try {
+      final school = await _db.schoolsDao.get();
+      if (school != null) {
+        state = state.copyWith(currentSchool: school);
+      }
+    } catch (_) {
+      // Silently ignore – the next sync cycle will pick up any changes.
+    }
+    // Check subscription expiry using server time (fire-and-forget)
+    unawaited(_checkSubscriptionExpiry());
+  }
+
   // -----------------------------------------------------------------------
   // Helpers
   // -----------------------------------------------------------------------
@@ -1344,6 +1417,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
       schoolMasterKeyWrapped: result.school.schoolMasterKeyWrapped,
       adminRecoveryEmail: result.school.adminRecoveryEmail,
       adminRecoveryEmailVerified: result.school.adminRecoveryEmailVerified,
+      expiryDate: result.school.expiryDate,
+      activationCode: result.school.activationCode,
     );
     final schoolLocalIdToUse = schoolRow.localId;
 

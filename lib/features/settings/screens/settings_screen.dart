@@ -426,6 +426,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     bool isDark,
     bool isWide,
   ) {
+    final isAdmin = authData.currentTeacher?.role == 'admin';
     return Column(
       children: [
         // Row 1: Interface Mode + Appearance
@@ -464,7 +465,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   const SizedBox(width: 16),
                   Expanded(
                     child: _buildCreditsCard(
-                        context, cs, textTheme, creditData),
+                        context, cs, textTheme, creditData,
+                        isAdmin: isAdmin),
                   ),
                 ],
               )
@@ -474,7 +476,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       context, cs, textTheme, authData),
                   const SizedBox(height: 16),
                   _buildCreditsCard(
-                      context, cs, textTheme, creditData),
+                      context, cs, textTheme, creditData,
+                      isAdmin: isAdmin),
                 ],
               ),
         const SizedBox(height: 16),
@@ -800,7 +803,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // Credits Card
   // ---------------------------------------------------------------
   Widget _buildCreditsCard(BuildContext context, ColorScheme cs,
-      TextTheme textTheme, CreditStateData creditData) {
+      TextTheme textTheme, CreditStateData creditData,
+      {bool isAdmin = false}) {
     return _StitchCard(
       cs: cs,
       child: Column(
@@ -866,16 +870,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           const SizedBox(height: 16),
 
-          // Purchase button
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: FilledButton.icon(
-              onPressed: () => context.push('/payment'),
-              icon: const Icon(Icons.shopping_cart_outlined),
-              label: const Text('Purchase Credits'),
+          // Purchase button (admin only)
+          if (isAdmin)
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton.icon(
+                onPressed: () => context.push('/payment'),
+                icon: const Icon(Icons.shopping_cart_outlined),
+                label: const Text('Purchase Credits'),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -1054,8 +1059,39 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     borderRadius: BorderRadius.circular(24),
                   ),
                   title: const Text('Privacy Policy'),
-                  content: const Text(
-                    'Privacy Policy details will be available in a future update.',
+                  content: const SingleChildScrollView(
+                    child: Text(
+                      'ClassAI Privacy Policy\n\n'
+                      '1. Data We Collect\n'
+                      'We collect teacher name, email address, school details, '
+                      'and lesson/exam content you create. We do not collect '
+                      'sensitive personal data beyond what is necessary for '
+                      'the service.\n\n'
+                      '2. How We Use Data\n'
+                      'Your data is used to provide and improve the ClassAI '
+                      'platform, sync content across devices, and generate '
+                      'PDF exports and AI-assisted content. We do not sell '
+                      'your data to third parties.\n\n'
+                      '3. Data Storage & Security\n'
+                      'Content is encrypted at rest using AES-256. '
+                      'Authentication tokens and session keys are stored '
+                      'locally on your device. Server-side data is stored '
+                      'in secure Supabase infrastructure with row-level '
+                      'security policies.\n\n'
+                      '4. Data Sharing\n'
+                      'We do not share your personal data with third parties '
+                      'except as required by law or with your explicit consent. '
+                      'Vault content submitted for publication is reviewed by '
+                      'administrators before being made visible.\n\n'
+                      '5. Your Rights\n'
+                      'You may request deletion of your account and associated '
+                      'data at any time by contacting support. You can export '
+                      'your data via the Settings screen.\n\n'
+                      '6. Changes to This Policy\n'
+                      'We may update this policy from time to time. Significant '
+                      'changes will be notified through the app.\n\n'
+                      'Last updated: June 2026',
+                    ),
                   ),
                   actions: [
                     TextButton(
