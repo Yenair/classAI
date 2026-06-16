@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:classai/core/utils/platform_helper.dart';
@@ -13,6 +14,7 @@ import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/features/dashboard/providers/unresolved_conflicts_provider.dart';
 import 'package:classai/features/settings/providers/theme_provider.dart';
+import 'package:classai/core/services/payment_service.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
@@ -71,7 +73,45 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       if (mounted) {
         setState(() => _isEditorMode = isEditor);
       }
+      _resumePendingPayments();
     });
+  }
+
+  Future<void> _resumePendingPayments() async {
+    try {
+      final db = ref.read(databaseProvider);
+      final pendingPayments = await db.paymentEventsDao.getUnconfirmed();
+      if (pendingPayments.isEmpty || !mounted) return;
+
+      final authData = ref.read(authProvider);
+      final school = authData.currentSchool;
+      final teacher = authData.currentTeacher;
+      if (school == null || teacher == null) return;
+
+      final dio = Dio(BaseOptions(
+        baseUrl: '',
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 30),
+      ));
+      final paymentService = PaymentService(db, dio);
+      final schoolId = school.serverId ?? school.localId.toString();
+
+      for (final payment in pendingPayments) {
+        final confirmed = await paymentService.verifyPayment(
+          payment.transactionReference,
+        );
+        if (!confirmed || !mounted) {
+          continue;
+        }
+        await paymentService.confirmPayment(
+          reference: payment.transactionReference,
+          plan: payment.plan,
+          schoolId: schoolId,
+        );
+        ref.read(authProvider.notifier).refreshSchoolFromDb();
+        break;
+      }
+    } catch (_) {}
   }
 
   @override

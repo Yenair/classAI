@@ -59,6 +59,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   List<SchemeOfWorkData> _schemes = [];
   int? _schemeOfWorkLocalId;
   bool _isFromSchemeOfWork = false;
+  bool _sourceMissing = false;
   List<Lesson> _teacherLessons = [];
   int? _selectedLessonId;
   bool _isManualTopicEntry = true;
@@ -218,6 +219,19 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     }
   }
 
+  Future<void> _refreshSourceMissing() async {
+    if (_schemeOfWorkLocalId == null) {
+      return;
+    }
+    try {
+      final db = ref.read(databaseProvider);
+      final exists = await db.schemeOfWorkDao.getById(_schemeOfWorkLocalId!) != null;
+      if (mounted) {
+        setState(() => _sourceMissing = !exists);
+      }
+    } catch (_) {}
+  }
+
   void _onSchemeOfWorkSelected(SchemeOfWorkData? scheme) {
     if (scheme == null) {
       setState(() {
@@ -226,6 +240,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         _week = 1;
         _selectedLessonId = null;
         _isManualTopicEntry = true;
+        _sourceMissing = false;
       });
       return;
     }
@@ -237,6 +252,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       _week = scheme.weekNumber;
       _selectedLessonId = null;
       _isManualTopicEntry = false;
+      _sourceMissing = false;
     });
   }
 
@@ -253,6 +269,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       _topicController.text = lesson.topic;
       _week = lesson.weekNumber ?? lesson.week;
       _isManualTopicEntry = false;
+      _sourceMissing = false;
     });
   }
 
@@ -293,6 +310,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       }
       if (mounted) setState(() {});
       await _loadTeacherLessons();
+      await _refreshSourceMissing();
     } catch (_) {}
   }
 
@@ -779,10 +797,30 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                               ? AppTheme.spacingMarginTablet
                               : AppTheme.spacingMarginMobile,
                         ),
-                        child: Form(
-                          key: _formKey,
-                          child: isWide
-                              ? Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (_sourceMissing)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 16),
+                                child: Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: cs.errorContainer,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    'The source scheme for this exam no longer exists. '
+                                    'You can still edit the exam, but the original scheme link is missing.',
+                                    style: TextStyle(color: cs.onErrorContainer),
+                                  ),
+                                ),
+                              ),
+                            Form(
+                              key: _formKey,
+                              child: isWide
+                                  ? Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     SizedBox(
@@ -861,7 +899,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                     ),
                                   ],
                                 )
-                              : Column(
+                                  : Column(
                                   children: [
                                     _ConfigPanel(
                                       cs: cs,
@@ -934,6 +972,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                     ),
                                   ],
                                 ),
+                            ),
+                          ],
                         ),
                       );
                     },

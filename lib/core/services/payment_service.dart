@@ -67,6 +67,16 @@ class PaymentService {
   }) async {
     final reference = _uuid.v4();
     final amountKobo = amountNaira * 100; // Paystack expects amount in kobo
+
+    // Persist the pending transaction locally before opening checkout.
+    await _db.paymentEventsDao.insert(
+      transactionReference: reference,
+      confirmedByWebhook: false,
+      amount: amountNaira,
+      plan: plan,
+      createdAt: DateTime.now(),
+    );
+
     final response = await _dio.post(
       '$_baseUrl/transaction/initialize',
       data: {
@@ -77,15 +87,6 @@ class PaymentService {
         'callback_url': 'classai://payment/complete',
       },
       options: _getOptions(),
-    );
-
-    // Save pending payment event locally
-    await _db.paymentEventsDao.insert(
-      transactionReference: reference,
-      confirmedByWebhook: false,
-      amount: amountNaira,
-      plan: plan,
-      createdAt: DateTime.now(),
     );
 
     return PaymentInitResult(

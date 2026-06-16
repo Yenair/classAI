@@ -28,6 +28,53 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   bool _isProcessing = false;
   String _selectedPlan = 'standard';
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _resumePendingPayments();
+    });
+  }
+
+  Future<void> _resumePendingPayments() async {
+    final authData = ref.read(authProvider);
+    final school = authData.currentSchool;
+    final teacher = authData.currentTeacher;
+    if (school == null || teacher == null) return;
+
+    try {
+      final db = ref.read(databaseProvider);
+      final pendingPayments = await db.paymentEventsDao.getUnconfirmed();
+      if (pendingPayments.isEmpty || !mounted) return;
+
+      final dio = Dio(BaseOptions(
+        baseUrl: '',
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 30),
+      ));
+      final paymentService = PaymentService(db, dio);
+      final schoolId = school.serverId ?? school.localId.toString();
+
+      for (final payment in pendingPayments) {
+        final confirmed = await paymentService.verifyPayment(
+          payment.transactionReference,
+        );
+        if (!confirmed || !mounted) {
+          continue;
+        }
+        await _confirmAndShowCode(
+          context,
+          ref,
+          paymentService,
+          payment.transactionReference,
+          payment.plan,
+          schoolId,
+        );
+        break;
+      }
+    } catch (_) {}
+  }
+
   Future<void> _initializePayment(
       BuildContext context, WidgetRef ref, String plan, int amountNaira) async {
     if (_isProcessing) return;

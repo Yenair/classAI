@@ -242,6 +242,17 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     if (_schoolId == null || _teacherId == null) return;
     try {
       final db = ref.read(databaseProvider);
+      final subjectRow = await db.subjectsDao.getByName(_subject);
+      final subjectId = subjectRow?.id;
+      if (subjectId == null) {
+        if (mounted) {
+          showErrorToast(
+            context: context,
+            message: 'Unable to save scheme: subject not found.',
+          );
+        }
+        return;
+      }
       for (var index = 0; index < _weeks.length; index++) {
         final week = _weeks[index];
         final weekNumber = index + 1;
@@ -251,7 +262,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
           SchemeOfWorkCompanion.insert(
             schoolId: Value(_schoolId!),
             teacherId: Value(_teacherId!),
-            subjectId: const Value(0),
+            subjectId: Value(subjectId),
             term: Value(_term),
             weekNumber: Value(weekNumber),
             topic: Value(topicText),
@@ -295,6 +306,10 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
   Future<void> _adminApprove(int schemeWeekId) async {
     try {
       final db = ref.read(databaseProvider);
+      if (await _hasLessonOrExamReferences(db, schemeWeekId)) {
+        await _showReferencedSchemeWarning();
+        return;
+      }
       final adminEdit = _adminEditControllers[schemeWeekId]?.text;
       if (adminEdit != null && adminEdit.isNotEmpty) {
         await db.schemeOfWorkDao.updateAdminEditedTopic(schemeWeekId, adminEdit);
@@ -314,6 +329,10 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
   Future<void> _adminReject(int schemeWeekId) async {
     try {
       final db = ref.read(databaseProvider);
+      if (await _hasLessonOrExamReferences(db, schemeWeekId)) {
+        await _showReferencedSchemeWarning();
+        return;
+      }
       await db.schemeOfWorkDao.updateStatus(schemeWeekId, 'rejected',
           adminComment: 'Rejected by admin');
       await _loadExistingSow();
@@ -332,6 +351,41 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       (r) => (r.subjectId.toString() == _subject) || (r.term == _term),
     ).toList();
     return existing;
+  }
+
+  Future<bool> _hasLessonOrExamReferences(dynamic db, int schemeId) async {
+    final schemeIdStr = schemeId.toString();
+    final lessonRefs = await (db.select(db.lessons)
+          ..where((t) => t.schemeOfWorkId.equals(schemeIdStr))
+          ..where((t) => t.isDeleted.equals(false)))
+        .get();
+    if (lessonRefs.isNotEmpty) return true;
+
+    final examRefs = await (db.select(db.exams)
+          ..where((t) => t.schemeOfWorkId.equals(schemeIdStr))
+          ..where((t) => t.isDeleted.equals(false)))
+        .get();
+    return examRefs.isNotEmpty;
+  }
+
+  Future<void> _showReferencedSchemeWarning() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Scheme in Use'),
+        content: const Text(
+          'This approved scheme is already linked to lessons or exams. '
+          'Please remove those references before editing or deleting it.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _disposeControllers() {

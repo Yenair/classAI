@@ -71,6 +71,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   int? _schemeOfWorkLocalId;
   bool _isFromSchemeOfWork = false;
   bool _isManualTopicEntry = true;
+  bool _sourceMissing = false;
 
   // Generated content (editable after generation)
   String _objectivesText = '';
@@ -192,6 +193,15 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       final db = ref.read(databaseProvider);
       final lesson = await db.lessonsDao.getById(id);
       if (lesson != null && mounted) {
+        bool sourceMissing = false;
+        if (lesson.schemeOfWorkId != null) {
+          final schemeId = int.tryParse(lesson.schemeOfWorkId!);
+          if (schemeId != null) {
+            sourceMissing = await db.schemeOfWorkDao.getById(schemeId) == null;
+          } else {
+            sourceMissing = true;
+          }
+        }
         setState(() {
           _topicController.text = lesson.topic;
           _lessonStatus = lesson.status;
@@ -205,6 +215,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             _week = lesson.weekNumber!;
           }
           _isFromSchemeOfWork = _schemeOfWorkLocalId != null;
+          _sourceMissing = sourceMissing;
         });
       }
     } catch (_) {
@@ -251,6 +262,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         }
       }
       if (mounted) setState(() {});
+      await _refreshSourceMissing();
     } catch (_) {}
   }
 
@@ -634,6 +646,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       _schemeOfWorkLocalId = scheme.id;
       _isFromSchemeOfWork = true;
       _isManualTopicEntry = false;
+      _sourceMissing = false;
       _week = scheme.weekNumber;
       _topicController.text = displayTopic;
     });
@@ -661,11 +674,23 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     }
   }
 
+  Future<void> _refreshSourceMissing() async {
+    if (_schemeOfWorkLocalId == null) return;
+    try {
+      final db = ref.read(databaseProvider);
+      final exists = await db.schemeOfWorkDao.getById(_schemeOfWorkLocalId!) != null;
+      if (mounted) {
+        setState(() => _sourceMissing = !exists);
+      }
+    } catch (_) {}
+  }
+
   void _onManualTopicSelected() {
     setState(() {
       _isManualTopicEntry = true;
       _isFromSchemeOfWork = false;
       _schemeOfWorkLocalId = null;
+      _sourceMissing = false;
     });
   }
 
@@ -764,6 +789,23 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                             ),
 
                             // ── Two-column layout ───────────────────
+                            if (_sourceMissing)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                                child: Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: cs.errorContainer,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    'The source scheme for this lesson no longer exists. '
+                                    'You can still edit the lesson, but the original scheme link is missing.',
+                                    style: TextStyle(color: cs.onErrorContainer),
+                                  ),
+                                ),
+                              ),
                             Padding(
                               padding: EdgeInsets.all(
                                 isWide

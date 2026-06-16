@@ -35,8 +35,8 @@ class BulkOperationsService {
     for (final teacherId in teacherIds) {
       try {
         final code = await authService.generateTeacherRecoveryCode(
-          adminId.toString(),
           teacherId.toString(),
+          adminId.toString(),
         );
         results[teacherId] = code;
       } catch (e) {

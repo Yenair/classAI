@@ -16,12 +16,22 @@ const examMergeStrategies = {
   'markingScheme': MergeStrategy.lwwByUpdateCounter,
 };
 
+const schemeOfWorkMergeStrategies = {
+  'topic': MergeStrategy.keepRemote,
+  'adminEditedTopic': MergeStrategy.keepRemote,
+  'objectives': MergeStrategy.lwwByUpdateCounter,
+  'status': MergeStrategy.keepRemote,
+  'adminComment': MergeStrategy.keepRemote,
+};
+
 Map<String, MergeStrategy> mergeStrategiesForTable(String tableName) {
   switch (tableName) {
     case 'lessons':
       return lessonMergeStrategies;
     case 'exams':
       return examMergeStrategies;
+    case 'scheme_of_work':
+      return schemeOfWorkMergeStrategies;
     default:
       return const {};
   }

@@ -27,6 +27,18 @@ class PaymentEventsDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  Future<List<PaymentEvent>> getUnconfirmed() {
+    return (select(paymentEvents)
+          ..where((t) => t.confirmedByWebhook.equals(false))
+          ..orderBy([
+            (t) => OrderingTerm(
+                  expression: t.createdAt,
+                  mode: OrderingMode.desc,
+                ),
+          ]))
+        .get();
+  }
+
   Future<void> markConfirmed(String reference) async {
     await (update(paymentEvents)
           ..where((t) => t.transactionReference.equals(reference)))
