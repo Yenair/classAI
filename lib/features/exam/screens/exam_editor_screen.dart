@@ -36,6 +36,7 @@ class ExamEditorScreen extends ConsumerStatefulWidget {
 class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   final _formKey = GlobalKey<FormState>();
   final _topicController = TextEditingController();
+  int _week = 1;
   String _subject = 'Mathematics';
   String _classLevel = 'JSS 1';
   String _difficulty = 'medium';
@@ -58,6 +59,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   List<SchemeOfWorkData> _schemes = [];
   int? _schemeOfWorkLocalId;
   bool _isFromSchemeOfWork = false;
+  List<Lesson> _teacherLessons = [];
+  int? _selectedLessonId;
+  bool _isManualTopicEntry = true;
 
   // Multi-select question types and their counts
   final Set<String> _selectedQuestionTypes = {'MCQ', 'Theory'};
@@ -119,7 +123,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       _loadCreditBalance();
       _loadAuthInfo();
       _loadSubjects();
-      _loadSchemes();
+      _loadSchemesForContext();
+      _loadTeacherLessons();
     });
   }
 
@@ -175,7 +180,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     }
   }
 
-  Future<void> _loadSchemes() async {
+  Future<void> _loadSchemesForContext() async {
     try {
       final db = ref.read(databaseProvider);
       final subjectRow = await db.subjectsDao.getByName(_subject);
@@ -191,24 +196,24 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     }
   }
 
-  Future<void> _loadSchemesForSubject(String subject) async {
+  Future<void> _loadTeacherLessons() async {
     try {
       final db = ref.read(databaseProvider);
-      final subjectRow = await db.subjectsDao.getByName(subject);
-      final subjectId = subjectRow?.id;
-      if (subjectId != null) {
-        final schemes = await db.schemeOfWorkDao.getApprovedBySubject(subjectId);
+      if (_teacherId == null) {
         if (mounted) {
-          setState(() => _schemes = schemes);
+          setState(() => _teacherLessons = []);
         }
-      } else {
-        if (mounted) {
-          setState(() => _schemes = []);
-        }
+        return;
+      }
+      final lessons = await db.lessonsDao.getAll();
+      if (mounted) {
+        setState(() {
+          _teacherLessons = lessons.where((lesson) => lesson.teacherServerId == _teacherId).toList();
+        });
       }
     } catch (_) {
       if (mounted) {
-        setState(() => _schemes = []);
+        setState(() => _teacherLessons = []);
       }
     }
   }
@@ -218,6 +223,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       setState(() {
         _schemeOfWorkLocalId = null;
         _isFromSchemeOfWork = false;
+        _week = 1;
+        _selectedLessonId = null;
+        _isManualTopicEntry = true;
       });
       return;
     }
@@ -226,6 +234,25 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       _schemeOfWorkLocalId = scheme.id;
       _isFromSchemeOfWork = true;
       _topicController.text = displayTopic;
+      _week = scheme.weekNumber;
+      _selectedLessonId = null;
+      _isManualTopicEntry = false;
+    });
+  }
+
+  void _onLessonSelected(Lesson? lesson) {
+    if (lesson == null) {
+      setState(() {
+        _selectedLessonId = null;
+        _isManualTopicEntry = true;
+      });
+      return;
+    }
+    setState(() {
+      _selectedLessonId = lesson.id;
+      _topicController.text = lesson.topic;
+      _week = lesson.weekNumber ?? lesson.week;
+      _isManualTopicEntry = false;
     });
   }
 
@@ -265,6 +292,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         }
       }
       if (mounted) setState(() {});
+      await _loadTeacherLessons();
     } catch (_) {}
   }
 
@@ -663,6 +691,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       _topicController.clear();
       _subject = 'Mathematics';
       _classLevel = 'JSS 1';
+      _week = 1;
       _difficulty = 'medium';
       _mcqs = [];
       _theoryQuestions = [];
@@ -676,6 +705,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       _hasGenerated = false;
       _schemeOfWorkLocalId = null;
       _isFromSchemeOfWork = false;
+      _selectedLessonId = null;
+      _isManualTopicEntry = true;
     });
   }
 
@@ -761,6 +792,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                           theme: theme,
                                           subject: _subject,
                                           classLevel: _classLevel,
+                                          week: _week,
                                           topicController: _topicController,
                                           selectedQuestionTypes:
                                               _selectedQuestionTypes,
@@ -773,10 +805,15 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                           difficulties: _difficulties,
                                           onSubjectChanged: (v) => setState(() {
                                             _subject = v;
-                                            _loadSchemesForSubject(v);
+                                            _selectedLessonId = null;
+                                            _isManualTopicEntry = true;
+                                            _loadSchemesForContext();
                                           }),
-                                          onClassChanged: (v) => setState(
-                                              () => _classLevel = v),
+                                          onClassChanged: (v) => setState(() {
+                                              _classLevel = v;
+                                              _selectedLessonId = null;
+                                              _isManualTopicEntry = true;
+                                            }),
                                           onDifficultyChanged: (v) => setState(
                                               () => _difficulty = v),
                                           onTypeToggled: (type) => setState(() {
@@ -791,10 +828,16 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                           }),
                                           onGenerate: _handleGenerate,
                                           onAddNewSubject: _showAddSubjectDialog,
+                                          teacherLessons: _teacherLessons,
                                           schemes: _schemes,
                                           schemeOfWorkLocalId: _schemeOfWorkLocalId,
                                           isFromSchemeOfWork: _isFromSchemeOfWork,
+                                          isManualTopicEntry: _isManualTopicEntry,
+                                          selectedLessonId: _selectedLessonId,
+                                          onWeekChanged: (v) => setState(() => _week = v),
+                                          onLessonSelected: _onLessonSelected,
                                           onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
+                                          onManualTopicSelected: () => _onLessonSelected(null),
                                         ),
                                     ),
                                     const SizedBox(width: 24),
@@ -825,6 +868,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                       theme: theme,
                                       subject: _subject,
                                       classLevel: _classLevel,
+                                      week: _week,
                                       topicController: _topicController,
                                       selectedQuestionTypes:
                                           _selectedQuestionTypes,
@@ -837,10 +881,15 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                       difficulties: _difficulties,
                                       onSubjectChanged: (v) => setState(() {
                                           _subject = v;
-                                          _loadSchemesForSubject(v);
+                                          _selectedLessonId = null;
+                                          _isManualTopicEntry = true;
+                                          _loadSchemesForContext();
                                         }),
-                                      onClassChanged: (v) => setState(
-                                          () => _classLevel = v),
+                                      onClassChanged: (v) => setState(() {
+                                        _classLevel = v;
+                                        _selectedLessonId = null;
+                                        _isManualTopicEntry = true;
+                                      }),
                                       onDifficultyChanged: (v) => setState(
                                           () => _difficulty = v),
                                       onTypeToggled: (type) => setState(() {
@@ -855,10 +904,16 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                       }),
                                       onGenerate: _handleGenerate,
                                       onAddNewSubject: _showAddSubjectDialog,
+                                      teacherLessons: _teacherLessons,
                                       schemes: _schemes,
                                       schemeOfWorkLocalId: _schemeOfWorkLocalId,
                                       isFromSchemeOfWork: _isFromSchemeOfWork,
+                                      isManualTopicEntry: _isManualTopicEntry,
+                                      selectedLessonId: _selectedLessonId,
+                                      onWeekChanged: (v) => setState(() => _week = v),
+                                      onLessonSelected: _onLessonSelected,
                                       onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
+                                      onManualTopicSelected: () => _onLessonSelected(null),
                                     ),
                                     const SizedBox(height: 24),
                                     _PreviewPanel(
@@ -1223,6 +1278,7 @@ class _ConfigPanel extends StatelessWidget {
   final ThemeData theme;
   final String subject;
   final String classLevel;
+  final int week;
   final TextEditingController topicController;
   final Set<String> selectedQuestionTypes;
   final Map<String, int> questionCounts;
@@ -1239,16 +1295,23 @@ class _ConfigPanel extends StatelessWidget {
   final void Function(String, int) onCountChanged;
   final VoidCallback onGenerate;
   final VoidCallback? onAddNewSubject;
+  final List<Lesson> teacherLessons;
   final List<SchemeOfWorkData> schemes;
   final int? schemeOfWorkLocalId;
   final bool isFromSchemeOfWork;
+  final bool isManualTopicEntry;
+  final int? selectedLessonId;
+  final ValueChanged<int> onWeekChanged;
+  final ValueChanged<Lesson?> onLessonSelected;
   final ValueChanged<SchemeOfWorkData?> onSchemeOfWorkSelected;
+  final VoidCallback onManualTopicSelected;
 
   const _ConfigPanel({
     required this.cs,
     required this.theme,
     required this.subject,
     required this.classLevel,
+    required this.week,
     required this.topicController,
     required this.selectedQuestionTypes,
     required this.questionCounts,
@@ -1265,16 +1328,26 @@ class _ConfigPanel extends StatelessWidget {
     required this.onCountChanged,
     required this.onGenerate,
     this.onAddNewSubject,
+    required this.teacherLessons,
     required this.schemes,
     required this.schemeOfWorkLocalId,
     required this.isFromSchemeOfWork,
+    required this.isManualTopicEntry,
+    required this.selectedLessonId,
+    required this.onWeekChanged,
+    required this.onLessonSelected,
     required this.onSchemeOfWorkSelected,
+    required this.onManualTopicSelected,
   });
 
   @override
   Widget build(BuildContext context) {
-    final selectedScheme = isFromSchemeOfWork && schemeOfWorkLocalId != null
-        ? schemes.where((s) => s.id == schemeOfWorkLocalId).firstOrNull
+    final filteredLessons = teacherLessons
+        .where((lesson) => lesson.subject == subject)
+        .where((lesson) => lesson.classLevel == classLevel)
+        .toList();
+    final selectedLesson = selectedLessonId != null
+        ? filteredLessons.where((lesson) => lesson.id == selectedLessonId).firstOrNull
         : null;
     return Column(
       children: [
@@ -1304,59 +1377,78 @@ class _ConfigPanel extends StatelessWidget {
                 child: Divider(height: 1),
               ),
               const SizedBox(height: 8),
-              // Scheme of Work dropdown
-              _FieldLabel(theme: theme, cs: cs, label: 'Scheme of Work'),
+              // Lesson topics dropdown
+              _FieldLabel(theme: theme, cs: cs, label: 'Topics'),
               const SizedBox(height: 4),
-              SizedBox(
-                height: AppTheme.touchTarget,
-                child: DropdownButtonFormField<int>(
-                  initialValue: selectedScheme?.id,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    hintText: 'Select a scheme…',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                      borderSide: BorderSide(color: cs.outlineVariant),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                      borderSide: BorderSide(color: cs.outlineVariant),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                    filled: true,
-                    fillColor: cs.surface,
+              if (teacherLessons.isEmpty)
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => context.go('/lesson-editor'),
+                    child: const Text('No lessons yet. Generate a lesson first.'),
                   ),
-                  items: [
-                    const DropdownMenuItem<int>(
-                      value: null,
-                      child: Text('None (manual topic)'),
+                )
+              else
+                SizedBox(
+                  height: AppTheme.touchTarget,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: isManualTopicEntry
+                        ? '__manual__'
+                        : selectedLesson?.id.toString(),
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      hintText: filteredLessons.isEmpty
+                          ? 'No matching lessons'
+                          : 'Select a lesson topic...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                        borderSide: BorderSide(color: cs.outlineVariant),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                        borderSide: BorderSide(color: cs.outlineVariant),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                      filled: true,
+                      fillColor: cs.surface,
                     ),
-                    ...schemes.map((s) {
-                      final displayTopic = s.adminEditedTopic ?? s.topic;
-                      return DropdownMenuItem<int>(
-                        value: s.id,
-                        child: Text('Week ${s.weekNumber}: $displayTopic'),
-                      );
-                    }),
-                  ],
-                  onChanged: (value) {
-                    if (value == null) {
-                      onSchemeOfWorkSelected(null);
-                    } else {
-                      final scheme = schemes.where((s) => s.id == value).firstOrNull;
-                      onSchemeOfWorkSelected(scheme);
-                    }
-                  },
+                    items: [
+                      const DropdownMenuItem<String>(
+                        value: '__manual__',
+                        child: Text('✏️ Write a new topic'),
+                      ),
+                      ...filteredLessons.map((lesson) {
+                        final lessonWeek = lesson.weekNumber ?? lesson.week;
+                        return DropdownMenuItem<String>(
+                          value: lesson.id.toString(),
+                          child: Text('Week $lessonWeek: ${lesson.topic}'),
+                        );
+                      }),
+                    ],
+                    onChanged: (value) {
+                      if (value == null || value == '__manual__') {
+                        onManualTopicSelected();
+                        return;
+                      }
+                      final lesson = filteredLessons
+                          .where((item) => item.id.toString() == value)
+                          .firstOrNull;
+                      if (lesson == null) {
+                        onManualTopicSelected();
+                        return;
+                      }
+                      onLessonSelected(lesson);
+                    },
+                  ),
                 ),
-              ),
               const SizedBox(height: 16),
-              // Topic
               _FieldLabel(theme: theme, cs: cs, label: 'Topic'),
               const SizedBox(height: 4),
               SizedBox(
                 height: AppTheme.touchTarget,
                 child: TextFormField(
                   controller: topicController,
+                  readOnly: !isManualTopicEntry,
                   decoration: InputDecoration(
                     hintText: 'e.g. Advanced Mathematics: Calculus',
                     border: OutlineInputBorder(
@@ -1376,6 +1468,39 @@ class _ConfigPanel extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
+              _FieldLabel(theme: theme, cs: cs, label: 'Week'),
+              const SizedBox(height: 4),
+              SizedBox(
+                height: AppTheme.touchTarget,
+                width: 120,
+                child: TextFormField(
+                  key: ValueKey(week),
+                  initialValue: week.toString(),
+                  readOnly: !isManualTopicEntry,
+                  keyboardType: TextInputType.number,
+                  onChanged: isManualTopicEntry
+                      ? (value) {
+                          final parsed = int.tryParse(value);
+                          if (parsed != null) {
+                            onWeekChanged(parsed);
+                          }
+                        }
+                      : null,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                      borderSide: BorderSide(color: cs.outlineVariant),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                      borderSide: BorderSide(color: cs.outlineVariant),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                    filled: true,
+                    fillColor: cs.surface,
+                  ),
+                ),
+              ),
               // Grade Level + Duration row
               Row(
                 children: [

@@ -70,6 +70,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   List<SchemeOfWorkData> _schemes = [];
   int? _schemeOfWorkLocalId;
   bool _isFromSchemeOfWork = false;
+  bool _isManualTopicEntry = true;
 
   // Generated content (editable after generation)
   String _objectivesText = '';
@@ -126,7 +127,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       _loadCreditBalance();
       _loadAuthInfo();
       _loadSubjects();
-      _loadSchemes();
+      _loadSchemesForContext();
       if (_lessonId != null) {
         _loadLesson(_lessonId!);
       }
@@ -183,22 +184,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       }
     } catch (_) {
       // Fall back to hardcoded _subjects
-    }
-  }
-
-  Future<void> _loadSchemes() async {
-    try {
-      final db = ref.read(databaseProvider);
-      final subjectRow = await db.subjectsDao.getByName(_subject);
-      final subjectId = subjectRow?.id;
-      if (subjectId != null) {
-        final schemes = await db.schemeOfWorkDao.getApprovedBySubject(subjectId);
-        if (mounted) {
-          setState(() => _schemes = schemes);
-        }
-      }
-    } catch (_) {
-      // Silently fail
     }
   }
 
@@ -640,6 +625,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       setState(() {
         _schemeOfWorkLocalId = null;
         _isFromSchemeOfWork = false;
+        _isManualTopicEntry = true;
       });
       return;
     }
@@ -647,15 +633,16 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     setState(() {
       _schemeOfWorkLocalId = scheme.id;
       _isFromSchemeOfWork = true;
+      _isManualTopicEntry = false;
       _week = scheme.weekNumber;
       _topicController.text = displayTopic;
     });
   }
 
-  Future<void> _loadSchemesForSubject(String subject) async {
+  Future<void> _loadSchemesForContext() async {
     try {
       final db = ref.read(databaseProvider);
-      final subjectRow = await db.subjectsDao.getByName(subject);
+      final subjectRow = await db.subjectsDao.getByName(_subject);
       final subjectId = subjectRow?.id;
       if (subjectId != null) {
         final schemes = await db.schemeOfWorkDao.getApprovedBySubject(subjectId);
@@ -672,6 +659,14 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         setState(() => _schemes = []);
       }
     }
+  }
+
+  void _onManualTopicSelected() {
+    setState(() {
+      _isManualTopicEntry = true;
+      _isFromSchemeOfWork = false;
+      _schemeOfWorkLocalId = null;
+    });
   }
 
   void _discard() {
@@ -692,6 +687,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       _hasGenerated = false;
       _schemeOfWorkLocalId = null;
       _isFromSchemeOfWork = false;
+      _isManualTopicEntry = true;
     });
   }
 
@@ -803,13 +799,13 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                                   topicController: _topicController,
                                                   onSubjectChanged: (v) {
                                                     setState(() => _subject = v);
-                                                    _loadSchemesForSubject(v);
+                                                    _loadSchemesForContext();
                                                   },
-                                                  onClassChanged: (v) =>
-                                                      setState(() =>
-                                                          _classLevel = v),
-                                                  onWeekChanged: (v) =>
-                                                      setState(() => _week = v),
+                                                  onClassChanged: (v) {
+                                                    setState(() => _classLevel = v);
+                                                    _loadSchemesForContext();
+                                                  },
+                                                  onWeekChanged: (v) => setState(() => _week = v),
                                                   onDifficultyChanged: (v) =>
                                                       setState(() =>
                                                           _difficulty = v),
@@ -831,7 +827,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                                   schemes: _schemes,
                                                   schemeOfWorkLocalId: _schemeOfWorkLocalId,
                                                   isFromSchemeOfWork: _isFromSchemeOfWork,
+                                                  isManualTopicEntry: _isManualTopicEntry,
                                                   onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
+                                                  onManualTopicSelected: _onManualTopicSelected,
                                                 ),
                                           ),
                                           const SizedBox(width: 24),
@@ -897,12 +895,13 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                             topicController: _topicController,
                                             onSubjectChanged: (v) {
                                               setState(() => _subject = v);
-                                              _loadSchemesForSubject(v);
+                                              _loadSchemesForContext();
                                             },
-                                            onClassChanged: (v) => setState(
-                                                () => _classLevel = v),
-                                            onWeekChanged: (v) =>
-                                                setState(() => _week = v),
+                                            onClassChanged: (v) {
+                                              setState(() => _classLevel = v);
+                                              _loadSchemesForContext();
+                                            },
+                                            onWeekChanged: (v) => setState(() => _week = v),
                                             onDifficultyChanged: (v) =>
                                                 setState(
                                                     () => _difficulty = v),
@@ -924,7 +923,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                             schemes: _schemes,
                                             schemeOfWorkLocalId: _schemeOfWorkLocalId,
                                             isFromSchemeOfWork: _isFromSchemeOfWork,
+                                            isManualTopicEntry: _isManualTopicEntry,
                                             onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
+                                            onManualTopicSelected: _onManualTopicSelected,
                                           ),
                                           const SizedBox(height: 24),
                                           _PreviewColumn(
@@ -1397,7 +1398,9 @@ class _ConfigColumn extends StatelessWidget {
   final List<SchemeOfWorkData> schemes;
   final int? schemeOfWorkLocalId;
   final bool isFromSchemeOfWork;
+  final bool isManualTopicEntry;
   final ValueChanged<SchemeOfWorkData?> onSchemeOfWorkSelected;
+  final VoidCallback onManualTopicSelected;
 
   const _ConfigColumn({
     required this.cs,
@@ -1426,7 +1429,9 @@ class _ConfigColumn extends StatelessWidget {
     required this.schemes,
     required this.schemeOfWorkLocalId,
     required this.isFromSchemeOfWork,
+    required this.isManualTopicEntry,
     required this.onSchemeOfWorkSelected,
+    required this.onManualTopicSelected,
   });
 
   @override
@@ -1469,12 +1474,12 @@ class _ConfigColumn extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 16),
-              // Scheme of Work dropdown
+              // Topics dropdown
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Scheme of Work',
+                    'Topics',
                     style: theme.textTheme.labelMedium?.copyWith(
                       color: cs.onSurfaceVariant,
                     ),
@@ -1482,8 +1487,10 @@ class _ConfigColumn extends StatelessWidget {
                   const SizedBox(height: 4),
                   SizedBox(
                     height: AppTheme.touchTarget,
-                    child: DropdownButtonFormField<int>(
-                      initialValue: schemeOfWorkLocalId,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: isManualTopicEntry
+                          ? '__manual__'
+                          : schemeOfWorkLocalId?.toString(),
                       decoration: InputDecoration(
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
@@ -1492,19 +1499,28 @@ class _ConfigColumn extends StatelessWidget {
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                       ),
                       hint: Text(
-                        'Select scheme…',
+                        schemes.isEmpty ? 'No approved scheme of work' : 'Select topic…',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: cs.outlineVariant,
                         ),
                       ),
                       isExpanded: true,
                       items: [
+                        DropdownMenuItem<String>(
+                          value: '__manual__',
+                          child: Text(
+                            '✏️ Write a new topic',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: cs.onSurface,
+                            ),
+                          ),
+                        ),
                         ...schemes.map((s) {
                           final displayTopic = s.adminEditedTopic ?? s.topic;
-                          return DropdownMenuItem<int>(
-                            value: s.id,
+                          return DropdownMenuItem<String>(
+                            value: s.id.toString(),
                             child: Text(
-                              displayTopic,
+                              'Week ${s.weekNumber}: $displayTopic',
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 color: cs.onSurface,
                               ),
@@ -1512,15 +1528,26 @@ class _ConfigColumn extends StatelessWidget {
                             ),
                           );
                         }),
+                        if (schemes.isEmpty)
+                          DropdownMenuItem<String>(
+                            value: '__empty__',
+                            enabled: false,
+                            child: Text(
+                              'No approved scheme of work',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: cs.outlineVariant,
+                              ),
+                            ),
+                          ),
                       ],
                       onChanged: (id) {
-                        if (id == null) {
-                          onSchemeOfWorkSelected(null);
-                        } else {
-                          final scheme = schemes.where((s) => s.id == id).firstOrNull;
-                          if (scheme != null) {
-                            onSchemeOfWorkSelected(scheme);
-                          }
+                        if (id == null || id == '__manual__' || id == '__empty__') {
+                          onManualTopicSelected();
+                          return;
+                        }
+                        final scheme = schemes.where((s) => s.id.toString() == id).firstOrNull;
+                        if (scheme != null) {
+                          onSchemeOfWorkSelected(scheme);
                         }
                       },
                     ),
@@ -1538,6 +1565,7 @@ class _ConfigColumn extends StatelessWidget {
                       label: 'Topic',
                       controller: topicController,
                       initialValue: null,
+                      readOnly: !isManualTopicEntry,
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -1547,7 +1575,7 @@ class _ConfigColumn extends StatelessWidget {
                       cs: cs,
                       theme: theme,
                       week: week,
-                      onChanged: onWeekChanged,
+                      onChanged: isManualTopicEntry ? onWeekChanged : (_) {},
                     ),
                   ),
                 ],
@@ -2422,6 +2450,7 @@ class _StyledTextField extends StatelessWidget {
   final String label;
   final TextEditingController? controller;
   final String? initialValue;
+  final bool readOnly;
 
   const _StyledTextField({
     required this.cs,
@@ -2429,6 +2458,7 @@ class _StyledTextField extends StatelessWidget {
     required this.label,
     this.controller,
     this.initialValue,
+    this.readOnly = false,
   });
 
   @override
@@ -2447,6 +2477,7 @@ class _StyledTextField extends StatelessWidget {
           height: AppTheme.touchTarget,
           child: TextField(
             controller: controller,
+            readOnly: readOnly,
             decoration: InputDecoration(
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(AppTheme.radiusLg),
