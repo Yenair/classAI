@@ -37,6 +37,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
   String _teacherName = 'Teacher';
   String _schoolName = 'School';
   String _subscriptionTier = 'free';
+  final Map<int, String> _teacherNamesById = {};
 
   // Generated SoW data: each entry is {week, topic, objectives}
   List<Map<String, dynamic>> _weeks = [];
@@ -90,6 +91,9 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
         final teacher = teachers.first;
         _teacherId = teacher.localId;
         _teacherName = teacher.teacherName;
+      }
+      for (final teacher in teachers) {
+        _teacherNamesById[teacher.localId] = teacher.teacherName;
       }
       await _loadExistingSow();
       if (mounted) setState(() {});
@@ -760,6 +764,8 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
               ],
             ),
             const SizedBox(height: 8),
+            Text('Teacher: ${_teacherNamesById[record.teacherId] ?? 'Teacher ${record.teacherId}'}', style: theme.textTheme.bodyMedium),
+            const SizedBox(height: 4),
             Text('Teacher Topic: ${record.topic}', style: theme.textTheme.bodyMedium),
             if (record.adminEditedTopic != null && record.adminEditedTopic!.isNotEmpty)
               Padding(

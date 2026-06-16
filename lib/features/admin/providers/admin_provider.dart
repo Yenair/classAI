@@ -21,6 +21,9 @@ class TeacherAdminData {
   final String? schoolSubscriptionTier;
   final int generatedCount;
   final int completedCount;
+  final String schemeStatus;
+  final int completedWeeks;
+  final int totalWeeks;
 
   const TeacherAdminData({
     required this.localId,
@@ -36,6 +39,9 @@ class TeacherAdminData {
     this.schoolSubscriptionTier,
     this.generatedCount = 0,
     this.completedCount = 0,
+    this.schemeStatus = 'none',
+    this.completedWeeks = 0,
+    this.totalWeeks = 0,
   });
 
   /// Status indicator color:
@@ -190,6 +196,7 @@ class AdminDashboardNotifier extends Notifier<AdminDashboardData> {
         final completedCount = t.serverId != null
             ? await _db.lessonsDao.countCompletedByTeacher(t.serverId!)
             : 0;
+        final schemeStats = await _loadSchemeProgressForTeacher(t);
 
         teacherDataList.add(TeacherAdminData(
           localId: t.localId,
@@ -204,6 +211,9 @@ class AdminDashboardNotifier extends Notifier<AdminDashboardData> {
           conflictCount: totalConflictCount,
           generatedCount: generatedCount,
           completedCount: completedCount,
+          schemeStatus: schemeStats.schemeStatus,
+          completedWeeks: schemeStats.completedWeeks,
+          totalWeeks: schemeStats.totalWeeks,
         ));
       }
 
@@ -238,6 +248,66 @@ class AdminDashboardNotifier extends Notifier<AdminDashboardData> {
     }
   }
 
+  Future<_SchemeProgress> _loadSchemeProgressForTeacher(Teacher teacher) async {
+    final teacherSchemes = await (_db.select(_db.schemeOfWork)
+          ..where((s) => s.teacherId.equals(teacher.localId))
+          ..orderBy([
+            (s) => OrderingTerm(
+                  expression: s.createdAt,
+                  mode: OrderingMode.desc,
+                )
+          ]))
+        .get();
+
+    if (teacherSchemes.isEmpty) {
+      return const _SchemeProgress.none();
+    }
+
+    final latestScheme = teacherSchemes.first;
+    if (latestScheme.status != 'approved') {
+      return _SchemeProgress(
+        schemeStatus: latestScheme.status,
+        completedWeeks: 0,
+        totalWeeks: 0,
+      );
+    }
+
+    final approvedSchemes = teacherSchemes
+        .where((scheme) =>
+            scheme.status == 'approved' &&
+            scheme.subjectId == latestScheme.subjectId &&
+            scheme.term == latestScheme.term)
+        .toList();
+    final totalWeeks = approvedSchemes.map((scheme) => scheme.weekNumber).toSet().length;
+
+    if (teacher.serverId == null || totalWeeks == 0) {
+      return _SchemeProgress(
+        schemeStatus: 'approved',
+        completedWeeks: 0,
+        totalWeeks: totalWeeks,
+      );
+    }
+
+    final approvedWeekNumbers =
+        approvedSchemes.map((scheme) => scheme.weekNumber).toSet();
+    final completedLessons = await (_db.select(_db.lessons)
+          ..where((lesson) =>
+              lesson.teacherServerId.equals(teacher.serverId!) &
+              lesson.status.equals('completed')))
+        .get();
+    final completedWeeks = completedLessons
+        .map((lesson) => lesson.week)
+        .where(approvedWeekNumbers.contains)
+        .toSet()
+        .length;
+
+    return _SchemeProgress(
+      schemeStatus: 'approved',
+      completedWeeks: completedWeeks,
+      totalWeeks: totalWeeks,
+    );
+  }
+
   /// Deactivate a teacher account.
   Future<void> deactivateTeacher(int localId) async {
     await (_db.update(_db.teachers)..where((t) => t.localId.equals(localId)))
@@ -255,6 +325,23 @@ class AdminDashboardNotifier extends Notifier<AdminDashboardData> {
     ));
     await refresh();
   }
+}
+
+class _SchemeProgress {
+  final String schemeStatus;
+  final int completedWeeks;
+  final int totalWeeks;
+
+  const _SchemeProgress({
+    required this.schemeStatus,
+    required this.completedWeeks,
+    required this.totalWeeks,
+  });
+
+  const _SchemeProgress.none()
+      : schemeStatus = 'none',
+        completedWeeks = 0,
+        totalWeeks = 0;
 }
 
 final adminDashboardProvider =

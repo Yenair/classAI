@@ -1302,12 +1302,18 @@ class _TeacherManagementTab extends ConsumerStatefulWidget {
 
 class _TeacherManagementTabState extends ConsumerState<_TeacherManagementTab> {
   String _filterStatus = 'all';
+  bool _showOnlyNoScheme = false;
 
   List<TeacherAdminData> get _filteredTeachers {
-    if (_filterStatus == 'all') return widget.teachers;
-    return widget.teachers
-        .where((t) => t.statusColor == _filterStatus)
-        .toList();
+    return widget.teachers.where((t) {
+      if (_filterStatus != 'all' && t.statusColor != _filterStatus) {
+        return false;
+      }
+      if (_showOnlyNoScheme && t.schemeStatus != 'none') {
+        return false;
+      }
+      return true;
+    }).toList();
   }
 
   String get _filterLabel {
@@ -1473,6 +1479,21 @@ class _TeacherManagementTabState extends ConsumerState<_TeacherManagementTab> {
                 ),
                 const SizedBox(height: 24),
 
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    FilterChip(
+                      label: const Text('No Scheme'),
+                      selected: _showOnlyNoScheme,
+                      onSelected: (value) {
+                        setState(() => _showOnlyNoScheme = value);
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
                 // Filtered teacher cards list
                 ..._filteredTeachers.map((teacher) {
                   return _TeacherCardWidget(
@@ -1612,6 +1633,12 @@ class _TeacherCardWidget extends StatelessWidget {
     final initials = _getInitials(teacher.teacherName);
     final statusColor = _statusColor(teacher.statusColor);
     final isError = teacher.statusColor == 'red';
+    final schemeColor = _schemeStatusColor(teacher.schemeStatus);
+    final schemeLabel = _schemeStatusLabel(teacher.schemeStatus);
+    final hasSchemeProgress = teacher.totalWeeks > 0;
+    final progressValue = hasSchemeProgress
+        ? (teacher.completedWeeks / teacher.totalWeeks).clamp(0.0, 1.0)
+        : 0.0;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1624,8 +1651,8 @@ class _TeacherCardWidget extends StatelessWidget {
         ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Avatar + status dot
           Stack(
             children: [
               Container(
@@ -1661,8 +1688,6 @@ class _TeacherCardWidget extends StatelessWidget {
             ],
           ),
           const SizedBox(width: 16),
-
-          // Name + info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1676,26 +1701,73 @@ class _TeacherCardWidget extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${teacher.email} \u00b7 ${teacher.role}'
-                                    '${teacher.generatedCount > 0 ? ' · ${teacher.generatedCount} generated' : ''}'
-                  '${teacher.completedCount > 0 ? ' · ${teacher.completedCount} completed' : ''}'
-                  '${teacher.deviceCount > 0 ? ' \u00b7 ${teacher.deviceCount} device(s)' : ''}',
+                  '${teacher.email} ? ${teacher.role}'
+                  '${teacher.generatedCount > 0 ? ' ? ${teacher.generatedCount} generated' : ''}'
+                  '${teacher.completedCount > 0 ? ' ? ${teacher.completedCount} completed' : ''}'
+                  '${teacher.deviceCount > 0 ? ' ? ${teacher.deviceCount} device(s)' : ''}',
                   style: textTheme.labelMedium?.copyWith(
                     color: cs.onSurfaceVariant,
                   ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Chip(
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                      label: Text(
+                        schemeLabel,
+                        style: textTheme.labelSmall?.copyWith(
+                          color: schemeColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      backgroundColor: schemeColor.withValues(alpha: 0.12),
+                      side: BorderSide(
+                        color: schemeColor.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    if (hasSchemeProgress)
+                      SizedBox(
+                        width: 220,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            LinearProgressIndicator(
+                              value: progressValue,
+                              minHeight: 6,
+                              backgroundColor:
+                                  cs.outlineVariant.withValues(alpha: 0.25),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                cs.primary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Week ${teacher.completedWeeks} of ${teacher.totalWeeks} completed',
+                              style: textTheme.labelSmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
               ],
             ),
           ),
           const SizedBox(width: 12),
-
-          // Action text + Details button
-          Row(
+          Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               if (isError)
                 Padding(
-                  padding: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
                     'Action Required',
                     style: textTheme.labelMedium?.copyWith(
@@ -1704,7 +1776,6 @@ class _TeacherCardWidget extends StatelessWidget {
                     ),
                   ),
                 ),
-              // Details button
               OutlinedButton(
                 onPressed: onDetailsTap,
                 style: OutlinedButton.styleFrom(
@@ -1771,6 +1842,32 @@ class _TeacherCardWidget extends StatelessWidget {
         return cs.tertiary;
       default:
         return cs.onSurfaceVariant;
+    }
+  }
+
+  Color _schemeStatusColor(String status) {
+    switch (status) {
+      case 'draft':
+        return Colors.orange;
+      case 'pending':
+        return Colors.blue;
+      case 'approved':
+        return Colors.green;
+      default:
+        return cs.onSurfaceVariant;
+    }
+  }
+
+  String _schemeStatusLabel(String status) {
+    switch (status) {
+      case 'draft':
+        return 'Draft';
+      case 'pending':
+        return 'Pending';
+      case 'approved':
+        return 'Approved';
+      default:
+        return 'No Scheme';
     }
   }
 }
