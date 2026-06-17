@@ -613,6 +613,16 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                               ],
                             ),
 
+                            const SizedBox(height: 24),
+
+                            // ── Today at a Glance ──────────────────────
+                            const _TodayAtAGlanceStrip(),
+
+                            const SizedBox(height: 24),
+
+                            // ── Resume Last Lesson ─────────────────────
+                            _ResumeLessonCard(cs: cs, theme: theme),
+
                             const SizedBox(height: 32),
 
                             // Bento Grid
@@ -1413,6 +1423,31 @@ final examCountProvider = FutureProvider<int>((ref) async {
   return exams.length;
 });
 
+final todayLessonCountProvider = FutureProvider<int>((ref) async {
+  final db = ref.read(databaseProvider);
+  final lessons = await db.lessonsDao.getAll();
+  final today = DateTime.now();
+  return lessons
+      .where((lesson) =>
+          lesson.createdAt.year == today.year &&
+          lesson.createdAt.month == today.month &&
+          lesson.createdAt.day == today.day)
+      .length;
+});
+
+final lastUpdatedLessonProvider = FutureProvider<Lesson?>((ref) async {
+  final db = ref.read(databaseProvider);
+  final authData = ref.read(authProvider);
+  final teacherId = authData.currentTeacher?.serverId;
+  final lessons = await db.lessonsDao.getAll();
+  final filtered = teacherId == null
+      ? lessons
+      : lessons.where((lesson) => lesson.teacherServerId == teacherId).toList();
+  if (filtered.isEmpty) return null;
+  filtered.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  return filtered.first;
+});
+
 class ReaderLayout extends ConsumerStatefulWidget {
   const ReaderLayout({super.key});
 
@@ -1811,6 +1846,8 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
                     ),
                   ),
                   const SizedBox(height: 24),
+                  const _TodayAtAGlanceStrip(),
+                  const SizedBox(height: 24),
                   // Recent lesson cards (live from lessons database)
                   _RecentLessonsList(cs: cs, theme: theme),
                 ],
@@ -1909,6 +1946,162 @@ class _RecentLessonsList extends ConsumerWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _TodayAtAGlanceStrip extends ConsumerWidget {
+  const _TodayAtAGlanceStrip();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final todayLessonsAsync = ref.watch(todayLessonCountProvider);
+    final lessonCountAsync = ref.watch(lessonCountProvider);
+    final examCountAsync = ref.watch(examCountProvider);
+    final creditData = ref.watch(creditStateProvider);
+    final syncData = ref.watch(syncStatusProvider);
+    final conflictCount = ref.watch(unresolvedConflictsProvider);
+
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        _GlanceChip(
+          label: 'Lessons',
+          value: (todayLessonsAsync.asData?.value ?? 0) > 0
+              ? '${todayLessonsAsync.asData?.value ?? 0} today'
+              : lessonCountAsync.asData?.value != null
+                  ? '${lessonCountAsync.asData?.value} total'
+                  : '...',
+          icon: Icons.menu_book_rounded,
+          cs: cs,
+          theme: theme,
+        ),
+        _GlanceChip(
+          label: 'Exams',
+          value: examCountAsync.asData?.value != null
+              ? '${examCountAsync.asData?.value}'
+              : '...',
+          icon: Icons.quiz_rounded,
+          cs: cs,
+          theme: theme,
+        ),
+        _GlanceChip(
+          label: 'Credits',
+          value: creditData.loading ? '...' : '${creditData.currentCredits}',
+          icon: Icons.toll_rounded,
+          cs: cs,
+          theme: theme,
+        ),
+        _GlanceChip(
+          label: 'Sync',
+          value: statusLabel(syncData.status),
+          icon: syncData.status == SyncStatus.synced
+              ? Icons.cloud_done_rounded
+              : syncData.status == SyncStatus.syncing
+                  ? Icons.sync_rounded
+                  : syncData.status == SyncStatus.error
+                      ? Icons.cloud_off_rounded
+                      : Icons.cloud_queue_rounded,
+          cs: cs,
+          theme: theme,
+        ),
+        _GlanceChip(
+          label: 'Conflicts',
+          value: '$conflictCount',
+          icon: Icons.warning_amber_rounded,
+          cs: cs,
+          theme: theme,
+        ),
+        _ResumeLessonCard(cs: cs, theme: theme),
+      ],
+    );
+  }
+}
+
+class _GlanceChip extends StatelessWidget {
+  const _GlanceChip({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.cs,
+    required this.theme,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final ColorScheme cs;
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: cs.primary),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+              Text(value, style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResumeLessonCard extends ConsumerWidget {
+  const _ResumeLessonCard({required this.cs, required this.theme});
+
+  final ColorScheme cs;
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final lessonAsync = ref.watch(lastUpdatedLessonProvider);
+    final lesson = lessonAsync.asData?.value;
+    if (lesson == null) return const SizedBox.shrink();
+
+    return InkWell(
+      onTap: () => context.push('/lessons/${lesson.id}'),
+      borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cs.primaryContainer.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+          border: Border.all(color: cs.primary.withValues(alpha: 0.15)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Resume last lesson', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700, color: cs.primary)),
+            const SizedBox(height: 4),
+            Text(
+              lesson.topic.isNotEmpty ? lesson.topic : lesson.subject,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text('${lesson.classLevel} • ${lesson.subject}', style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+          ],
+        ),
+      ),
     );
   }
 }

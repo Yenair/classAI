@@ -30,6 +30,31 @@ class LessonsListScreen extends ConsumerStatefulWidget {
 }
 
 class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
+  String _selectedFilter = 'All';
+
+  List<Lesson> _applyFilter(List<Lesson> lessons) {
+    switch (_selectedFilter) {
+      case 'Draft':
+        return lessons.where((lesson) => lesson.status == 'draft').toList();
+      case 'Completed':
+        return lessons.where((lesson) => lesson.status == 'completed').toList();
+      case 'Unlocked':
+        return lessons.where((lesson) => lesson.isUnlocked).toList();
+      case 'Linked to Scheme':
+        return lessons.where((lesson) => lesson.schemeOfWorkId != null).toList();
+      case 'Needs Sync':
+        return lessons.where((lesson) => lesson.serverId == null).toList();
+      default:
+        return lessons;
+    }
+  }
+
+  void _setFilter(String filter) {
+    setState(() {
+      _selectedFilter = filter;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -123,6 +148,50 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
                 ),
               ),
               data: (lessons) {
+                final filteredLessons = _applyFilter(lessons);
+                if (lessons.isNotEmpty && filteredLessons.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 80,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              color: cs.surfaceContainer,
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            child: Icon(
+                              Icons.filter_alt_off_rounded,
+                              size: 38,
+                              color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            'No lessons match "$_selectedFilter"',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: cs.onSurface,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Try a different filter or clear it to see all lessons.',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
                 if (lessons.isEmpty) {
                   return Center(
                     child: Padding(
@@ -153,7 +222,7 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Tap the + button to create your first lesson.',
+                            'Tap New Lesson to create your first lesson.',
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: cs.onSurfaceVariant,
                             ),
@@ -172,9 +241,20 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
                         ? const BouncingScrollPhysics()
                         : null,
                     padding: const EdgeInsets.all(16),
-                    itemCount: lessons.length,
+                    itemCount: filteredLessons.length + 1,
                     itemBuilder: (context, index) {
-                      final lesson = lessons[index];
+                      if (index == 0) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _LessonFilterRow(
+                            selectedFilter: _selectedFilter,
+                            cs: cs,
+                            theme: theme,
+                            onSelected: _setFilter,
+                          ),
+                        );
+                      }
+                      final lesson = filteredLessons[index - 1];
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: _LessonCard(
@@ -275,6 +355,56 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
         }
       }
     }
+  }
+}
+
+class _LessonFilterRow extends StatelessWidget {
+  const _LessonFilterRow({
+    required this.selectedFilter,
+    required this.cs,
+    required this.theme,
+    required this.onSelected,
+  });
+
+  final String selectedFilter;
+  final ColorScheme cs;
+  final ThemeData theme;
+  final ValueChanged<String> onSelected;
+
+  static const _filters = [
+    'All',
+    'Draft',
+    'Completed',
+    'Unlocked',
+    'Linked to Scheme',
+    'Needs Sync',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: _filters.map((filter) {
+          final selected = filter == selectedFilter;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              label: Text(filter),
+              selected: selected,
+              onSelected: (_) => onSelected(filter),
+              labelStyle: theme.textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: selected ? cs.onPrimary : cs.onSurfaceVariant,
+              ),
+              selectedColor: cs.primary,
+              backgroundColor: cs.surfaceContainerLow,
+              side: BorderSide(color: cs.outlineVariant),
+            ),
+          );
+        }).toList(),
+      ),
+    );
   }
 }
 

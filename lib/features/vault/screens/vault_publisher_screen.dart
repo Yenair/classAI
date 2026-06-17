@@ -67,6 +67,7 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
       final items = await db.vaultItemsDao.getItemsByAuthor(teacherId);
       setState(() {
         _recentSubmissions = items
+            .take(5)
             .map((item) => _SubmissionItem(
                   title: item.title,
                   status: item.approvalStatus,
@@ -1200,7 +1201,7 @@ class _RecentSubmissionsPanel extends StatelessWidget {
           // Header
           Row(
             children: [
-              const Icon(Icons.history_rounded, size: 22),
+              Icon(Icons.timeline_rounded, size: 22, color: cs.primary),
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
@@ -1215,7 +1216,7 @@ class _RecentSubmissionsPanel extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          // Content
+          // Timeline content
           if (loading)
             const Center(
               child: Padding(
@@ -1246,10 +1247,11 @@ class _RecentSubmissionsPanel extends StatelessWidget {
               ),
             )
           else
-            ...submissions.map((item) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _StatusCard(item: item, cs: cs, tt: tt),
-                )),
+            _TimelineWidget(
+              submissions: submissions,
+              cs: cs,
+              tt: tt,
+            ),
 
           // Footer
           const SizedBox(height: 8),
@@ -1290,129 +1292,242 @@ class _RecentSubmissionsPanel extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Status Card
+// Timeline Widget
 // ---------------------------------------------------------------------------
-class _StatusCard extends StatelessWidget {
-  final _SubmissionItem item;
+class _TimelineWidget extends StatelessWidget {
+  final List<_SubmissionItem> submissions;
   final ColorScheme cs;
   final TextTheme tt;
 
-  const _StatusCard({
-    required this.item,
+  const _TimelineWidget({
+    required this.submissions,
     required this.cs,
     required this.tt,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isRejected = item.status == 'rejected';
-    final (Color dotColor, Color badgeBg, Color badgeTextColor, String badgeLabel) =
-        switch (item.status) {
-      'approved' => (
-          cs.primary,
-          cs.secondaryContainer.withValues(alpha: 0.5),
-          cs.onSecondaryContainer,
-          'Approved'
-        ),
-      'rejected' => (
-          cs.error,
-          cs.errorContainer.withValues(alpha: 0.5),
-          cs.onErrorContainer,
-          'Rejected'
-        ),
-      _ => (
-          cs.onSurfaceVariant,
-          cs.surfaceContainerHighest,
-          cs.onSurfaceVariant,
-          'Pending'
-        ),
-    };
+    return Column(
+      children: [
+        for (int i = 0; i < submissions.length; i++) ...[
+          _TimelineNode(
+            item: submissions[i],
+            isLast: i == submissions.length - 1,
+            cs: cs,
+            tt: tt,
+          ),
+        ],
+      ],
+    );
+  }
+}
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        border: Border.all(
-          color: isRejected
-              ? cs.error.withValues(alpha: 0.2)
-              : cs.outlineVariant.withValues(alpha: 0.1),
-        ),
-      ),
-      child: Column(
+// ---------------------------------------------------------------------------
+// Timeline Node (vertical line + dot + content card)
+// ---------------------------------------------------------------------------
+class _TimelineNode extends StatelessWidget {
+  final _SubmissionItem item;
+  final bool isLast;
+  final ColorScheme cs;
+  final TextTheme tt;
+
+  const _TimelineNode({
+    required this.item,
+    required this.isLast,
+    required this.cs,
+    required this.tt,
+  });
+
+  Color get _dotColor => switch (item.status) {
+        'approved' => cs.primary,
+        'rejected' => cs.error,
+        _ => cs.onSurfaceVariant,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return IntrinsicHeight(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  item.title,
-                  style: tt.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: cs.onSurface,
+          // Vertical line + dot column
+          SizedBox(
+            width: 32,
+            child: Column(
+              children: [
+                // Dot
+                Container(
+                  width: 14,
+                  height: 14,
+                  margin: const EdgeInsets.only(top: 4),
+                  decoration: BoxDecoration(
+                    color: _dotColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: cs.surface,
+                      width: 2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _dotColor.withValues(alpha: 0.3),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                ),
+                // Connector line (not for last item)
+                if (!isLast)
+                  Expanded(
+                    child: Container(
+                      width: 2,
+                      color: cs.outlineVariant.withValues(alpha: 0.4),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Content card
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: cs.surface,
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                border: Border.all(
+                  color: item.status == 'rejected'
+                      ? cs.error.withValues(alpha: 0.2)
+                      : cs.outlineVariant.withValues(alpha: 0.15),
                 ),
               ),
-              const SizedBox(width: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: badgeBg,
-                  borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: dotColor,
-                        shape: BoxShape.circle,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Title + status badge row
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.title,
+                          style: tt.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: cs.onSurface,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
+                      const SizedBox(width: 8),
+                      _StatusBadge(
+                        status: item.status,
+                        cs: cs,
+                        tt: tt,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  // Date
+                  Text(
+                    'Submitted: ${item.date}',
+                    style: tt.labelMedium?.copyWith(
+                      color: cs.outline,
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      badgeLabel,
-                      style: tt.labelMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: badgeTextColor,
+                  ),
+                  // Error message
+                  if (item.error != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: cs.errorContainer.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                      ),
+                      child: Text(
+                        item.error!,
+                        style: tt.labelMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: cs.error,
+                        ),
                       ),
                     ),
                   ],
-                ),
+                ],
               ),
-            ],
+            ),
           ),
-          const SizedBox(height: 4),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Status Badge (small pill)
+// ---------------------------------------------------------------------------
+class _StatusBadge extends StatelessWidget {
+  final String status;
+  final ColorScheme cs;
+  final TextTheme tt;
+
+  const _StatusBadge({
+    required this.status,
+    required this.cs,
+    required this.tt,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final (Color dotColor, Color bgColor, Color textColor, String label) =
+        switch (status) {
+      'approved' => (
+        cs.primary,
+        cs.secondaryContainer.withValues(alpha: 0.5),
+        cs.onSecondaryContainer,
+        'Approved'
+      ),
+      'rejected' => (
+        cs.error,
+        cs.errorContainer.withValues(alpha: 0.5),
+        cs.onErrorContainer,
+        'Rejected'
+      ),
+      _ => (
+        cs.onSurfaceVariant,
+        cs.surfaceContainerHighest,
+        cs.onSurfaceVariant,
+        'Pending'
+      ),
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              color: dotColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 4),
           Text(
-            'Submitted: ${item.date}',
+            label,
             style: tt.labelMedium?.copyWith(
-              color: cs.outline,
+              fontWeight: FontWeight.w700,
+              color: textColor,
             ),
           ),
-          if (item.error != null) ...[
-            const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: cs.errorContainer.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-              ),
-              child: Text(
-                item.error!,
-                style: tt.labelMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: cs.error,
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );

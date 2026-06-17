@@ -787,6 +787,17 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                   () => _editorSidebarOpen = !_editorSidebarOpen),
                               sidebarOpen: _editorSidebarOpen,
                             ),
+                            if (_schemeOfWorkLocalId != null)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                                child: _LinkedSchemeBanner(
+                                  schemeId: _schemeOfWorkLocalId!,
+                                  classLevel: _classLevel,
+                                  isSourceMissing: _sourceMissing,
+                                  cs: cs,
+                                  theme: theme,
+                                ),
+                              ),
 
                             // ── Two-column layout ───────────────────
                             if (_sourceMissing)
@@ -1406,6 +1417,100 @@ class _ToolHeader extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Data holder for a loaded scheme together with its resolved subject name.
+class _SchemeDisplayData {
+  final String subjectName;
+  final SchemeOfWorkData scheme;
+  const _SchemeDisplayData({required this.subjectName, required this.scheme});
+}
+
+class _LinkedSchemeBanner extends ConsumerWidget {
+  const _LinkedSchemeBanner({
+    required this.schemeId,
+    required this.classLevel,
+    required this.isSourceMissing,
+    required this.cs,
+    required this.theme,
+  });
+
+  final int schemeId;
+  final String classLevel;
+  final bool isSourceMissing;
+  final ColorScheme cs;
+  final ThemeData theme;
+
+  Future<_SchemeDisplayData?> _loadScheme(WidgetRef ref) async {
+    final db = ref.read(databaseProvider);
+    final scheme = await db.schemeOfWorkDao.getById(schemeId);
+    if (scheme == null) return null;
+
+    // Resolve subject name from the subjects table
+    final allSubjects = await db.subjectsDao.getAll();
+    final subject = allSubjects.where((s) => s.id == scheme.subjectId).firstOrNull;
+    final subjectName = subject?.name ?? 'Subject ${scheme.subjectId}';
+    return _SchemeDisplayData(subjectName: subjectName, scheme: scheme);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return FutureBuilder<_SchemeDisplayData?>(
+      future: _loadScheme(ref),
+      builder: (context, snapshot) {
+        final display = snapshot.data;
+        if (display == null) {
+          if (!isSourceMissing) return const SizedBox.shrink();
+          return Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: cs.errorContainer,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              'The linked scheme of work is no longer available. You can still edit this lesson.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: cs.onErrorContainer,
+              ),
+            ),
+          );
+        }
+
+        final scheme = display.scheme;
+        return Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: cs.primaryContainer.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: cs.primary.withValues(alpha: 0.15)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Linked to Scheme of Work',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: cs.primary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Subject: ${display.subjectName} • Class: $classLevel • Week ${scheme.weekNumber} • Topic: ${scheme.topic}',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurface,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

@@ -31,6 +31,9 @@ class _VaultBrowserScreenState extends ConsumerState<VaultBrowserScreen> {
   String? _filterClassLevel;
   String? _filterCurriculum;
 
+  // Sort state
+  String _sortBy = 'newest';
+
   // Search query
   String _searchQuery = '';
 
@@ -49,11 +52,18 @@ class _VaultBrowserScreenState extends ConsumerState<VaultBrowserScreen> {
     setState(() => _loading = true);
     try {
       final dao = ref.read(databaseProvider).vaultItemsDao;
-      final items = await dao.filter(
+      var items = await dao.filter(
         subject: _filterSubject,
         classLevel: _filterClassLevel,
         curriculum: _filterCurriculum,
       );
+      // Apply in-memory sort
+      if (_sortBy == 'newest') {
+        items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      } else if (_sortBy == 'recommended') {
+        // Recommended: sort by title (A-Z) as a simple heuristic
+        items.sort((a, b) => a.title.compareTo(b.title));
+      }
       // Derive distinct filter options from all approved items
       final allItems = await dao.getApprovedItems();
       final subjects = allItems.map((e) => e.subject).toSet().toList()..sort();
@@ -141,6 +151,7 @@ class _VaultBrowserScreenState extends ConsumerState<VaultBrowserScreen> {
                                     filterSubject: _filterSubject,
                                     filterClassLevel: _filterClassLevel,
                                     filterCurriculum: _filterCurriculum,
+                                    sortBy: _sortBy,
                                     onSearchChanged: (q) =>
                                         setState(() => _searchQuery = q),
                                     onFilterSubjectChanged: (v) => setState(
@@ -151,6 +162,10 @@ class _VaultBrowserScreenState extends ConsumerState<VaultBrowserScreen> {
                                     onFilterCurriculumChanged: (v) =>
                                         setState(
                                             () => _filterCurriculum = v),
+                                    onSortChanged: (v) {
+                                      setState(() => _sortBy = v);
+                                      _loadItems();
+                                    },
                                     onApplyFilters: _loadItems,
                                     subjectOptions: _subjectOptions,
                                     classLevelOptions: _classLevelOptions,
@@ -589,6 +604,7 @@ class _VaultContent extends StatelessWidget {
   final String? filterSubject;
   final String? filterClassLevel;
   final String? filterCurriculum;
+  final String sortBy;
   final List<String> subjectOptions;
   final List<String> classLevelOptions;
   final List<String> curriculumOptions;
@@ -596,6 +612,7 @@ class _VaultContent extends StatelessWidget {
   final ValueChanged<String?> onFilterSubjectChanged;
   final ValueChanged<String?> onFilterClassLevelChanged;
   final ValueChanged<String?> onFilterCurriculumChanged;
+  final ValueChanged<String> onSortChanged;
   final VoidCallback onApplyFilters;
   final void Function(VaultItem) onOpenDetail;
   final String Function(String) getInitials;
@@ -608,6 +625,7 @@ class _VaultContent extends StatelessWidget {
     required this.filterSubject,
     required this.filterClassLevel,
     required this.filterCurriculum,
+    required this.sortBy,
     required this.subjectOptions,
     required this.classLevelOptions,
     required this.curriculumOptions,
@@ -615,6 +633,7 @@ class _VaultContent extends StatelessWidget {
     required this.onFilterSubjectChanged,
     required this.onFilterClassLevelChanged,
     required this.onFilterCurriculumChanged,
+    required this.onSortChanged,
     required this.onApplyFilters,
     required this.onOpenDetail,
     required this.getInitials,
@@ -654,6 +673,16 @@ class _VaultContent extends StatelessWidget {
                 onSearchChanged: onSearchChanged,
               ),
               const SizedBox(height: 24),
+              // Quick filter chips for common subjects/levels
+              _QuickFilterChips(
+                cs: cs,
+                tt: tt,
+                currentSubject: filterSubject,
+                currentClassLevel: filterClassLevel,
+                onSubjectChanged: onFilterSubjectChanged,
+                onClassLevelChanged: onFilterClassLevelChanged,
+              ),
+              const SizedBox(height: 16),
               // Filter bar
               _FilterChipsRow(
                 cs: cs,
@@ -668,6 +697,14 @@ class _VaultContent extends StatelessWidget {
                 onFilterClassLevelChanged: onFilterClassLevelChanged,
                 onFilterCurriculumChanged: onFilterCurriculumChanged,
                 onApplyFilters: onApplyFilters,
+              ),
+              const SizedBox(height: 16),
+              // Sort chips
+              _SortChips(
+                cs: cs,
+                tt: tt,
+                sortBy: sortBy,
+                onSortChanged: onSortChanged,
               ),
               const SizedBox(height: 24),
               // Bento grid
@@ -977,6 +1014,228 @@ class _FilterDropdown extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
+// Quick Filter Chips for common subjects & class levels
+// ---------------------------------------------------------------------------
+class _QuickFilterChips extends StatelessWidget {
+  final ColorScheme cs;
+  final TextTheme tt;
+  final String? currentSubject;
+  final String? currentClassLevel;
+  final ValueChanged<String?> onSubjectChanged;
+  final ValueChanged<String?> onClassLevelChanged;
+
+  const _QuickFilterChips({
+    required this.cs,
+    required this.tt,
+    required this.currentSubject,
+    required this.currentClassLevel,
+    required this.onSubjectChanged,
+    required this.onClassLevelChanged,
+  });
+
+  static const _quickSubjects = ['Mathematics', 'English', 'Science'];
+  static const _quickClassLevels = ['JSS 1', 'JSS 2', 'JSS 3', 'SSS 1', 'SSS 2', 'SSS 3'];
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Subject quick chips
+        SingleChildScrollView(
+          physics: (Platform.isAndroid || Platform.isIOS)
+              ? const BouncingScrollPhysics()
+              : null,
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              ..._quickSubjects.map((subject) => Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: _QuickChip(
+                      label: subject,
+                      icon: Icons.book_rounded,
+                      isSelected: currentSubject == subject,
+                      onTap: () => onSubjectChanged(
+                          currentSubject == subject ? null : subject),
+                      cs: cs,
+                      tt: tt,
+                    ),
+                  )),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Class level quick chips
+        SingleChildScrollView(
+          physics: (Platform.isAndroid || Platform.isIOS)
+              ? const BouncingScrollPhysics()
+              : null,
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              ..._quickClassLevels.map((level) => Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: _QuickChip(
+                      label: level,
+                      icon: Icons.grade_rounded,
+                      isSelected: currentClassLevel == level,
+                      onTap: () => onClassLevelChanged(
+                          currentClassLevel == level ? null : level),
+                      cs: cs,
+                      tt: tt,
+                    ),
+                  )),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Quick Chip (small pill toggle)
+// ---------------------------------------------------------------------------
+class _QuickChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final ColorScheme cs;
+  final TextTheme tt;
+
+  const _QuickChip({
+    required this.label,
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+    required this.cs,
+    required this.tt,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: isSelected ? cs.primaryContainer : cs.surface,
+          border: Border.all(
+            color: isSelected
+                ? cs.primary.withValues(alpha: 0.5)
+                : cs.outlineVariant,
+          ),
+          borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: isSelected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: tt.labelSmall?.copyWith(
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Sort Chips (Newest / Recommended)
+// ---------------------------------------------------------------------------
+class _SortChips extends StatelessWidget {
+  final ColorScheme cs;
+  final TextTheme tt;
+  final String sortBy;
+  final ValueChanged<String> onSortChanged;
+
+  const _SortChips({
+    required this.cs,
+    required this.tt,
+    required this.sortBy,
+    required this.onSortChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      physics: (Platform.isAndroid || Platform.isIOS)
+          ? const BouncingScrollPhysics()
+          : null,
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          Text(
+            'Sort by:',
+            style: tt.labelLarge?.copyWith(color: cs.onSurfaceVariant),
+          ),
+          const SizedBox(width: 12),
+          _buildSortChip('newest', Icons.access_time_rounded, 'Newest'),
+          const SizedBox(width: 8),
+          _buildSortChip('recommended', Icons.auto_awesome_rounded, 'Recommended'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSortChip(String value, IconData icon, String label) {
+    final isSelected = sortBy == value;
+    return GestureDetector(
+      onTap: () => onSortChanged(value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: isSelected ? cs.secondaryContainer : cs.surface,
+          border: Border.all(
+            color: isSelected
+                ? cs.secondary.withValues(alpha: 0.5)
+                : cs.outlineVariant,
+          ),
+          borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: isSelected
+                  ? cs.onSecondaryContainer
+                  : cs.onSurfaceVariant,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: tt.labelSmall?.copyWith(
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected
+                    ? cs.onSecondaryContainer
+                    : cs.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Vault Item Card
 // ---------------------------------------------------------------------------
 class _VaultCard extends StatelessWidget {
@@ -1047,6 +1306,41 @@ class _VaultCard extends StatelessWidget {
                             item: item,
                           ),
                   ),
+                  // Approved badge (only for approved items)
+                  if (item.approvalStatus == 'approved')
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: cs.primary.withValues(alpha: 0.9),
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusLg),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.check_circle_rounded,
+                              size: 14,
+                              color: cs.onPrimary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Approved',
+                              style: tt.labelMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: cs.onPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   // Tier badge
                   Positioned(
                     top: 12,

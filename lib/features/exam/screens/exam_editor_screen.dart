@@ -817,6 +817,16 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                   ),
                                 ),
                               ),
+                            if (!_sourceMissing && _schemeOfWorkLocalId != null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 16),
+                                child: _ExamSchemeContextBanner(
+                                  schemeId: _schemeOfWorkLocalId!,
+                                  classLevel: _classLevel,
+                                  cs: cs,
+                                  theme: theme,
+                                ),
+                              ),
                             Form(
                               key: _formKey,
                               child: isWide
@@ -1699,6 +1709,76 @@ class _ConfigPanel extends StatelessWidget {
                 );
               }),
               const SizedBox(height: 20),
+
+              // ── Question Plan Summary ──────────────────────────────
+              if (selectedQuestionTypes.isNotEmpty) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: cs.onPrimaryContainer.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Question Plan',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: cs.onPrimaryContainer,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // Total
+                      Row(
+                        children: [
+                          Icon(Icons.quiz_rounded, size: 16, color: cs.onPrimaryContainer),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Total: ${selectedQuestionTypes.fold<int>(0, (sum, t) => sum + (questionCounts[t] ?? 5))} questions',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: cs.onPrimaryContainer,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      // Breakdown by type
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: selectedQuestionTypes.map((type) {
+                          final count = questionCounts[type] ?? 5;
+                          return Text(
+                            '$type: $count',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: cs.onPrimaryContainer.withValues(alpha: 0.8),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 4),
+                      // Difficulty
+                      Row(
+                        children: [
+                          Icon(Icons.tune_rounded, size: 16, color: cs.onPrimaryContainer),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Difficulty: $difficulty',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: cs.onPrimaryContainer.withValues(alpha: 0.8),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
               // Generate button
               SizedBox(
                 width: double.infinity,
@@ -2579,6 +2659,65 @@ class _SectionHeader extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+  
+}
+
+// ---------------------------------------------------------------------------
+// Exam Scheme Context Banner
+// ---------------------------------------------------------------------------
+/// Shows a contextual banner when the exam is linked to a scheme of work.
+class _ExamSchemeContextBanner extends ConsumerWidget {
+  const _ExamSchemeContextBanner({
+    required this.schemeId,
+    required this.classLevel,
+    required this.cs,
+    required this.theme,
+  });
+
+  final int schemeId;
+  final String classLevel;
+  final ColorScheme cs;
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return FutureBuilder<SchemeOfWorkData?>(
+      future: ref.read(databaseProvider).schemeOfWorkDao.getById(schemeId),
+      builder: (context, snapshot) {
+        final scheme = snapshot.data;
+        if (scheme == null) return const SizedBox.shrink();
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: cs.primaryContainer.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: cs.primary.withValues(alpha: 0.15)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Linked to Scheme of Work',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: cs.primary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Class: $classLevel • Week ${scheme.weekNumber} • Topic: ${scheme.topic}',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurface,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

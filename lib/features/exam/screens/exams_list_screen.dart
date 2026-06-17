@@ -30,6 +30,31 @@ class ExamsListScreen extends ConsumerStatefulWidget {
 }
 
 class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
+  String _selectedFilter = 'All';
+
+  List<Exam> _applyFilter(List<Exam> exams) {
+    switch (_selectedFilter) {
+      case 'Draft':
+        return exams.where((exam) => !exam.isUnlocked).toList();
+      case 'Completed':
+        return exams.where((exam) => exam.isUnlocked).toList();
+      case 'Unlocked':
+        return exams.where((exam) => exam.isUnlocked).toList();
+      case 'Linked to Scheme':
+        return exams.where((exam) => exam.schemeOfWorkId != null).toList();
+      case 'Needs Sync':
+        return exams.where((exam) => exam.serverId == null).toList();
+      default:
+        return exams;
+    }
+  }
+
+  void _setFilter(String filter) {
+    setState(() {
+      _selectedFilter = filter;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -71,7 +96,8 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
           const ConflictBanner(),
           Expanded(
             child: examsAsync.when(
-              loading: () => ListView(
+              loading: () => ListView(
+
                 physics: (Platform.isAndroid || Platform.isIOS)
                     ? const BouncingScrollPhysics()
                     : null,
@@ -126,6 +152,50 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
                 ),
               ),
               data: (exams) {
+                final filteredExams = _applyFilter(exams);
+                if (exams.isNotEmpty && filteredExams.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 80,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              color: cs.surfaceContainer,
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            child: Icon(
+                              Icons.filter_alt_off_rounded,
+                              size: 38,
+                              color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            'No exams match "$_selectedFilter"',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: cs.onSurface,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Try a different filter or clear it to see all exams.',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
                 if (exams.isEmpty) {
                   return Center(
                     child: Padding(
@@ -156,7 +226,7 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Tap the + button to create your first exam.',
+                            'Tap New Exam to create your first exam.',
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: cs.onSurfaceVariant,
                             ),
@@ -170,14 +240,25 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
 
                 return RefreshIndicator(
                   onRefresh: () async => ref.invalidate(examsListProvider),
-                  child: ListView.builder(
+                  child: ListView.builder(
                     physics: (Platform.isAndroid || Platform.isIOS)
                         ? const BouncingScrollPhysics()
                         : null,
                     padding: const EdgeInsets.all(16),
-                    itemCount: exams.length,
+                    itemCount: filteredExams.length + 1,
                     itemBuilder: (context, index) {
-                      final exam = exams[index];
+                      if (index == 0) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _ExamFilterRow(
+                            selectedFilter: _selectedFilter,
+                            cs: cs,
+                            theme: theme,
+                            onSelected: _setFilter,
+                          ),
+                        );
+                      }
+                      final exam = filteredExams[index - 1];
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: _ExamCard(
@@ -219,6 +300,56 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
             style: TextStyle(fontWeight: FontWeight.w600),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ExamFilterRow extends StatelessWidget {
+  const _ExamFilterRow({
+    required this.selectedFilter,
+    required this.cs,
+    required this.theme,
+    required this.onSelected,
+  });
+
+  final String selectedFilter;
+  final ColorScheme cs;
+  final ThemeData theme;
+  final ValueChanged<String> onSelected;
+
+  static const _filters = [
+    'All',
+    'Draft',
+    'Completed',
+    'Unlocked',
+    'Linked to Scheme',
+    'Needs Sync',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: _filters.map((filter) {
+          final selected = filter == selectedFilter;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              label: Text(filter),
+              selected: selected,
+              onSelected: (_) => onSelected(filter),
+              labelStyle: theme.textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: selected ? cs.onPrimary : cs.onSurfaceVariant,
+              ),
+              selectedColor: cs.primary,
+              backgroundColor: cs.surfaceContainerLow,
+              side: BorderSide(color: cs.outlineVariant),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
