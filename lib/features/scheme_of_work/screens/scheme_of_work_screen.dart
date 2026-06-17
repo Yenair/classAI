@@ -37,6 +37,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
   String _teacherName = 'Teacher';
   String _schoolName = 'School';
   String _subscriptionTier = 'free';
+  int? _subjectId;
   final Map<int, String> _teacherNamesById = {};
 
   // Generated SoW data: each entry is {week, topic, objectives}
@@ -246,17 +247,15 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     if (_schoolId == null || _teacherId == null) return;
     try {
       final db = ref.read(databaseProvider);
-      final subjectRow = await db.subjectsDao.getByName(_subject);
-      final subjectId = subjectRow?.id;
+      var subjectId = _subjectId;
       if (subjectId == null) {
-        if (mounted) {
-          showErrorToast(
-            context: context,
-            message: 'Unable to save scheme: subject not found.',
-          );
-        }
-        return;
+        final subjectRow = await db.subjectsDao.getByName(_subject);
+        subjectId = subjectRow?.id;
       }
+      if (subjectId == null) {
+        subjectId = await db.subjectsDao.insert(name: _subject);
+      }
+      _subjectId = subjectId;
       for (var index = 0; index < _weeks.length; index++) {
         final week = _weeks[index];
         final weekNumber = index + 1;
@@ -292,6 +291,10 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
 
   Future<void> _submitForApproval() async {
     try {
+      // Save first to ensure all data is persisted
+      await _saveScheme();
+      if (_weeks.isEmpty) return;
+
       final db = ref.read(databaseProvider);
       for (final record in _groupByTerm()) {
         await db.schemeOfWorkDao.updateStatus(record.id, 'pending');
@@ -352,7 +355,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
 
   List<SchemeOfWorkData> _groupByTerm() {
     final existing = _existingSowRecords.where(
-      (r) => (r.subjectId.toString() == _subject) || (r.term == _term),
+      (r) => r.subjectId == _subjectId && r.term == _term,
     ).toList();
     return existing;
   }
