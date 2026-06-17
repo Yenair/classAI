@@ -6,8 +6,10 @@ import 'package:go_router/go_router.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/main.dart' show databaseProvider;
 import 'package:classai/core/theme/app_theme.dart';
+import 'package:classai/core/widgets/conflict_banner.dart';
+import 'package:classai/core/widgets/sync_indicator.dart';
+import 'package:classai/core/widgets/credit_counter.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
-import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/features/vault/screens/vault_item_detail_screen.dart';
 
 /// Vault browser screen showing approved items in a searchable grid.
@@ -129,6 +131,9 @@ class _VaultBrowserScreenState extends ConsumerState<VaultBrowserScreen> {
                   // TopAppBar (Mobile only)
                   if (!isDesktop)
                     _MobileHeader(cs: cs, tt: tt, ref: ref, teacherName: teacherName, teacherInitials: teacherInitials),
+
+                  // Conflict Banner
+                  const ConflictBanner(),
 
                   // Scrollable main canvas
                   Expanded(
@@ -434,7 +439,6 @@ class _MobileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final credits = ref.watch(creditStateProvider).currentCredits;
     return Container(
       height: 64,
       padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingMarginMobile),
@@ -448,7 +452,7 @@ class _MobileHeader extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Avatar placeholder (hidden for layout symmetry)
+          // Avatar placeholder
           Container(
             width: 32,
             height: 32,
@@ -474,36 +478,9 @@ class _MobileHeader extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          // Credit chip
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: cs.primary,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 4),
-              ],
-            ),
-          ),
+          const SyncIndicator(),
           const SizedBox(width: 8),
-          Text(
-            '\u20A6$credits',
-            style: tt.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: cs.secondary,
-            ),
-          ),
+          const CreditCounter(),
         ],
       ),
     );
@@ -569,25 +546,35 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.inventory_2_outlined,
-            size: 64,
-            color: cs.onSurfaceVariant.withValues(alpha: 0.5),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No vault items found',
-            style: tt.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Adjust filters or check back later.',
-            style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: cs.surfaceContainer,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Icon(
+                Icons.inventory_2_outlined,
+                size: 38,
+                color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'No items in the vault yet.',
+              style: tt.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: cs.onSurface,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }

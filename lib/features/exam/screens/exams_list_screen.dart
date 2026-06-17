@@ -81,9 +81,9 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
           ),
         ),
         actions: const [
-          CreditCounter(),
-          SizedBox(width: 4),
           SyncIndicator(),
+          SizedBox(width: 8),
+          CreditCounter(),
           SizedBox(width: 8),
         ],
         elevation: 0,
@@ -226,7 +226,7 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Tap New Exam to create your first exam.',
+                            'Tap New Exam to create one.',
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: cs.onSurfaceVariant,
                             ),

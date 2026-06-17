@@ -81,9 +81,9 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
           ),
         ),
         actions: const [
-          CreditCounter(),
-          SizedBox(width: 4),
           SyncIndicator(),
+          SizedBox(width: 8),
+          CreditCounter(),
           SizedBox(width: 8),
         ],
         elevation: 0,
@@ -222,7 +222,7 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'Tap New Lesson to create your first lesson.',
+                            'Tap New Lesson to create one.',
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: cs.onSurfaceVariant,
                             ),

@@ -404,10 +404,10 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                       const Spacer(),
                       // Sync indicator (Stitch green dot style)
                       const _SyncChip(),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 8),
                       // Credit chip
                       const _CreditChip(),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       // Profile popup
                       PopupMenuButton<String>(
                         onSelected: (value) {
@@ -1772,7 +1772,7 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 // Credit chip (live from creditStateProvider)
                 Material(
                   color: Colors.transparent,
