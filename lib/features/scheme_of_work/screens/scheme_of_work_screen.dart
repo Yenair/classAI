@@ -31,6 +31,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
   String _classLevel = 'JSS 1';
   String _term = 'First';
   bool _isGenerating = false;
+  bool _isLoadingScheme = false;
   bool _isAdmin = false;
   int? _teacherId;
   int? _schoolId;
@@ -45,6 +46,9 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
   Map<int, TextEditingController> _topicControllers = {};
   Map<int, TextEditingController> _objectivesControllers = {};
   Map<int, TextEditingController> _adminEditControllers = {};
+
+  // Maps week number -> database record ID for loaded schemes
+  Map<int, int> _weekRecordIds = {};
 
   // Existing SoW records
   List<SchemeOfWorkData> _existingSowRecords = [];
@@ -96,8 +100,10 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       for (final teacher in teachers) {
         _teacherNamesById[teacher.localId] = teacher.teacherName;
       }
-      await _loadExistingSow();
-      if (mounted) setState(() {});
+      if (mounted) {
+        await _loadSchemeForSelection();
+        setState(() {});
+      }
     } catch (_) {}
   }
 
@@ -114,6 +120,72 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       );
       _existingSowRecords = [];
       return null;
+    }
+  }
+
+  Future<void> _loadSchemeForSelection() async {
+    if (_schoolId == null || _teacherId == null) return;
+    setState(() => _isLoadingScheme = true);
+    try {
+      final db = ref.read(databaseProvider);
+      // Resolve subject name to subjectId
+      _subjectId = null;
+      final subjectRow = await db.subjectsDao.getByName(_subject);
+      if (subjectRow != null) {
+        _subjectId = subjectRow.id;
+      }
+
+      // Query existing records by school and filter for this teacher + subject + term
+      final allSchoolRecords = await db.schemeOfWorkDao.getBySchool(_schoolId!);
+      final matching = allSchoolRecords.where((r) =>
+          r.teacherId == _teacherId &&
+          r.subjectId == _subjectId &&
+          r.term == _term &&
+          !r.isDeleted).toList();
+
+      // Dispose old controllers
+      _disposeControllers();
+
+      if (matching.isNotEmpty) {
+        // Sort by week number
+        matching.sort((a, b) => a.weekNumber.compareTo(b.weekNumber));
+        _weeks = [];
+        _topicControllers = {};
+        _objectivesControllers = {};
+        _adminEditControllers = {};
+        _weekRecordIds = {};
+
+        for (final record in matching) {
+          final weekNum = record.weekNumber;
+          _topicControllers[weekNum] = TextEditingController(text: record.topic);
+          _objectivesControllers[weekNum] =
+              TextEditingController(text: record.objectives);
+          _adminEditControllers[weekNum] = TextEditingController();
+          _weekRecordIds[weekNum] = record.id;
+
+          _weeks.add({
+            'week': weekNum,
+            'topic': record.topic,
+            'objectives': record.objectives,
+          });
+        }
+      } else {
+        // No scheme found - clear weeks so Generate button and params appear
+        _weeks = [];
+        _topicControllers = {};
+        _objectivesControllers = {};
+        _adminEditControllers = {};
+        _weekRecordIds = {};
+      }
+    } catch (_) {
+      // On error, clear weeks to allow generation
+      _weeks = [];
+      _topicControllers = {};
+      _objectivesControllers = {};
+      _adminEditControllers = {};
+      _weekRecordIds = {};
+    } finally {
+      if (mounted) setState(() => _isLoadingScheme = false);
     }
   }
 
@@ -211,6 +283,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
         _topicControllers = {};
         _objectivesControllers = {};
         _adminEditControllers = {};
+        _weekRecordIds = {};
 
         for (final week in weeksData) {
           final weekNum = _normalizeWeekNumber(week['week'], _weeks.length + 1);
@@ -261,22 +334,34 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
         final weekNumber = index + 1;
         final topicText = _topicControllers[weekNumber]?.text ?? week['topic']?.toString() ?? '';
         final objectivesText = _objectivesControllers[weekNumber]?.text ?? week['objectives']?.toString() ?? '';
-        await db.schemeOfWorkDao.insert(
-          SchemeOfWorkCompanion.insert(
-            schoolId: Value(_schoolId!),
-            teacherId: Value(_teacherId!),
-            subjectId: Value(subjectId),
-            term: Value(_term),
-            weekNumber: Value(weekNumber),
-            topic: Value(topicText),
-            objectives: Value(objectivesText),
-            status: const Value('draft'),
-            createdAt: Value(DateTime.now()),
-            updatedAt: Value(DateTime.now()),
-          ),
-        );
+        final existingId = _weekRecordIds[weekNumber];
+        if (existingId != null) {
+          // Update existing record
+          await db.schemeOfWorkDao.updateWeekEntry(
+            existingId,
+            topic: topicText,
+            objectives: objectivesText,
+          );
+        } else {
+          // Insert new record
+          final newId = await db.schemeOfWorkDao.insert(
+            SchemeOfWorkCompanion.insert(
+              schoolId: Value(_schoolId!),
+              teacherId: Value(_teacherId!),
+              subjectId: Value(subjectId),
+              term: Value(_term),
+              weekNumber: Value(weekNumber),
+              topic: Value(topicText),
+              objectives: Value(objectivesText),
+              status: const Value('draft'),
+              createdAt: Value(DateTime.now()),
+              updatedAt: Value(DateTime.now()),
+            ),
+          );
+          _weekRecordIds[weekNumber] = newId;
+        }
       }
-      await _loadExistingSow();
+      await _loadSchemeForSelection();
       if (mounted) {
         showInfoToast(context: context, message: 'Scheme of Work saved!');
       }
@@ -296,10 +381,10 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       if (_weeks.isEmpty) return;
 
       final db = ref.read(databaseProvider);
-      for (final record in _groupByTerm()) {
-        await db.schemeOfWorkDao.updateStatus(record.id, 'pending');
+      for (final recordId in _weekRecordIds.values) {
+        await db.schemeOfWorkDao.updateStatus(recordId, 'pending');
       }
-      await _loadExistingSow();
+      await _loadSchemeForSelection();
       if (mounted) {
         showInfoToast(context: context, message: 'Submitted for approval!');
       }
@@ -351,13 +436,6 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
         showErrorToast(context: context, message: 'Reject failed: $e');
       }
     }
-  }
-
-  List<SchemeOfWorkData> _groupByTerm() {
-    final existing = _existingSowRecords.where(
-      (r) => r.subjectId == _subjectId && r.term == _term,
-    ).toList();
-    return existing;
   }
 
   Future<bool> _hasLessonOrExamReferences(dynamic db, int schemeId) async {
@@ -473,21 +551,36 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
               initialValue: nerdcSubjects.contains(_subject) ? _subject : nerdcSubjects.first,
               decoration: const InputDecoration(labelText: 'Subject'),
               items: nerdcSubjects.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-              onChanged: (v) { if (v != null) setState(() => _subject = v); },
+              onChanged: (v) {
+                if (v != null) {
+                  setState(() => _subject = v);
+                  _loadSchemeForSelection();
+                }
+              },
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _classLevel,
               decoration: const InputDecoration(labelText: 'Class Level'),
               items: _classLevels.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-              onChanged: (v) { if (v != null) setState(() => _classLevel = v); },
+              onChanged: (v) {
+                if (v != null) {
+                  setState(() => _classLevel = v);
+                  _loadSchemeForSelection();
+                }
+              },
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _term,
               decoration: const InputDecoration(labelText: 'Term'),
               items: _terms.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-              onChanged: (v) { if (v != null) setState(() => _term = v); },
+              onChanged: (v) {
+                if (v != null) {
+                  setState(() => _term = v);
+                  _loadSchemeForSelection();
+                }
+              },
             ),
             const SizedBox(height: 20),
             if (!_isAdmin) ...[
@@ -558,16 +651,16 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
   }
 
   Widget _buildPreviewColumn(ThemeData theme, ColorScheme cs) {
-    debugPrint('[SOW] build: _weeks length = ${_weeks.length}, _isGenerating = $_isGenerating');
+    debugPrint('[SOW] build: _weeks length = ${_weeks.length}, _isGenerating = $_isGenerating, _isLoadingScheme = $_isLoadingScheme');
     if (_isAdmin) {
       return _buildAdminView(theme, cs);
     }
 
-    if (_isGenerating) {
+    if (_isGenerating || _isLoadingScheme) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_weeks.isEmpty && _existingSowRecords.isEmpty) {
+    if (_weeks.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -577,42 +670,33 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
               Icon(Icons.calendar_month, size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
               const SizedBox(height: 12),
               Text('No scheme generated yet', style: theme.textTheme.bodyLarge),
+              const SizedBox(height: 4),
+              Text('Configure the options above and tap Generate Scheme',
+                  style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
             ],
           ),
         ),
       );
     }
 
-    // Show teacher's generated weeks
-    if (_weeks.isNotEmpty) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Generated Scheme — $_subject $_term Term',
-              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 12),
-            ..._weeks.asMap().entries.map((entry) {
-              final week = entry.value;
-              final weekNum = _normalizeWeekNumber(week['week'], entry.key + 1);
-              return _buildWeekCard(
-                theme,
-                cs,
-                weekNum,
-                week['topic'] as String,
-                week['objectives'] as String,
-              );
-            }),
-        ],
-      );
-    }
-
-    // Show existing saved records
+    // Show teacher's generated/loaded weeks
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Saved Schemes', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+        Text('Generated Scheme — $_subject $_term Term',
+            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
         const SizedBox(height: 12),
-        ..._existingSowRecords.map((r) => _buildExistingWeekCard(theme, cs, r)),
+          ..._weeks.asMap().entries.map((entry) {
+            final week = entry.value;
+            final weekNum = _normalizeWeekNumber(week['week'], entry.key + 1);
+            return _buildWeekCard(
+              theme,
+              cs,
+              weekNum,
+              week['topic'] as String,
+              week['objectives'] as String,
+            );
+          }),
       ],
     );
   }
@@ -660,50 +744,6 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
               ),
               maxLines: 4,
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildExistingWeekCard(ThemeData theme, ColorScheme cs, SchemeOfWorkData record) {
-    return Card(
-      color: _statusColor(record.status, cs).withValues(alpha: 0.08),
-      margin: const EdgeInsets.only(bottom: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: cs.primaryContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text('Week ${record.weekNumber} · ${record.term}',
-                      style: TextStyle(color: cs.onPrimaryContainer, fontWeight: FontWeight.w600)),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: _statusColor(record.status, cs),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(record.status,
-                      style: TextStyle(color: cs.onPrimary, fontSize: 12, fontWeight: FontWeight.w600)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text('Topic: ${record.adminEditedTopic ?? record.topic}',
-                style: theme.textTheme.bodyMedium),
-            const SizedBox(height: 4),
-            Text(record.objectives, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
           ],
         ),
       ),
