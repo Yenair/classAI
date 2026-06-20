@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
@@ -130,6 +131,8 @@ class AppDatabase extends _$AppDatabase {
         tokenize='porter unicode61'
       )
       ''');
+
+    await reconcileLegacyTeachers();
     }
   
     /// Removes duplicate teacher rows that share the same non-null [serverId],
@@ -167,6 +170,87 @@ class AppDatabase extends _$AppDatabase {
 
         await customStatement(
           'DELETE FROM teachers WHERE local_id IN (${deleteIds.join(',')})',
+        );
+      }
+    }
+
+    /// Repairs teacher rows that were created before the current school
+    /// linkage and roster rules were in place.
+    ///
+    /// The repair is conservative: it only writes when the school match is
+    /// unambiguous and never guesses across multiple schools.
+    Future<void> reconcileLegacyTeachers() async {
+      final schools = await (select(this.schools)
+            ..where((s) => s.isDeleted.equals(false)))
+          .get();
+      if (schools.isEmpty) return;
+
+      final schoolsByServerId = <String, School>{};
+      for (final school in schools) {
+        final serverId = school.serverId;
+        if (serverId != null && serverId.isNotEmpty) {
+          schoolsByServerId[serverId.toLowerCase()] = school;
+        }
+      }
+
+      final teachersToReview = await (select(teachers)
+            ..where((t) => t.isDeleted.equals(false)))
+          .get();
+      if (teachersToReview.isEmpty) return;
+
+      final singleSchool = schools.length == 1 ? schools.first : null;
+      var repairedCount = 0;
+
+      for (final teacher in teachersToReview) {
+        School? resolvedSchool;
+
+        final teacherSchoolServerId = teacher.schoolServerId;
+        if (teacherSchoolServerId != null &&
+            teacherSchoolServerId.isNotEmpty) {
+          resolvedSchool =
+              schoolsByServerId[teacherSchoolServerId.toLowerCase()];
+        }
+
+        if (resolvedSchool == null &&
+            teacher.schoolLocalId > 0 &&
+            schools.any((school) => school.localId == teacher.schoolLocalId)) {
+          resolvedSchool = schools
+              .firstWhere((school) => school.localId == teacher.schoolLocalId);
+        }
+
+        if (resolvedSchool == null && singleSchool != null) {
+          resolvedSchool = singleSchool;
+        }
+
+        if (resolvedSchool == null) {
+          continue;
+        }
+
+        final normalizedEmail = teacher.email.toLowerCase();
+        final shouldUpdate = teacher.schoolLocalId != resolvedSchool.localId ||
+            teacher.schoolServerId != resolvedSchool.serverId ||
+            teacher.email != normalizedEmail;
+
+        if (!shouldUpdate) {
+          continue;
+        }
+
+        await (update(this.teachers)
+              ..where((t) => t.localId.equals(teacher.localId)))
+            .write(
+          TeachersCompanion(
+            schoolLocalId: Value(resolvedSchool.localId),
+            schoolServerId: Value(resolvedSchool.serverId),
+            email: Value(normalizedEmail),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
+        repairedCount++;
+      }
+
+      if (repairedCount > 0) {
+        debugPrint(
+          '[db] reconcileLegacyTeachers: repaired $repairedCount teacher row(s)',
         );
       }
     }
@@ -209,6 +293,7 @@ class AppDatabase extends _$AppDatabase {
     Future<void> deduplicateAuthLoginRows() async {
       await deduplicateSchools();
       await deduplicateTeachers();
+      await reconcileLegacyTeachers();
     }
 
   // Migration support

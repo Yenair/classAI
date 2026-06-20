@@ -149,6 +149,7 @@ class AdminDashboardNotifier extends Notifier<AdminDashboardData> {
         final school = await _db.schoolsDao.get();
         schoolLocalId = school?.localId ?? 0;
       }
+      await _db.reconcileLegacyTeachers();
       final teachers = await _db.teachersDao.getBySchool(schoolLocalId);
       debugPrint(
         '[ADMIN-DEBUG] Teachers in local DB for school $schoolLocalId: ${teachers.length}',

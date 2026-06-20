@@ -725,6 +725,7 @@ class SyncService {
       await store.updateSecurityConfig(syncCooldownUntil: null);
     }
     await _pullChanges(schoolIdOverride: overrideSchoolId);
+    await db.reconcileLegacyTeachers();
   }
 
   Future<void> _pullChanges({String? schoolIdOverride}) async {
@@ -1352,7 +1353,6 @@ class SyncService {
     int totalDeleted = 0;
     for (final row in dupRows) {
       final serverId = row.data['server_id'] as String;
-      final count = row.data['cnt'] as int;
 
       // Get all localIds for this serverId, ordered ascending
       final idRows = await db.customSelect(

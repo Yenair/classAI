@@ -133,7 +133,7 @@ class _DatabaseBootstrapperState extends State<DatabaseBootstrapper> {
   Future<AppDatabase> _initDatabase() async {
     final db = AppDatabase();
     await db.initialize();
-    await db.deduplicateTeachers();
+    await db.reconcileLegacyTeachers();
     return db;
   }
 
