@@ -53,7 +53,7 @@ void main() {
     expect(find.text('Vault'), findsOneWidget);
   });
 
-  testWidgets('EditorLayout has 4 nav icons (non-admin)',
+  testWidgets('EditorLayout has 6 nav icons (non-admin)',
       (tester) async {
     await ensureViewportHeight(tester);
     SharedPreferences.setMockInitialValues({
@@ -74,7 +74,7 @@ void main() {
     expect(find.byType(EditorLayout).evaluate(), hasLength(1));
 
     // With default auth (currentTeacher == null => isAdmin == false),
-    // there are 4 nav items: Home, Lessons, Exams, Vault.
+    // there are 6 nav items: Home, Lessons, Exams, Vault, Scheme of Work, Settings.
     expect(find.byIcon(Icons.home_rounded), findsOneWidget);
     expect(find.byIcon(Icons.menu_book_rounded), findsOneWidget);
     expect(find.byIcon(Icons.quiz_rounded), findsOneWidget);

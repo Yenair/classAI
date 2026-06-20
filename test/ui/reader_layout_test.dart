@@ -88,10 +88,34 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     // Custom bottom nav renders Home, Lessons, Exams, More labels.
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Lessons'), findsOneWidget);
-    expect(find.text('Exams'), findsOneWidget);
-    expect(find.text('More'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(BottomNavigationBar),
+        matching: find.text('Home'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(BottomNavigationBar),
+        matching: find.text('Lessons'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(BottomNavigationBar),
+        matching: find.text('Exams'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(BottomNavigationBar),
+        matching: find.text('More'),
+      ),
+      findsOneWidget,
+    );
     // "Dashboard" is an EditorLayout-only destination
     expect(find.text('Dashboard'), findsNothing);
   });
@@ -122,10 +146,34 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Lessons'), findsOneWidget);
-    expect(find.text('Exams'), findsOneWidget);
-    expect(find.text('More'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(BottomNavigationBar),
+        matching: find.text('Home'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(BottomNavigationBar),
+        matching: find.text('Lessons'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(BottomNavigationBar),
+        matching: find.text('Exams'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(BottomNavigationBar),
+        matching: find.text('More'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('ReaderLayout shows ClassAI title in header',
