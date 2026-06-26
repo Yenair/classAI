@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/widgets/conflict_banner.dart';
-import 'package:classai/core/widgets/sync_indicator.dart';
 import 'package:classai/core/widgets/credit_counter.dart';
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
@@ -70,9 +69,17 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
     final lessonsAsync = ref.watch(lessonsListProvider);
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
+    final canPop = Navigator.of(context).canPop();
 
     return Scaffold(
       appBar: AppBar(
+        leading: canPop
+            ? IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.arrow_back_rounded),
+                tooltip: 'Back',
+              )
+            : null,
         title: Text(
           'Lessons',
           style: theme.textTheme.titleLarge?.copyWith(
@@ -80,11 +87,11 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
             letterSpacing: -0.12,
           ),
         ),
-        actions: const [
-          SyncIndicator(),
-          SizedBox(width: 8),
-          CreditCounter(),
-          SizedBox(width: 8),
+        actions: [
+          const Icon(Icons.cloud_off_rounded),
+          const SizedBox(width: 8),
+          const CreditCounter(),
+          const SizedBox(width: 8),
         ],
         elevation: 0,
         backgroundColor: cs.surface,
@@ -94,6 +101,15 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
       body: Column(
         children: [
           const ConflictBanner(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: _LessonFilterRow(
+              selectedFilter: _selectedFilter,
+              cs: cs,
+              theme: theme,
+              onSelected: _setFilter,
+            ),
+          ),
           Expanded(
             child: lessonsAsync.when(
               loading: () => ListView(
@@ -106,131 +122,146 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
                   (i) => _LessonCardSkeleton(cs: cs),
                 ),
               ),
-              error: (error, stack) => Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          color: cs.errorContainer,
-                          borderRadius: BorderRadius.circular(20),
+              error: (error, stack) => ListView(
+                physics: (Platform.isAndroid || Platform.isIOS)
+                    ? const BouncingScrollPhysics()
+                    : null,
+                padding: const EdgeInsets.all(32),
+                children: [
+                  Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            color: cs.errorContainer,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Icon(Icons.error_outline,
+                              size: 34, color: cs.onErrorContainer),
                         ),
-                        child: Icon(Icons.error_outline,
-                            size: 34, color: cs.onErrorContainer),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Failed to load lessons',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
+                        const SizedBox(height: 16),
+                        Text(
+                          'Failed to load lessons',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '$error',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: cs.onSurfaceVariant,
+                        const SizedBox(height: 8),
+                        Text(
+                          '$error',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 20),
-                      FilledButton(
-                        onPressed: () => ref.invalidate(lessonsListProvider),
-                        child: const Text('Retry'),
-                      ),
-                    ],
+                        const SizedBox(height: 20),
+                        FilledButton(
+                          onPressed: () => ref.invalidate(lessonsListProvider),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                ],
               ),
               data: (lessons) {
                 final filteredLessons = _applyFilter(lessons);
                 if (lessons.isNotEmpty && filteredLessons.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              color: cs.surfaceContainer,
-                              borderRadius: BorderRadius.circular(24),
+                  return ListView(
+                    physics: (Platform.isAndroid || Platform.isIOS)
+                        ? const BouncingScrollPhysics()
+                        : null,
+                    padding: const EdgeInsets.all(32),
+                    children: [
+                      Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 80,
+                              height: 80,
+                              decoration: BoxDecoration(
+                                color: cs.surfaceContainer,
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                              child: Icon(
+                                Icons.filter_alt_off_rounded,
+                                size: 38,
+                                color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                              ),
                             ),
-                            child: Icon(
-                              Icons.filter_alt_off_rounded,
-                              size: 38,
-                              color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                            const SizedBox(height: 20),
+                            Text(
+                              'No lessons match "$_selectedFilter"',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: cs.onSurface,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                          ),
-                          const SizedBox(height: 20),
-                          Text(
-                            'No lessons match "$_selectedFilter"',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: cs.onSurface,
+                            const SizedBox(height: 6),
+                            Text(
+                              'Try a different filter or clear it to see all lessons.',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Try a different filter or clear it to see all lessons.',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: cs.onSurfaceVariant,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   );
                 }
 
                 if (lessons.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              color: cs.surfaceContainer,
-                              borderRadius: BorderRadius.circular(24),
+                  return ListView(
+                    physics: (Platform.isAndroid || Platform.isIOS)
+                        ? const BouncingScrollPhysics()
+                        : null,
+                    padding: const EdgeInsets.all(32),
+                    children: [
+                      Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 80,
+                              height: 80,
+                              decoration: BoxDecoration(
+                                color: cs.surfaceContainer,
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                              child: Icon(
+                                Icons.book_rounded,
+                                size: 38,
+                                color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                              ),
                             ),
-                            child: Icon(
-                              Icons.book_rounded,
-                              size: 38,
-                              color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                            const SizedBox(height: 20),
+                            Text(
+                              'No lessons yet',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: cs.onSurface,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 20),
-                          Text(
-                            'No lessons yet',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: cs.onSurface,
+                            const SizedBox(height: 6),
+                            Text(
+                              'Tap New Lesson to create one.',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Tap New Lesson to create one.',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: cs.onSurfaceVariant,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   );
                 }
 
@@ -240,21 +271,10 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
                     physics: (Platform.isAndroid || Platform.isIOS)
                         ? const BouncingScrollPhysics()
                         : null,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: filteredLessons.length + 1,
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    itemCount: filteredLessons.length,
                     itemBuilder: (context, index) {
-                      if (index == 0) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _LessonFilterRow(
-                            selectedFilter: _selectedFilter,
-                            cs: cs,
-                            theme: theme,
-                            onSelected: _setFilter,
-                          ),
-                        );
-                      }
-                      final lesson = filteredLessons[index - 1];
+                      final lesson = filteredLessons[index];
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: _LessonCard(
@@ -465,13 +485,16 @@ class _LessonCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    lesson.topic,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: cs.onSurface,
+                  Flexible(
+                    child: Text(
+                      lesson.topic,
+                      maxLines: 3,
+                      overflow: TextOverflow.visible,
+                      softWrap: true,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: cs.onSurface,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 4),
