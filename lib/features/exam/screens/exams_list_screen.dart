@@ -70,9 +70,17 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
     final examsAsync = ref.watch(examsListProvider);
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
+    final canPop = Navigator.of(context).canPop();
 
     return Scaffold(
       appBar: AppBar(
+        leading: canPop
+            ? IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.arrow_back_rounded),
+                tooltip: 'Back',
+              )
+            : null,
         title: Text(
           'Exams',
           style: theme.textTheme.titleLarge?.copyWith(
@@ -80,11 +88,11 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
             letterSpacing: -0.12,
           ),
         ),
-        actions: const [
-          SyncIndicator(),
-          SizedBox(width: 8),
-          CreditCounter(),
-          SizedBox(width: 8),
+        actions: [
+          const SyncIndicator(),
+          const SizedBox(width: 8),
+          const CreditCounter(),
+          const SizedBox(width: 8),
         ],
         elevation: 0,
         backgroundColor: cs.surface,
@@ -94,10 +102,18 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
       body: Column(
         children: [
           const ConflictBanner(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: _ExamFilterRow(
+              selectedFilter: _selectedFilter,
+              cs: cs,
+              theme: theme,
+              onSelected: _setFilter,
+            ),
+          ),
           Expanded(
             child: examsAsync.when(
               loading: () => ListView(
-
                 physics: (Platform.isAndroid || Platform.isIOS)
                     ? const BouncingScrollPhysics()
                     : null,
@@ -154,87 +170,97 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
               data: (exams) {
                 final filteredExams = _applyFilter(exams);
                 if (exams.isNotEmpty && filteredExams.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              color: cs.surfaceContainer,
-                              borderRadius: BorderRadius.circular(24),
+                  return ListView(
+                    physics: (Platform.isAndroid || Platform.isIOS)
+                        ? const BouncingScrollPhysics()
+                        : null,
+                    padding: const EdgeInsets.all(32),
+                    children: [
+                      Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 80,
+                              height: 80,
+                              decoration: BoxDecoration(
+                                color: cs.surfaceContainer,
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                              child: Icon(
+                                Icons.filter_alt_off_rounded,
+                                size: 38,
+                                color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                              ),
                             ),
-                            child: Icon(
-                              Icons.filter_alt_off_rounded,
-                              size: 38,
-                              color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                            const SizedBox(height: 20),
+                            Text(
+                              'No exams match "$_selectedFilter"',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: cs.onSurface,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                          ),
-                          const SizedBox(height: 20),
-                          Text(
-                            'No exams match "$_selectedFilter"',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: cs.onSurface,
+                            const SizedBox(height: 6),
+                            Text(
+                              'Try a different filter or clear it to see all exams.',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Try a different filter or clear it to see all exams.',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: cs.onSurfaceVariant,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   );
                 }
 
                 if (exams.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              color: cs.surfaceContainer,
-                              borderRadius: BorderRadius.circular(24),
+                  return ListView(
+                    physics: (Platform.isAndroid || Platform.isIOS)
+                        ? const BouncingScrollPhysics()
+                        : null,
+                    padding: const EdgeInsets.all(32),
+                    children: [
+                      Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 80,
+                              height: 80,
+                              decoration: BoxDecoration(
+                                color: cs.surfaceContainer,
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                              child: Icon(
+                                Icons.quiz_rounded,
+                                size: 38,
+                                color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                              ),
                             ),
-                            child: Icon(
-                              Icons.quiz_rounded,
-                              size: 38,
-                              color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                            const SizedBox(height: 20),
+                            Text(
+                              'No exams yet',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: cs.onSurface,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 20),
-                          Text(
-                            'No exams yet',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: cs.onSurface,
+                            const SizedBox(height: 6),
+                            Text(
+                              'Tap New Exam to create one.',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Tap New Exam to create one.',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: cs.onSurfaceVariant,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   );
                 }
 
@@ -244,21 +270,10 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
                     physics: (Platform.isAndroid || Platform.isIOS)
                         ? const BouncingScrollPhysics()
                         : null,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: filteredExams.length + 1,
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    itemCount: filteredExams.length,
                     itemBuilder: (context, index) {
-                      if (index == 0) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _ExamFilterRow(
-                            selectedFilter: _selectedFilter,
-                            cs: cs,
-                            theme: theme,
-                            onSelected: _setFilter,
-                          ),
-                        );
-                      }
-                      final exam = filteredExams[index - 1];
+                      final exam = filteredExams[index];
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: _ExamCard(
