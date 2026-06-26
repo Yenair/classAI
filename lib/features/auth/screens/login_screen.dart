@@ -78,7 +78,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         if (next.state == AuthState.emailVerificationRequired &&
             !next.isSignupFlow &&
             mounted) {
-          _showEmailVerificationDialog();
+          _showEmailVerificationDialog(
+            showNewDeviceHint: next.pendingDeviceId != null,
+          );
         }
 
         if (previous?.state == AuthState.emailVerificationRequired &&
@@ -100,12 +102,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final authState = ref.read(authProvider);
     if (authState.state == AuthState.emailVerificationRequired &&
         !authState.isSignupFlow) {
-      _showEmailVerificationDialog();
+      _showEmailVerificationDialog(
+        showNewDeviceHint: authState.pendingDeviceId != null,
+      );
     }
   }
 
   /// Shows the non-dismissible email verification dialog.
-  void _showEmailVerificationDialog() {
+  void _showEmailVerificationDialog({required bool showNewDeviceHint}) {
     if (!mounted || _emailVerificationDialogShowing) return;
     _emailVerificationDialogShowing = true;
     showDialog(
@@ -118,7 +122,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             // Prevent back-button dismissal — the user must
             // explicitly Cancel (which logs out) or Verify.
           },
-          child: const EmailVerificationDialog(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (showNewDeviceHint)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    'New device detected – please verify your email to continue.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                ),
+              const EmailVerificationDialog(),
+            ],
+          ),
         );
       },
     ).whenComplete(() {
