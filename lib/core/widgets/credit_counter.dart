@@ -21,6 +21,7 @@ class _CreditCounterState extends ConsumerState<CreditCounter>
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
   int _previousBalance = -1;
+  bool _pulseScheduled = false;
 
   @override
   void initState() {
@@ -54,63 +55,74 @@ class _CreditCounterState extends ConsumerState<CreditCounter>
     final creditData = ref.watch(creditStateProvider);
     final balance = creditData.currentCredits;
 
-    if (_previousBalance >= 0 && balance != _previousBalance) {
-      _pulseController.forward(from: 0);
+    if (_previousBalance >= 0 &&
+        balance != _previousBalance &&
+        !_pulseScheduled) {
+      _pulseScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _pulseScheduled = false;
+        _pulseController.forward(from: 0);
+      });
     }
     _previousBalance = balance;
 
     final cs = Theme.of(context).colorScheme;
-
     final hasError = creditData.errorMessage != null;
     final isPositive = !hasError && creditData.currentCredits > 0;
     final labelColor = hasError ? cs.error : (isPositive ? cs.primary : cs.error);
 
-    return AnimatedBuilder(
-      animation: _pulseAnimation,
-      builder: (context, child) => Transform.scale(
-        scale: _pulseAnimation.value,
-        child: child,
-      ),
-      child: ActionChip(
-      backgroundColor: labelColor.withValues(alpha: isPositive ? 0.10 : 0.12),
-      side: BorderSide(
-        color: labelColor.withValues(alpha: isPositive ? 0.24 : 0.30),
-        width: 1,
-      ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      labelPadding: const EdgeInsets.symmetric(horizontal: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-      avatar: Container(
-        width: 20,
-        height: 20,
-        decoration: BoxDecoration(
-          color: labelColor.withValues(alpha: isPositive ? 0.16 : 0.18),
-          borderRadius: BorderRadius.circular(6),
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _pulseAnimation,
+        builder: (context, child) => Transform.scale(
+          scale: _pulseAnimation.value,
+          child: child,
         ),
-        alignment: Alignment.center,
-        child: Icon(
-          hasError ? Icons.error_outline_rounded : Icons.lock_open_rounded,
-          size: 11,
-          color: labelColor,
-        ),
-      ),
-      label: Text(
-        hasError ? '—' : (creditData.loading ? '…' : '${creditData.currentCredits}'),
-        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: labelColor,
-              letterSpacing: 0.25,
+        child: ActionChip(
+          backgroundColor:
+              labelColor.withValues(alpha: isPositive ? 0.10 : 0.12),
+          side: BorderSide(
+            color: labelColor.withValues(alpha: isPositive ? 0.24 : 0.30),
+            width: 1,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          labelPadding: const EdgeInsets.symmetric(horizontal: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          avatar: Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              color: labelColor.withValues(alpha: isPositive ? 0.16 : 0.18),
+              borderRadius: BorderRadius.circular(6),
             ),
-      ),
-      onPressed: () {
-        if (creditData.currentCredits <= 0) {
-          context.push('/insufficient-credit');
-        } else {
-          _showCreditDetailsDialog(context, creditData);
-        }
-      },
+            alignment: Alignment.center,
+            child: Icon(
+              hasError ? Icons.error_outline_rounded : Icons.lock_open_rounded,
+              size: 11,
+              color: labelColor,
+            ),
+          ),
+          label: Text(
+            hasError
+                ? '—'
+                : (creditData.loading ? '…' : '${creditData.currentCredits}'),
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: labelColor,
+                  letterSpacing: 0.25,
+                ),
+          ),
+          onPressed: () {
+            if (creditData.currentCredits <= 0) {
+              context.push('/insufficient-credit');
+            } else {
+              _showCreditDetailsDialog(context, creditData);
+            }
+          },
+        ),
       ),
     );
   }
@@ -133,6 +145,7 @@ class _CreditDetailsDialog extends StatelessWidget {
     required this.data,
     required this.schoolTier,
   });
+
   final dynamic data;
   final String schoolTier;
 
@@ -159,8 +172,11 @@ class _CreditDetailsDialog extends StatelessWidget {
               color: cs.primaryContainer,
               borderRadius: const BorderRadius.all(Radius.circular(10)),
             ),
-            child: Icon(Icons.account_balance_rounded,
-                color: cs.onPrimaryContainer, size: 18),
+            child: Icon(
+              Icons.account_balance_rounded,
+              color: cs.onPrimaryContainer,
+              size: 18,
+            ),
           ),
           const SizedBox(width: 12),
           Text(
@@ -176,7 +192,6 @@ class _CreditDetailsDialog extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Available credits ──────────────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -205,8 +220,6 @@ class _CreditDetailsDialog extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-
-          // ── Tier ───────────────────────────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -238,8 +251,6 @@ class _CreditDetailsDialog extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-
-          // ── Plan (school subscription) ─────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -273,8 +284,6 @@ class _CreditDetailsDialog extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-
-          // ── Next refill ────────────────────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [

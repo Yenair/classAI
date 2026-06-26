@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
@@ -30,6 +31,20 @@ final databaseProvider = Provider<AppDatabase>((ref) {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    debugPrint('FlutterError: ${details.exceptionAsString()}');
+    if (details.stack != null) {
+      debugPrint(details.stack.toString());
+    }
+  };
+
+  PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+    debugPrint('Uncaught error: $error');
+    debugPrint(stack.toString());
+    return false;
+  };
 
   await Supabase.initialize(
     url: AppConstants.supabaseUrl,
