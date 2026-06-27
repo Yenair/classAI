@@ -101,6 +101,8 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
   /// Builds a single item for the stable [ListView.builder] depending on
   /// the current [AsyncValue] state.
   Widget _buildItem(BuildContext context, AsyncValue<List<Lesson>> async, int index) {
+    if (!mounted) return const SizedBox.shrink();
+    
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
 
@@ -228,12 +230,24 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
         return Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: _LessonCard(
+            key: ValueKey(lesson.id),
             lesson: lesson,
-            onTap: () => WidgetsBinding.instance
-                .addPostFrameCallback((_) => context.push('/lessons/${lesson.id}')),
-            onEdit: () => WidgetsBinding.instance
-                .addPostFrameCallback((_) => context.push('/lessons/${lesson.id}')),
-            onDelete: () => _confirmDeleteLesson(lesson),
+            cs: cs,
+            theme: theme,
+            onTap: () {
+              if (!mounted) return;
+              WidgetsBinding.instance
+                  .addPostFrameCallback((_) => context.push('/lessons/${lesson.id}'));
+            },
+            onEdit: () {
+              if (!mounted) return;
+              WidgetsBinding.instance
+                  .addPostFrameCallback((_) => context.push('/lessons/${lesson.id}'));
+            },
+            onDelete: () {
+              if (!mounted) return;
+              _confirmDeleteLesson(lesson);
+            },
           ),
         );
       },
@@ -247,17 +261,26 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
     final theme = Theme.of(context);
     final canPop = Navigator.of(context).canPop();
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: canPop
-            ? IconButton(
-                onPressed: () => WidgetsBinding.instance.addPostFrameCallback(
-                  (_) => Navigator.of(context).pop(),
-                ),
-                icon: const Icon(Icons.arrow_back_rounded),
-                tooltip: 'Back',
-              )
-            : null,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && mounted) {
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => Navigator.of(context).pop(),
+          );
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: canPop
+              ? IconButton(
+                  onPressed: () => WidgetsBinding.instance.addPostFrameCallback(
+                    (_) => Navigator.of(context).pop(),
+                  ),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  tooltip: 'Back',
+                )
+              : null,
         title: Text(
           'Lessons',
           style: theme.textTheme.titleLarge?.copyWith(
@@ -347,7 +370,7 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
           ),
         ),
       ),
-    );
+    ));
   }
 
   Future<void> _confirmDeleteLesson(Lesson lesson) async {
@@ -458,12 +481,17 @@ class _LessonFilterRow extends StatelessWidget {
 
 class _LessonCard extends StatelessWidget {
   final Lesson lesson;
+  final ColorScheme cs;
+  final ThemeData theme;
   final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _LessonCard({
+    super.key,
     required this.lesson,
+    required this.cs,
+    required this.theme,
     required this.onTap,
     required this.onEdit,
     required this.onDelete,
@@ -471,103 +499,85 @@ class _LessonCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final theme = Theme.of(context);
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: cs.outlineVariant.withValues(alpha: 0.55),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: cs.onSurface.withValues(alpha: 0.03),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: cs.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: cs.outlineVariant.withValues(alpha: 0.55),
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color: cs.primaryContainer.withValues(alpha: 0.35),
-                borderRadius: BorderRadius.circular(13),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: cs.primaryContainer.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(13),
+          ),
+          child: Icon(
+            Icons.menu_book_rounded,
+            color: cs.primary,
+            size: 22,
+          ),
+        ),
+        title: Text(
+          lesson.topic,
+          maxLines: 3,
+          overflow: TextOverflow.visible,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: cs.onSurface,
+          ),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainer,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  lesson.subject,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: cs.onSurfaceVariant,
+                    letterSpacing: 0.3,
+                  ),
+                ),
               ),
-              child: Icon(
-                Icons.menu_book_rounded,
-                color: cs.primary,
-                size: 22,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Flexible(
-                    child: Text(
-                      lesson.topic,
-                      maxLines: 3,
-                      overflow: TextOverflow.visible,
-                      softWrap: true,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: cs.onSurface,
-                      ),
+              if (lesson.classLevel.isNotEmpty) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainer,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    lesson.classLevel,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: cs.onSurfaceVariant,
+                      letterSpacing: 0.3,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: cs.surfaceContainer,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          lesson.subject,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            fontWeight: FontWeight.w500,
-                            color: cs.onSurfaceVariant,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ),
-                      if (lesson.classLevel.isNotEmpty) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: cs.surfaceContainer,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            lesson.classLevel,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              fontWeight: FontWeight.w500,
-                              color: cs.onSurfaceVariant,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
+                ),
+              ],
+            ],
+          ),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
             Text(
               _formatDate(lesson.createdAt),
               style: theme.textTheme.labelSmall?.copyWith(
@@ -576,35 +586,27 @@ class _LessonCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            // Edit button
             IconButton(
+              icon: Icon(Icons.edit_rounded, size: 20, color: cs.primary),
               onPressed: onEdit,
-              icon: Icon(
-                Icons.edit_rounded,
-                size: 20,
-                color: cs.primary,
-              ),
-              tooltip: 'Edit lesson',
-              style: IconButton.styleFrom(
-                foregroundColor: cs.primary,
-                visualDensity: VisualDensity.compact,
-              ),
+              tooltip: 'Edit',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
             ),
-            // Delete button
             IconButton(
+              icon: Icon(Icons.delete_outline_rounded, size: 20, color: cs.error),
               onPressed: onDelete,
-              icon: Icon(
-                Icons.delete_outline_rounded,
-                size: 20,
-                color: cs.error,
-              ),
-              tooltip: 'Delete lesson',
-              style: IconButton.styleFrom(
-                foregroundColor: cs.error,
-                visualDensity: VisualDensity.compact,
-              ),
+              tooltip: 'Delete',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
             ),
           ],
+        ),
+        onTap: onTap,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
         ),
       ),
     );
