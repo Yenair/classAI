@@ -1412,6 +1412,8 @@ class _RightColumn extends ConsumerWidget {
             ],
           ),
         ),
+        const SizedBox(height: 16),
+        const _CurrentWeekProgressCard(),
       ],
     );
   }
@@ -1465,6 +1467,71 @@ final lastUpdatedLessonProvider = FutureProvider<Lesson?>((ref) async {
   if (filtered.isEmpty) return null;
   filtered.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
   return filtered.first;
+});
+
+class CurrentWeekProgressData {
+  final int weekNumber;
+  final String topic;
+  final int completedLessons;
+
+  const CurrentWeekProgressData({
+    required this.weekNumber,
+    required this.topic,
+    required this.completedLessons,
+  });
+}
+
+final currentWeekProgressProvider =
+    FutureProvider<CurrentWeekProgressData?>((ref) async {
+  final db = ref.read(databaseProvider);
+  final authData = ref.read(authProvider);
+  final teacher = authData.currentTeacher;
+  final teacherId = teacher?.localId;
+  final teacherServerId = teacher?.serverId;
+
+  if (teacherId == null || teacherServerId == null) {
+    return null;
+  }
+
+  final lessons = await db.lessonsDao.getAll();
+  final teacherLessons = lessons
+      .where((lesson) => lesson.teacherServerId == teacherServerId)
+      .toList();
+  if (teacherLessons.isEmpty) return null;
+
+  final activeWeek = teacherLessons
+      .map((lesson) => lesson.weekNumber ?? lesson.week)
+      .reduce((a, b) => a > b ? a : b);
+
+  final schemes = await db.schemeOfWorkDao.getApproved();
+  final matchingSchemes = schemes
+      .where((scheme) => scheme.teacherId == teacherId)
+      .toList()
+    ..sort((a, b) => a.weekNumber.compareTo(b.weekNumber));
+  if (matchingSchemes.isEmpty) return null;
+
+  SchemeOfWorkData schemeForWeek = matchingSchemes.first;
+  for (final scheme in matchingSchemes) {
+    if (scheme.weekNumber == activeWeek) {
+      schemeForWeek = scheme;
+      break;
+    }
+    if (scheme.weekNumber <= activeWeek) {
+      schemeForWeek = scheme;
+    }
+  }
+
+  final completedLessons = teacherLessons
+      .where((lesson) =>
+          (lesson.weekNumber ?? lesson.week) == schemeForWeek.weekNumber &&
+          lesson.status == 'completed')
+      .length;
+
+  return CurrentWeekProgressData(
+    weekNumber: schemeForWeek.weekNumber,
+    topic: schemeForWeek.topic,
+    completedLessons: completedLessons,
+  );
 });
 
 class ReaderLayout extends ConsumerStatefulWidget {
@@ -1864,6 +1931,8 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
                       color: cs.onSurfaceVariant,
                     ),
                   ),
+                  const SizedBox(height: 24),
+                  const _CurrentWeekProgressCard(),
                   const SizedBox(height: 24),
                   const _TodayAtAGlanceStrip(),
                   const SizedBox(height: 24),
@@ -2422,6 +2491,101 @@ class _BottomNavItem extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _CurrentWeekProgressCard extends ConsumerWidget {
+  const _CurrentWeekProgressCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final progressAsync = ref.watch(currentWeekProgressProvider);
+    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+
+    return progressAsync.when(
+      loading: () => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.2)),
+        ),
+        child: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (err, _) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.2)),
+        ),
+        child: Text(
+          'No active scheme',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: cs.onSurfaceVariant,
+          ),
+        ),
+      ),
+      data: (progress) {
+        if (progress == null) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.2)),
+            ),
+            child: Text(
+              'No active scheme',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+          );
+        }
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+            border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Upcoming Schedule',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: cs.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Week ${progress.weekNumber}: ${progress.topic}',
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: cs.onSurface,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${progress.completedLessons} completed lesson${progress.completedLessons == 1 ? '' : 's'}',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

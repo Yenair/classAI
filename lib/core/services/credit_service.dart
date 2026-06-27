@@ -1,4 +1,5 @@
 import 'package:uuid/uuid.dart';
+import '../utils/platform_helper.dart';
 import '../database/database.dart';
 
 class CreditService {
@@ -19,6 +20,10 @@ class CreditService {
     final effectiveAmount = amount > 1 ? 1 : amount;
 
     final batchId = _uuid.v4();
+    if (await PlatformHelper.isOnline()) {
+      return batchId;
+    }
+
     final config = await _db.securityConfigDao.get();
 
     if (config.offlineCredits < effectiveAmount) {
