@@ -59,7 +59,7 @@ class TestSyncStatusNotifier extends SyncStatusNotifier {
 void main() {
   final testDb = AppDatabase.forTesting();
 
-  testWidgets('ReaderLayout shows bottom navigation with 4 items',
+  testWidgets('ReaderLayout shows bottom navigation with 5 items',
       (tester) async {
     await ensureViewportHeight(tester);
     SharedPreferences.setMockInitialValues({
@@ -87,31 +87,44 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    // Custom bottom nav renders Home, Lessons, Exams, More labels.
+    final bottomNavItems = find.byWidgetPredicate(
+      (widget) => widget.runtimeType.toString() == '_BottomNavItem',
+    );
+
+    expect(bottomNavItems, findsNWidgets(5));
+
+    // Custom bottom nav renders Home, Lessons, Exams, Scheme of Work, More.
     expect(
       find.descendant(
-        of: find.byType(BottomNavigationBar),
+        of: bottomNavItems,
         matching: find.text('Home'),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
-        of: find.byType(BottomNavigationBar),
+        of: bottomNavItems,
         matching: find.text('Lessons'),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
-        of: find.byType(BottomNavigationBar),
+        of: bottomNavItems,
         matching: find.text('Exams'),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
-        of: find.byType(BottomNavigationBar),
+        of: bottomNavItems,
+        matching: find.text('Scheme of Work'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: bottomNavItems,
         matching: find.text('More'),
       ),
       findsOneWidget,
@@ -120,7 +133,7 @@ void main() {
     expect(find.text('Dashboard'), findsNothing);
   });
 
-  testWidgets('ReaderLayout shows Home, Lessons, Exams, More labels',
+  testWidgets('ReaderLayout shows Home, Lessons, Exams, Scheme of Work, More labels',
       (tester) async {
     await ensureViewportHeight(tester);
     SharedPreferences.setMockInitialValues({
@@ -146,30 +159,42 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
+    final bottomNavItems = find.byWidgetPredicate(
+      (widget) => widget.runtimeType.toString() == '_BottomNavItem',
+    );
+
+    expect(bottomNavItems, findsNWidgets(5));
     expect(
       find.descendant(
-        of: find.byType(BottomNavigationBar),
+        of: bottomNavItems,
         matching: find.text('Home'),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
-        of: find.byType(BottomNavigationBar),
+        of: bottomNavItems,
         matching: find.text('Lessons'),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
-        of: find.byType(BottomNavigationBar),
+        of: bottomNavItems,
         matching: find.text('Exams'),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
-        of: find.byType(BottomNavigationBar),
+        of: bottomNavItems,
+        matching: find.text('Scheme of Work'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: bottomNavItems,
         matching: find.text('More'),
       ),
       findsOneWidget,

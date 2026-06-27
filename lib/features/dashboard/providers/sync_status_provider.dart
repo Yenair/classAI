@@ -1,9 +1,10 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/core/services/sync_service.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart'
@@ -71,34 +72,43 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
   Timer? _periodicSyncTimer;
   bool _wasOffline = true;
   bool _isSyncing = false;
+  bool _initialized = false;
 
   @override
   SyncStatusData build() {
-    // Monitor connectivity changes in real time.
-    final connectivity = Connectivity();
-    _connectivitySubscription =
-        connectivity.onConnectivityChanged.listen((results) {
-      final isOnline = results.any((r) => r != ConnectivityResult.none);
+    if (_initialized) {
+      return state;
+    }
+    _initialized = true;
 
-      // Update state with new connectivity status
-      state = SyncStatusData(
-        status: isOnline ? state.status : SyncStatus.offline,
-        lastSyncTime: state.lastSyncTime,
-        pendingPushCount: state.pendingPushCount,
-        pendingPullCount: state.pendingPullCount,
-        conflictCount: state.conflictCount,
-        isOnline: isOnline,
-      );
+    // Monitor connectivity changes in real time on platforms that support it.
+    if (_connectivitySubscription == null &&
+        PlatformHelper.supportsConnectivityStream()) {
+      final connectivity = Connectivity();
+      _connectivitySubscription =
+          connectivity.onConnectivityChanged.listen((results) {
+        final isOnline = results.any((r) => r != ConnectivityResult.none);
 
-      // Auto-trigger sync when transitioning offline → online
-      if (isOnline && _wasOffline) {
-        _autoSync();
-      }
-      _wasOffline = !isOnline;
-    });
+        // Update state with new connectivity status
+        state = SyncStatusData(
+          status: isOnline ? state.status : SyncStatus.offline,
+          lastSyncTime: state.lastSyncTime,
+          pendingPushCount: state.pendingPushCount,
+          pendingPullCount: state.pendingPullCount,
+          conflictCount: state.conflictCount,
+          isOnline: isOnline,
+        );
+
+        // Auto-trigger sync when transitioning offline → online
+        if (isOnline && _wasOffline) {
+          _autoSync();
+        }
+        _wasOffline = !isOnline;
+      });
+    }
 
     // Periodic background sync every 5 minutes while online
-    _periodicSyncTimer = Timer.periodic(
+    _periodicSyncTimer ??= Timer.periodic(
       const Duration(minutes: 5),
       (_) {
         if (state.isOnline && !_isSyncing) {
@@ -109,13 +119,20 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
 
     ref.onDispose(() {
       _connectivitySubscription?.cancel();
+      _connectivitySubscription = null;
       _periodicSyncTimer?.cancel();
+      _periodicSyncTimer = null;
+      _initialized = false;
     });
 
     // Trigger an initial sync after the widget tree is built so that
     // data (teachers, pending teachers, etc.) is available immediately
     // when the admin dashboard or any other screen first renders.
-    Future(() => _autoSync());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (ref.mounted) {
+        _autoSync();
+      }
+    });
 
     return const SyncStatusData(status: SyncStatus.offline);
   }
@@ -159,7 +176,7 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
     }
   }
 
-  /// Trigger a full sync cycle (pull‑merge‑push) and update UI status.
+  /// Trigger a full sync cycle (pull-merge-push) and update UI status.
   ///
   /// Sets the status to [SyncStatus.syncing], calls
   /// [SyncService.onConnectivityRestored()], then refreshes the display.
@@ -220,8 +237,13 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
 
       // Check current connectivity on refresh.
       final connectivity = Connectivity();
-      final results = await connectivity.checkConnectivity();
-      final isOnline = results.any((r) => r != ConnectivityResult.none);
+      bool isOnline = false;
+      try {
+        final results = await connectivity.checkConnectivity();
+        isOnline = results.any((r) => r != ConnectivityResult.none);
+      } catch (_) {
+        isOnline = false;
+      }
 
       final syncStatus = _determineSyncStatus(config);
       state = SyncStatusData(

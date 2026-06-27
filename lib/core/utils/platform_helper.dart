@@ -1,8 +1,15 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PlatformHelper {
+  /// Returns `true` when the current platform can safely use the
+  /// connectivity_plus realtime stream.
+  static bool supportsConnectivityStream() {
+    return defaultTargetPlatform != TargetPlatform.windows;
+  }
+
   /// Returns `true` if the device has network connectivity.
   ///
   /// Uses [connectivity_plus] to check for active network connections.

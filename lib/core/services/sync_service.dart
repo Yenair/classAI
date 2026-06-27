@@ -881,6 +881,9 @@ class SyncService {
       }
     } catch (e) {
       // Silently ignore — the next sync cycle will re-check.
+      if (e.toString().contains('_instance._isInitialized')) {
+        return;
+      }
       debugPrint('[SyncService] Failed to check subscription expiry: $e');
     }
   }
@@ -1003,7 +1006,7 @@ class SyncService {
 
       if (result.retryable && entry.attempts < 5) {
         _setState(SyncState.backoff);
-      } else if (!result.retryable || entry.attempts >= 5) {
+      } else if (entry.attempts >= 5) {
         // ── Stuck item cleanup ──────────────────────────────────
         // Items that have exhausted retries (attempts >= 5) or are
         // non-retryable would remain in the queue forever, causing
@@ -1099,7 +1102,12 @@ class SyncService {
         await db.securityConfigDao.updateConfig(
           offlineCredits: response['offlineCredits'] as int? ?? 3,
           creditServerCounter: response['creditServerCounter'] as int? ?? 0,
-          creditSpentIdsLocal: response['spentIds'] as String? ?? '[]',
+          creditSpentIdsLocal: (() {
+            final spentIds = response['spentIds'];
+            if (spentIds is String) return spentIds;
+            if (spentIds is List) return jsonEncode(spentIds);
+            return '[]';
+          })(),
         );
       }
     } catch (e) {

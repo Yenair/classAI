@@ -10,9 +10,10 @@ class ExamsDao extends DatabaseAccessor<AppDatabase>
     with _$ExamsDaoMixin {
   ExamsDao(AppDatabase db) : super(db);
 
-  /// Get all exams ordered by created date descending.
+  /// Get all non-deleted exams ordered by created date descending.
   Future<List<Exam>> getAll() {
     return (select(exams)
+          ..where((t) => t.isDeleted.equals(false))
           ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)]))
         .get();
   }

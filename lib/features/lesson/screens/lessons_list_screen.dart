@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/widgets/conflict_banner.dart';
 import 'package:classai/core/widgets/credit_counter.dart';
+import 'package:classai/core/widgets/sync_indicator.dart';
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/features/dashboard/providers/unresolved_conflicts_provider.dart';
@@ -30,6 +31,11 @@ class LessonsListScreen extends ConsumerStatefulWidget {
 
 class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
   String _selectedFilter = 'All';
+
+  // Stable scroll physics to avoid null-pattern issues with RefreshIndicator
+  static final ScrollPhysics _stablePhysics =
+      const AlwaysScrollableScrollPhysics()
+          .applyTo(const BouncingScrollPhysics());
 
   List<Lesson> _applyFilter(List<Lesson> lessons) {
     switch (_selectedFilter) {
@@ -64,6 +70,176 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
     });
   }
 
+  /// Returns a [ScrollPhysics] that is never null so [RefreshIndicator]
+  /// can always attach its internal gesture recogniser correctly.
+  ScrollPhysics _effectivePhysics() {
+    if (Platform.isAndroid || Platform.isIOS) {
+      return _stablePhysics;
+    }
+    // Always return a non-null physics to prevent RefreshIndicator
+    // from receiving a null viewport, which can cause the "Null check
+    // operator used on a null value" crash in RenderViewportBase.
+    return _stablePhysics;
+  }
+
+  /// Computes the number of items for the single stable [ListView.builder].
+  /// - loading: 4 skeleton cards
+  /// - error: 1 error card
+  /// - data with filtered list: item count or 1 for empty states
+  int _itemCount(AsyncValue<List<Lesson>> async) {
+    return async.when(
+      loading: () => 4,
+      error: (_, __) => 1,
+      data: (lessons) {
+        final filtered = _applyFilter(lessons);
+        if (filtered.isEmpty) return 1; // single "empty state" card
+        return filtered.length;
+      },
+    );
+  }
+
+  /// Builds a single item for the stable [ListView.builder] depending on
+  /// the current [AsyncValue] state.
+  Widget _buildItem(BuildContext context, AsyncValue<List<Lesson>> async, int index) {
+    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+
+    return async.when(
+      loading: () => Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: _LessonCardSkeleton(cs: cs),
+      ),
+      error: (error, _) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: cs.errorContainer,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child:
+                  Icon(Icons.error_outline, size: 34, color: cs.onErrorContainer),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Failed to load lessons',
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '$error',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: cs.onSurfaceVariant),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            FilledButton(
+              onPressed: () => ref.invalidate(lessonsListProvider),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+      data: (lessons) {
+        final filtered = _applyFilter(lessons);
+
+        // Empty states: single card
+        if (filtered.isEmpty) {
+          if (lessons.isNotEmpty) {
+            // Filter matches nothing
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainer,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Icon(
+                      Icons.filter_alt_off_rounded,
+                      size: 38,
+                      color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'No lessons match "$_selectedFilter"',
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w600, color: cs.onSurface),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Try a different filter or clear it to see all lessons.',
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(color: cs.onSurfaceVariant),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            );
+          }
+          // No lessons at all
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainer,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Icon(
+                    Icons.book_rounded,
+                    size: 38,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'No lessons yet',
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w600, color: cs.onSurface),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Tap New Lesson to create one.',
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: cs.onSurfaceVariant),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          );
+        }
+
+        // Normal lesson card
+        final lesson = filtered[index];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: _LessonCard(
+            lesson: lesson,
+            onTap: () => WidgetsBinding.instance
+                .addPostFrameCallback((_) => context.push('/lessons/${lesson.id}')),
+            onEdit: () => WidgetsBinding.instance
+                .addPostFrameCallback((_) => context.push('/lessons/${lesson.id}')),
+            onDelete: () => _confirmDeleteLesson(lesson),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final lessonsAsync = ref.watch(lessonsListProvider);
@@ -75,7 +251,9 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
       appBar: AppBar(
         leading: canPop
             ? IconButton(
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () => WidgetsBinding.instance.addPostFrameCallback(
+                  (_) => Navigator.of(context).pop(),
+                ),
                 icon: const Icon(Icons.arrow_back_rounded),
                 tooltip: 'Back',
               )
@@ -88,7 +266,7 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
           ),
         ),
         actions: [
-          const Icon(Icons.cloud_off_rounded),
+          const SyncIndicator(),
           const SizedBox(width: 8),
           const CreditCounter(),
           const SizedBox(width: 8),
@@ -110,184 +288,32 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
               onSelected: _setFilter,
             ),
           ),
+          // Single stable RefreshIndicator + ListView.builder that
+          // persists across all async states (loading / error / data).
+          // This prevents the "Null check operator used on a null value"
+          // crash in RenderViewportBase caused by widget tree structural
+          // swaps when FutureProvider.when() returns different ListViews.
           Expanded(
-            child: lessonsAsync.when(
-              loading: () => ListView(
-                physics: (Platform.isAndroid || Platform.isIOS)
-                    ? const BouncingScrollPhysics()
-                    : null,
-                padding: const EdgeInsets.all(16),
-                children: List.generate(
-                  4,
-                  (i) => _LessonCardSkeleton(cs: cs),
-                ),
-              ),
-              error: (error, stack) => ListView(
-                physics: (Platform.isAndroid || Platform.isIOS)
-                    ? const BouncingScrollPhysics()
-                    : null,
-                padding: const EdgeInsets.all(32),
-                children: [
-                  Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 72,
-                          height: 72,
-                          decoration: BoxDecoration(
-                            color: cs.errorContainer,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Icon(Icons.error_outline,
-                              size: 34, color: cs.onErrorContainer),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Failed to load lessons',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '$error',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: cs.onSurfaceVariant,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 20),
-                        FilledButton(
-                          onPressed: () => ref.invalidate(lessonsListProvider),
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              data: (lessons) {
-                final filteredLessons = _applyFilter(lessons);
-                if (lessons.isNotEmpty && filteredLessons.isEmpty) {
-                  return ListView(
-                    physics: (Platform.isAndroid || Platform.isIOS)
-                        ? const BouncingScrollPhysics()
-                        : null,
-                    padding: const EdgeInsets.all(32),
-                    children: [
-                      Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 80,
-                              height: 80,
-                              decoration: BoxDecoration(
-                                color: cs.surfaceContainer,
-                                borderRadius: BorderRadius.circular(24),
-                              ),
-                              child: Icon(
-                                Icons.filter_alt_off_rounded,
-                                size: 38,
-                                color: cs.onSurfaceVariant.withValues(alpha: 0.5),
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            Text(
-                              'No lessons match "$_selectedFilter"',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: cs.onSurface,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Try a different filter or clear it to see all lessons.',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: cs.onSurfaceVariant,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                }
-
-                if (lessons.isEmpty) {
-                  return ListView(
-                    physics: (Platform.isAndroid || Platform.isIOS)
-                        ? const BouncingScrollPhysics()
-                        : null,
-                    padding: const EdgeInsets.all(32),
-                    children: [
-                      Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 80,
-                              height: 80,
-                              decoration: BoxDecoration(
-                                color: cs.surfaceContainer,
-                                borderRadius: BorderRadius.circular(24),
-                              ),
-                              child: Icon(
-                                Icons.book_rounded,
-                                size: 38,
-                                color: cs.onSurfaceVariant.withValues(alpha: 0.5),
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            Text(
-                              'No lessons yet',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: cs.onSurface,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Tap New Lesson to create one.',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: cs.onSurfaceVariant,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                }
-
-                return RefreshIndicator(
-                  onRefresh: () async => ref.invalidate(lessonsListProvider),
-                  child: ListView.builder(
-                    physics: (Platform.isAndroid || Platform.isIOS)
-                        ? const BouncingScrollPhysics()
-                        : null,
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    itemCount: filteredLessons.length,
-                    itemBuilder: (context, index) {
-                      final lesson = filteredLessons[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: _LessonCard(
-                          lesson: lesson,
-                          onTap: () => context.push('/lessons/${lesson.id}'),
-                          onEdit: () => context.push('/lessons/${lesson.id}'),
-                          onDelete: () => _confirmDeleteLesson(lesson),
-                        ),
-                      );
-                    },
-                  ),
-                );
+            child: RefreshIndicator(
+              onRefresh: () async {
+                ref.invalidate(lessonsListProvider);
+                await ref.read(lessonsListProvider.future);
               },
+              child: ListView.builder(
+                physics: _effectivePhysics(),
+                padding: lessonsAsync.when(
+                  loading: () => const EdgeInsets.all(16),
+                  error: (_, __) => const EdgeInsets.all(32),
+                  data: (lessons) {
+                    final filtered = _applyFilter(lessons);
+                    if (filtered.isEmpty) return const EdgeInsets.all(32);
+                    return const EdgeInsets.fromLTRB(16, 0, 16, 16);
+                  },
+                ),
+                itemCount: _itemCount(lessonsAsync),
+                itemBuilder: (context, index) =>
+                    _buildItem(context, lessonsAsync, index),
+              ),
             ),
           ),
         ],
@@ -304,7 +330,9 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
           ],
         ),
         child: FloatingActionButton.extended(
-          onPressed: () => context.push('/lesson-editor'),
+          onPressed: () => WidgetsBinding.instance.addPostFrameCallback(
+            (_) => context.push('/lesson-editor'),
+          ),
           heroTag: 'newLesson',
           backgroundColor: cs.primary,
           foregroundColor: cs.onPrimary,
@@ -446,9 +474,8 @@ class _LessonCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
 
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(

@@ -12,6 +12,13 @@ import 'package:classai/core/widgets/credit_counter.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/vault/screens/vault_item_detail_screen.dart';
 
+void _goToLessonsDeferred(BuildContext context) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!context.mounted) return;
+    context.push('/lessons');
+  });
+}
+
 /// Vault browser screen showing approved items in a searchable grid.
 ///
 /// Teachers can browse, filter, and acquire vault items using credits.
@@ -266,7 +273,7 @@ class _NavDrawer extends StatelessWidget {
                   icon: Icons.menu_book_rounded,
                   label: 'Lessons',
                   isActive: false,
-                  onTap: () => context.push('/lessons'),
+                  onTap: () => _goToLessonsDeferred(context),
                 ),
                 _navItem(
                   cs: cs,
@@ -1248,7 +1255,7 @@ class _VaultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
+            return MouseRegion(
       child: GestureDetector(
         onTap: onTap,
         child: Container(
@@ -1584,7 +1591,7 @@ class _BottomNav extends StatelessWidget {
             icon: Icons.menu_book_rounded,
             label: 'Lessons',
             isActive: false,
-            onTap: () => context.push('/lessons'),
+            onTap: () => _goToLessonsDeferred(context),
           ),
           _bottomItem(
             cs: cs,

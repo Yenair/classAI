@@ -35,6 +35,14 @@ class TeachersDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
+  /// Find a teacher by server ID (used to resolve UUID serverId → localId int).
+  Future<Teacher?> findByServerId(String serverId) async {
+    final results = await (select(teachers)
+          ..where((t) => t.serverId.equals(serverId)))
+        .get();
+    return results.isNotEmpty ? results.first : null;
+  }
+
   /// Get all teachers with forcePasswordReset set to true (pending login)
   /// for a specific school.
   Future<List<Teacher>> getPendingTeachers({int? schoolLocalId}) {

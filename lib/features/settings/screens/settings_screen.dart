@@ -10,6 +10,13 @@ import 'package:classai/features/dashboard/providers/credit_state_provider.dart'
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
 import 'package:classai/features/settings/providers/theme_provider.dart';
 
+void _goToLessonsDeferred(BuildContext context) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!context.mounted) return;
+    context.push('/lessons');
+  });
+}
+
 /// Settings screen — redesigned to match Google Stitch bento grid layout.
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -308,7 +315,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       isActive: false,
                       cs: cs,
                       textTheme: textTheme,
-                      onTap: () => context.push('/lessons')),
+                      onTap: () => _goToLessonsDeferred(context)),
                   const SizedBox(height: 4),
                   _SettingsNavItem(
                       icon: Icons.quiz_rounded,

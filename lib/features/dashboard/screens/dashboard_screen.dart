@@ -18,6 +18,20 @@ import 'package:classai/core/services/payment_service.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
+void _goToLessonsDeferred(BuildContext context) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!context.mounted) return;
+    context.push('/lessons');
+  });
+}
+
+void _goToLessonEditorDeferred(BuildContext context, int lessonId) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!context.mounted) return;
+    context.push('/lessons/$lessonId');
+  });
+}
+
 /// Root dashboard screen that routes to either [EditorLayout] or [ReaderLayout]
 /// based on [PlatformHelper.isEditorMode].
 ///
@@ -155,17 +169,17 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
   int _selectedIndex = 0;
   bool _isSidebarOpen = true;
 
-  List<_NavItem> get _navItems {
+  List<NavItem> get _navItems {
     final authData = ref.read(authProvider);
     final isAdmin = authData.currentTeacher?.role == 'admin';
     return [
-      _NavItem(icon: Icons.home_rounded, label: 'Home', route: null),
-      _NavItem(icon: Icons.menu_book_rounded, label: 'Lessons', route: '/lessons'),
-      _NavItem(icon: Icons.quiz_rounded, label: 'Exams', route: '/exams'),
-      _NavItem(icon: Icons.inventory_2_rounded, label: 'Vault', route: '/vault'),
-      _NavItem(icon: Icons.calendar_month_rounded, label: 'Scheme of Work', route: '/scheme-of-work'),
+      NavItem(icon: Icons.home_rounded, label: 'Home', route: null),
+      NavItem(icon: Icons.menu_book_rounded, label: 'Lessons', route: '/lessons'),
+      NavItem(icon: Icons.quiz_rounded, label: 'Exams', route: '/exams'),
+      NavItem(icon: Icons.inventory_2_rounded, label: 'Vault', route: '/vault'),
+      NavItem(icon: Icons.calendar_month_rounded, label: 'Scheme of Work', route: '/scheme-of-work'),
       if (isAdmin)
-        _NavItem(icon: Icons.admin_panel_settings_rounded, label: 'Admin', route: '/admin'),
+        NavItem(icon: Icons.admin_panel_settings_rounded, label: 'Admin', route: '/admin'),
     ];
   }
 
@@ -311,7 +325,12 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                         onTap: () {
                           setState(() => _selectedIndex = index);
                           if (item.route != null) {
-                            context.push(item.route!);
+                            final route = item.route!;
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (context.mounted) {
+                                context.push(route);
+                              }
+                            });
                           }
                         },
                         child: AnimatedContainer(
@@ -686,8 +705,8 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
 //  EDITOR SUB-WIDGETS
 // ═══════════════════════════════════════════════════════════════════════════
 
-class _NavItem {
-  const _NavItem({
+class NavItem {
+  const NavItem({
     required this.icon,
     required this.label,
     this.route,
@@ -1024,7 +1043,7 @@ class _RecentLessonsSection extends ConsumerWidget {
             ),
             const SizedBox(width: 8),
             TextButton(
-              onPressed: () => context.push('/lessons'),
+              onPressed: () => _goToLessonsDeferred(context),
               style: TextButton.styleFrom(
                 padding: EdgeInsets.zero,
                 minimumSize: Size.zero,
@@ -1873,7 +1892,7 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
       case 0:
         break; // Home (already here)
       case 1:
-        context.push('/lessons');
+        _goToLessonsDeferred(context);
         break;
       case 2:
         context.push('/exams');
@@ -2076,7 +2095,7 @@ class _ResumeLessonCard extends ConsumerWidget {
     if (lesson == null) return const SizedBox.shrink();
 
     return InkWell(
-      onTap: () => context.push('/lessons/${lesson.id}'),
+      onTap: () => _goToLessonEditorDeferred(context, lesson.id),
       borderRadius: BorderRadius.circular(AppTheme.radiusXl),
       child: Container(
         width: double.infinity,

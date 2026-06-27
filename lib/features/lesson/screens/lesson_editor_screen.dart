@@ -15,6 +15,7 @@ import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
+import 'package:classai/features/lesson/screens/lessons_list_screen.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
 /// Stitch‑designed lesson note editor with AI generation.
@@ -284,20 +285,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     try {
       final db = ref.read(databaseProvider);
 
-      // Check daily preview limit before generating
-      final previewAllowed = await db.securityConfigDao
-          .checkAndIncrementDailyPreviews(tier: _subscriptionTier);
-      if (!previewAllowed) {
-        if (mounted) {
-          setState(() => _isGenerating = false);
-          showErrorToast(
-            context: context,
-            message: 'Daily preview limit reached (10/day). Try again tomorrow.',
-          );
-        }
-        return;
-      }
-
       // Build prompt with teacher/school attribution
       final bloomsStr =
           _selectedBlooms.isEmpty ? 'All levels' : _selectedBlooms.join(', ');
@@ -319,6 +306,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       if (widget.generateCallback != null) {
         // Test / external callback path – skip AiService setup
         result = await widget.generateCallback!(prompt);
+        // Increment preview counter only after successful test generation
+        await db.securityConfigDao
+            .checkAndIncrementDailyPreviews(tier: _subscriptionTier);
       } else {
         // Production path: call the AI generation service directly
         final aiService = AiService(db: db);
@@ -335,6 +325,10 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         }
 
         result = await aiService.generate(prompt);
+
+        // Increment preview counter only after successful generation
+        await db.securityConfigDao
+            .checkAndIncrementDailyPreviews(tier: _subscriptionTier);
 
         // Audit log the generation
         await aiService.logGeneration(
@@ -536,6 +530,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           );
 
           if (notify && mounted) {
+            ref.invalidate(lessonsListProvider);
             showInfoToast(context: context, message: 'Lesson updated (id=$id)');
           }
           return;
@@ -585,6 +580,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         },
       );
 
+      ref.invalidate(lessonsListProvider);
       if (notify && mounted) {
         showInfoToast(context: context, message: 'Lesson saved (id=$id)');
       }
@@ -602,11 +598,14 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       final db = ref.read(databaseProvider);
       await db.lessonsDao.updateStatus(_lessonId!, newStatus);
       final school = await db.schoolsDao.get();
+      // Resolve teacher's localId from the String serverId
+      final teacher = await db.teachersDao.findByServerId(_teacherId!);
+      final teacherLocalId = teacher?.localId ?? 0;
       final logId = await db.progressLogsDao.insert(
         ProgressLogsCompanion.insert(
           eventType: newStatus == 'completed' ? 'lesson_completed' : 'lesson_reopened',
           lessonId: Value(_lessonId!),
-          teacherId: Value(int.tryParse(_teacherId ?? '0') ?? 0),
+          teacherId: Value(teacherLocalId),
           schoolId: Value(school?.localId ?? 0),
         ),
       );
@@ -1230,7 +1229,7 @@ class _NavigationDrawer extends StatelessWidget {
         context.go('/');
         break;
       case 'Lessons':
-        context.go('/lessons');
+        _goToLessonsDeferred(context);
         break;
       case 'Exams':
         context.go('/exams');
@@ -1242,6 +1241,13 @@ class _NavigationDrawer extends StatelessWidget {
         context.go('/admin');
         break;
     }
+  }
+
+  void _goToLessonsDeferred(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!context.mounted) return;
+      context.go('/lessons');
+    });
   }
 }
 

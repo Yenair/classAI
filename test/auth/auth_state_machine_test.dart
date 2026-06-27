@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/core/services/auth_service.dart';
@@ -58,11 +59,52 @@ Future<ProviderContainer> createContainer({
 
   // Ensure AuthNotifier is initialised
   container.read(authProvider);
+  addTearDown(container.dispose);
 
   return container;
 }
 
+Future<void> seedLocalAuthCache(AppDatabase db) async {
+  final schoolId = await db.into(db.schools).insert(
+        SchoolsCompanion.insert(
+          serverId: const Value('00000000-0000-0000-0000-000000000010'),
+          schoolName: 'Test School',
+          shortCode: 'TST',
+          subscriptionTier: const Value('free'),
+          activeCurriculum: const Value('nerdc'),
+          activeCurriculumVersion: const Value('2024'),
+          totalSeats: const Value(5),
+          schoolMasterKeyWrapped: const Value(
+            'bW9ja193cmFwcGVkX21hc3Rlcl9rZXk=',
+          ),
+        ),
+      );
+
+  await db.into(db.teachers).insert(
+        TeachersCompanion.insert(
+          serverId: const Value('00000000-0000-0000-0000-000000000001'),
+          email: 'teacher@test.com',
+          teacherName: 'Test Teacher',
+          role: const Value('teacher'),
+          schoolLocalId: schoolId,
+          schoolServerId: const Value(
+            '00000000-0000-0000-0000-000000000010',
+          ),
+          isActive: const Value(true),
+          forcePasswordReset: const Value(false),
+          passwordHashVersion: const Value(1),
+          schoolKeyWrapped: const Value(
+            'bW9ja193cmFwcGVkX3NjaG9vbF9rZXk=',
+          ),
+          lastCreditRefillDate: Value(DateTime.now()),
+          themeMode: const Value('system'),
+        ),
+      );
+}
+
 void main() {
+  SharedPreferences.setMockInitialValues({});
+
   late AppDatabase db;
   late MockAuthService mockAuth;
   late MockSecurityService mockSecurity;
@@ -94,11 +136,10 @@ void main() {
   });
 
   group('checkLocalAuth', () {
-    test(
-        'transitions to onlineLoginRequired when stored hash exists (offline login disabled)',
-        () async {
+    test('transitions to authenticated when local cache exists', () async {
       when(() => mockSecurity.getPasswordHash())
           .thenAnswer((_) async => 'stored_hash');
+      await seedLocalAuthCache(db);
 
       final container = await createContainer(
         db: db,
@@ -109,9 +150,11 @@ void main() {
       await container.read(authProvider.notifier).checkLocalAuth();
 
       final state = container.read(authProvider);
-      expect(state.state, equals(AuthState.onlineLoginRequired));
-      // checkLocalAuth now silently transitions without setting an error message
+      expect(state.state, equals(AuthState.authenticated));
+      expect(state.currentTeacher, isNotNull);
+      expect(state.currentSchool, isNotNull);
       expect(state.errorMessage, isNull);
+      container.dispose();
     });
 
     test('transitions to onlineLoginRequired when no stored hash', () async {
@@ -148,9 +191,11 @@ void main() {
   });
 
   group('offline login attempts', () {
-    test('returns false and shows offline unavailable message', () async {
+    test('returns true and authenticates when cached password matches',
+        () async {
       when(() => mockSecurity.getPasswordHash())
-          .thenAnswer((_) async => 'some_hash');
+          .thenAnswer((_) async => 'password123');
+      await seedLocalAuthCache(db);
 
       final container = await createContainer(
         db: db,
@@ -158,23 +203,37 @@ void main() {
         securityService: mockSecurity,
       );
 
-      // First go to checkingLocalAuth
       await container.read(authProvider.notifier).checkLocalAuth();
 
-      // Offline login should be unavailable
       final success =
           await container.read(authProvider.notifier).attemptOfflineLogin(
-                'any_password',
+                'password123',
               );
+      expect(success, isTrue);
+      expect(container.read(authProvider).state, equals(AuthState.authenticated));
+      container.dispose();
+    });
+
+    test('returns false when cached password does not match', () async {
+      when(() => mockSecurity.getPasswordHash())
+          .thenAnswer((_) async => 'password123');
+      await seedLocalAuthCache(db);
+
+      final container = await createContainer(
+        db: db,
+        authService: mockAuth,
+        securityService: mockSecurity,
+      );
+
+      final success =
+          await container.read(authProvider.notifier).attemptOfflineLogin(
+                'wrong-password',
+              );
+
       expect(success, isFalse);
-      expect(
-        container.read(authProvider).state,
-        equals(AuthState.onlineLoginRequired),
-      );
-      expect(
-        container.read(authProvider).errorMessage,
-        contains('Offline login unavailable'),
-      );
+      expect(container.read(authProvider).state, equals(AuthState.onlineLoginRequired));
+      expect(container.read(authProvider).errorMessage,
+          contains('Invalid offline credentials'));
     });
   });
 
@@ -272,6 +331,7 @@ void main() {
       expect(state.currentTeacher!.email, equals('teacher@test.com'));
       expect(state.currentSchool, isNotNull);
       expect(state.currentSchool!.schoolName, equals('Test School'));
+      container.dispose();
     });
 
     test('transitions to accountDeactivated on deactivated error', () async {
@@ -545,6 +605,7 @@ void main() {
       expect(state.state, equals(AuthState.authenticated));
       expect(state.currentTeacher, isNotNull);
       expect(state.currentTeacher!.role, equals('admin'));
+      container.dispose();
     });
 
     test('stays in onlineLoginRequired on invalid OTP', () async {
@@ -681,6 +742,7 @@ void main() {
       expect(state.state, equals(AuthState.authenticated));
       expect(state.currentTeacher, isNotNull);
       expect(state.currentTeacher!.email, equals('teacher@test.com'));
+      container.dispose();
     });
 
     test('stays in onlineLoginRequired on invalid recovery code', () async {

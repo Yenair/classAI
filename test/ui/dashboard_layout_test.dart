@@ -46,14 +46,16 @@ void main() {
     // Header should have ClassAI title
     expect(find.text('ClassAI'), findsWidgets);
 
-    // Nav drawer labels should be present (4 items when not admin)
+    // Nav drawer labels should be present for a non-admin teacher.
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Lessons'), findsOneWidget);
     expect(find.text('Exams'), findsOneWidget);
     expect(find.text('Vault'), findsOneWidget);
+    expect(find.text('Scheme of Work'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
   });
 
-  testWidgets('EditorLayout has 6 nav icons (non-admin)',
+  testWidgets('EditorLayout has 5 nav icons (non-admin)',
       (tester) async {
     await ensureViewportHeight(tester);
     SharedPreferences.setMockInitialValues({
@@ -73,12 +75,20 @@ void main() {
     // Verify there is exactly one EditorLayout
     expect(find.byType(EditorLayout).evaluate(), hasLength(1));
 
-    // With default auth (currentTeacher == null => isAdmin == false),
-    // there are 6 nav items: Home, Lessons, Exams, Vault, Scheme of Work, Settings.
-    expect(find.byIcon(Icons.home_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.menu_book_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.quiz_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.inventory_2_rounded), findsOneWidget);
+    // The sidebar is a custom Column in the left AnimatedContainer.
+    // Scope the search to the sidebar using its unique "ClassAI" header.
+    final sidebar = find.ancestor(
+      of: find.text('ClassAI'),
+      matching: find.byType(AnimatedContainer),
+    );
+    expect(sidebar, findsWidgets);
+
+    final sidebarNavItems = find.descendant(
+      of: sidebar.first,
+      matching: find.byType(InkWell),
+    );
+    expect(sidebarNavItems, findsNWidgets(5));
+
     // Admin icon should NOT be present for non-admin users
     expect(find.byIcon(Icons.admin_panel_settings_rounded), findsNothing);
   });

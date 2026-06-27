@@ -143,6 +143,10 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
   @override
   AuthStateData build() {
+    ref.onDispose(() {
+      _sessionTimer?.cancel();
+      _sessionTimer = null;
+    });
     return const AuthStateData(state: AuthState.uninitialized);
   }
 
@@ -271,7 +275,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
   /// 1. Reads stored JWT from flutter_secure_storage (via SecurityService).
   /// 2. If found, calls validate-session edge function.
   /// 3. If valid, transitions to [AuthState.authenticated] and navigates.
-  /// 4. If invalid/expired/offline, falls back to [AuthState.onlineLoginRequired].
+  /// 4. If invalid/expired/offline, falls back to the local credential cache.
   Future<void> checkLocalAuth() async {
     state = state.copyWith(
       state: AuthState.checkingLocalAuth,
@@ -315,20 +319,44 @@ class AuthNotifier extends Notifier<AuthStateData> {
             return;
           }
           // Session validation failed (expired, token_version_mismatch, offline)
-          // Clear the stored JWT and fall through to online login
+          // Clear the stored JWT and fall through to the local credential cache.
           await _securityService.clearJwt();
           _authService.clearJwt();
-          // No error message — silent fallback
         }
       }
     } catch (e) {
       if (await _logoutIfSessionMismatch(e)) {
         return;
       }
-      // Secure storage read failed — fall through silently
+      // Secure storage read failed — fall through to local cache.
     }
 
-    // No valid stored session — show login screen
+    final cachedAuth = await _loadLocalCredentialCache();
+    if (cachedAuth != null) {
+      state = state.copyWith(
+        state: AuthState.authenticated,
+        currentTeacher: cachedAuth.teacher,
+        currentSchool: cachedAuth.school,
+        clearError: true,
+      );
+      _applyThemeFromTeacher(
+        AuthResult(
+          teacher: cachedAuth.teacher,
+          school: cachedAuth.school,
+          wrappedSchoolKey: cachedAuth.teacher.schoolKeyWrapped,
+          passwordHashVersion: cachedAuth.teacher.passwordHashVersion,
+          offlineCredits: (await _db.securityConfigDao.get()).offlineCredits,
+          lastCreditRefillServerTime:
+              cachedAuth.teacher.lastCreditRefillDate ?? DateTime.now(),
+          emailVerified: true,
+          newDevice: false,
+        ),
+      );
+      _startSessionTimer();
+      return;
+    }
+
+    // No valid stored session or local cache — show login screen.
     state = state.copyWith(
       state: AuthState.onlineLoginRequired,
       clearError: true,
@@ -338,27 +366,59 @@ class AuthNotifier extends Notifier<AuthStateData> {
   /// Attempt offline login using stored password hash.
   /// Returns true if login succeeded.
   Future<bool> attemptOfflineLogin(String password) async {
-    // Offline login is disabled — the server uses bcrypt+pepper for
-    // password verification while the client stored a SHA-256 hash that
-    // will never match. Only surface the "connect to the internet" message
-    // when the device is actually offline; otherwise silently return false
-    // so the caller can proceed to online login without a scary banner.
-    final isOnline = await PlatformHelper.isOnline();
-    if (!isOnline) {
+    final cachedPassword = await _securityService.getPasswordHash();
+    if (cachedPassword == null || cachedPassword.isEmpty) {
       state = state.copyWith(
         state: AuthState.onlineLoginRequired,
         errorMessage:
-            'Offline login unavailable — connect to the internet to sign in.',
+            'No offline credentials are cached yet. Connect to the internet to sign in.',
         offlineLoginAttempts: 0,
       );
-    } else {
+      return false;
+    }
+
+    if (cachedPassword != password) {
       state = state.copyWith(
         state: AuthState.onlineLoginRequired,
-        clearError: true,
+        errorMessage: 'Invalid offline credentials. Please try again.',
+        offlineLoginAttempts: state.offlineLoginAttempts + 1,
+      );
+      return false;
+    }
+
+    final cachedAuth = await _loadLocalCredentialCache();
+    if (cachedAuth == null) {
+      state = state.copyWith(
+        state: AuthState.onlineLoginRequired,
+        errorMessage:
+            'Offline data is not ready yet. Connect to the internet once to finish setup.',
         offlineLoginAttempts: 0,
       );
+      return false;
     }
-    return false;
+
+    state = state.copyWith(
+      state: AuthState.authenticated,
+      currentTeacher: cachedAuth.teacher,
+      currentSchool: cachedAuth.school,
+      offlineLoginAttempts: 0,
+      clearError: true,
+    );
+    _applyThemeFromTeacher(
+      AuthResult(
+        teacher: cachedAuth.teacher,
+        school: cachedAuth.school,
+        wrappedSchoolKey: cachedAuth.teacher.schoolKeyWrapped,
+        passwordHashVersion: cachedAuth.teacher.passwordHashVersion,
+        offlineCredits: (await _db.securityConfigDao.get()).offlineCredits,
+        lastCreditRefillServerTime:
+            cachedAuth.teacher.lastCreditRefillDate ?? DateTime.now(),
+        emailVerified: true,
+        newDevice: false,
+      ),
+    );
+    _startSessionTimer();
+    return true;
   }
 
   /// Perform server-side login with email, password, and device ID.
@@ -1390,6 +1450,34 @@ class AuthNotifier extends Notifier<AuthStateData> {
     ref.read(themeProvider.notifier).applyTeacherThemeMode(
           result.teacher.themeMode,
         );
+  }
+
+  Future<({Teacher teacher, School school})?> _loadLocalCredentialCache() async {
+    try {
+      final cachedPassword = await _securityService.getPasswordHash();
+      if (cachedPassword == null || cachedPassword.isEmpty) {
+        return null;
+      }
+
+      final school = await _db.schoolsDao.get();
+      if (school == null) {
+        return null;
+      }
+
+      final teachers = await _db.teachersDao.getBySchool(school.localId);
+      if (teachers.isEmpty) {
+        return null;
+      }
+
+      final teacher = teachers.firstWhere(
+        (t) => t.isActive,
+        orElse: () => teachers.first,
+      );
+
+      return (teacher: teacher, school: school);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _saveAuthResultToLocalDb(AuthResult result) async {

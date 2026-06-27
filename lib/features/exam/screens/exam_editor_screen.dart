@@ -316,10 +316,10 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
 
   Future<void> _loadCreditBalance() async {
     try {
-      final db = ref.read(databaseProvider);
-      final config = await db.securityConfigDao.get();
+      await ref.read(creditStateProvider.notifier).refresh();
       if (mounted) {
-        setState(() => _creditBalance = config.offlineCredits);
+        setState(() =>
+            _creditBalance = ref.read(creditStateProvider).currentCredits);
       }
     } catch (_) {}
   }
@@ -347,20 +347,6 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
             if (!mounted) return;
             showErrorToast(context: context, message: e.message);
           });
-        }
-        return;
-      }
-
-      // Check daily preview limit
-      final previewAllowed = await db.securityConfigDao
-          .checkAndIncrementDailyPreviews(tier: _subscriptionTier);
-      if (!previewAllowed) {
-        if (mounted) {
-          setState(() => _isGenerating = false);
-          showErrorToast(
-            context: context,
-            message: 'Daily preview limit reached (10/day). Try again tomorrow.',
-          );
         }
         return;
       }
@@ -433,6 +419,10 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         _subjectiveQuestions =
             subjectiveList.map((q) => Map<String, dynamic>.from(q as Map)).toList();
       }
+
+      // Increment preview counter only after successful generation
+      await db.securityConfigDao
+          .checkAndIncrementDailyPreviews(tier: _subscriptionTier);
 
       // Audit log the generation
       await aiService.logGeneration(
@@ -613,8 +603,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         schemeOfWorkId: schemeOfWorkIdStr != null
             ? Value(schemeOfWorkIdStr)
             : const Value.absent(),
-        weekNumber: _isFromSchemeOfWork && _schemeOfWorkLocalId != null
-            ? const Value.absent()
+        weekNumber: _isFromSchemeOfWork
+            ? Value(_week)
             : const Value.absent(),
         updatedAt: Value(DateTime.now()),
       );
@@ -651,8 +641,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
           schemeOfWorkId: schemeOfWorkIdStr != null
               ? Value(schemeOfWorkIdStr)
               : const Value.absent(),
-          weekNumber: _isFromSchemeOfWork && _schemeOfWorkLocalId != null
-              ? Value(_schemeOfWorkLocalId)
+          weekNumber: _isFromSchemeOfWork
+              ? Value(_week)
               : const Value.absent(),
           createdAt: Value(DateTime.now()),
           isDeleted: const Value(false),
@@ -677,8 +667,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       if (schemeOfWorkIdStr != null) {
         payload['scheme_of_work_id'] = schemeOfWorkIdStr;
       }
-      if (_isFromSchemeOfWork && _schemeOfWorkLocalId != null) {
-        payload['week_number'] = _schemeOfWorkLocalId;
+      if (_isFromSchemeOfWork) {
+        payload['week_number'] = _week;
       }
 
       await db.syncQueueDao.insertEntry(
