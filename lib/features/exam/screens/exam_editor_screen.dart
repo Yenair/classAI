@@ -126,6 +126,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       _loadSubjects();
       _loadSchemesForContext();
       _loadTeacherLessons();
+      if (widget.examId != null) {
+        _loadExistingExam(widget.examId!);
+      }
     });
   }
 
@@ -232,6 +235,65 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     } catch (_) {}
   }
 
+  Future<void> _loadExistingExam(int examId) async {
+    try {
+      final db = ref.read(databaseProvider);
+      final exam = await db.examsDao.getById(examId);
+      if (exam == null || !mounted) {
+        return;
+      }
+
+      final content =
+          jsonDecode(exam.content) as Map<String, dynamic>? ?? <String, dynamic>{};
+      final mcqs = content['mcqs'] as List<dynamic>? ?? const [];
+      final theory = content['theory'] as List<dynamic>? ?? const [];
+      final subjective = content['subjective'] as List<dynamic>? ?? const [];
+
+      setState(() {
+        _examId = exam.id;
+        _topicController.text = exam.topic;
+        _week = exam.weekNumber ?? 1;
+        _subject = exam.subject;
+        _classLevel = exam.classLevel;
+        _difficulty = exam.difficulty;
+        _isUnlocked = exam.isUnlocked;
+        _hasGenerated = mcqs.isNotEmpty || theory.isNotEmpty || subjective.isNotEmpty;
+        _mcqs = mcqs
+            .map((q) => Map<String, dynamic>.from(q as Map))
+            .toList();
+        _theoryQuestions = theory
+            .map((q) => Map<String, dynamic>.from(q as Map))
+            .toList();
+        _subjectiveQuestions = subjective
+            .map((q) => Map<String, dynamic>.from(q as Map))
+            .toList();
+        _selectedQuestionTypes
+          ..clear()
+          ..addAll([
+            if (_mcqs.isNotEmpty) 'MCQ',
+            if (_theoryQuestions.isNotEmpty) 'Theory',
+            if (_subjectiveQuestions.isNotEmpty) 'Subjective',
+          ]);
+        _questionCounts
+          ..clear()
+          ..addAll({
+            'MCQ': _mcqs.length,
+            'Theory': _theoryQuestions.length,
+            'Subjective': _subjectiveQuestions.length,
+          });
+        _schemeOfWorkLocalId = exam.schemeOfWorkId == null
+            ? null
+            : int.tryParse(exam.schemeOfWorkId!);
+        _isFromSchemeOfWork = _schemeOfWorkLocalId != null;
+        _isManualTopicEntry = _schemeOfWorkLocalId == null;
+        _sourceMissing = false;
+      });
+
+      await _loadSchemesForContext();
+      await _refreshSourceMissing();
+    } catch (_) {}
+  }
+
   void _onSchemeOfWorkSelected(SchemeOfWorkData? scheme) {
     if (scheme == null) {
       setState(() {
@@ -324,8 +386,42 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     } catch (_) {}
   }
 
+  Future<void> _showUpgradeRequiredDialog() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        content: const Text(
+          'Upgrade to a paid plan to generate lessons and exams.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Close'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              if (mounted) {
+                context.push('/payment');
+              }
+            },
+            child: const Text('View Plans'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _handleGenerate() async {
     if (!_formKey.currentState!.validate()) return;
+
+    final authTier =
+        ref.read(authProvider).currentSchool?.subscriptionTier ?? _subscriptionTier;
+    if (authTier == 'free') {
+      await _showUpgradeRequiredDialog();
+      return;
+    }
 
     setState(() => _isGenerating = true);
 
@@ -778,7 +874,6 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                     builder: (context, constraints) {
                       final isWide = constraints.maxWidth >= 1024;
                       return SingleChildScrollView(
-
                         physics: (Platform.isAndroid || Platform.isIOS)
                             ? const BouncingScrollPhysics()
                             : null,
@@ -1059,23 +1154,27 @@ class _NavDrawer extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'ClassAI',
-                            style: theme.textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.w900,
-                              color: cs.primary,
+                      Flexible(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'ClassAI',
+                              style: theme.textTheme.headlineMedium?.copyWith(
+                                fontWeight: FontWeight.w900,
+                                color: cs.primary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                          Text(
-                            'Nigerian Academic Partner',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: cs.onSurfaceVariant,
+                            Text(
+                              'Nigerian Academic Partner',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -1931,61 +2030,59 @@ class _PreviewPanel extends StatelessWidget {
 
           // Locked overlay
           if (hasGenerated && !isUnlocked) ...[
-            RepaintBoundary(
-              child: Padding(
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Container(
                 padding: const EdgeInsets.all(16),
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: cs.tertiary.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                    border: Border.all(
-                      color: cs.tertiary.withValues(alpha: 0.3),
+                decoration: BoxDecoration(
+                  color: cs.tertiary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                  border: Border.all(
+                    color: cs.tertiary.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.lock_rounded,
+                            color: cs.tertiary, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Locked — Preview only',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: cs.tertiary,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.lock_rounded,
-                              color: cs.tertiary, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Locked — Preview only',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: cs.tertiary,
-                            ),
+                    const SizedBox(height: 12),
+                    Text(
+                      _buildSummaryText(),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      height: AppTheme.touchTarget,
+                      child: FilledButton.icon(
+                        onPressed: onUnlock,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: cs.tertiary,
+                          foregroundColor: cs.onTertiary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusXl),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        _buildSummaryText(),
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: cs.onSurfaceVariant,
                         ),
+                        icon: const Icon(Icons.lock_open_rounded),
+                        label: const Text('Unlock for 1 Credit'),
                       ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        height: AppTheme.touchTarget,
-                        child: FilledButton.icon(
-                          onPressed: onUnlock,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: cs.tertiary,
-                            foregroundColor: cs.onTertiary,
-                            shape: RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius.circular(AppTheme.radiusXl),
-                            ),
-                          ),
-                          icon: const Icon(Icons.lock_open_rounded),
-                          label: const Text('Unlock for 1 Credit'),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -2063,36 +2160,42 @@ class _PreviewPanel extends StatelessWidget {
                 ),
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  SizedBox(
-                    height: AppTheme.touchTarget,
-                    child: OutlinedButton(
-                      onPressed: onDiscard,
-                      style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppTheme.radiusXl),
+                  const Spacer(),
+                  Flexible(
+                    fit: FlexFit.loose,
+                    child: SizedBox(
+                      height: AppTheme.touchTarget,
+                      child: OutlinedButton(
+                        onPressed: onDiscard,
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusXl),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
                         ),
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: const Text('Discard'),
                       ),
-                      child: const Text('Discard'),
                     ),
                   ),
                   const SizedBox(width: 12),
-                  SizedBox(
-                    height: AppTheme.touchTarget,
-                    child: FilledButton.icon(
-                      onPressed: onSave,
-                      style: FilledButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppTheme.radiusXl),
+                  Flexible(
+                    fit: FlexFit.loose,
+                    child: SizedBox(
+                      height: AppTheme.touchTarget,
+                      child: FilledButton.icon(
+                        onPressed: onSave,
+                        style: FilledButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusXl),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
                         ),
-                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        icon: const Icon(Icons.save_rounded),
+                        label: const Text('Save to Vault'),
                       ),
-                      icon: const Icon(Icons.save_rounded),
-                      label: const Text('Save to Vault'),
                     ),
                   ),
                 ],

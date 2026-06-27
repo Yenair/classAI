@@ -203,6 +203,16 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             sourceMissing = true;
           }
         }
+        final rawContent = lesson.content;
+        Map<String, dynamic>? parsedContent;
+        try {
+          final decoded = jsonDecode(rawContent);
+          if (decoded is Map<String, dynamic>) {
+            parsedContent = decoded;
+          }
+        } catch (_) {
+          // Keep the saved content as-is if it is encrypted or not JSON.
+        }
         setState(() {
           _topicController.text = lesson.topic;
           _lessonStatus = lesson.status;
@@ -217,6 +227,17 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           }
           _isFromSchemeOfWork = _schemeOfWorkLocalId != null;
           _sourceMissing = sourceMissing;
+          _isUnlocked = lesson.isUnlocked;
+          _encryptedContent = rawContent;
+          if (parsedContent != null) {
+            _objectivesText = _formatList(parsedContent['objectives']);
+            _vocabularyText = _formatList(parsedContent['vocabulary']);
+            _materialsText = _formatList(parsedContent['materials']);
+            _presentationText = _formatJson(parsedContent['presentation']);
+            _assessmentText = parsedContent['assessment'] as String? ?? '';
+            _homeworkText = parsedContent['homework'] as String? ?? '';
+            _hasGenerated = true;
+          }
         });
       }
     } catch (_) {
@@ -277,8 +298,42 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     } catch (_) {}
   }
 
+  Future<void> _showUpgradeRequiredDialog() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        content: const Text(
+          'Upgrade to a paid plan to generate lessons and exams.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Close'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              if (mounted) {
+                context.push('/payment');
+              }
+            },
+            child: const Text('View Plans'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _handleGenerate() async {
     if (!_formKey.currentState!.validate()) return;
+
+    final authTier =
+        ref.read(authProvider).currentSchool?.subscriptionTier ?? _subscriptionTier;
+    if (authTier == 'free') {
+      await _showUpgradeRequiredDialog();
+      return;
+    }
 
     setState(() => _isGenerating = true);
 
