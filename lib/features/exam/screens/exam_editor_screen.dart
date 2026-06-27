@@ -37,11 +37,13 @@ class ExamEditorScreen extends ConsumerStatefulWidget {
 class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   final _formKey = GlobalKey<FormState>();
   final _topicController = TextEditingController();
+  final _reviewController = TextEditingController();
   int _week = 1;
   String _subject = 'Mathematics';
   String _classLevel = 'JSS 1';
   String _difficulty = 'medium';
   bool _isGenerating = false;
+  bool _isRegenerating = false;
   bool _hasGenerated = false;
   bool _isUnlocked = false;
   int? _examId;
@@ -655,6 +657,77 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     );
   }
 
+  Future<void> _handleRegenerate() async {
+    setState(() => _isRegenerating = true);
+    try {
+      final db = ref.read(databaseProvider);
+      final aiService = AiService(db: db);
+      final topic = _topicController.text.trim();
+      final review = _reviewController.text.trim();
+
+      // Regenerate MCQ
+      if (_mcqs.isNotEmpty) {
+        final mcqPrompt = PromptTemplates.mcqs(
+          _subject, _classLevel, topic, _difficulty,
+          teacherName: _teacherName, schoolName: _schoolName,
+        ) + '\n\nTeacher feedback: $review';
+        final result = widget.generateCallback != null
+            ? await widget.generateCallback!(mcqPrompt)
+            : await aiService.generate(mcqPrompt);
+        final raw = result['raw'] as Map<String, dynamic>? ?? result;
+        final list = raw['questions'] as List<dynamic>? ?? [];
+        _mcqs = list.map((q) => Map<String, dynamic>.from(q as Map)).toList();
+      }
+
+      // Regenerate Theory
+      if (_theoryQuestions.isNotEmpty) {
+        final theoryPrompt = PromptTemplates.theoryQuestions(
+          _subject, _classLevel, topic,
+          teacherName: _teacherName, schoolName: _schoolName,
+        ) + '\n\nTeacher feedback: $review';
+        final result = widget.generateCallback != null
+            ? await widget.generateCallback!(theoryPrompt)
+            : await aiService.generate(theoryPrompt);
+        final raw = result['raw'] as Map<String, dynamic>? ?? result;
+        final list = raw['questions'] as List<dynamic>? ?? [];
+        _theoryQuestions = list.map((q) => Map<String, dynamic>.from(q as Map)).toList();
+      }
+
+      // Regenerate Subjective
+      if (_subjectiveQuestions.isNotEmpty) {
+        final subjectivePrompt = PromptTemplates.subjectiveQuestions(
+          _subject, _classLevel, topic,
+          teacherName: _teacherName, schoolName: _schoolName,
+        ) + '\n\nTeacher feedback: $review';
+        final result = widget.generateCallback != null
+            ? await widget.generateCallback!(subjectivePrompt)
+            : await aiService.generate(subjectivePrompt);
+        final raw = result['raw'] as Map<String, dynamic>? ?? result;
+        final list = raw['questions'] as List<dynamic>? ?? [];
+        _subjectiveQuestions = list.map((q) => Map<String, dynamic>.from(q as Map)).toList();
+      }
+
+      await _saveExam(notify: false);
+
+      if (mounted) {
+        setState(() => _isRegenerating = false);
+        _reviewController.clear();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          showInfoToast(context: context, message: 'Questions regenerated successfully');
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isRegenerating = false);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          showErrorToast(context: context, message: 'Regeneration failed: $e');
+        });
+      }
+    }
+  }
+
   void _updateMcq(int index, String field, String value) {
     setState(() {
       _mcqs[index][field] = value;
@@ -821,6 +894,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   @override
   void dispose() {
     _topicController.dispose();
+    _reviewController.dispose();
     super.dispose();
   }
 
@@ -991,6 +1065,12 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                         onUnlock: _handleUnlock,
                                         onSave: () => _saveExam(),
                                         onDiscard: _discard,
+                                        onRegenerate: _isUnlocked ? _handleRegenerate : null,
+                                        isRegenerating: _isRegenerating,
+                                        reviewController: _reviewController,
+                                        difficulty: _difficulty,
+                                        difficulties: _difficulties,
+                                        onDifficultyChanged: (v) => setState(() => _difficulty = v),
                                         onUpdateMcq: _updateMcq,
                                         onUpdateMcqOption: _updateMcqOption,
                                         onUpdateTheory: _updateTheory,
@@ -1065,6 +1145,12 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                       onUnlock: _handleUnlock,
                                       onSave: () => _saveExam(),
                                       onDiscard: _discard,
+                                      onRegenerate: _isUnlocked ? _handleRegenerate : null,
+                                      isRegenerating: _isRegenerating,
+                                      reviewController: _reviewController,
+                                      difficulty: _difficulty,
+                                      difficulties: _difficulties,
+                                      onDifficultyChanged: (v) => setState(() => _difficulty = v),
                                       onUpdateMcq: _updateMcq,
                                       onUpdateMcqOption: _updateMcqOption,
                                       onUpdateTheory: _updateTheory,
@@ -1929,6 +2015,12 @@ class _PreviewPanel extends StatelessWidget {
   final VoidCallback onUnlock;
   final VoidCallback onSave;
   final VoidCallback onDiscard;
+  final VoidCallback? onRegenerate;
+  final bool isRegenerating;
+  final TextEditingController? reviewController;
+  final String difficulty;
+  final List<String> difficulties;
+  final ValueChanged<String>? onDifficultyChanged;
   final void Function(int, String, String) onUpdateMcq;
   final void Function(int, String, String) onUpdateMcqOption;
   final void Function(int, String, String) onUpdateTheory;
@@ -1945,6 +2037,12 @@ class _PreviewPanel extends StatelessWidget {
     required this.onUnlock,
     required this.onSave,
     required this.onDiscard,
+    this.onRegenerate,
+    this.isRegenerating = false,
+    this.reviewController,
+    this.difficulty = 'medium',
+    this.difficulties = const ['easy', 'medium', 'hard'],
+    this.onDifficultyChanged,
     required this.onUpdateMcq,
     required this.onUpdateMcqOption,
     required this.onUpdateTheory,
@@ -2020,11 +2118,29 @@ class _PreviewPanel extends StatelessWidget {
                   children: [
                     Icon(Icons.check_circle_rounded, color: cs.primary, size: 20),
                     const SizedBox(width: 8),
-                    Text(
-                      'Unlocked — You can edit and save this exam',
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: cs.primary,
-                        fontWeight: FontWeight.w600,
+                    Expanded(
+                      child: Text(
+                        'Unlocked — You can edit and save this exam',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: cs.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      height: 32,
+                      child: FilledButton.icon(
+                        onPressed: onSave,
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                          ),
+                        ),
+                        icon: const Icon(Icons.save_rounded, size: 16),
+                        label: const Text('Save', style: TextStyle(fontSize: 12)),
                       ),
                     ),
                   ],
@@ -2084,6 +2200,133 @@ class _PreviewPanel extends StatelessWidget {
                         ),
                         icon: const Icon(Icons.lock_open_rounded),
                         label: const Text('Unlock for 1 Credit'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+
+          // Review & Regenerate section (visible when unlocked)
+          if (hasGenerated && isUnlocked && onRegenerate != null) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: cs.secondaryContainer.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                  border: Border.all(
+                    color: cs.secondary.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.tune_rounded, size: 18, color: cs.onSecondaryContainer),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Difficulty & Review',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: cs.onSecondaryContainer,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    // Difficulty dropdown
+                    Row(
+                      children: [
+                        Icon(Icons.speed_rounded, size: 16, color: cs.onSurfaceVariant),
+                        const SizedBox(width: 8),
+                        Text('Difficulty: ',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          height: 36,
+                          width: 120,
+                          child: DropdownButtonFormField<String>(
+                            initialValue: difficulty,
+                            isExpanded: true,
+                            decoration: InputDecoration(
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                                borderSide: BorderSide(color: cs.outlineVariant),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                                borderSide: BorderSide(color: cs.outlineVariant),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                              filled: true,
+                              fillColor: cs.surface,
+                            ),
+                            items: difficulties.map((d) => DropdownMenuItem(
+                              value: d,
+                              child: Text(d[0].toUpperCase() + d.substring(1),
+                                style: const TextStyle(fontSize: 13)),
+                            )).toList(),
+                            onChanged: (v) {
+                              if (v != null) onDifficultyChanged?.call(v);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    // Review text field
+                    TextField(
+                      controller: reviewController,
+                      maxLines: 3,
+                      minLines: 3,
+                      decoration: InputDecoration(
+                        hintText: 'Add suggestions or corrections for regeneration...',
+                        hintStyle: TextStyle(
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                          fontSize: 13,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                          borderSide: BorderSide(color: cs.outlineVariant),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                          borderSide: BorderSide(color: cs.outlineVariant),
+                        ),
+                        contentPadding: const EdgeInsets.all(12),
+                        filled: true,
+                        fillColor: cs.surface,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: AppTheme.touchTarget,
+                      child: FilledButton.icon(
+                        onPressed: isRegenerating ? null : onRegenerate,
+                        style: FilledButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                          ),
+                        ),
+                        icon: isRegenerating
+                            ? SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: cs.onPrimary,
+                                ),
+                              )
+                            : const Icon(Icons.refresh_rounded),
+                        label: Text(isRegenerating ? 'Regenerating...' : 'Regenerate with AI'),
                       ),
                     ),
                   ],
