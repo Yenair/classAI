@@ -95,6 +95,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
 
   // Generated subjective questions
   List<Map<String, dynamic>> _subjectiveQuestions = [];
+  int _previewRevision = 0;
 
   final List<String> _subjects = [
     'Mathematics',
@@ -324,6 +325,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         _isFromSchemeOfWork = _schemeOfWorkLocalId != null;
         _isManualTopicEntry = _schemeOfWorkLocalId == null;
         _sourceMissing = false;
+        _previewRevision++;
       });
 
       await _loadSchemesForContext();
@@ -553,6 +555,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         _hasGenerated = true;
         _isUnlocked = false;
         _isGenerating = false;
+        _previewRevision++;
       });
 
       await _saveExam(notify: false);
@@ -750,6 +753,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         _mcqs = mcqs;
         _theoryQuestions = theoryQuestions;
         _subjectiveQuestions = subjectiveQuestions;
+        _previewRevision++;
       });
 
       await _saveExam(notify: false);
@@ -1097,6 +1101,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       _isFromSchemeOfWork = false;
       _selectedLessonId = null;
       _isManualTopicEntry = true;
+      _previewRevision++;
     });
   }
 
@@ -1266,6 +1271,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                     const SizedBox(width: 24),
                                     Expanded(
                                       child: _PreviewPanel(
+                                        key: ValueKey(_previewRevision),
                                         cs: cs,
                                         theme: theme,
                                         hasGenerated: _hasGenerated,
@@ -1343,6 +1349,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                     ),
                                     const SizedBox(height: 24),
                                     _PreviewPanel(
+                                      key: ValueKey(_previewRevision),
                                       cs: cs,
                                       theme: theme,
                                       hasGenerated: _hasGenerated,
@@ -2330,6 +2337,7 @@ class _PreviewPanel extends StatelessWidget {
   final void Function(int, String, String) onUpdateTheory;
 
   const _PreviewPanel({
+    super.key,
     required this.cs,
     required this.theme,
     required this.hasGenerated,
