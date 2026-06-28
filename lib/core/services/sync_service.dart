@@ -442,7 +442,14 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
   @override
   Future<Map<String, dynamic>?> fetchCreditState() async {
     try {
-      final response = await client.functions.invoke('sync-credits');
+      final headers = <String, String>{};
+      if (_jwt != null && _jwt!.isNotEmpty) {
+        headers['x-classai-jwt'] = _jwt!;
+      }
+      final response = await client.functions.invoke(
+        'sync-credits',
+        headers: headers.isNotEmpty ? headers : null,
+      );
       final data = response.data as Map<String, dynamic>?;
       if (data != null) {
         return {
