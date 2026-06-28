@@ -54,7 +54,10 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   String _assessmentFormat = 'Both';
   final Set<String> _selectedBlooms = {};
   bool _isGenerating = false;
+  bool _isRegenerating = false;
   bool _hasGenerated = false;
+  int _previewRevision = 0;
+  final _reviewController = TextEditingController();
   bool _isUnlocked = false;
   bool _editorSidebarOpen = true;
   int _creditBalance = 0;
@@ -394,31 +397,122 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         );
       }
 
-      // Parse the generated JSON
-      final raw = result['raw'] as Map<String, dynamic>? ?? result;
-      _encryptedContent = result['encryptedContent'] as String?;
-      setState(() {
-        _objectivesText = _formatList(raw['objectives']);
-        _vocabularyText = _formatList(raw['vocabulary']);
-        _materialsText = _formatList(raw['materials']);
-        _presentationText = _formatJson(raw['presentation']);
-        _assessmentText = raw['assessment'] as String? ?? '';
-        _homeworkText = raw['homework'] as String? ?? '';
-        _hasGenerated = true;
-        _isUnlocked = false;
-        _isGenerating = false;
-      });
+      // Parse the generated JSON — defer setState to its own event loop
+      // iteration to avoid layout/paint assertion errors during the
+      // warm-up frame that Flutter schedules when setState is called
+      // from an async continuation.
+      final parsedRaw = result['raw'] as Map<String, dynamic>? ?? result;
+      final parsedEncrypted = result['encryptedContent'] as String?;
 
       await _saveLesson(notify: false);
 
       if (mounted) {
-        showInfoToast(
-            context: context, message: 'Lesson generated successfully!');
+        // Schedule a normal vsync frame instead of calling setState directly.
+        // Calling setState from an async continuation triggers
+        // scheduleWarmUpFrame(), which uses Timer.run internally. On desktop,
+        // this Timer can fire during the engine's onBeginFrame where
+        // _debugDuringDeviceUpdate is still true, causing the mouse_tracker
+        // assertion error. By scheduling a real vsync frame and deferring all
+        // state changes to the post-frame callback, no setState runs from an
+        // async continuation and no warm-up frame is triggered.
+        WidgetsBinding.instance.scheduleFrame();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          setState(() {
+            _encryptedContent = parsedEncrypted;
+            _objectivesText = _formatList(parsedRaw['objectives']);
+            _vocabularyText = _formatList(parsedRaw['vocabulary']);
+            _materialsText = _formatList(parsedRaw['materials']);
+            _presentationText = _formatJson(parsedRaw['presentation']);
+            _assessmentText = parsedRaw['assessment'] as String? ?? '';
+            _homeworkText = parsedRaw['homework'] as String? ?? '';
+            _hasGenerated = true;
+            _isUnlocked = false;
+            _isGenerating = false;
+            _previewRevision++;
+          });
+          if (mounted) {
+            showInfoToast(
+                context: context, message: 'Lesson generated successfully!');
+          }
+        });
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isGenerating = false);
         showErrorToast(context: context, message: 'Generation failed: $e');
+      }
+    }
+  }
+
+  Future<void> _handleRegenerate() async {
+    setState(() => _isRegenerating = true);
+    try {
+      final db = ref.read(databaseProvider);
+      final aiService = AiService(db: db);
+      final topic = _topicController.text.trim();
+      final review = _reviewController.text.trim();
+
+      // Build the original lesson prompt
+      final bloomsStr =
+          _selectedBlooms.isEmpty ? 'All levels' : _selectedBlooms.join(', ');
+      final basePrompt = PromptTemplates.lessonNote(
+        _subject,
+        'NERDC',
+        _classLevel,
+        _week,
+        topic,
+        _difficulty,
+        bloomsStr,
+        teacherName: _teacherName,
+        schoolName: _schoolName,
+      );
+
+      // Append teacher review feedback
+      final regeneratedPrompt = review.isEmpty
+          ? basePrompt
+          : '$basePrompt\n\nTeacher feedback: $review';
+
+      // Generate via callback or fallback to AiService
+      Map<String, dynamic> result;
+      if (widget.generateCallback != null) {
+        result = await widget.generateCallback!(regeneratedPrompt);
+      } else {
+        result = await aiService.generate(regeneratedPrompt);
+      }
+
+      // Parse the generated JSON
+      final raw = result['raw'] as Map<String, dynamic>? ?? result;
+      // Defer ALL setState to a normal vsync frame to avoid scheduleWarmUpFrame
+      // and the mouse_tracker assertion during device update.
+      WidgetsBinding.instance.scheduleFrame();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          _encryptedContent = result['encryptedContent'] as String?;
+          _objectivesText = _formatList(raw['objectives']);
+          _vocabularyText = _formatList(raw['vocabulary']);
+          _materialsText = _formatList(raw['materials']);
+          _presentationText = _formatJson(raw['presentation']);
+          _assessmentText = raw['assessment'] as String? ?? '';
+          _homeworkText = raw['homework'] as String? ?? '';
+          _hasGenerated = true;
+          _isRegenerating = false;
+          _previewRevision++;
+        });
+      });
+
+      await _saveLesson(notify: false);
+      _reviewController.clear();
+
+      if (mounted) {
+        showInfoToast(
+            context: context, message: 'Lesson regenerated successfully!');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isRegenerating = false);
+        showErrorToast(context: context, message: 'Regeneration failed: $e');
       }
     }
   }
@@ -756,6 +850,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   void _discard() {
     setState(() {
       _topicController.clear();
+      _reviewController.clear();
       _week = 1;
       _subject = 'Mathematics';
       _classLevel = 'JSS 1';
@@ -778,6 +873,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   @override
   void dispose() {
     _topicController.dispose();
+    _reviewController.dispose();
     super.dispose();
   }
 
@@ -837,6 +933,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                             ? const BouncingScrollPhysics()
                             : null,
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             // ── Tool Header Area ────────────────────
                             _ToolHeader(
@@ -948,10 +1045,12 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                           // Right column: preview
                                           Expanded(
                                             child: _PreviewColumn(
+                                              key: ValueKey(_previewRevision),
                                               cs: cs,
                                               theme: theme,
                                               hasGenerated: _hasGenerated,
                                               isUnlocked: _isUnlocked,
+                                              isRegenerating: _isRegenerating,
                                               objectivesText: _objectivesText,
                                               vocabularyText: _vocabularyText,
                                               materialsText: _materialsText,
@@ -959,6 +1058,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                                   _presentationText,
                                               assessmentText: _assessmentText,
                                               homeworkText: _homeworkText,
+                                              reviewController: _reviewController,
                                               onObjectivesChanged: (v) =>
                                                   setState(() =>
                                                       _objectivesText = v),
@@ -980,6 +1080,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                               onUnlock: _handleUnlock,
                                               onSave: _saveLesson,
                                               onDiscard: _discard,
+                                              onRegenerate: _isUnlocked ? _handleRegenerate : null,
                                               lessonStatus: _lessonStatus,
                                               onToggleComplete: _isUnlocked ? _handleToggleComplete : null,
                                             ),
@@ -1041,10 +1142,12 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                           ),
                                           const SizedBox(height: 24),
                                           _PreviewColumn(
+                                            key: ValueKey(_previewRevision),
                                             cs: cs,
                                             theme: theme,
                                             hasGenerated: _hasGenerated,
                                             isUnlocked: _isUnlocked,
+                                            isRegenerating: _isRegenerating,
                                             objectivesText: _objectivesText,
                                             vocabularyText: _vocabularyText,
                                             materialsText: _materialsText,
@@ -1052,6 +1155,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                                 _presentationText,
                                             assessmentText: _assessmentText,
                                             homeworkText: _homeworkText,
+                                            reviewController: _reviewController,
                                             onObjectivesChanged: (v) =>
                                                 setState(() =>
                                                     _objectivesText = v),
@@ -1073,6 +1177,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                             onUnlock: _handleUnlock,
                                             onSave: _saveLesson,
                                             onDiscard: _discard,
+                                            onRegenerate: _isUnlocked ? _handleRegenerate : null,
                                           ),
                                         ],
                                       ),
@@ -1891,12 +1996,14 @@ class _PreviewColumn extends StatelessWidget {
   final ThemeData theme;
   final bool hasGenerated;
   final bool isUnlocked;
+  final bool isRegenerating;
   final String objectivesText;
   final String vocabularyText;
   final String materialsText;
   final String presentationText;
   final String assessmentText;
   final String homeworkText;
+  final TextEditingController? reviewController;
   final ValueChanged<String> onObjectivesChanged;
   final ValueChanged<String> onVocabularyChanged;
   final ValueChanged<String> onMaterialsChanged;
@@ -1906,20 +2013,24 @@ class _PreviewColumn extends StatelessWidget {
   final VoidCallback onUnlock;
   final VoidCallback onSave;
   final VoidCallback onDiscard;
+  final VoidCallback? onRegenerate;
   final String lessonStatus;
   final VoidCallback? onToggleComplete;
 
   const _PreviewColumn({
+    super.key,
     required this.cs,
     required this.theme,
     required this.hasGenerated,
     required this.isUnlocked,
+    this.isRegenerating = false,
     required this.objectivesText,
     required this.vocabularyText,
     required this.materialsText,
     required this.presentationText,
     required this.assessmentText,
     required this.homeworkText,
+    this.reviewController,
     required this.onObjectivesChanged,
     required this.onVocabularyChanged,
     required this.onMaterialsChanged,
@@ -1929,12 +2040,14 @@ class _PreviewColumn extends StatelessWidget {
     required this.onUnlock,
     required this.onSave,
     required this.onDiscard,
+    this.onRegenerate,
     this.lessonStatus = 'draft',
     this.onToggleComplete,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Empty state (before generation)
     if (!hasGenerated) {
       return Container(
         decoration: BoxDecoration(
@@ -1945,6 +2058,7 @@ class _PreviewColumn extends StatelessWidget {
           ),
         ),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Preview header
             Container(
@@ -1973,12 +2087,12 @@ class _PreviewColumn extends StatelessWidget {
                 ],
               ),
             ),
-            // Empty state
+            // Empty body
             SizedBox(
               height: 300,
               child: Center(
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Icon(
                       Icons.description_outlined,
@@ -2002,6 +2116,7 @@ class _PreviewColumn extends StatelessWidget {
       );
     }
 
+    // Generated state (after generation, with ValueKey forcing clean mount)
     return Container(
       decoration: BoxDecoration(
         color: cs.surface,
@@ -2017,7 +2132,6 @@ class _PreviewColumn extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: cs.surfaceContainerLowest,
               border: Border(
                 bottom: BorderSide(
                   color: cs.outlineVariant.withValues(alpha: 0.2),
@@ -2038,61 +2152,15 @@ class _PreviewColumn extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: cs.secondaryFixed,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'Ready to Save',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: cs.secondary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
               ],
             ),
           ),
-
-          // Unlocked banner
-          if (isUnlocked)
-            Container(
-              margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: cs.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                border: Border.all(
-                  color: cs.primary.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.check_circle_rounded, color: cs.primary, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Unlocked — You can edit and save this lesson',
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: cs.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-          // Preview canvas
-          if (!isUnlocked) ...[
-            // Locked overlay
-            RepaintBoundary(
+          // ── Locked overlay (generated but not yet unlocked) ─────
+          if (hasGenerated && !isUnlocked)
+            Padding(
+              padding: const EdgeInsets.all(16),
               child: Container(
                 padding: const EdgeInsets.all(16),
-                margin: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: cs.tertiary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(AppTheme.radiusXl),
@@ -2104,37 +2172,25 @@ class _PreviewColumn extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.lock_rounded, color: cs.tertiary, size: 20),
+                        Icon(Icons.lock_rounded,
+                            color: cs.tertiary, size: 20),
                         const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            'Locked — Preview only',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: cs.tertiary,
-                              overflow: TextOverflow.clip,
-                            ),
+                        Text(
+                          'Locked — Preview only',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: cs.tertiary,
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Objectives: $objectivesText',
+                      'Review the generated lesson content below. '
+                      'Unlock to edit, save, or regenerate.',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: cs.onSurfaceVariant,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Presentation: $presentationText',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: cs.onSurfaceVariant,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 16),
                     SizedBox(
@@ -2146,7 +2202,8 @@ class _PreviewColumn extends StatelessWidget {
                           backgroundColor: cs.tertiary,
                           foregroundColor: cs.onTertiary,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusXl),
                           ),
                         ),
                         icon: const Icon(Icons.lock_open_rounded),
@@ -2157,119 +2214,251 @@ class _PreviewColumn extends StatelessWidget {
                 ),
               ),
             ),
-          ],
 
-          // Preview content cards
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Column(
-              children: [
-                _buildPreviewCard(
-                  'Learning Objectives',
-                  objectivesText,
-                  readOnly: !isUnlocked,
-                  onChanged: onObjectivesChanged,
+          // ── Unlocked banner ─────────────────────────────────────
+          if (hasGenerated && isUnlocked)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: cs.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                  border: Border.all(
+                    color: cs.primary.withValues(alpha: 0.3),
+                  ),
                 ),
-                const SizedBox(height: 12),
-                _buildPreviewCard(
-                  'Key Vocabulary',
-                  vocabularyText,
-                  readOnly: !isUnlocked,
-                  onChanged: onVocabularyChanged,
-                ),
-                const SizedBox(height: 12),
-                _buildPreviewCard(
-                  'Materials',
-                  materialsText,
-                  readOnly: !isUnlocked,
-                  onChanged: onMaterialsChanged,
-                ),
-                const SizedBox(height: 12),
-                _buildPreviewCard(
-                  'Lesson Presentation',
-                  presentationText,
-                  readOnly: !isUnlocked,
-                  onChanged: onPresentationChanged,
-                ),
-                const SizedBox(height: 12),
-                _buildPreviewCard(
-                  'Assessment',
-                  assessmentText,
-                  readOnly: !isUnlocked,
-                  onChanged: onAssessmentChanged,
-                ),
-                const SizedBox(height: 12),
-                _buildPreviewCard(
-                  'Homework',
-                  homeworkText,
-                  readOnly: !isUnlocked,
-                  onChanged: onHomeworkChanged,
-                ),
-              ],
-            ),
-          ),
-
-          // Action footer
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: cs.surface,
-              border: Border(
-                top: BorderSide(
-                  color: cs.outlineVariant.withValues(alpha: 0.2),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle_rounded,
+                        color: cs.primary, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Unlocked — You can edit and save this lesson',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: cs.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                SizedBox(
-                  height: AppTheme.touchTarget,
-                  child: OutlinedButton(
+
+          // ── Preview Cards ───────────────────────────────────────
+          if (hasGenerated)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildPreviewCard('Objectives', objectivesText,
+                    readOnly: !isUnlocked,
+                    onChanged: onObjectivesChanged,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildPreviewCard('Vocabulary', vocabularyText,
+                    readOnly: !isUnlocked,
+                    onChanged: onVocabularyChanged,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildPreviewCard('Materials', materialsText,
+                    readOnly: !isUnlocked,
+                    onChanged: onMaterialsChanged,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildPreviewCard('Presentation', presentationText,
+                    readOnly: !isUnlocked,
+                    onChanged: onPresentationChanged,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildPreviewCard('Assessment', assessmentText,
+                    readOnly: !isUnlocked,
+                    onChanged: onAssessmentChanged,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildPreviewCard('Homework', homeworkText,
+                    readOnly: !isUnlocked,
+                    onChanged: onHomeworkChanged,
+                  ),
+
+                  // ── Review & Regenerate ────────────────────────
+                  if (onRegenerate != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color:
+                            cs.onPrimaryContainer.withValues(alpha: 0.10),
+                        borderRadius:
+                            BorderRadius.circular(AppTheme.radiusXl),
+                        border: Border.all(
+                          color: cs.secondary.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.refresh_rounded,
+                                  size: 18, color: cs.onPrimaryContainer),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Review & Regenerate',
+                                style:
+                                    theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: cs.onPrimaryContainer,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: reviewController,
+                            maxLines: 3,
+                            minLines: 2,
+                            decoration: InputDecoration(
+                              hintText:
+                                  'Type feedback to guide regeneration...',
+                              hintStyle: TextStyle(
+                                color: cs.onPrimaryContainer
+                                    .withValues(alpha: 0.5),
+                                fontSize: 13,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(
+                                    AppTheme.radiusLg),
+                                borderSide: BorderSide.none,
+                              ),
+                              filled: true,
+                              fillColor:
+                                  cs.surface.withValues(alpha: 0.5),
+                              contentPadding:
+                                  const EdgeInsets.all(12),
+                            ),
+                            style:
+                                TextStyle(color: cs.onPrimaryContainer),
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            height: AppTheme.touchTarget,
+                            child: FilledButton.icon(
+                              onPressed:
+                                  isRegenerating ? null : onRegenerate,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: cs.secondary,
+                                foregroundColor: cs.onSecondary,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(
+                                      AppTheme.radiusLg),
+                                ),
+                              ),
+                              icon: isRegenerating
+                                  ? SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.5,
+                                        color: cs.onSecondary,
+                                      ),
+                                    )
+                                  : const Icon(Icons.refresh_rounded,
+                                      size: 20),
+                              label: Text(
+                                isRegenerating
+                                    ? 'Regenerating...'
+                                    : 'Regenerate with AI',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+          // Action footer — uses Divider + minimumSize buttons to
+          // avoid Container decoration that triggered RenderBox
+          // assertion errors during warm-up frames.
+          if (hasGenerated)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Divider(height: 1, thickness: 1),
+            ),
+          if (hasGenerated)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  OutlinedButton(
                     onPressed: onDiscard,
                     style: OutlinedButton.styleFrom(
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                        borderRadius:
+                            BorderRadius.circular(AppTheme.radiusXl),
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 24),
+                      minimumSize:
+                          const Size(100, AppTheme.touchTarget),
                     ),
                     child: const Text('Discard'),
                   ),
-                ),
-                if (onToggleComplete != null) ...[
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    height: AppTheme.touchTarget,
-                    child: FilledButton.tonalIcon(
+                  if (onToggleComplete != null) ...[
+                    const SizedBox(width: 12),
+                    FilledButton.tonalIcon(
                       onPressed: onToggleComplete,
                       style: FilledButton.styleFrom(
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                          borderRadius: BorderRadius.circular(
+                              AppTheme.radiusXl),
                         ),
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 20),
+                        minimumSize:
+                            const Size(120, AppTheme.touchTarget),
                       ),
-                      icon: Icon(lessonStatus == 'completed' ? Icons.refresh : Icons.check_circle),
-                      label: Text(lessonStatus == 'completed' ? 'Mark Draft' : 'Mark Completed'),
+                      icon: Icon(lessonStatus == 'completed'
+                          ? Icons.refresh
+                          : Icons.check_circle),
+                      label: Text(
+                          lessonStatus == 'completed'
+                              ? 'Mark Draft'
+                              : 'Mark Completed'),
                     ),
-                  ),
-                ],
-                const SizedBox(width: 12),
-                SizedBox(
-                  height: AppTheme.touchTarget,
-                  child: FilledButton(
+                  ],
+                  const SizedBox(width: 12),
+                  FilledButton(
                     onPressed: onSave,
                     style: FilledButton.styleFrom(
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                        borderRadius:
+                            BorderRadius.circular(AppTheme.radiusXl),
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 32),
+                      minimumSize:
+                          const Size(100, AppTheme.touchTarget),
                     ),
                     child: const Text('Save to Vault'),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -2347,6 +2536,7 @@ class _PreviewColumn extends StatelessWidget {
     }
 
     return Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: widgets,
     );
@@ -2358,48 +2548,55 @@ class _PreviewColumn extends StatelessWidget {
     bool readOnly = false,
     required ValueChanged<String> onChanged,
   }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cs.surfaceBright,
+    return Card(
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-        border: Border.all(
+        side: BorderSide(
           color: cs.outlineVariant.withValues(alpha: 0.4),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (readOnly)
-            _renderMarkdownContent(content)
-          else
-            TextFormField(
-              initialValue: content,
-              maxLines: 6,
-              decoration: InputDecoration(
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                  borderSide: BorderSide(color: cs.outlineVariant),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                  borderSide: BorderSide(
-                    color: cs.outlineVariant.withValues(alpha: 0.5),
+      color: cs.surfaceBright,
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
+        contentPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        title: Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            title,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: cs.onSurface,
+            ),
+          ),
+        ),
+        subtitle: readOnly
+            ? _renderMarkdownContent(content)
+            : TextFormField(
+                initialValue: content,
+                maxLines: 6,
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                    borderSide: BorderSide(color: cs.outlineVariant),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                    borderSide: BorderSide(
+                      color: cs.outlineVariant.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  hintText: 'No content yet. Tap Generate first.',
+                  hintStyle: theme.textTheme.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.5),
                   ),
                 ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 12,
-                ),
-                hintText: 'No content yet. Tap Generate first.',
-                hintStyle: theme.textTheme.bodySmall?.copyWith(
-                  color: cs.onSurfaceVariant.withValues(alpha: 0.5),
-                ),
+                onChanged: onChanged,
               ),
-              onChanged: onChanged,
-            ),
-        ],
       ),
     );
   }
