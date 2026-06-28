@@ -39,6 +39,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   final _topicController = TextEditingController();
   final _reviewController = TextEditingController();
   int _week = 1;
+  int _term = 1;
   String _subject = 'Mathematics';
   String _classLevel = 'JSS 1';
   String _difficulty = 'medium';
@@ -563,7 +564,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   }
 
   Future<void> _handleUnlock() async {
-    if (_creditBalance < 1) {
+    final isOnline = await PlatformHelper.isOnline();
+
+    if (!isOnline && _creditBalance < 1) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         AppToast.instance.showToast(
@@ -577,7 +580,6 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     }
 
     try {
-      final isOnline = await PlatformHelper.isOnline();
       final creditService = CreditService(ref.read(databaseProvider));
       final topicId = _topicController.text.trim();
       await creditService.spendCredits(
@@ -1004,12 +1006,16 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                           subject: _subject,
                                           classLevel: _classLevel,
                                           week: _week,
+                                          term: _term,
                                           topicController: _topicController,
                                           selectedQuestionTypes:
                                               _selectedQuestionTypes,
                                           questionCounts: _questionCounts,
                                           difficulty: _difficulty,
                                           isGenerating: _isGenerating,
+                                          isRegenerating: _isRegenerating,
+                                          onRegenerate: _isUnlocked ? _handleRegenerate : null,
+                                          reviewController: _reviewController,
                                           creditBalance: _creditBalance,
                                           subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
                                           classLevels: _classLevels,
@@ -1046,6 +1052,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                           isManualTopicEntry: _isManualTopicEntry,
                                           selectedLessonId: _selectedLessonId,
                                           onWeekChanged: (v) => setState(() => _week = v),
+                                          onTermChanged: (v) => setState(() => _term = v),
                                           onLessonSelected: _onLessonSelected,
                                           onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
                                           onManualTopicSelected: () => _onLessonSelected(null),
@@ -1065,12 +1072,6 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                         onUnlock: _handleUnlock,
                                         onSave: () => _saveExam(),
                                         onDiscard: _discard,
-                                        onRegenerate: _isUnlocked ? _handleRegenerate : null,
-                                        isRegenerating: _isRegenerating,
-                                        reviewController: _reviewController,
-                                        difficulty: _difficulty,
-                                        difficulties: _difficulties,
-                                        onDifficultyChanged: (v) => setState(() => _difficulty = v),
                                         onUpdateMcq: _updateMcq,
                                         onUpdateMcqOption: _updateMcqOption,
                                         onUpdateTheory: _updateTheory,
@@ -1086,12 +1087,16 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                       subject: _subject,
                                       classLevel: _classLevel,
                                       week: _week,
+                                      term: _term,
                                       topicController: _topicController,
                                       selectedQuestionTypes:
                                           _selectedQuestionTypes,
                                       questionCounts: _questionCounts,
                                       difficulty: _difficulty,
                                       isGenerating: _isGenerating,
+                                      isRegenerating: _isRegenerating,
+                                      onRegenerate: _isUnlocked ? _handleRegenerate : null,
+                                      reviewController: _reviewController,
                                       creditBalance: _creditBalance,
                                       subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
                                       classLevels: _classLevels,
@@ -1128,6 +1133,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                       isManualTopicEntry: _isManualTopicEntry,
                                       selectedLessonId: _selectedLessonId,
                                       onWeekChanged: (v) => setState(() => _week = v),
+                                      onTermChanged: (v) => setState(() => _term = v),
                                       onLessonSelected: _onLessonSelected,
                                       onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
                                       onManualTopicSelected: () => _onLessonSelected(null),
@@ -1145,12 +1151,6 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                       onUnlock: _handleUnlock,
                                       onSave: () => _saveExam(),
                                       onDiscard: _discard,
-                                      onRegenerate: _isUnlocked ? _handleRegenerate : null,
-                                      isRegenerating: _isRegenerating,
-                                      reviewController: _reviewController,
-                                      difficulty: _difficulty,
-                                      difficulties: _difficulties,
-                                      onDifficultyChanged: (v) => setState(() => _difficulty = v),
                                       onUpdateMcq: _updateMcq,
                                       onUpdateMcqOption: _updateMcqOption,
                                       onUpdateTheory: _updateTheory,
@@ -1508,11 +1508,13 @@ class _ConfigPanel extends StatelessWidget {
   final String subject;
   final String classLevel;
   final int week;
+  final int term;
   final TextEditingController topicController;
   final Set<String> selectedQuestionTypes;
   final Map<String, int> questionCounts;
   final String difficulty;
   final bool isGenerating;
+  final bool isRegenerating;
   final int creditBalance;
   final List<String> subjects;
   final List<String> classLevels;
@@ -1523,6 +1525,8 @@ class _ConfigPanel extends StatelessWidget {
   final ValueChanged<String> onTypeToggled;
   final void Function(String, int) onCountChanged;
   final VoidCallback onGenerate;
+  final VoidCallback? onRegenerate;
+  final TextEditingController? reviewController;
   final VoidCallback? onAddNewSubject;
   final List<Lesson> teacherLessons;
   final List<SchemeOfWorkData> schemes;
@@ -1531,6 +1535,7 @@ class _ConfigPanel extends StatelessWidget {
   final bool isManualTopicEntry;
   final int? selectedLessonId;
   final ValueChanged<int> onWeekChanged;
+  final ValueChanged<int> onTermChanged;
   final ValueChanged<Lesson?> onLessonSelected;
   final ValueChanged<SchemeOfWorkData?> onSchemeOfWorkSelected;
   final VoidCallback onManualTopicSelected;
@@ -1541,11 +1546,13 @@ class _ConfigPanel extends StatelessWidget {
     required this.subject,
     required this.classLevel,
     required this.week,
+    required this.term,
     required this.topicController,
     required this.selectedQuestionTypes,
     required this.questionCounts,
     required this.difficulty,
     required this.isGenerating,
+    this.isRegenerating = false,
     required this.creditBalance,
     required this.subjects,
     required this.classLevels,
@@ -1556,6 +1563,8 @@ class _ConfigPanel extends StatelessWidget {
     required this.onTypeToggled,
     required this.onCountChanged,
     required this.onGenerate,
+    this.onRegenerate,
+    this.reviewController,
     this.onAddNewSubject,
     required this.teacherLessons,
     required this.schemes,
@@ -1564,6 +1573,7 @@ class _ConfigPanel extends StatelessWidget {
     required this.isManualTopicEntry,
     required this.selectedLessonId,
     required this.onWeekChanged,
+    required this.onTermChanged,
     required this.onLessonSelected,
     required this.onSchemeOfWorkSelected,
     required this.onManualTopicSelected,
@@ -1697,39 +1707,33 @@ class _ConfigPanel extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              _FieldLabel(theme: theme, cs: cs, label: 'Week'),
-              const SizedBox(height: 4),
-              SizedBox(
-                height: AppTheme.touchTarget,
-                width: 120,
-                child: TextFormField(
-                  key: ValueKey(week),
-                  initialValue: week.toString(),
-                  readOnly: !isManualTopicEntry,
-                  keyboardType: TextInputType.number,
-                  onChanged: isManualTopicEntry
-                      ? (value) {
-                          final parsed = int.tryParse(value);
-                          if (parsed != null) {
-                            onWeekChanged(parsed);
-                          }
-                        }
-                      : null,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                      borderSide: BorderSide(color: cs.outlineVariant),
+              // Term + Week row
+              Row(
+                children: [
+                  Expanded(
+                    child: _SimpleDropdown(
+                      cs: cs,
+                      theme: theme,
+                      label: 'Term',
+                      value: term.toString(),
+                      items: const ['1', '2', '3'],
+                      onChanged: (v) => onTermChanged(int.tryParse(v) ?? 1),
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                      borderSide: BorderSide(color: cs.outlineVariant),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                    filled: true,
-                    fillColor: cs.surface,
                   ),
-                ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _SimpleDropdown(
+                      cs: cs,
+                      theme: theme,
+                      label: 'Week',
+                      value: week.toString(),
+                      items: List.generate(13, (i) => (i + 1).toString()),
+                      onChanged: (v) => onWeekChanged(int.tryParse(v) ?? 1),
+                    ),
+                  ),
+                ],
               ),
+              const SizedBox(height: 16),
               // Grade Level + Duration row
               Row(
                 children: [
@@ -1992,6 +1996,131 @@ class _ConfigPanel extends StatelessWidget {
                   ),
                 ),
               ),
+
+              // ── Review & Regenerate (visible after generation + unlock) ──
+              if (onRegenerate != null) ...[
+                const SizedBox(height: 24),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: cs.onPrimaryContainer.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                    border: Border.all(
+                      color: cs.secondary.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.refresh_rounded, size: 18, color: cs.onPrimaryContainer),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Review & Regenerate',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: cs.onPrimaryContainer,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      // Difficulty
+                      _FieldLabel(
+                        theme: theme,
+                        cs: cs,
+                        label: 'Difficulty',
+                        color: cs.onPrimaryContainer.withValues(alpha: 0.8),
+                      ),
+                      const SizedBox(height: 4),
+                      SizedBox(
+                        height: AppTheme.touchTarget,
+                        child: DropdownButtonFormField<String>(
+                          initialValue: difficulty,
+                          isExpanded: true,
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            fillColor: cs.onSurface.withValues(alpha: 0.15),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                          ),
+                          items: difficulties.map((d) => DropdownMenuItem(
+                            value: d,
+                            child: Text(d[0].toUpperCase() + d.substring(1),
+                              style: TextStyle(color: cs.onPrimaryContainer)),
+                          )).toList(),
+                          onChanged: (v) {
+                            if (v != null) onDifficultyChanged(v);
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Review field
+                      _FieldLabel(
+                        theme: theme,
+                        cs: cs,
+                        label: 'Suggestions or Corrections',
+                        color: cs.onPrimaryContainer.withValues(alpha: 0.8),
+                      ),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: reviewController,
+                        maxLines: 3,
+                        minLines: 2,
+                        decoration: InputDecoration(
+                          hintText: 'Type feedback to guide regeneration...',
+                          hintStyle: TextStyle(
+                            color: cs.onPrimaryContainer.withValues(alpha: 0.5),
+                            fontSize: 13,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                            borderSide: BorderSide.none,
+                          ),
+                          filled: true,
+                          fillColor: cs.surface.withValues(alpha: 0.5),
+                          contentPadding: const EdgeInsets.all(12),
+                        ),
+                        style: TextStyle(color: cs.onPrimaryContainer),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        height: AppTheme.touchTarget,
+                        child: FilledButton.icon(
+                          onPressed: isRegenerating ? null : onRegenerate,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: cs.secondary,
+                            foregroundColor: cs.onSecondary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                            ),
+                          ),
+                          icon: isRegenerating
+                              ? SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: cs.onSecondary,
+                                  ),
+                                )
+                              : const Icon(Icons.refresh_rounded, size: 20),
+                          label: Text(
+                            isRegenerating ? 'Regenerating...' : 'Regenerate with AI',
+                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -2015,12 +2144,6 @@ class _PreviewPanel extends StatelessWidget {
   final VoidCallback onUnlock;
   final VoidCallback onSave;
   final VoidCallback onDiscard;
-  final VoidCallback? onRegenerate;
-  final bool isRegenerating;
-  final TextEditingController? reviewController;
-  final String difficulty;
-  final List<String> difficulties;
-  final ValueChanged<String>? onDifficultyChanged;
   final void Function(int, String, String) onUpdateMcq;
   final void Function(int, String, String) onUpdateMcqOption;
   final void Function(int, String, String) onUpdateTheory;
@@ -2037,12 +2160,6 @@ class _PreviewPanel extends StatelessWidget {
     required this.onUnlock,
     required this.onSave,
     required this.onDiscard,
-    this.onRegenerate,
-    this.isRegenerating = false,
-    this.reviewController,
-    this.difficulty = 'medium',
-    this.difficulties = const ['easy', 'medium', 'hard'],
-    this.onDifficultyChanged,
     required this.onUpdateMcq,
     required this.onUpdateMcqOption,
     required this.onUpdateTheory,
@@ -2129,18 +2246,20 @@ class _PreviewPanel extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    SizedBox(
-                      height: 32,
-                      child: FilledButton.icon(
-                        onPressed: onSave,
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                    Flexible(
+                      child: SizedBox(
+                        height: 32,
+                        child: FilledButton.icon(
+                          onPressed: onSave,
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                            ),
                           ),
+                          icon: const Icon(Icons.save_rounded, size: 16),
+                          label: const Text('Save', style: TextStyle(fontSize: 12)),
                         ),
-                        icon: const Icon(Icons.save_rounded, size: 16),
-                        label: const Text('Save', style: TextStyle(fontSize: 12)),
                       ),
                     ),
                   ],
@@ -2200,133 +2319,6 @@ class _PreviewPanel extends StatelessWidget {
                         ),
                         icon: const Icon(Icons.lock_open_rounded),
                         label: const Text('Unlock for 1 Credit'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-
-          // Review & Regenerate section (visible when unlocked)
-          if (hasGenerated && isUnlocked && onRegenerate != null) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: cs.secondaryContainer.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                  border: Border.all(
-                    color: cs.secondary.withValues(alpha: 0.2),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.tune_rounded, size: 18, color: cs.onSecondaryContainer),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Difficulty & Review',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: cs.onSecondaryContainer,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    // Difficulty dropdown
-                    Row(
-                      children: [
-                        Icon(Icons.speed_rounded, size: 16, color: cs.onSurfaceVariant),
-                        const SizedBox(width: 8),
-                        Text('Difficulty: ',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        SizedBox(
-                          height: 36,
-                          width: 120,
-                          child: DropdownButtonFormField<String>(
-                            initialValue: difficulty,
-                            isExpanded: true,
-                            decoration: InputDecoration(
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                                borderSide: BorderSide(color: cs.outlineVariant),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                                borderSide: BorderSide(color: cs.outlineVariant),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                              filled: true,
-                              fillColor: cs.surface,
-                            ),
-                            items: difficulties.map((d) => DropdownMenuItem(
-                              value: d,
-                              child: Text(d[0].toUpperCase() + d.substring(1),
-                                style: const TextStyle(fontSize: 13)),
-                            )).toList(),
-                            onChanged: (v) {
-                              if (v != null) onDifficultyChanged?.call(v);
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    // Review text field
-                    TextField(
-                      controller: reviewController,
-                      maxLines: 3,
-                      minLines: 3,
-                      decoration: InputDecoration(
-                        hintText: 'Add suggestions or corrections for regeneration...',
-                        hintStyle: TextStyle(
-                          color: cs.onSurfaceVariant.withValues(alpha: 0.6),
-                          fontSize: 13,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                          borderSide: BorderSide(color: cs.outlineVariant),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                          borderSide: BorderSide(color: cs.outlineVariant),
-                        ),
-                        contentPadding: const EdgeInsets.all(12),
-                        filled: true,
-                        fillColor: cs.surface,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      height: AppTheme.touchTarget,
-                      child: FilledButton.icon(
-                        onPressed: isRegenerating ? null : onRegenerate,
-                        style: FilledButton.styleFrom(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                          ),
-                        ),
-                        icon: isRegenerating
-                            ? SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  color: cs.onPrimary,
-                                ),
-                              )
-                            : const Icon(Icons.refresh_rounded),
-                        label: Text(isRegenerating ? 'Regenerating...' : 'Regenerate with AI'),
                       ),
                     ),
                   ],
