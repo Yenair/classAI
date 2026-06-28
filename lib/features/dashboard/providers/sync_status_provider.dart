@@ -262,7 +262,7 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
 
       final isOnline = await PlatformHelper.isOnline();
 
-      final syncStatus = _determineSyncStatus(config);
+      final syncStatus = _determineSyncStatus(config, isOnline);
       state = SyncStatusData(
         status: syncStatus,
         lastSyncTime: config.lastSyncAttemptTime,
@@ -276,7 +276,11 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
     }
   }
 
-  SyncStatus _determineSyncStatus(SecurityConfigData config) {
+  /// Determines the appropriate [SyncStatus] based on connectivity and
+  /// last-sync time.  If the device is offline the status is always
+  /// [SyncStatus.offline], regardless of how recently a sync completed.
+  SyncStatus _determineSyncStatus(SecurityConfigData config, bool isOnline) {
+    if (!isOnline) return SyncStatus.offline;
     final lastSync = config.lastSyncAttemptTime;
     if (lastSync == null) return SyncStatus.offline;
     final diff = DateTime.now().difference(lastSync);

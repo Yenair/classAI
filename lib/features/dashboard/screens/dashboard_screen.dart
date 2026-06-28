@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/widgets/conflict_banner.dart';
@@ -888,16 +887,6 @@ class _CreditChip extends ConsumerWidget {
                 cs: cs,
                 theme: theme,
               ),
-              if (creditData.nextRefillTime != null) ...[
-                const SizedBox(height: 12),
-                _CreditInfoRow(
-                  label: 'Next Refill',
-                  value: DateFormat('MMM d, yyyy')
-                      .format(creditData.nextRefillTime!),
-                  cs: cs,
-                  theme: theme,
-                ),
-              ],
             ],
           ),
         ),
@@ -1651,16 +1640,6 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
                 cs: cs,
                 theme: theme,
               ),
-              if (creditData.nextRefillTime != null) ...[
-                const SizedBox(height: 12),
-                _CreditInfoRow(
-                  label: 'Next Refill',
-                  value: DateFormat('MMM d, yyyy')
-                      .format(creditData.nextRefillTime!),
-                  cs: cs,
-                  theme: theme,
-                ),
-              ],
             ],
           ),
         ),

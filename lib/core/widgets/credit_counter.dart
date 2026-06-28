@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 
@@ -152,7 +151,6 @@ class _CreditDetailsDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final dateFormat = DateFormat('MMM d, yyyy – h:mm a');
 
     return AlertDialog(
       backgroundColor: cs.surface,
@@ -279,34 +277,6 @@ class _CreditDetailsDialog extends StatelessWidget {
                   backgroundColor: cs.secondaryContainer,
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.symmetric(horizontal: 10),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Flexible(
-                child: Text(
-                  'Next refill',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: cs.onSurfaceVariant,
-                        overflow: TextOverflow.clip,
-                      ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  data.nextRefillTime != null
-                      ? dateFormat.format(data.nextRefillTime!)
-                      : 'N/A',
-                  textAlign: TextAlign.end,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w500,
-                        overflow: TextOverflow.clip,
-                      ),
                 ),
               ),
             ],

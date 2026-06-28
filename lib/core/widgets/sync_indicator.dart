@@ -18,7 +18,7 @@ class SyncIndicator extends ConsumerWidget {
 
     final label = statusLabel(syncData.status);
     final (IconData icon, Color tint) = switch (syncData.status) {
-      SyncStatus.offline => (Icons.cloud_off, cs.error),
+      SyncStatus.offline => (Icons.cloud_off, cs.onSurfaceVariant),
       SyncStatus.syncing => (Icons.cloud_sync, cs.primary),
       SyncStatus.synced => (Icons.cloud_done, cs.primary),
       SyncStatus.error => (Icons.cloud_off, cs.error),
@@ -231,6 +231,6 @@ class _StatRow extends StatelessWidget {
 String statusLabel(SyncStatus s) => switch (s) {
       SyncStatus.offline => 'Offline',
       SyncStatus.syncing => 'Syncing…',
-      SyncStatus.synced => 'Online',
+      SyncStatus.synced => 'Synced',
       SyncStatus.error => 'Sync error',
     };

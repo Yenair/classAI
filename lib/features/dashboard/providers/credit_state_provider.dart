@@ -6,14 +6,12 @@ import 'package:classai/main.dart' show databaseProvider;
 class CreditStateData {
   final int currentCredits;
   final String tierName;
-  final DateTime? nextRefillTime;
   final bool loading;
   final String? errorMessage;
 
   const CreditStateData({
     this.currentCredits = 0,
     this.tierName = 'Free',
-    this.nextRefillTime,
     this.loading = false,
     this.errorMessage,
   });
@@ -35,10 +33,6 @@ class CreditStateNotifier extends Notifier<CreditStateData> {
       state = CreditStateData(
         currentCredits: config.offlineCredits,
         tierName: _tierFromCredits(config.offlineCredits),
-        nextRefillTime: config.lastCreditRefillServerTime != null
-            ? config.lastCreditRefillServerTime!
-                .add(const Duration(days: 30))
-            : null,
       );
     } catch (e) {
       state = CreditStateData(
