@@ -1,4 +1,7 @@
 class PromptTemplates {
+  static const String _selfCheckInstruction =
+      'After generating the questions, double-check each answer. If any answer is likely incorrect, replace it with a correct one. Do not output questions you are unsure about - omit them and reduce the count accordingly. Return only valid JSON.';
+
   static String lessonNote(String subject, String curriculum, String classLevel,
       int week, String topic, String difficulty, String bloomsVerbs,
       {String teacherName = 'Teacher', String schoolName = 'School'}) {
@@ -16,7 +19,8 @@ class PromptTemplates {
         '## Homework\n'
         'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
         'Return ONLY valid JSON: '
-        '{"objectives":[...],"vocabulary":[...],"materials":[...],"presentation":{...},"assessment":"...","homework":"...","attribution":"$attribution"}';
+        '{"objectives":[...],"vocabulary":[...],"materials":[...],"presentation":{...},"assessment":"...","homework":"...","attribution":"$attribution"} '
+        '$_selfCheckInstruction';
   }
 
   /// Generate a combined exam prompt that supports MCQ, Theory, and Subjective.
@@ -48,7 +52,7 @@ class PromptTemplates {
     }
     if ((typeCounts['Subjective'] ?? 0) > 0) {
       jsonStructure.add(
-          '"subjective":[{"question":"...","prompt":"...","rubric":"..."}]');
+          '"subjective":[{"question":"...","answer":"...","rubric":"..."}]');
     }
 
     return 'Generate $typeDescription for $subject, $classLevel, "$topic". Difficulty: $difficulty. '
@@ -58,7 +62,8 @@ class PromptTemplates {
         '## Subjective Questions\n'
         'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
         'Return ONLY valid JSON: '
-        '{$jsonStructure,"attribution":"$attribution"}';
+        '{$jsonStructure,"attribution":"$attribution"} '
+        '$_selfCheckInstruction';
   }
 
   static String mcqs(
@@ -71,7 +76,8 @@ class PromptTemplates {
         '## MCQ Questions\n'
         'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
         '4 options each (A-D). Return ONLY valid JSON: '
-        '{"questions":[{"question":"...","options":{"A":"...","B":"...","C":"...","D":"..."},"correct":"A"}],"attribution":"$attribution"}';
+        '{"questions":[{"question":"...","options":{"A":"...","B":"...","C":"...","D":"..."},"correct":"A"}],"attribution":"$attribution"} '
+        '$_selfCheckInstruction';
   }
 
   static String theoryQuestions(String subject, String classLevel, String topic,
@@ -83,7 +89,8 @@ class PromptTemplates {
         '## Theory Questions\n'
         'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
         'Include model answer and cognitive level. Return ONLY valid JSON: '
-        '{"questions":[{"question":"...","modelAnswer":"...","cognitiveLevel":"..."}],"attribution":"$attribution"}';
+        '{"questions":[{"question":"...","modelAnswer":"...","cognitiveLevel":"..."}],"attribution":"$attribution"} '
+        '$_selfCheckInstruction';
   }
 
   static String subjectiveQuestions(
@@ -95,8 +102,9 @@ class PromptTemplates {
         'Use the following clear section heading in the output:\n'
         '## Subjective Questions\n'
         'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
-        'Include detailed prompt and marking rubric. Return ONLY valid JSON: '
-        '{"questions":[{"question":"...","prompt":"...","rubric":"..."}],"attribution":"$attribution"}';
+        'Include a correct answer and marking rubric. Return ONLY valid JSON: '
+        '{"questions":[{"question":"...","answer":"...","rubric":"..."}],"attribution":"$attribution"} '
+        '$_selfCheckInstruction';
   }
 
   /// Generate a Scheme of Work for a NERDC subject across a full term.

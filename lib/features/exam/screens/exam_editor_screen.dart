@@ -21,6 +21,11 @@ import 'package:classai/main.dart' show databaseProvider;
 ///
 /// Generates MCQ, Theory, and/or Subjective questions. Preview as editable list of question cards.
 /// Save inserts into `exams` table.
+typedef _QuestionValidationResult = ({
+  List<Map<String, dynamic>> validQuestions,
+  List<String> invalidLabels,
+});
+
 class ExamEditorScreen extends ConsumerStatefulWidget {
   /// Callback invoked with the generated prompt; returns parsed JSON map.
   final Future<Map<String, dynamic>> Function(String prompt)? generateCallback;
@@ -269,7 +274,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
             .map((q) => Map<String, dynamic>.from(q as Map))
             .toList();
         _subjectiveQuestions = subjective
-            .map((q) => Map<String, dynamic>.from(q as Map))
+            .map((q) => _normalizeWrittenQuestion(
+                Map<String, dynamic>.from(q as Map)))
             .toList();
         _selectedQuestionTypes
           ..clear()
@@ -436,6 +442,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       final generateMcq = _selectedQuestionTypes.contains('MCQ');
       final generateTheory = _selectedQuestionTypes.contains('Theory');
       final generateSubjective = _selectedQuestionTypes.contains('Subjective');
+      List<Map<String, dynamic>> mcqs = [];
+      List<Map<String, dynamic>> theoryQuestions = [];
+      List<Map<String, dynamic>> subjectiveQuestions = [];
 
       // Check daily generation limit before generating
       try {
@@ -453,10 +462,6 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
 
       // Generate questions
       // NOTE: No credit is spent on AI generation - credit is spent on unlock
-      _mcqs = [];
-      _theoryQuestions = [];
-      _subjectiveQuestions = [];
-
       if (generateMcq) {
         final mcqPrompt = PromptTemplates.mcqs(
           _subject,
@@ -466,16 +471,11 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
           teacherName: _teacherName,
           schoolName: _schoolName,
         );
-        Map<String, dynamic> mcqResult = {};
-        if (widget.generateCallback != null) {
-          mcqResult = await widget.generateCallback!(mcqPrompt);
-        } else {
-          mcqResult = await aiService.generate(mcqPrompt);
-        }
-        final mcqRaw = mcqResult['raw'] as Map<String, dynamic>? ?? mcqResult;
-        final mcqList = mcqRaw['questions'] as List<dynamic>? ?? [];
-        _mcqs =
-            mcqList.map((q) => Map<String, dynamic>.from(q as Map)).toList();
+        mcqs = await _generateValidatedQuestions(
+          prompt: mcqPrompt,
+          aiService: aiService,
+          validator: _validateMcqs,
+        );
       }
 
       if (generateTheory) {
@@ -486,17 +486,11 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
           teacherName: _teacherName,
           schoolName: _schoolName,
         );
-        Map<String, dynamic> theoryResult = {};
-        if (widget.generateCallback != null) {
-          theoryResult = await widget.generateCallback!(theoryPrompt);
-        } else {
-          theoryResult = await aiService.generate(theoryPrompt);
-        }
-        final theoryRaw =
-            theoryResult['raw'] as Map<String, dynamic>? ?? theoryResult;
-        final theoryList = theoryRaw['questions'] as List<dynamic>? ?? [];
-        _theoryQuestions =
-            theoryList.map((q) => Map<String, dynamic>.from(q as Map)).toList();
+        theoryQuestions = await _generateValidatedQuestions(
+          prompt: theoryPrompt,
+          aiService: aiService,
+          validator: _validateWrittenQuestions,
+        );
       }
 
       if (generateSubjective) {
@@ -507,17 +501,11 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
           teacherName: _teacherName,
           schoolName: _schoolName,
         );
-        Map<String, dynamic> subjectiveResult = {};
-        if (widget.generateCallback != null) {
-          subjectiveResult = await widget.generateCallback!(subjectivePrompt);
-        } else {
-          subjectiveResult = await aiService.generate(subjectivePrompt);
-        }
-        final subjectiveRaw =
-            subjectiveResult['raw'] as Map<String, dynamic>? ?? subjectiveResult;
-        final subjectiveList = subjectiveRaw['questions'] as List<dynamic>? ?? [];
-        _subjectiveQuestions =
-            subjectiveList.map((q) => Map<String, dynamic>.from(q as Map)).toList();
+        subjectiveQuestions = await _generateValidatedQuestions(
+          prompt: subjectivePrompt,
+          aiService: aiService,
+          validator: _validateWrittenQuestions,
+        );
       }
 
       // Increment preview counter only after successful generation
@@ -532,6 +520,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       );
 
       setState(() {
+        _mcqs = mcqs;
+        _theoryQuestions = theoryQuestions;
+        _subjectiveQuestions = subjectiveQuestions;
         _hasGenerated = true;
         _isUnlocked = false;
         _isGenerating = false;
@@ -666,48 +657,73 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       final aiService = AiService(db: db);
       final topic = _topicController.text.trim();
       final review = _reviewController.text.trim();
+      List<Map<String, dynamic>> mcqs = _mcqs;
+      List<Map<String, dynamic>> theoryQuestions = _theoryQuestions;
+      List<Map<String, dynamic>> subjectiveQuestions = _subjectiveQuestions;
 
       // Regenerate MCQ
       if (_mcqs.isNotEmpty) {
-        final mcqPrompt = PromptTemplates.mcqs(
-          _subject, _classLevel, topic, _difficulty,
-          teacherName: _teacherName, schoolName: _schoolName,
-        ) + '\n\nTeacher feedback: $review';
-        final result = widget.generateCallback != null
-            ? await widget.generateCallback!(mcqPrompt)
-            : await aiService.generate(mcqPrompt);
-        final raw = result['raw'] as Map<String, dynamic>? ?? result;
-        final list = raw['questions'] as List<dynamic>? ?? [];
-        _mcqs = list.map((q) => Map<String, dynamic>.from(q as Map)).toList();
+        final mcqPrompt = _buildRegenerationPrompt(
+          PromptTemplates.mcqs(
+            _subject,
+            _classLevel,
+            topic,
+            _difficulty,
+            teacherName: _teacherName,
+            schoolName: _schoolName,
+          ),
+          review,
+        );
+        mcqs = await _generateValidatedQuestions(
+          prompt: mcqPrompt,
+          aiService: aiService,
+          validator: _validateMcqs,
+        );
       }
 
       // Regenerate Theory
       if (_theoryQuestions.isNotEmpty) {
-        final theoryPrompt = PromptTemplates.theoryQuestions(
-          _subject, _classLevel, topic,
-          teacherName: _teacherName, schoolName: _schoolName,
-        ) + '\n\nTeacher feedback: $review';
-        final result = widget.generateCallback != null
-            ? await widget.generateCallback!(theoryPrompt)
-            : await aiService.generate(theoryPrompt);
-        final raw = result['raw'] as Map<String, dynamic>? ?? result;
-        final list = raw['questions'] as List<dynamic>? ?? [];
-        _theoryQuestions = list.map((q) => Map<String, dynamic>.from(q as Map)).toList();
+        final theoryPrompt = _buildRegenerationPrompt(
+          PromptTemplates.theoryQuestions(
+            _subject,
+            _classLevel,
+            topic,
+            teacherName: _teacherName,
+            schoolName: _schoolName,
+          ),
+          review,
+        );
+        theoryQuestions = await _generateValidatedQuestions(
+          prompt: theoryPrompt,
+          aiService: aiService,
+          validator: _validateWrittenQuestions,
+        );
       }
 
       // Regenerate Subjective
       if (_subjectiveQuestions.isNotEmpty) {
-        final subjectivePrompt = PromptTemplates.subjectiveQuestions(
-          _subject, _classLevel, topic,
-          teacherName: _teacherName, schoolName: _schoolName,
-        ) + '\n\nTeacher feedback: $review';
-        final result = widget.generateCallback != null
-            ? await widget.generateCallback!(subjectivePrompt)
-            : await aiService.generate(subjectivePrompt);
-        final raw = result['raw'] as Map<String, dynamic>? ?? result;
-        final list = raw['questions'] as List<dynamic>? ?? [];
-        _subjectiveQuestions = list.map((q) => Map<String, dynamic>.from(q as Map)).toList();
+        final subjectivePrompt = _buildRegenerationPrompt(
+          PromptTemplates.subjectiveQuestions(
+            _subject,
+            _classLevel,
+            topic,
+            teacherName: _teacherName,
+            schoolName: _schoolName,
+          ),
+          review,
+        );
+        subjectiveQuestions = await _generateValidatedQuestions(
+          prompt: subjectivePrompt,
+          aiService: aiService,
+          validator: _validateWrittenQuestions,
+        );
       }
+
+      setState(() {
+        _mcqs = mcqs;
+        _theoryQuestions = theoryQuestions;
+        _subjectiveQuestions = subjectiveQuestions;
+      });
 
       await _saveExam(notify: false);
 
@@ -728,6 +744,170 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         });
       }
     }
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchQuestionList(
+    String prompt,
+    AiService aiService,
+  ) async {
+    final result = widget.generateCallback != null
+        ? await widget.generateCallback!(prompt)
+        : await aiService.generate(prompt);
+    final raw = result['raw'] as Map<String, dynamic>? ?? result;
+    final list = raw['questions'] as List<dynamic>? ?? const [];
+    final questions = <Map<String, dynamic>>[];
+    for (final item in list) {
+      if (item is Map) {
+        questions.add(Map<String, dynamic>.from(item));
+      }
+    }
+    return questions;
+  }
+
+  String _questionLabel(Map<String, dynamic> question) {
+    final questionText = question['question']?.toString().trim();
+    if (questionText != null && questionText.isNotEmpty) {
+      return questionText;
+    }
+    final topic = question['topic']?.toString().trim();
+    if (topic != null && topic.isNotEmpty) {
+      return topic;
+    }
+    return 'untitled question';
+  }
+
+  Map<String, dynamic> _normalizeWrittenQuestion(
+    Map<String, dynamic> question,
+  ) {
+    final normalized = Map<String, dynamic>.from(question);
+    final modelAnswer = normalized['modelAnswer']?.toString().trim();
+    final answer = normalized['answer']?.toString().trim();
+    if (modelAnswer == null || modelAnswer.isEmpty) {
+      if (answer != null && answer.isNotEmpty) {
+        normalized['modelAnswer'] = answer;
+      }
+    } else {
+      normalized['modelAnswer'] = modelAnswer;
+    }
+    return normalized;
+  }
+
+  _QuestionValidationResult _validateMcqs(
+    List<Map<String, dynamic>> questions,
+  ) {
+    final validQuestions = <Map<String, dynamic>>[];
+    final invalidLabels = <String>[];
+
+    for (final question in questions) {
+      final normalized = Map<String, dynamic>.from(question);
+      final optionsRaw = normalized['options'];
+      if (optionsRaw is! Map) {
+        invalidLabels.add(_questionLabel(normalized));
+        continue;
+      }
+
+      final options = <String, dynamic>{};
+      for (final entry in optionsRaw.entries) {
+        final key = entry.key.toString().trim();
+        if (key.isNotEmpty) {
+          options[key] = entry.value;
+        }
+      }
+
+      if (options.isEmpty) {
+        invalidLabels.add(_questionLabel(normalized));
+        continue;
+      }
+
+      final correctRaw = normalized['correct']?.toString().trim();
+      if (correctRaw == null || correctRaw.isEmpty) {
+        invalidLabels.add(_questionLabel(normalized));
+        continue;
+      }
+
+      String? matchedKey;
+      for (final key in options.keys) {
+        if (key.toLowerCase() == correctRaw.toLowerCase()) {
+          matchedKey = key;
+          break;
+        }
+      }
+
+      if (matchedKey == null) {
+        invalidLabels.add(_questionLabel(normalized));
+        continue;
+      }
+
+      normalized['options'] = options;
+      normalized['correct'] = matchedKey;
+      validQuestions.add(normalized);
+    }
+
+    return (
+      validQuestions: validQuestions,
+      invalidLabels: invalidLabels,
+    );
+  }
+
+  _QuestionValidationResult _validateWrittenQuestions(
+    List<Map<String, dynamic>> questions,
+  ) {
+    final validQuestions = <Map<String, dynamic>>[];
+    final invalidLabels = <String>[];
+
+    for (final question in questions) {
+      final normalized = _normalizeWrittenQuestion(question);
+      final answer = normalized['modelAnswer']?.toString().trim();
+      if (answer == null || answer.length < 10) {
+        invalidLabels.add(_questionLabel(normalized));
+        continue;
+      }
+
+      normalized['modelAnswer'] = answer;
+      if (normalized.containsKey('answer')) {
+        normalized['answer'] = answer;
+      }
+      validQuestions.add(normalized);
+    }
+
+    return (
+      validQuestions: validQuestions,
+      invalidLabels: invalidLabels,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> _generateValidatedQuestions({
+    required String prompt,
+    required AiService aiService,
+    required _QuestionValidationResult Function(List<Map<String, dynamic>>)
+        validator,
+  }) async {
+    final initialQuestions = await _fetchQuestionList(prompt, aiService);
+    final initialValidation = validator(initialQuestions);
+    final cleanedQuestions =
+        List<Map<String, dynamic>>.from(initialValidation.validQuestions);
+
+    if (initialValidation.invalidLabels.isEmpty) {
+      return cleanedQuestions;
+    }
+
+    final followUpPrompt = '$prompt\n\n'
+        'The following questions were invalid or missing: '
+        '${initialValidation.invalidLabels.join(', ')}. '
+        'Please generate correct replacements for them in the same JSON format.';
+    final replacementQuestions =
+        await _fetchQuestionList(followUpPrompt, aiService);
+    final replacementValidation = validator(replacementQuestions);
+    cleanedQuestions.addAll(replacementValidation.validQuestions);
+
+    return cleanedQuestions.take(initialQuestions.length).toList();
+  }
+
+  String _buildRegenerationPrompt(String basePrompt, String review) {
+    if (review.isEmpty) {
+      return basePrompt;
+    }
+    return '$basePrompt\n\nTeacher feedback: $review';
   }
 
   void _updateMcq(int index, String field, String value) {
