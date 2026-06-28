@@ -1,15 +1,19 @@
+import 'dart:convert';
 import 'dart:io' show Platform;
+
+import 'package:drift/drift.dart' hide Column;
+import 'package:classai/core/database/database.dart';
+import 'package:classai/core/widgets/conflict_banner.dart';
+import 'package:classai/core/widgets/credit_counter.dart';
+import 'package:classai/core/widgets/sync_indicator.dart';
+import 'package:classai/features/auth/providers/auth_provider.dart';
+import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
+import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
+import 'package:classai/features/dashboard/providers/unresolved_conflicts_provider.dart';
+import 'package:classai/main.dart' show databaseProvider;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:classai/core/database/database.dart';
-import 'package:classai/core/widgets/conflict_banner.dart';
-import 'package:classai/core/widgets/sync_indicator.dart';
-import 'package:classai/core/widgets/credit_counter.dart';
-import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
-import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
-import 'package:classai/features/dashboard/providers/unresolved_conflicts_provider.dart';
-import 'package:classai/main.dart' show databaseProvider;
 
 /// Provider that fetches all exams from the database.
 final examsListProvider = FutureProvider<List<Exam>>((ref) async {
@@ -18,10 +22,6 @@ final examsListProvider = FutureProvider<List<Exam>>((ref) async {
 });
 
 /// Displays a list of exams from the local database.
-///
-/// Each exam card shows subject, topic, and date information.
-/// Tapping a card navigates to the exam editor for that exam.
-/// A FAB allows creating a new exam.
 class ExamsListScreen extends ConsumerStatefulWidget {
   const ExamsListScreen({super.key});
 
@@ -30,30 +30,22 @@ class ExamsListScreen extends ConsumerStatefulWidget {
 }
 
 class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
-  String _selectedFilter = 'All';
+  static const _termFilters = ['All', '1st Term', '2nd Term', '3rd Term'];
+  static const _statusFilters = [
+    _StatusFilterItem('All', Icons.layers_rounded),
+    _StatusFilterItem('Draft', Icons.edit_note_rounded),
+    _StatusFilterItem('Completed', Icons.check_circle_rounded),
+    _StatusFilterItem('Unlocked', Icons.lock_open_rounded),
+    _StatusFilterItem('Linked to Scheme', Icons.link_rounded),
+    _StatusFilterItem('Needs Sync', Icons.sync_rounded),
+  ];
 
-  List<Exam> _applyFilter(List<Exam> exams) {
-    switch (_selectedFilter) {
-      case 'Draft':
-        return exams.where((exam) => !exam.isUnlocked).toList();
-      case 'Completed':
-        return exams.where((exam) => exam.isUnlocked).toList();
-      case 'Unlocked':
-        return exams.where((exam) => exam.isUnlocked).toList();
-      case 'Linked to Scheme':
-        return exams.where((exam) => exam.schemeOfWorkId != null).toList();
-      case 'Needs Sync':
-        return exams.where((exam) => exam.serverId == null).toList();
-      default:
-        return exams;
-    }
-  }
-
-  void _setFilter(String filter) {
-    setState(() {
-      _selectedFilter = filter;
-    });
-  }
+  String _selectedStatusFilter = 'All';
+  String _selectedTermFilter = 'All';
+  String _selectedClassFilter = 'All';
+  String _selectedSubjectFilter = 'All';
+  bool _schemeDraftsBootstrapped = false;
+  final Map<int, SchemeOfWorkData> _schemesById = {};
 
   @override
   void initState() {
@@ -62,7 +54,320 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
       ref.read(syncStatusProvider.notifier).refresh();
       ref.read(creditStateProvider.notifier).refresh();
       ref.read(unresolvedConflictsProvider.notifier).refresh();
+      _bootstrapSchemeDrafts();
     });
+  }
+
+  Future<void> _bootstrapSchemeDrafts() async {
+    if (_schemeDraftsBootstrapped) return;
+    _schemeDraftsBootstrapped = true;
+
+    try {
+      final db = ref.read(databaseProvider);
+      final authState = ref.read(authProvider);
+      final school = authState.currentSchool ?? await db.schoolsDao.get();
+      if (school == null) return;
+
+      final schemes = (await db.schemeOfWorkDao.getApproved())
+          .where((scheme) => scheme.schoolId == school.localId)
+          .toList();
+      if (schemes.isEmpty) return;
+
+      final subjects = await db.subjectsDao.getAll();
+      final subjectNamesById = <int, String>{
+        for (final subject in subjects) subject.id: subject.name,
+      };
+      final lessons = await db.lessonsDao.getAll();
+      final exams = await db.examsDao.getAll();
+      final teacherServerId = authState.currentTeacher?.serverId;
+
+      final schemeMap = <int, SchemeOfWorkData>{
+        for (final scheme in schemes) scheme.id: scheme,
+      };
+      if (mounted) {
+        setState(() {
+          _schemesById
+            ..clear()
+            ..addAll(schemeMap);
+        });
+      } else {
+        _schemesById
+          ..clear()
+          ..addAll(schemeMap);
+      }
+
+      final existingDraftKeys = <String>{};
+      for (final exam in exams) {
+        final termLabel = _termLabelForExam(exam);
+        if (termLabel == null || exam.weekNumber == null) continue;
+        existingDraftKeys.add(
+          _draftKey(
+            subject: exam.subject,
+            classLevel: exam.classLevel,
+            term: termLabel,
+            weekNumber: exam.weekNumber!,
+          ),
+        );
+      }
+
+      var insertedCount = 0;
+      for (final scheme in schemes) {
+        final subjectName = subjectNamesById[scheme.subjectId];
+        if (subjectName == null || subjectName.isEmpty) continue;
+
+        final classLevel = _inferClassLevelForScheme(
+          scheme: scheme,
+          subjectName: subjectName,
+          lessons: lessons,
+          exams: exams,
+          teacherServerId: teacherServerId,
+        );
+        if (classLevel == null || classLevel.isEmpty) continue;
+
+        final termLabel = _normalizeTermLabel(scheme.term);
+        if (termLabel.isEmpty) continue;
+
+        final key = _draftKey(
+          subject: subjectName,
+          classLevel: classLevel,
+          term: termLabel,
+          weekNumber: scheme.weekNumber,
+        );
+        if (existingDraftKeys.contains(key)) continue;
+
+        final existingForScheme = exams.any((exam) {
+          final linkedSchemeId = int.tryParse(exam.schemeOfWorkId ?? '');
+          return linkedSchemeId == scheme.id &&
+              exam.subject == subjectName &&
+              exam.classLevel == classLevel &&
+              exam.weekNumber == scheme.weekNumber &&
+              !exam.isDeleted;
+        });
+        if (existingForScheme) {
+          existingDraftKeys.add(key);
+          continue;
+        }
+
+        await db.examsDao.insertExam(
+          ExamsCompanion.insert(
+            subject: subjectName,
+            classLevel: classLevel,
+            topic: scheme.adminEditedTopic ?? scheme.topic,
+            difficulty: 'medium',
+            curriculum: 'NERDC',
+            content: jsonEncode({
+              'mcqs': const [],
+              'theory': const [],
+              'subjective': const [],
+            }),
+            teacherServerId: teacherServerId != null
+                ? Value(teacherServerId)
+                : const Value.absent(),
+            schoolServerId: school.serverId != null
+                ? Value(school.serverId)
+                : const Value.absent(),
+            isUnlocked: const Value(false),
+            schemeOfWorkId: Value(scheme.id.toString()),
+            weekNumber: Value(scheme.weekNumber),
+            createdAt: Value(DateTime.now()),
+            updatedAt: Value(DateTime.now()),
+            isDeleted: const Value(false),
+          ),
+        );
+        existingDraftKeys.add(key);
+        insertedCount++;
+      }
+
+      if (insertedCount > 0 && mounted) {
+        ref.invalidate(examsListProvider);
+      }
+    } catch (_) {
+      // Keep the screen silent if draft seeding fails.
+    }
+  }
+
+  List<Exam> _applyFilters(List<Exam> exams) {
+    return exams.where((exam) {
+      if (!_matchesStatusFilter(exam)) return false;
+      if (!_matchesTermFilter(exam)) return false;
+      if (!_matchesClassFilter(exam)) return false;
+      if (!_matchesSubjectFilter(exam)) return false;
+      return true;
+    }).toList();
+  }
+
+  bool _matchesStatusFilter(Exam exam) {
+    switch (_selectedStatusFilter) {
+      case 'Draft':
+        return !exam.isUnlocked;
+      case 'Completed':
+      case 'Unlocked':
+        return exam.isUnlocked;
+      case 'Linked to Scheme':
+        return exam.schemeOfWorkId != null;
+      case 'Needs Sync':
+        return exam.serverId == null;
+      default:
+        return true;
+    }
+  }
+
+  bool _matchesTermFilter(Exam exam) {
+    if (_selectedTermFilter == 'All') return true;
+    final termLabel = _termLabelForExam(exam);
+    return termLabel == _selectedTermFilter;
+  }
+
+  bool _matchesClassFilter(Exam exam) {
+    if (_selectedClassFilter == 'All') return true;
+    return exam.classLevel == _selectedClassFilter;
+  }
+
+  bool _matchesSubjectFilter(Exam exam) {
+    if (_selectedSubjectFilter == 'All') return true;
+    return exam.subject == _selectedSubjectFilter;
+  }
+
+  void _setStatusFilter(String filter) {
+    setState(() => _selectedStatusFilter = filter);
+  }
+
+  void _setTermFilter(String filter) {
+    setState(() => _selectedTermFilter = filter);
+  }
+
+  void _setClassFilter(String filter) {
+    setState(() => _selectedClassFilter = filter);
+  }
+
+  void _setSubjectFilter(String filter) {
+    setState(() => _selectedSubjectFilter = filter);
+  }
+
+  List<String> _buildFilterOptions(Iterable<String> values) {
+    final items = values
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    return ['All', ...items];
+  }
+
+  String? _termLabelForExam(Exam exam) {
+    final schemeId = int.tryParse(exam.schemeOfWorkId ?? '');
+    if (schemeId == null) return null;
+    final scheme = _schemesById[schemeId];
+    if (scheme == null) return null;
+    return _normalizeTermLabel(scheme.term);
+  }
+
+  String _classLevelLabelForExam(Exam exam) {
+    final termLabel = _termLabelForExam(exam);
+    if (termLabel == null || termLabel.isEmpty) {
+      return exam.classLevel;
+    }
+    return '${exam.classLevel} ($termLabel)';
+  }
+
+  String _draftKey({
+    required String subject,
+    required String classLevel,
+    required String term,
+    required int weekNumber,
+  }) {
+    return '${subject.trim().toLowerCase()}|${classLevel.trim().toLowerCase()}|'
+        '${term.trim().toLowerCase()}|$weekNumber';
+  }
+
+  String _normalizeTermLabel(String term) {
+    final cleaned = term.trim();
+    if (cleaned.isEmpty) return '';
+    final lower = cleaned.toLowerCase();
+    if (lower.contains('1st') || lower.contains('first') || lower == '1') {
+      return '1st Term';
+    }
+    if (lower.contains('2nd') || lower.contains('second') || lower == '2') {
+      return '2nd Term';
+    }
+    if (lower.contains('3rd') || lower.contains('third') || lower == '3') {
+      return '3rd Term';
+    }
+    return cleaned;
+  }
+
+  String? _inferClassLevelForScheme({
+    required SchemeOfWorkData scheme,
+    required String subjectName,
+    required List<Lesson> lessons,
+    required List<Exam> exams,
+    required String? teacherServerId,
+  }) {
+    final schemeId = scheme.id.toString();
+    final linkedLessons = lessons.where((lesson) {
+      if (lesson.isDeleted) return false;
+      if (lesson.schemeOfWorkId != schemeId) return false;
+      if (teacherServerId != null && lesson.teacherServerId != teacherServerId) {
+        return false;
+      }
+      return true;
+    }).toList();
+    if (linkedLessons.isNotEmpty) {
+      return linkedLessons.first.classLevel;
+    }
+
+    final matchingLessons = lessons.where((lesson) {
+      if (lesson.isDeleted) return false;
+      if (teacherServerId != null && lesson.teacherServerId != teacherServerId) {
+        return false;
+      }
+      if (lesson.subject != subjectName) return false;
+      final lessonWeek = lesson.weekNumber ?? lesson.week;
+      return lessonWeek == scheme.weekNumber;
+    }).toList();
+    if (matchingLessons.isNotEmpty) {
+      return matchingLessons.first.classLevel;
+    }
+
+    final linkedExams = exams.where((exam) {
+      if (exam.isDeleted) return false;
+      final linkedSchemeId = int.tryParse(exam.schemeOfWorkId ?? '');
+      return linkedSchemeId == scheme.id;
+    }).toList();
+    if (linkedExams.isNotEmpty) {
+      return linkedExams.first.classLevel;
+    }
+
+    return null;
+  }
+
+  String _createExamLocation({
+    required String subject,
+    required String classLevel,
+    required String term,
+  }) {
+    final queryParameters = <String, String>{};
+    if (subject.isNotEmpty) queryParameters['subject'] = subject;
+    if (classLevel.isNotEmpty) queryParameters['classLevel'] = classLevel;
+    if (term.isNotEmpty) queryParameters['term'] = term;
+    return Uri(
+      path: '/exam-editor',
+      queryParameters: queryParameters.isEmpty ? null : queryParameters,
+    ).toString();
+  }
+
+  void _openNewExam() {
+    final subject = _selectedSubjectFilter == 'All' ? '' : _selectedSubjectFilter;
+    final classLevel =
+        _selectedClassFilter == 'All' ? '' : _selectedClassFilter;
+    final term = _selectedTermFilter == 'All' ? '' : _selectedTermFilter;
+    context.push(
+      _createExamLocation(
+        subject: subject,
+        classLevel: classLevel,
+        term: term,
+      ),
+    );
   }
 
   @override
@@ -102,15 +407,6 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
       body: Column(
         children: [
           const ConflictBanner(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-            child: _ExamFilterRow(
-              selectedFilter: _selectedFilter,
-              cs: cs,
-              theme: theme,
-              onSelected: _setFilter,
-            ),
-          ),
           Expanded(
             child: examsAsync.when(
               loading: () => ListView(
@@ -168,94 +464,82 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
                 ),
               ),
               data: (exams) {
-                final filteredExams = _applyFilter(exams);
-                if (exams.isNotEmpty && filteredExams.isEmpty) {
-                  return ListView(
-                    physics: (Platform.isAndroid || Platform.isIOS)
-                        ? const BouncingScrollPhysics()
-                        : null,
-                    padding: const EdgeInsets.all(32),
-                    children: [
-                      Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 80,
-                              height: 80,
-                              decoration: BoxDecoration(
-                                color: cs.surfaceContainer,
-                                borderRadius: BorderRadius.circular(24),
-                              ),
-                              child: Icon(
-                                Icons.filter_alt_off_rounded,
-                                size: 38,
-                                color: cs.onSurfaceVariant.withValues(alpha: 0.5),
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            Text(
-                              'No exams match "$_selectedFilter"',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: cs.onSurface,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Try a different filter or clear it to see all exams.',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: cs.onSurfaceVariant,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                }
+                final filteredExams = _applyFilters(exams);
+                final termOptions = _termFilters;
+                final classOptions = _buildFilterOptions(
+                  exams.map((exam) => exam.classLevel),
+                );
+                final subjectOptions = _buildFilterOptions(
+                  exams.map((exam) => exam.subject),
+                );
+
+                final filterPanel = Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                  child: _ExamFiltersPanel(
+                    cs: cs,
+                    theme: theme,
+                    selectedStatusFilter: _selectedStatusFilter,
+                    selectedTermFilter: _selectedTermFilter,
+                    selectedClassFilter: _selectedClassFilter,
+                    selectedSubjectFilter: _selectedSubjectFilter,
+                    statusFilters: _statusFilters,
+                    termFilters: termOptions,
+                    classFilters: classOptions,
+                    subjectFilters: subjectOptions,
+                    onStatusChanged: _setStatusFilter,
+                    onTermChanged: _setTermFilter,
+                    onClassChanged: _setClassFilter,
+                    onSubjectChanged: _setSubjectFilter,
+                  ),
+                );
 
                 if (exams.isEmpty) {
-                  return ListView(
-                    physics: (Platform.isAndroid || Platform.isIOS)
-                        ? const BouncingScrollPhysics()
-                        : null,
-                    padding: const EdgeInsets.all(32),
+                  return Column(
                     children: [
-                      Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
+                      filterPanel,
+                      Expanded(
+                        child: ListView(
+                          physics: (Platform.isAndroid || Platform.isIOS)
+                              ? const BouncingScrollPhysics()
+                              : null,
+                          padding: const EdgeInsets.all(32),
                           children: [
-                            Container(
-                              width: 80,
-                              height: 80,
-                              decoration: BoxDecoration(
-                                color: cs.surfaceContainer,
-                                borderRadius: BorderRadius.circular(24),
+                            Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 80,
+                                    height: 80,
+                                    decoration: BoxDecoration(
+                                      color: cs.surfaceContainer,
+                                      borderRadius: BorderRadius.circular(24),
+                                    ),
+                                    child: Icon(
+                                      Icons.quiz_rounded,
+                                      size: 38,
+                                      color: cs.onSurfaceVariant
+                                          .withValues(alpha: 0.5),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 20),
+                                  Text(
+                                    'No exams yet',
+                                    style: theme.textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: cs.onSurface,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Tap New Exam to create one.',
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
                               ),
-                              child: Icon(
-                                Icons.quiz_rounded,
-                                size: 38,
-                                color: cs.onSurfaceVariant.withValues(alpha: 0.5),
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            Text(
-                              'No exams yet',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: cs.onSurface,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Tap New Exam to create one.',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: cs.onSurfaceVariant,
-                              ),
-                              textAlign: TextAlign.center,
                             ),
                           ],
                         ),
@@ -264,25 +548,89 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
                   );
                 }
 
-                return RefreshIndicator(
-                  onRefresh: () async => ref.invalidate(examsListProvider),
-                  child: ListView.builder(
-                    physics: (Platform.isAndroid || Platform.isIOS)
-                        ? const BouncingScrollPhysics()
-                        : null,
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    itemCount: filteredExams.length,
-                    itemBuilder: (context, index) {
-                      final exam = filteredExams[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: _ExamCard(
-                          exam: exam,
-                          onTap: () => context.push('/exams/${exam.id}'),
+                if (filteredExams.isEmpty) {
+                  return Column(
+                    children: [
+                      filterPanel,
+                      Expanded(
+                        child: ListView(
+                          physics: (Platform.isAndroid || Platform.isIOS)
+                              ? const BouncingScrollPhysics()
+                              : null,
+                          padding: const EdgeInsets.all(32),
+                          children: [
+                            Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 80,
+                                    height: 80,
+                                    decoration: BoxDecoration(
+                                      color: cs.surfaceContainer,
+                                      borderRadius: BorderRadius.circular(24),
+                                    ),
+                                    child: Icon(
+                                      Icons.filter_alt_off_rounded,
+                                      size: 38,
+                                      color: cs.onSurfaceVariant
+                                          .withValues(alpha: 0.5),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 20),
+                                  Text(
+                                    'No exams match the selected filters',
+                                    style: theme.textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: cs.onSurface,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Try a different filter or clear it to see all exams.',
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    ],
+                  );
+                }
+
+                return Column(
+                  children: [
+                    filterPanel,
+                    Expanded(
+                      child: RefreshIndicator(
+                        onRefresh: () async => ref.invalidate(examsListProvider),
+                        child: ListView.builder(
+                          physics: (Platform.isAndroid || Platform.isIOS)
+                              ? const BouncingScrollPhysics()
+                              : null,
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          itemCount: filteredExams.length,
+                          itemBuilder: (context, index) {
+                            final exam = filteredExams[index];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: _ExamCard(
+                                exam: exam,
+                                classLevelLabel: _classLevelLabelForExam(exam),
+                                onTap: () => context.push('/exams/${exam.id}'),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
                 );
               },
             ),
@@ -301,7 +649,7 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
           ],
         ),
         child: FloatingActionButton.extended(
-          onPressed: () => context.push('/exam-editor'),
+          onPressed: _openNewExam,
           heroTag: 'newExam',
           backgroundColor: cs.primary,
           foregroundColor: cs.onPrimary,
@@ -320,61 +668,209 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
   }
 }
 
-class _ExamFilterRow extends StatelessWidget {
-  const _ExamFilterRow({
-    required this.selectedFilter,
+class _ExamFiltersPanel extends StatelessWidget {
+  const _ExamFiltersPanel({
     required this.cs,
     required this.theme,
-    required this.onSelected,
+    required this.selectedStatusFilter,
+    required this.selectedTermFilter,
+    required this.selectedClassFilter,
+    required this.selectedSubjectFilter,
+    required this.statusFilters,
+    required this.termFilters,
+    required this.classFilters,
+    required this.subjectFilters,
+    required this.onStatusChanged,
+    required this.onTermChanged,
+    required this.onClassChanged,
+    required this.onSubjectChanged,
   });
 
-  final String selectedFilter;
   final ColorScheme cs;
   final ThemeData theme;
-  final ValueChanged<String> onSelected;
-
-  static const _filters = [
-    'All',
-    'Draft',
-    'Completed',
-    'Unlocked',
-    'Linked to Scheme',
-    'Needs Sync',
-  ];
+  final String selectedStatusFilter;
+  final String selectedTermFilter;
+  final String selectedClassFilter;
+  final String selectedSubjectFilter;
+  final List<_StatusFilterItem> statusFilters;
+  final List<String> termFilters;
+  final List<String> classFilters;
+  final List<String> subjectFilters;
+  final ValueChanged<String> onStatusChanged;
+  final ValueChanged<String> onTermChanged;
+  final ValueChanged<String> onClassChanged;
+  final ValueChanged<String> onSubjectChanged;
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: _filters.map((filter) {
-          final selected = filter == selectedFilter;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              label: Text(filter),
-              selected: selected,
-              onSelected: (_) => onSelected(filter),
-              labelStyle: theme.textTheme.labelMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: selected ? cs.onPrimary : cs.onSurfaceVariant,
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.tune_rounded, size: 18, color: cs.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Filters',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSurface,
+                ),
               ),
-              selectedColor: cs.primary,
-              backgroundColor: cs.surfaceContainerLow,
-              side: BorderSide(color: cs.outlineVariant),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: statusFilters.map((item) {
+                final selected = item.label == selectedStatusFilter;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    avatar: Icon(
+                      item.icon,
+                      size: 18,
+                      color: selected ? cs.primary : cs.onSurfaceVariant,
+                    ),
+                    label: Text(item.label),
+                    selected: selected,
+                    showCheckmark: false,
+                    onSelected: (_) => onStatusChanged(item.label),
+                    labelStyle: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: selected ? cs.primary : cs.onSurfaceVariant,
+                    ),
+                    backgroundColor: cs.surfaceContainerLow,
+                    selectedColor: cs.primaryContainer.withValues(alpha: 0.45),
+                    side: BorderSide(
+                      color: selected
+                          ? cs.primary.withValues(alpha: 0.25)
+                          : cs.outlineVariant,
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
-          );
-        }).toList(),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              SizedBox(
+                width: 220,
+                child: _FilterDropdownField(
+                  cs: cs,
+                  label: 'Term',
+                  value: selectedTermFilter,
+                  items: termFilters,
+                  onChanged: onTermChanged,
+                ),
+              ),
+              SizedBox(
+                width: 220,
+                child: _FilterDropdownField(
+                  cs: cs,
+                  label: 'Class Level',
+                  value: selectedClassFilter,
+                  items: classFilters,
+                  onChanged: onClassChanged,
+                ),
+              ),
+              SizedBox(
+                width: 220,
+                child: _FilterDropdownField(
+                  cs: cs,
+                  label: 'Subject',
+                  value: selectedSubjectFilter,
+                  items: subjectFilters,
+                  onChanged: onSubjectChanged,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
+class _FilterDropdownField extends StatelessWidget {
+  const _FilterDropdownField({
+    required this.cs,
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  final ColorScheme cs;
+  final String label;
+  final String value;
+  final List<String> items;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<String>(
+      initialValue: items.contains(value) ? value : 'All',
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: cs.surface,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: cs.outlineVariant),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: cs.outlineVariant),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      ),
+      items: items
+          .map(
+            (item) => DropdownMenuItem<String>(
+              value: item,
+              child: Text(item),
+            ),
+          )
+          .toList(),
+      onChanged: (value) {
+        if (value != null) {
+          onChanged(value);
+        }
+      },
+    );
+  }
+}
+
+class _StatusFilterItem {
+  const _StatusFilterItem(this.label, this.icon);
+
+  final String label;
+  final IconData icon;
+}
+
 class _ExamCard extends StatelessWidget {
   final Exam exam;
+  final String classLevelLabel;
   final VoidCallback onTap;
 
-  const _ExamCard({required this.exam, required this.onTap});
+  const _ExamCard({
+    required this.exam,
+    required this.classLevelLabel,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -434,7 +930,9 @@ class _ExamCard extends StatelessWidget {
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: cs.surfaceContainer,
                           borderRadius: BorderRadius.circular(6),
@@ -448,26 +946,16 @@ class _ExamCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (exam.classLevel.isNotEmpty) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: cs.surfaceContainer,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            exam.classLevel,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              fontWeight: FontWeight.w500,
-                              color: cs.onSurfaceVariant,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ),
-                      ],
                     ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    classLevelLabel,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurfaceVariant,
+                      letterSpacing: 0.15,
+                    ),
                   ),
                 ],
               ),
@@ -545,7 +1033,7 @@ class _ExamCardSkeleton extends StatelessWidget {
                       const SizedBox(width: 8),
                       Container(
                         height: 20,
-                        width: 64,
+                        width: 92,
                         decoration: BoxDecoration(
                           color: cs.surfaceContainer,
                           borderRadius: BorderRadius.circular(6),

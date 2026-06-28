@@ -663,9 +663,18 @@ class SyncService {
 
   SyncState get state => _state;
 
-  Future<void> onConnectivityRestored() async {
+  Future<void> onConnectivityRestored({String? jwt}) async {
     final config = await store.loadSecurityConfig();
     if (_cooldownActive(config.syncCooldownUntil)) {
+      return;
+    }
+
+    // If a JWT is provided, set it on the remote API and run sync directly
+    // bypassing the biometric/session gate. This is the normal path from
+    // SyncStatusNotifier.syncNow() and _autoSync().
+    if (jwt != null && jwt.isNotEmpty && remoteApi is SupabaseSyncRemoteApi) {
+      (remoteApi as SupabaseSyncRemoteApi).setJwt(jwt);
+      await _pullChanges();
       return;
     }
 

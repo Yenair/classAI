@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:classai/core/database/database.dart';
@@ -8,7 +7,7 @@ import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/core/services/sync_service.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart'
-    show authProvider, securityServiceProvider;
+    show authProvider, authServiceProvider, securityServiceProvider;
 import 'package:classai/main.dart' show databaseProvider, navigatorKey;
 
 /// Possible sync statuses for UI display.
@@ -68,7 +67,6 @@ final syncServiceProvider = FutureProvider<SyncService>((ref) async {
 /// - Periodically every 5 minutes while online
 /// - Sync pauses when device goes offline
 class SyncStatusNotifier extends Notifier<SyncStatusData> {
-  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   Timer? _periodicSyncTimer;
   bool _wasOffline = true;
   bool _isSyncing = false;
@@ -81,36 +79,14 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
     }
     _initialized = true;
 
-    // Monitor connectivity changes in real time on platforms that support it.
-    if (_connectivitySubscription == null &&
-        PlatformHelper.supportsConnectivityStream()) {
-      final connectivity = Connectivity();
-      _connectivitySubscription =
-          connectivity.onConnectivityChanged.listen((results) {
-        final isOnline = results.any((r) => r != ConnectivityResult.none);
-
-        // Update state with new connectivity status
-        state = SyncStatusData(
-          status: isOnline ? state.status : SyncStatus.offline,
-          lastSyncTime: state.lastSyncTime,
-          pendingPushCount: state.pendingPushCount,
-          pendingPullCount: state.pendingPullCount,
-          conflictCount: state.conflictCount,
-          isOnline: isOnline,
-        );
-
-        // Auto-trigger sync when transitioning offline → online
-        if (isOnline && _wasOffline) {
-          _autoSync();
-        }
-        _wasOffline = !isOnline;
-      });
-    }
-
-    // Periodic background sync every 5 minutes while online
+    // Periodic background sync every 5 minutes while online.
+    // Also polls connectivity to detect offline→online transitions
+    // (replaces the onConnectivityChanged stream which can cause
+    // PlatformException(0, NetworkManager::StartListen) on Android).
     _periodicSyncTimer ??= Timer.periodic(
       const Duration(minutes: 5),
-      (_) {
+      (_) async {
+        await _pollConnectivity();
         if (state.isOnline && !_isSyncing) {
           _autoSync();
         }
@@ -118,8 +94,6 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
     );
 
     ref.onDispose(() {
-      _connectivitySubscription?.cancel();
-      _connectivitySubscription = null;
       _periodicSyncTimer?.cancel();
       _periodicSyncTimer = null;
       _initialized = false;
@@ -139,13 +113,48 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
 
   AppDatabase get _db => ref.read(databaseProvider);
 
+  /// Polls connectivity and updates state if a transition occurred.
+  Future<void> _pollConnectivity() async {
+    await refresh();
+    if (state.isOnline && _wasOffline) {
+      _autoSync();
+    }
+    _wasOffline = !state.isOnline;
+  }
+
+  /// Sets the JWT on the remote API so edge function calls are authenticated.
+  /// Returns the JWT, or null if not available.
+  String? _setJwtOnRemoteApi(SyncService syncService) {
+    final authService = ref.read(authServiceProvider);
+    final jwt = authService.currentJwt;
+    if (jwt != null && jwt.isNotEmpty && syncService.remoteApi is SupabaseSyncRemoteApi) {
+      (syncService.remoteApi as SupabaseSyncRemoteApi).setJwt(jwt);
+    }
+    return jwt;
+  }
+
   /// Silent background sync — no error toasts, just status updates.
   Future<void> _autoSync() async {
-    debugPrint('[sync] _autoSync called: _isSyncing=$_isSyncing, isOnline=${state.isOnline}');
-    if (_isSyncing) return;
+    // Safety reset: if a previous sync never cleared _isSyncing, force-clear it
+    if (_isSyncing) {
+      _isSyncing = false;
+    }
     _isSyncing = true;
 
     try {
+      final isOnline = await PlatformHelper.isOnline();
+      if (!isOnline) {
+        state = SyncStatusData(
+          status: SyncStatus.offline,
+          lastSyncTime: state.lastSyncTime,
+          pendingPushCount: state.pendingPushCount,
+          pendingPullCount: state.pendingPullCount,
+          conflictCount: state.conflictCount,
+          isOnline: false,
+        );
+        return;
+      }
+
       state = SyncStatusData(
         status: SyncStatus.syncing,
         lastSyncTime: state.lastSyncTime,
@@ -156,12 +165,13 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
       );
 
       final syncService = await ref.read(syncServiceProvider.future);
-      await syncService.onConnectivityRestored();
+      final jwt = _setJwtOnRemoteApi(syncService);
+      await syncService.onConnectivityRestored(jwt: jwt);
       await refresh();
     } on SessionMismatchException {
       // Session was invalidated by a login on another device — force logout
       await ref.read(authProvider.notifier).manualLogout();
-    } catch (_) {
+    } catch (e) {
       // Silent fail for auto-sync — no user-visible toasts
       state = SyncStatusData(
         status: SyncStatus.error,
@@ -183,7 +193,16 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
   /// On failure the status is set to [SyncStatus.error] and a snackbar is
   /// shown with the error message.
   Future<void> syncNow() async {
+    // Safety reset: if a previous sync never cleared _isSyncing, force-clear it
+    if (_isSyncing) {
+      _isSyncing = false;
+    }
+    await refresh();
     final currentState = state;
+    if (!currentState.isOnline) {
+      return;
+    }
+
     try {
       // Immediately show syncing state
       state = SyncStatusData(
@@ -198,8 +217,10 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
       // Resolve SyncService (may load school info asynchronously)
       final syncService = await ref.read(syncServiceProvider.future);
 
+      final jwt = _setJwtOnRemoteApi(syncService);
+
       // Run the full sync cycle
-      await syncService.onConnectivityRestored();
+      await syncService.onConnectivityRestored(jwt: jwt);
     } on SessionMismatchException {
       // Session was invalidated by a login on another device — force logout
       await ref.read(authProvider.notifier).manualLogout();
@@ -235,15 +256,7 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
             ..where((t) => t.resolution.equals('unresolved')))
           .get();
 
-      // Check current connectivity on refresh.
-      final connectivity = Connectivity();
-      bool isOnline = false;
-      try {
-        final results = await connectivity.checkConnectivity();
-        isOnline = results.any((r) => r != ConnectivityResult.none);
-      } catch (_) {
-        isOnline = false;
-      }
+      final isOnline = await PlatformHelper.isOnline();
 
       final syncStatus = _determineSyncStatus(config);
       state = SyncStatusData(

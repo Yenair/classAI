@@ -165,7 +165,9 @@ class SupabaseAuthService implements AuthService {
   static String? _currentJwt;
 
   /// Returns the currently stored JWT, or null if not authenticated.
-  String? get currentJwt => _currentJwt;
+  String? get currentJwt {
+    return _currentJwt;
+  }
 
   supabase_pkg.GoTrueClient get _auth =>
       supabase_pkg.Supabase.instance.client.auth;

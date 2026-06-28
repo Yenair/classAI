@@ -1,15 +1,19 @@
+import 'dart:convert';
 import 'dart:io' show Platform;
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+
+import 'package:drift/drift.dart' hide Column;
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/widgets/conflict_banner.dart';
 import 'package:classai/core/widgets/credit_counter.dart';
 import 'package:classai/core/widgets/sync_indicator.dart';
-import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
+import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
+import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
 import 'package:classai/features/dashboard/providers/unresolved_conflicts_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 /// Provider that fetches all lessons from the database.
 final lessonsListProvider = FutureProvider<List<Lesson>>((ref) async {
@@ -18,10 +22,6 @@ final lessonsListProvider = FutureProvider<List<Lesson>>((ref) async {
 });
 
 /// Displays a list of lessons from the local database.
-///
-/// Each lesson card shows subject, topic, and date information.
-/// Tapping a card navigates to the lesson editor for that lesson.
-/// A FAB allows creating a new lesson.
 class LessonsListScreen extends ConsumerStatefulWidget {
   const LessonsListScreen({super.key});
 
@@ -30,35 +30,22 @@ class LessonsListScreen extends ConsumerStatefulWidget {
 }
 
 class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
-  String _selectedFilter = 'All';
+  static const _termFilters = ['All', '1st Term', '2nd Term', '3rd Term'];
+  static const _statusFilters = [
+    _StatusFilterItem('All', Icons.layers_rounded),
+    _StatusFilterItem('Draft', Icons.edit_note_rounded),
+    _StatusFilterItem('Completed', Icons.check_circle_rounded),
+    _StatusFilterItem('Unlocked', Icons.lock_open_rounded),
+    _StatusFilterItem('Linked to Scheme', Icons.link_rounded),
+    _StatusFilterItem('Needs Sync', Icons.sync_rounded),
+  ];
 
-  // Stable scroll physics to avoid null-pattern issues with RefreshIndicator
-  static final ScrollPhysics _stablePhysics =
-      const AlwaysScrollableScrollPhysics()
-          .applyTo(const BouncingScrollPhysics());
-
-  List<Lesson> _applyFilter(List<Lesson> lessons) {
-    switch (_selectedFilter) {
-      case 'Draft':
-        return lessons.where((lesson) => lesson.status == 'draft').toList();
-      case 'Completed':
-        return lessons.where((lesson) => lesson.status == 'completed').toList();
-      case 'Unlocked':
-        return lessons.where((lesson) => lesson.isUnlocked).toList();
-      case 'Linked to Scheme':
-        return lessons.where((lesson) => lesson.schemeOfWorkId != null).toList();
-      case 'Needs Sync':
-        return lessons.where((lesson) => lesson.serverId == null).toList();
-      default:
-        return lessons;
-    }
-  }
-
-  void _setFilter(String filter) {
-    setState(() {
-      _selectedFilter = filter;
-    });
-  }
+  String _selectedStatusFilter = 'All';
+  String _selectedTermFilter = 'All';
+  String _selectedClassFilter = 'All';
+  String _selectedSubjectFilter = 'All';
+  bool _schemeDraftsBootstrapped = false;
+  final Map<int, SchemeOfWorkData> _schemesById = {};
 
   @override
   void initState() {
@@ -67,190 +54,332 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
       ref.read(syncStatusProvider.notifier).refresh();
       ref.read(creditStateProvider.notifier).refresh();
       ref.read(unresolvedConflictsProvider.notifier).refresh();
+      _bootstrapSchemeDrafts();
     });
   }
 
-  /// Returns a [ScrollPhysics] that is never null so [RefreshIndicator]
-  /// can always attach its internal gesture recogniser correctly.
-  ScrollPhysics _effectivePhysics() {
-    if (Platform.isAndroid || Platform.isIOS) {
-      return _stablePhysics;
-    }
-    // Always return a non-null physics to prevent RefreshIndicator
-    // from receiving a null viewport, which can cause the "Null check
-    // operator used on a null value" crash in RenderViewportBase.
-    return _stablePhysics;
-  }
+  Future<void> _bootstrapSchemeDrafts() async {
+    if (_schemeDraftsBootstrapped) return;
+    _schemeDraftsBootstrapped = true;
 
-  /// Computes the number of items for the single stable [ListView.builder].
-  /// - loading: 4 skeleton cards
-  /// - error: 1 error card
-  /// - data with filtered list: item count or 1 for empty states
-  int _itemCount(AsyncValue<List<Lesson>> async) {
-    return async.when(
-      loading: () => 4,
-      error: (_, __) => 1,
-      data: (lessons) {
-        final filtered = _applyFilter(lessons);
-        if (filtered.isEmpty) return 1; // single "empty state" card
-        return filtered.length;
-      },
-    );
-  }
+    try {
+      final db = ref.read(databaseProvider);
+      final authState = ref.read(authProvider);
+      final school = authState.currentSchool ?? await db.schoolsDao.get();
+      if (school == null) return;
 
-  /// Builds a single item for the stable [ListView.builder] depending on
-  /// the current [AsyncValue] state.
-  Widget _buildItem(BuildContext context, AsyncValue<List<Lesson>> async, int index) {
-    if (!mounted) return const SizedBox.shrink();
-    
-    final cs = Theme.of(context).colorScheme;
-    final theme = Theme.of(context);
+      final schemes = (await db.schemeOfWorkDao.getApproved())
+          .where((scheme) => scheme.schoolId == school.localId)
+          .toList();
+      if (schemes.isEmpty) return;
 
-    return async.when(
-      loading: () => Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: _LessonCardSkeleton(cs: cs),
-      ),
-      error: (error, _) => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                color: cs.errorContainer,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child:
-                  Icon(Icons.error_outline, size: 34, color: cs.onErrorContainer),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Failed to load lessons',
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w600),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '$error',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: cs.onSurfaceVariant),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: () => ref.invalidate(lessonsListProvider),
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      ),
-      data: (lessons) {
-        final filtered = _applyFilter(lessons);
+      final subjects = await db.subjectsDao.getAll();
+      final subjectNamesById = <int, String>{
+        for (final subject in subjects) subject.id: subject.name,
+      };
+      final lessons = await db.lessonsDao.getAll();
+      final exams = await db.examsDao.getAll();
+      final teacherServerId = authState.currentTeacher?.serverId;
 
-        // Empty states: single card
-        if (filtered.isEmpty) {
-          if (lessons.isNotEmpty) {
-            // Filter matches nothing
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: cs.surfaceContainer,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: Icon(
-                      Icons.filter_alt_off_rounded,
-                      size: 38,
-                      color: cs.onSurfaceVariant.withValues(alpha: 0.5),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    'No lessons match "$_selectedFilter"',
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w600, color: cs.onSurface),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Try a different filter or clear it to see all lessons.',
-                    style: theme.textTheme.bodyMedium
-                        ?.copyWith(color: cs.onSurfaceVariant),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            );
-          }
-          // No lessons at all
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: cs.surfaceContainer,
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Icon(
-                    Icons.book_rounded,
-                    size: 38,
-                    color: cs.onSurfaceVariant.withValues(alpha: 0.5),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'No lessons yet',
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w600, color: cs.onSurface),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Tap New Lesson to create one.',
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(color: cs.onSurfaceVariant),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          );
-        }
+      final schemeMap = <int, SchemeOfWorkData>{
+        for (final scheme in schemes) scheme.id: scheme,
+      };
+      if (mounted) {
+        setState(() {
+          _schemesById
+            ..clear()
+            ..addAll(schemeMap);
+        });
+      } else {
+        _schemesById
+          ..clear()
+          ..addAll(schemeMap);
+      }
 
-        // Normal lesson card
-        final lesson = filtered[index];
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: _LessonCard(
-            key: ValueKey(lesson.id),
-            lesson: lesson,
-            cs: cs,
-            theme: theme,
-            onTap: () {
-              if (!mounted) return;
-              WidgetsBinding.instance
-                  .addPostFrameCallback((_) => context.push('/lessons/${lesson.id}'));
-            },
-            onEdit: () {
-              if (!mounted) return;
-              WidgetsBinding.instance
-                  .addPostFrameCallback((_) => context.push('/lessons/${lesson.id}'));
-            },
-            onDelete: () {
-              if (!mounted) return;
-              _confirmDeleteLesson(lesson);
-            },
+      final existingDraftKeys = <String>{};
+      for (final lesson in lessons) {
+        if (lesson.isDeleted || lesson.status != 'draft') continue;
+        final termLabel = _termLabelForLesson(lesson);
+        if (termLabel == null || lesson.weekNumber == null) continue;
+        existingDraftKeys.add(
+          _draftKey(
+            subject: lesson.subject,
+            classLevel: lesson.classLevel,
+            term: termLabel,
+            weekNumber: lesson.weekNumber!,
           ),
         );
-      },
+      }
+
+      var insertedCount = 0;
+      for (final scheme in schemes) {
+        final subjectName = subjectNamesById[scheme.subjectId];
+        if (subjectName == null || subjectName.isEmpty) continue;
+
+        final classLevel = _inferClassLevelForScheme(
+          scheme: scheme,
+          subjectName: subjectName,
+          lessons: lessons,
+          exams: exams,
+          teacherServerId: teacherServerId,
+        );
+        if (classLevel == null || classLevel.isEmpty) continue;
+
+        final termLabel = _normalizeTermLabel(scheme.term);
+        if (termLabel.isEmpty) continue;
+
+        final key = _draftKey(
+          subject: subjectName,
+          classLevel: classLevel,
+          term: termLabel,
+          weekNumber: scheme.weekNumber,
+        );
+        if (existingDraftKeys.contains(key)) continue;
+
+        final existingForScheme = lessons.any((lesson) {
+          if (lesson.isDeleted || lesson.status != 'draft') return false;
+          final linkedSchemeId = int.tryParse(lesson.schemeOfWorkId ?? '');
+          return linkedSchemeId == scheme.id &&
+              lesson.subject == subjectName &&
+              lesson.classLevel == classLevel &&
+              (lesson.weekNumber ?? lesson.week) == scheme.weekNumber;
+        });
+        if (existingForScheme) {
+          existingDraftKeys.add(key);
+          continue;
+        }
+
+        await db.lessonsDao.insertLesson(
+          LessonsCompanion.insert(
+            subject: subjectName,
+            classLevel: classLevel,
+            week: scheme.weekNumber,
+            topic: _displayTopicForScheme(scheme),
+            difficulty: 'medium',
+            bloomsVerbs: '',
+            curriculum: 'NERDC',
+            content: jsonEncode({
+              'objectives': const [],
+              'vocabulary': const [],
+              'materials': const [],
+              'presentation': const [],
+              'assessment': '',
+              'homework': '',
+            }),
+            teacherServerId: teacherServerId != null
+                ? Value(teacherServerId)
+                : const Value.absent(),
+            schoolServerId: school.serverId != null
+                ? Value(school.serverId)
+                : const Value.absent(),
+            schemeOfWorkId: Value(scheme.id.toString()),
+            weekNumber: Value(scheme.weekNumber),
+            isUnlocked: const Value(false),
+            status: const Value('draft'),
+          ),
+        );
+        existingDraftKeys.add(key);
+        insertedCount++;
+      }
+
+      if (insertedCount > 0 && mounted) {
+        ref.invalidate(lessonsListProvider);
+      }
+    } catch (_) {
+      // Keep the screen silent if draft seeding fails.
+    }
+  }
+
+  List<Lesson> _applyFilters(List<Lesson> lessons) {
+    return lessons.where((lesson) {
+      if (!_matchesStatusFilter(lesson)) return false;
+      if (!_matchesTermFilter(lesson)) return false;
+      if (!_matchesClassFilter(lesson)) return false;
+      if (!_matchesSubjectFilter(lesson)) return false;
+      return true;
+    }).toList();
+  }
+
+  bool _matchesStatusFilter(Lesson lesson) {
+    switch (_selectedStatusFilter) {
+      case 'Draft':
+        return lesson.status == 'draft';
+      case 'Completed':
+        return lesson.status == 'completed';
+      case 'Unlocked':
+        return lesson.isUnlocked;
+      case 'Linked to Scheme':
+        return lesson.schemeOfWorkId != null;
+      case 'Needs Sync':
+        return lesson.serverId == null;
+      default:
+        return true;
+    }
+  }
+
+  bool _matchesTermFilter(Lesson lesson) {
+    if (_selectedTermFilter == 'All') return true;
+    final termLabel = _termLabelForLesson(lesson);
+    return termLabel == _selectedTermFilter;
+  }
+
+  bool _matchesClassFilter(Lesson lesson) {
+    if (_selectedClassFilter == 'All') return true;
+    return lesson.classLevel == _selectedClassFilter;
+  }
+
+  bool _matchesSubjectFilter(Lesson lesson) {
+    if (_selectedSubjectFilter == 'All') return true;
+    return lesson.subject == _selectedSubjectFilter;
+  }
+
+  void _setStatusFilter(String filter) {
+    setState(() => _selectedStatusFilter = filter);
+  }
+
+  void _setTermFilter(String filter) {
+    setState(() => _selectedTermFilter = filter);
+  }
+
+  void _setClassFilter(String filter) {
+    setState(() => _selectedClassFilter = filter);
+  }
+
+  void _setSubjectFilter(String filter) {
+    setState(() => _selectedSubjectFilter = filter);
+  }
+
+  List<String> _buildFilterOptions(Iterable<String> values) {
+    final items = values
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    return ['All', ...items];
+  }
+
+  String? _termLabelForLesson(Lesson lesson) {
+    final schemeId = int.tryParse(lesson.schemeOfWorkId ?? '');
+    if (schemeId == null) return null;
+    final scheme = _schemesById[schemeId];
+    if (scheme == null) return null;
+    return _normalizeTermLabel(scheme.term);
+  }
+
+  String _classLevelLabelForLesson(Lesson lesson) {
+    final termLabel = _termLabelForLesson(lesson);
+    if (termLabel == null || termLabel.isEmpty) {
+      return lesson.classLevel;
+    }
+    return '${lesson.classLevel} ($termLabel)';
+  }
+
+  String _draftKey({
+    required String subject,
+    required String classLevel,
+    required String term,
+    required int weekNumber,
+  }) {
+    return '${subject.trim().toLowerCase()}|${classLevel.trim().toLowerCase()}|'
+        '${term.trim().toLowerCase()}|$weekNumber';
+  }
+
+  String _normalizeTermLabel(String term) {
+    final cleaned = term.trim();
+    if (cleaned.isEmpty) return '';
+    final lower = cleaned.toLowerCase();
+    if (lower.contains('1st') || lower.contains('first') || lower == '1') {
+      return '1st Term';
+    }
+    if (lower.contains('2nd') || lower.contains('second') || lower == '2') {
+      return '2nd Term';
+    }
+    if (lower.contains('3rd') || lower.contains('third') || lower == '3') {
+      return '3rd Term';
+    }
+    return cleaned;
+  }
+
+  String _displayTopicForScheme(SchemeOfWorkData scheme) {
+    final edited = scheme.adminEditedTopic?.trim();
+    if (edited != null && edited.isNotEmpty) {
+      return edited;
+    }
+    return scheme.topic;
+  }
+
+  String? _inferClassLevelForScheme({
+    required SchemeOfWorkData scheme,
+    required String subjectName,
+    required List<Lesson> lessons,
+    required List<Exam> exams,
+    required String? teacherServerId,
+  }) {
+    final schemeId = scheme.id.toString();
+    final linkedLessons = lessons.where((lesson) {
+      if (lesson.isDeleted) return false;
+      if (lesson.schemeOfWorkId != schemeId) return false;
+      if (teacherServerId != null && lesson.teacherServerId != teacherServerId) {
+        return false;
+      }
+      return true;
+    }).toList();
+    if (linkedLessons.isNotEmpty) {
+      return linkedLessons.first.classLevel;
+    }
+
+    final matchingLessons = lessons.where((lesson) {
+      if (lesson.isDeleted) return false;
+      if (teacherServerId != null && lesson.teacherServerId != teacherServerId) {
+        return false;
+      }
+      if (lesson.subject != subjectName) return false;
+      final lessonWeek = lesson.weekNumber ?? lesson.week;
+      return lessonWeek == scheme.weekNumber;
+    }).toList();
+    if (matchingLessons.isNotEmpty) {
+      return matchingLessons.first.classLevel;
+    }
+
+    final linkedExams = exams.where((exam) {
+      if (exam.isDeleted) return false;
+      final linkedSchemeId = int.tryParse(exam.schemeOfWorkId ?? '');
+      return linkedSchemeId == scheme.id;
+    }).toList();
+    if (linkedExams.isNotEmpty) {
+      return linkedExams.first.classLevel;
+    }
+
+    return null;
+  }
+
+  String _createLessonLocation({
+    required String subject,
+    required String classLevel,
+    required String term,
+  }) {
+    final queryParameters = <String, String>{};
+    if (subject.isNotEmpty) queryParameters['subject'] = subject;
+    if (classLevel.isNotEmpty) queryParameters['classLevel'] = classLevel;
+    if (term.isNotEmpty) queryParameters['term'] = term;
+    return Uri(
+      path: '/lesson-editor',
+      queryParameters: queryParameters.isEmpty ? null : queryParameters,
+    ).toString();
+  }
+
+  void _openNewLesson() {
+    final subject = _selectedSubjectFilter == 'All' ? '' : _selectedSubjectFilter;
+    final classLevel =
+        _selectedClassFilter == 'All' ? '' : _selectedClassFilter;
+    final term = _selectedTermFilter == 'All' ? '' : _selectedTermFilter;
+    context.push(
+      _createLessonLocation(
+        subject: subject,
+        classLevel: classLevel,
+        term: term,
+      ),
     );
   }
 
@@ -281,96 +410,288 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
                   tooltip: 'Back',
                 )
               : null,
-        title: Text(
-          'Lessons',
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.12,
+          title: Text(
+            'Lessons',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.12,
+            ),
           ),
+          actions: [
+            const SyncIndicator(),
+            const SizedBox(width: 8),
+            const CreditCounter(),
+            const SizedBox(width: 8),
+          ],
+          elevation: 0,
+          backgroundColor: cs.surface,
+          foregroundColor: cs.onSurface,
+          surfaceTintColor: cs.surface,
         ),
-        actions: [
-          const SyncIndicator(),
-          const SizedBox(width: 8),
-          const CreditCounter(),
-          const SizedBox(width: 8),
-        ],
-        elevation: 0,
-        backgroundColor: cs.surface,
-        foregroundColor: cs.onSurface,
-        surfaceTintColor: cs.surface,
-      ),
-      body: Column(
-        children: [
-          const ConflictBanner(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-            child: _LessonFilterRow(
-              selectedFilter: _selectedFilter,
-              cs: cs,
-              theme: theme,
-              onSelected: _setFilter,
-            ),
-          ),
-          // Single stable RefreshIndicator + ListView.builder that
-          // persists across all async states (loading / error / data).
-          // This prevents the "Null check operator used on a null value"
-          // crash in RenderViewportBase caused by widget tree structural
-          // swaps when FutureProvider.when() returns different ListViews.
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () async {
-                ref.invalidate(lessonsListProvider);
-                await ref.read(lessonsListProvider.future);
-              },
-              child: ListView.builder(
-                physics: _effectivePhysics(),
-                padding: lessonsAsync.when(
-                  loading: () => const EdgeInsets.all(16),
-                  error: (_, __) => const EdgeInsets.all(32),
-                  data: (lessons) {
-                    final filtered = _applyFilter(lessons);
-                    if (filtered.isEmpty) return const EdgeInsets.all(32);
-                    return const EdgeInsets.fromLTRB(16, 0, 16, 16);
-                  },
+        body: Column(
+          children: [
+            const ConflictBanner(),
+            Expanded(
+              child: lessonsAsync.when(
+                loading: () => ListView(
+                  physics: (Platform.isAndroid || Platform.isIOS)
+                      ? const BouncingScrollPhysics()
+                      : null,
+                  padding: const EdgeInsets.all(16),
+                  children: List.generate(
+                    4,
+                    (i) => _LessonCardSkeleton(cs: cs),
+                  ),
                 ),
-                itemCount: _itemCount(lessonsAsync),
-                itemBuilder: (context, index) =>
-                    _buildItem(context, lessonsAsync, index),
+                error: (error, stack) => Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            color: cs.errorContainer,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Icon(
+                            Icons.error_outline,
+                            size: 34,
+                            color: cs.onErrorContainer,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Failed to load lessons',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '$error',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 20),
+                        FilledButton(
+                          onPressed: () => ref.invalidate(lessonsListProvider),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                data: (lessons) {
+                  final filteredLessons = _applyFilters(lessons);
+                  final termOptions = _termFilters;
+                  final classOptions = _buildFilterOptions(
+                    lessons.map((lesson) => lesson.classLevel),
+                  );
+                  final subjectOptions = _buildFilterOptions(
+                    lessons.map((lesson) => lesson.subject),
+                  );
+
+                  final filterPanel = Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                    child: _LessonFiltersPanel(
+                      cs: cs,
+                      theme: theme,
+                      selectedStatusFilter: _selectedStatusFilter,
+                      selectedTermFilter: _selectedTermFilter,
+                      selectedClassFilter: _selectedClassFilter,
+                      selectedSubjectFilter: _selectedSubjectFilter,
+                      statusFilters: _statusFilters,
+                      termFilters: termOptions,
+                      classFilters: classOptions,
+                      subjectFilters: subjectOptions,
+                      onStatusChanged: _setStatusFilter,
+                      onTermChanged: _setTermFilter,
+                      onClassChanged: _setClassFilter,
+                      onSubjectChanged: _setSubjectFilter,
+                    ),
+                  );
+
+                  if (lessons.isEmpty) {
+                    return Column(
+                      children: [
+                        filterPanel,
+                        Expanded(
+                          child: ListView(
+                            physics: (Platform.isAndroid || Platform.isIOS)
+                                ? const BouncingScrollPhysics()
+                                : null,
+                            padding: const EdgeInsets.all(32),
+                            children: [
+                              Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 80,
+                                      height: 80,
+                                      decoration: BoxDecoration(
+                                        color: cs.surfaceContainer,
+                                        borderRadius: BorderRadius.circular(24),
+                                      ),
+                                      child: Icon(
+                                        Icons.book_rounded,
+                                        size: 38,
+                                        color: cs.onSurfaceVariant
+                                            .withValues(alpha: 0.5),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 20),
+                                    Text(
+                                      'No lessons yet',
+                                      style: theme.textTheme.titleMedium?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        color: cs.onSurface,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Tap New Lesson to create one.',
+                                      style: theme.textTheme.bodyMedium?.copyWith(
+                                        color: cs.onSurfaceVariant,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+
+                  if (filteredLessons.isEmpty) {
+                    return Column(
+                      children: [
+                        filterPanel,
+                        Expanded(
+                          child: ListView(
+                            physics: (Platform.isAndroid || Platform.isIOS)
+                                ? const BouncingScrollPhysics()
+                                : null,
+                            padding: const EdgeInsets.all(32),
+                            children: [
+                              Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 80,
+                                      height: 80,
+                                      decoration: BoxDecoration(
+                                        color: cs.surfaceContainer,
+                                        borderRadius: BorderRadius.circular(24),
+                                      ),
+                                      child: Icon(
+                                        Icons.filter_alt_off_rounded,
+                                        size: 38,
+                                        color: cs.onSurfaceVariant
+                                            .withValues(alpha: 0.5),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 20),
+                                    Text(
+                                      'No lessons match the selected filters',
+                                      style: theme.textTheme.titleMedium?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        color: cs.onSurface,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Try a different filter or clear it to see all lessons.',
+                                      style: theme.textTheme.bodyMedium?.copyWith(
+                                        color: cs.onSurfaceVariant,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+
+                  return Column(
+                    children: [
+                      filterPanel,
+                      Expanded(
+                        child: RefreshIndicator(
+                          onRefresh: () async => ref.invalidate(lessonsListProvider),
+                          child: ListView.builder(
+                            physics: (Platform.isAndroid || Platform.isIOS)
+                                ? const BouncingScrollPhysics()
+                                : null,
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            itemCount: filteredLessons.length,
+                            itemBuilder: (context, index) {
+                              final lesson = filteredLessons[index];
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: _LessonCard(
+                                  lesson: lesson,
+                                  classLevelLabel: _classLevelLabelForLesson(lesson),
+                                  onTap: () => context.push('/lessons/${lesson.id}'),
+                                  onEdit: () => context.push('/lessons/${lesson.id}'),
+                                  onDelete: () => _confirmDeleteLesson(lesson),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
-            ),
-          ),
-        ],
-      ),
-      floatingActionButton: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: cs.primary.withValues(alpha: 0.30),
-              blurRadius: 14,
-              offset: const Offset(0, 4),
             ),
           ],
         ),
-        child: FloatingActionButton.extended(
-          onPressed: () => WidgetsBinding.instance.addPostFrameCallback(
-            (_) => context.push('/lesson-editor'),
-          ),
-          heroTag: 'newLesson',
-          backgroundColor: cs.primary,
-          foregroundColor: cs.onPrimary,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
+        floatingActionButton: Container(
+          decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: cs.primary.withValues(alpha: 0.30),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-          icon: const Icon(Icons.add_rounded),
-          label: const Text(
-            'New Lesson',
-            style: TextStyle(fontWeight: FontWeight.w600),
+          child: FloatingActionButton.extended(
+            onPressed: _openNewLesson,
+            heroTag: 'newLesson',
+            backgroundColor: cs.primary,
+            foregroundColor: cs.onPrimary,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text(
+              'New Lesson',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
         ),
       ),
-    ));
+    );
   }
 
   Future<void> _confirmDeleteLesson(Lesson lesson) async {
@@ -399,9 +720,7 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
     if (confirmed == true && mounted) {
       try {
         final db = ref.read(databaseProvider);
-        // Soft-delete the lesson locally
         await db.lessonsDao.deleteLesson(lesson.id);
-        // Queue a DELETE sync entry so the server is notified
         await db.syncQueueDao.insertEntry(
           queueTable: 'lessons',
           recordLocalId: lesson.id,
@@ -411,7 +730,6 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
             if (lesson.serverId != null) 'server_id': lesson.serverId,
           },
         );
-        // Refresh the list
         ref.invalidate(lessonsListProvider);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -429,69 +747,209 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
   }
 }
 
-class _LessonFilterRow extends StatelessWidget {
-  const _LessonFilterRow({
-    required this.selectedFilter,
+class _LessonFiltersPanel extends StatelessWidget {
+  const _LessonFiltersPanel({
     required this.cs,
     required this.theme,
-    required this.onSelected,
+    required this.selectedStatusFilter,
+    required this.selectedTermFilter,
+    required this.selectedClassFilter,
+    required this.selectedSubjectFilter,
+    required this.statusFilters,
+    required this.termFilters,
+    required this.classFilters,
+    required this.subjectFilters,
+    required this.onStatusChanged,
+    required this.onTermChanged,
+    required this.onClassChanged,
+    required this.onSubjectChanged,
   });
 
-  final String selectedFilter;
   final ColorScheme cs;
   final ThemeData theme;
-  final ValueChanged<String> onSelected;
-
-  static const _filters = [
-    'All',
-    'Draft',
-    'Completed',
-    'Unlocked',
-    'Linked to Scheme',
-    'Needs Sync',
-  ];
+  final String selectedStatusFilter;
+  final String selectedTermFilter;
+  final String selectedClassFilter;
+  final String selectedSubjectFilter;
+  final List<_StatusFilterItem> statusFilters;
+  final List<String> termFilters;
+  final List<String> classFilters;
+  final List<String> subjectFilters;
+  final ValueChanged<String> onStatusChanged;
+  final ValueChanged<String> onTermChanged;
+  final ValueChanged<String> onClassChanged;
+  final ValueChanged<String> onSubjectChanged;
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: _filters.map((filter) {
-          final selected = filter == selectedFilter;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              label: Text(filter),
-              selected: selected,
-              onSelected: (_) => onSelected(filter),
-              labelStyle: theme.textTheme.labelMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: selected ? cs.onPrimary : cs.onSurfaceVariant,
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.tune_rounded, size: 18, color: cs.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Filters',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSurface,
+                ),
               ),
-              selectedColor: cs.primary,
-              backgroundColor: cs.surfaceContainerLow,
-              side: BorderSide(color: cs.outlineVariant),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: statusFilters.map((item) {
+                final selected = item.label == selectedStatusFilter;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    avatar: Icon(
+                      item.icon,
+                      size: 18,
+                      color: selected ? cs.primary : cs.onSurfaceVariant,
+                    ),
+                    label: Text(item.label),
+                    selected: selected,
+                    showCheckmark: false,
+                    onSelected: (_) => onStatusChanged(item.label),
+                    labelStyle: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: selected ? cs.primary : cs.onSurfaceVariant,
+                    ),
+                    backgroundColor: cs.surfaceContainerLow,
+                    selectedColor: cs.primaryContainer.withValues(alpha: 0.45),
+                    side: BorderSide(
+                      color: selected
+                          ? cs.primary.withValues(alpha: 0.25)
+                          : cs.outlineVariant,
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
-          );
-        }).toList(),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              SizedBox(
+                width: 220,
+                child: _FilterDropdownField(
+                  cs: cs,
+                  label: 'Term',
+                  value: selectedTermFilter,
+                  items: termFilters,
+                  onChanged: onTermChanged,
+                ),
+              ),
+              SizedBox(
+                width: 220,
+                child: _FilterDropdownField(
+                  cs: cs,
+                  label: 'Class Level',
+                  value: selectedClassFilter,
+                  items: classFilters,
+                  onChanged: onClassChanged,
+                ),
+              ),
+              SizedBox(
+                width: 220,
+                child: _FilterDropdownField(
+                  cs: cs,
+                  label: 'Subject',
+                  value: selectedSubjectFilter,
+                  items: subjectFilters,
+                  onChanged: onSubjectChanged,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
+class _FilterDropdownField extends StatelessWidget {
+  const _FilterDropdownField({
+    required this.cs,
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  final ColorScheme cs;
+  final String label;
+  final String value;
+  final List<String> items;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<String>(
+      initialValue: items.contains(value) ? value : 'All',
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: cs.surface,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: cs.outlineVariant),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: cs.outlineVariant),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      ),
+      items: items
+          .map(
+            (item) => DropdownMenuItem<String>(
+              value: item,
+              child: Text(item),
+            ),
+          )
+          .toList(),
+      onChanged: (value) {
+        if (value != null) {
+          onChanged(value);
+        }
+      },
+    );
+  }
+}
+
+class _StatusFilterItem {
+  const _StatusFilterItem(this.label, this.icon);
+
+  final String label;
+  final IconData icon;
+}
+
 class _LessonCard extends StatelessWidget {
   final Lesson lesson;
-  final ColorScheme cs;
-  final ThemeData theme;
+  final String classLevelLabel;
   final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _LessonCard({
-    super.key,
     required this.lesson,
-    required this.cs,
-    required this.theme,
+    required this.classLevelLabel,
     required this.onTap,
     required this.onEdit,
     required this.onDelete,
@@ -499,114 +957,133 @@ class _LessonCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      elevation: 0,
-      color: cs.surfaceContainerLowest,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: cs.outlineVariant.withValues(alpha: 0.55),
-        ),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        leading: Container(
-          width: 46,
-          height: 46,
-          decoration: BoxDecoration(
-            color: cs.primaryContainer.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(13),
+    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: cs.outlineVariant.withValues(alpha: 0.55),
           ),
-          child: Icon(
-            Icons.menu_book_rounded,
-            color: cs.primary,
-            size: 22,
-          ),
-        ),
-        title: Text(
-          lesson.topic,
-          maxLines: 3,
-          overflow: TextOverflow.visible,
-          style: theme.textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: cs.onSurface,
-          ),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainer,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  lesson.subject,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    fontWeight: FontWeight.w500,
-                    color: cs.onSurfaceVariant,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ),
-              if (lesson.classLevel.isNotEmpty) ...[
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: cs.surfaceContainer,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    lesson.classLevel,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: cs.onSurfaceVariant,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _formatDate(lesson.createdAt),
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: cs.onSurfaceVariant.withValues(alpha: 0.7),
-                letterSpacing: 0.2,
-              ),
-            ),
-            const SizedBox(width: 4),
-            IconButton(
-              icon: Icon(Icons.edit_rounded, size: 20, color: cs.primary),
-              onPressed: onEdit,
-              tooltip: 'Edit',
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-            ),
-            IconButton(
-              icon: Icon(Icons.delete_outline_rounded, size: 20, color: cs.error),
-              onPressed: onDelete,
-              tooltip: 'Delete',
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          boxShadow: [
+            BoxShadow(
+              color: cs.onSurface.withValues(alpha: 0.03),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
             ),
           ],
         ),
-        onTap: onTap,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: cs.primaryContainer.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: Icon(
+                Icons.menu_book_rounded,
+                color: cs.primary,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    lesson.topic,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: cs.surfaceContainer,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          lesson.subject,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            fontWeight: FontWeight.w500,
+                            color: cs.onSurfaceVariant,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    classLevelLabel,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurfaceVariant,
+                      letterSpacing: 0.15,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  _formatDate(lesson.createdAt),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.edit_rounded, size: 20, color: cs.primary),
+                      onPressed: onEdit,
+                      tooltip: 'Edit',
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        Icons.delete_outline_rounded,
+                        size: 20,
+                        color: cs.error,
+                      ),
+                      onPressed: onDelete,
+                      tooltip: 'Delete',
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -665,7 +1142,7 @@ class _LessonCardSkeleton extends StatelessWidget {
                       const SizedBox(width: 8),
                       Container(
                         height: 20,
-                        width: 64,
+                        width: 92,
                         decoration: BoxDecoration(
                           color: cs.surfaceContainer,
                           borderRadius: BorderRadius.circular(6),
@@ -676,22 +1153,42 @@ class _LessonCardSkeleton extends StatelessWidget {
                 ],
               ),
             ),
-            Container(
-              height: 14,
-              width: 48,
-              decoration: BoxDecoration(
-                color: cs.surfaceContainer,
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-            const SizedBox(width: 4),
-            Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                color: cs.surfaceContainer,
-                borderRadius: BorderRadius.circular(4),
-              ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Container(
+                  height: 14,
+                  width: 48,
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainer,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainer,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainer,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ],
         ),

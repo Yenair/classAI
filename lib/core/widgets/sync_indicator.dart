@@ -26,7 +26,15 @@ class SyncIndicator extends ConsumerWidget {
 
     return IconButton(
       tooltip: label,
-      onPressed: () => _showSyncDetailsSheet(context, ref, syncData),
+      onPressed: () async {
+        await ref.read(syncStatusProvider.notifier).refresh();
+        if (!context.mounted) return;
+        _showSyncDetailsSheet(
+          context,
+          ref,
+          ref.read(syncStatusProvider),
+        );
+      },
       icon: RepaintBoundary(
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),

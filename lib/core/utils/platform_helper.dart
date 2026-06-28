@@ -1,5 +1,6 @@
+import 'dart:io';
+
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,17 +8,38 @@ class PlatformHelper {
   /// Returns `true` when the current platform can safely use the
   /// connectivity_plus realtime stream.
   static bool supportsConnectivityStream() {
-    return defaultTargetPlatform != TargetPlatform.windows;
+    return true;
   }
 
   /// Returns `true` if the device has network connectivity.
   ///
-  /// Uses [connectivity_plus] to check for active network connections.
-  /// Returns `true` if any connectivity result is not `none`.
+  /// Uses [connectivity_plus] to confirm there is a transport available.
+  /// This is a simple transport-level check with no side effects.
+  /// For a stricter check that also probes DNS, use [isReliablyOnline].
   static Future<bool> isOnline() async {
     final connectivity = Connectivity();
-    final results = await connectivity.checkConnectivity();
-    return results.any((r) => r != ConnectivityResult.none);
+    try {
+      final results = await connectivity.checkConnectivity();
+      return results.any((r) => r != ConnectivityResult.none);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// A stricter online check that performs a DNS lookup in addition to
+  /// the transport check. Use this only where strict connectivity is
+  /// required (e.g. subscription expiry checks), not in the general sync
+  /// flow.
+  static Future<bool> isReliablyOnline() async {
+    if (!await isOnline()) return false;
+
+    try {
+      final lookup = await InternetAddress.lookup('example.com');
+      return lookup.isNotEmpty &&
+          lookup.any((address) => address.rawAddress.isNotEmpty);
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Returns `true` for Editor layout (desktop/large tablet), `false` for Reader layout (phone/small tablet).
