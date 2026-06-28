@@ -8,6 +8,8 @@ import 'package:classai/core/services/sync_service.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart'
     show authProvider, authServiceProvider, securityServiceProvider;
+import 'package:classai/features/dashboard/providers/credit_state_provider.dart'
+    show creditStateProvider;
 import 'package:classai/main.dart' show databaseProvider, navigatorKey;
 
 /// Possible sync statuses for UI display.
@@ -168,6 +170,7 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
       final jwt = _setJwtOnRemoteApi(syncService);
       await syncService.onConnectivityRestored(jwt: jwt);
       await refresh();
+      await ref.read(creditStateProvider.notifier).refresh();
     } on SessionMismatchException {
       // Session was invalidated by a login on another device — force logout
       await ref.read(authProvider.notifier).manualLogout();
@@ -245,6 +248,7 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
 
     // Refresh display state after successful sync
     await refresh();
+    await ref.read(creditStateProvider.notifier).refresh();
   }
 
   /// Refresh sync status from the database and service.
