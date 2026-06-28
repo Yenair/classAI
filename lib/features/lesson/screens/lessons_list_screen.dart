@@ -434,12 +434,12 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
               letterSpacing: -0.12,
             ),
           ),
-          actions: [
-            const SyncIndicator(),
-            const SizedBox(width: 8),
-            const CreditCounter(),
-            const SizedBox(width: 8),
-          ],
+            actions: [
+              const SyncIndicator(),
+              const SizedBox(width: 8),
+              CreditCounter(visible: ref.watch(isOfflineProvider)),
+              const SizedBox(width: 8),
+            ],
           elevation: 0,
           backgroundColor: cs.surface,
           foregroundColor: cs.onSurface,

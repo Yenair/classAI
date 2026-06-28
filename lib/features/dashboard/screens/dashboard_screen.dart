@@ -425,7 +425,7 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                       const _SyncChip(),
                       const SizedBox(width: 8),
                       // Credit chip
-                      const _CreditChip(),
+                      _CreditChip(visible: ref.watch(isOfflineProvider)),
                       const SizedBox(width: 8),
                       // Profile popup
                       PopupMenuButton<String>(
@@ -778,10 +778,14 @@ class _SyncChip extends ConsumerWidget {
 }
 
 class _CreditChip extends ConsumerWidget {
-  const _CreditChip();
+  const _CreditChip({required this.visible});
+
+  final bool visible;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (!visible) return const SizedBox.shrink();
+
     final creditData = ref.watch(creditStateProvider);
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);

@@ -9,7 +9,9 @@ import 'package:classai/features/dashboard/providers/credit_state_provider.dart'
 /// Stitch style: compact pill container, primary tint background when
 /// credits are positive, thin mono-style numerics for the count.
 class CreditCounter extends ConsumerStatefulWidget {
-  const CreditCounter({super.key});
+  const CreditCounter({super.key, this.visible = true});
+
+  final bool visible;
 
   @override
   ConsumerState<CreditCounter> createState() => _CreditCounterState();
@@ -51,6 +53,8 @@ class _CreditCounterState extends ConsumerState<CreditCounter>
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.visible) return const SizedBox.shrink();
+
     final creditData = ref.watch(creditStateProvider);
     final balance = creditData.currentCredits;
 

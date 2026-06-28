@@ -10,6 +10,7 @@ import 'package:classai/core/widgets/conflict_banner.dart';
 import 'package:classai/core/widgets/sync_indicator.dart';
 import 'package:classai/core/widgets/credit_counter.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
+import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
 import 'package:classai/features/vault/screens/vault_item_detail_screen.dart';
 
 void _goToLessonsDeferred(BuildContext context) {
@@ -487,7 +488,7 @@ class _MobileHeader extends StatelessWidget {
           const Spacer(),
           const SyncIndicator(),
           const SizedBox(width: 8),
-          const CreditCounter(),
+          CreditCounter(visible: ref.watch(isOfflineProvider)),
         ],
       ),
     );
