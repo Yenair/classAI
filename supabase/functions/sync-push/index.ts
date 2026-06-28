@@ -152,12 +152,12 @@ serve(async (req) => {
             (change as Record<string, unknown>)["__generated_id"] = generatedId;
           }
         } else if (op === "UPDATE") {
-          const serverId = getValue(fullRowData, "server_id", "serverId", "id");
+          const serverId = getValue(fullRowData, "server_id", "serverId", "id", "school_server_id", "teacher_server_id");
           if (!serverId) {
             console.warn(`sync-push: UPDATE on "${table}" missing server id`);
             continue;
           }
-          const { local_id, localId, server_id, serverId, id, ...updateData } = fullRowData;
+          const { local_id, localId, server_id, serverId: _sid, id, school_server_id, teacher_server_id, ...updateData } = fullRowData;
           const { error } = await supabase
             .from(table)
             .update(updateData)
@@ -167,7 +167,7 @@ serve(async (req) => {
             continue;
           }
         } else if (op === "DELETE") {
-          const serverId = getValue(fullRowData, "server_id", "serverId", "id");
+          const serverId = getValue(fullRowData, "server_id", "serverId", "id", "school_server_id", "teacher_server_id");
           if (!serverId) {
             console.warn(`sync-push: DELETE on "${table}" missing server id`);
             continue;
@@ -181,6 +181,11 @@ serve(async (req) => {
             console.warn(`sync-push: DELETE error on "${table}": ${error.message}`);
             continue;
           }
+        } else if (op === "SPEND_CREDITS") {
+          // Credits are managed client-side and by the sync-credits function.
+          // No Supabase table modification needed.
+          (change as Record<string, unknown>)["__skipped"] = true;
+          continue;
         } else {
           console.warn(`sync-push: unknown operation "${operation}" on "${table}"`);
           continue;
@@ -202,10 +207,11 @@ serve(async (req) => {
       // Use the generated ID from INSERT, or fall back to the incoming server_id
       const generatedId = (change as Record<string, unknown>)["__generated_id"] as string | undefined;
       const serverId = generatedId ?? getValue(fullRowData, "server_id", "serverId", "id");
+      const isSkipped = (change as Record<string, unknown>)["__skipped"] === true;
       results.push({
         local_id: localId ?? 0,
-        status: "updated",
-        server_id: serverId ?? null,
+        status: isSkipped ? "skipped" : "updated",
+        server_id: isSkipped ? null : (serverId ?? null),
         retryable: false,
       });
     }
