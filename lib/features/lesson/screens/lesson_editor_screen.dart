@@ -13,6 +13,7 @@ import 'package:classai/core/services/emergency_flush_service.dart';
 import 'package:classai/core/constants/prompt_templates.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/core/theme/app_theme.dart';
+import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/features/lesson/screens/lessons_list_screen.dart';
@@ -423,7 +424,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   }
 
   Future<void> _handleUnlock() async {
-    if (_creditBalance < 1) {
+    final isOnline = await PlatformHelper.isOnline();
+
+    if (!isOnline && _creditBalance < 1) {
       // Show persistent toast with sync option
       AppToast.instance.showToast(
         context: context,
@@ -455,7 +458,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
 
       setState(() {
         _isUnlocked = true;
-        _creditBalance = _creditBalance - 1;
+        if (!isOnline) {
+          _creditBalance = _creditBalance - 1;
+        }
       });
 
       ref.read(creditStateProvider.notifier).refresh();

@@ -2613,9 +2613,9 @@ class _FreePlanBanner extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.amber.shade50,
+        color: Colors.amber.shade100,
         border: Border(
-          bottom: BorderSide(color: Colors.amber.shade200),
+          bottom: BorderSide(color: Colors.amber.shade400, width: 1.5),
         ),
       ),
       child: Row(
@@ -2627,7 +2627,7 @@ class _FreePlanBanner extends StatelessWidget {
               "You're on the Free plan. Upgrade to unlock more features.",
               style: theme.textTheme.bodySmall?.copyWith(
                 color: Colors.amber.shade900,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
