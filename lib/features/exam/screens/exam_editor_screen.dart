@@ -44,7 +44,6 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   final _topicController = TextEditingController();
   final _reviewController = TextEditingController();
   int _week = 1;
-  int _term = 1;
   String _subject = 'Mathematics';
   String _classLevel = 'JSS 1';
   String _difficulty = 'medium';
@@ -72,6 +71,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   List<Lesson> _teacherLessons = [];
   int? _selectedLessonId;
   bool _isManualTopicEntry = true;
+  bool _routeDefaultsApplied = false;
 
   // Multi-select question types and their counts
   final Set<String> _selectedQuestionTypes = {'MCQ', 'Theory'};
@@ -139,6 +139,33 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         _loadExistingExam(widget.examId!);
       }
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_routeDefaultsApplied || widget.examId != null) {
+      return;
+    }
+    _routeDefaultsApplied = true;
+
+    final query = GoRouterState.of(context).uri.queryParameters;
+    final subject = query['subject']?.trim();
+    final classLevel = query['classLevel']?.trim();
+
+    if (subject != null && subject.isNotEmpty) {
+      _subject = subject;
+    }
+    if (classLevel != null && classLevel.isNotEmpty) {
+      _classLevel = classLevel;
+    }
+    if (subject != null && subject.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _loadSchemesForContext();
+        }
+      });
+    }
   }
 
   Future<void> _showAddSubjectDialog() async {
@@ -1186,7 +1213,6 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                           subject: _subject,
                                           classLevel: _classLevel,
                                           week: _week,
-                                          term: _term,
                                           topicController: _topicController,
                                           selectedQuestionTypes:
                                               _selectedQuestionTypes,
@@ -1232,7 +1258,6 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                           isManualTopicEntry: _isManualTopicEntry,
                                           selectedLessonId: _selectedLessonId,
                                           onWeekChanged: (v) => setState(() => _week = v),
-                                          onTermChanged: (v) => setState(() => _term = v),
                                           onLessonSelected: _onLessonSelected,
                                           onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
                                           onManualTopicSelected: () => _onLessonSelected(null),
@@ -1267,7 +1292,6 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                       subject: _subject,
                                       classLevel: _classLevel,
                                       week: _week,
-                                      term: _term,
                                       topicController: _topicController,
                                       selectedQuestionTypes:
                                           _selectedQuestionTypes,
@@ -1313,7 +1337,6 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                       isManualTopicEntry: _isManualTopicEntry,
                                       selectedLessonId: _selectedLessonId,
                                       onWeekChanged: (v) => setState(() => _week = v),
-                                      onTermChanged: (v) => setState(() => _term = v),
                                       onLessonSelected: _onLessonSelected,
                                       onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
                                       onManualTopicSelected: () => _onLessonSelected(null),
@@ -1688,7 +1711,6 @@ class _ConfigPanel extends StatelessWidget {
   final String subject;
   final String classLevel;
   final int week;
-  final int term;
   final TextEditingController topicController;
   final Set<String> selectedQuestionTypes;
   final Map<String, int> questionCounts;
@@ -1715,7 +1737,6 @@ class _ConfigPanel extends StatelessWidget {
   final bool isManualTopicEntry;
   final int? selectedLessonId;
   final ValueChanged<int> onWeekChanged;
-  final ValueChanged<int> onTermChanged;
   final ValueChanged<Lesson?> onLessonSelected;
   final ValueChanged<SchemeOfWorkData?> onSchemeOfWorkSelected;
   final VoidCallback onManualTopicSelected;
@@ -1726,7 +1747,6 @@ class _ConfigPanel extends StatelessWidget {
     required this.subject,
     required this.classLevel,
     required this.week,
-    required this.term,
     required this.topicController,
     required this.selectedQuestionTypes,
     required this.questionCounts,
@@ -1753,7 +1773,6 @@ class _ConfigPanel extends StatelessWidget {
     required this.isManualTopicEntry,
     required this.selectedLessonId,
     required this.onWeekChanged,
-    required this.onTermChanged,
     required this.onLessonSelected,
     required this.onSchemeOfWorkSelected,
     required this.onManualTopicSelected,
@@ -1887,31 +1906,13 @@ class _ConfigPanel extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              // Term + Week row
-              Row(
-                children: [
-                  Expanded(
-                    child: _SimpleDropdown(
-                      cs: cs,
-                      theme: theme,
-                      label: 'Term',
-                      value: term.toString(),
-                      items: const ['1', '2', '3'],
-                      onChanged: (v) => onTermChanged(int.tryParse(v) ?? 1),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _SimpleDropdown(
-                      cs: cs,
-                      theme: theme,
-                      label: 'Week',
-                      value: week.toString(),
-                      items: List.generate(13, (i) => (i + 1).toString()),
-                      onChanged: (v) => onWeekChanged(int.tryParse(v) ?? 1),
-                    ),
-                  ),
-                ],
+              _SimpleDropdown(
+                cs: cs,
+                theme: theme,
+                label: 'Week',
+                value: week.toString(),
+                items: List.generate(13, (i) => (i + 1).toString()),
+                onChanged: (v) => onWeekChanged(int.tryParse(v) ?? 1),
               ),
               const SizedBox(height: 16),
               // Grade Level + Duration row
