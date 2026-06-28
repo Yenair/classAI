@@ -393,8 +393,14 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
     required int sinceEventId,
   }) async {
     try {
+      final headers = <String, String>{};
+      if (_jwt != null && _jwt!.isNotEmpty) {
+        headers['x-classai-jwt'] = _jwt!;
+      }
       final response =
-          await client.functions.invoke('sync-realtime-events', body: {
+          await client.functions.invoke('sync-realtime-events',
+        headers: headers.isNotEmpty ? headers : null,
+        body: {
         'since_event_id': sinceEventId,
         'school_id': schoolId,
       });
