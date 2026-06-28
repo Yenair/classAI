@@ -3,10 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
-import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
 import 'package:classai/features/settings/providers/theme_provider.dart';
 
@@ -26,15 +24,12 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  static const _interfaceModeKey = 'interface_mode';
   String _appVersion = '';
-  String _interfaceMode = 'auto';
 
   @override
   void initState() {
     super.initState();
     _loadAppVersion();
-    _loadInterfaceMode();
   }
 
   Future<void> _loadAppVersion() async {
@@ -51,22 +46,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _appVersion = '—';
         });
       }
-    }
-  }
-
-  Future<void> _loadInterfaceMode() async {
-    final prefs = await SharedPreferences.getInstance();
-    final mode = prefs.getString(_interfaceModeKey) ?? 'auto';
-    if (mounted) {
-      setState(() => _interfaceMode = mode);
-    }
-  }
-
-  Future<void> _setInterfaceMode(String mode) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_interfaceModeKey, mode);
-    if (mounted) {
-      setState(() => _interfaceMode = mode);
     }
   }
 
@@ -149,7 +128,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final authData = ref.watch(authProvider);
-    final creditData = ref.watch(creditStateProvider);
     final syncData = ref.watch(syncStatusProvider);
     final cs = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
@@ -191,10 +169,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               cs,
                               textTheme,
                               authData,
-                              creditData,
                               syncData,
                               isDark,
-                              isWide,
                             ),
                           ],
                         ),
@@ -428,145 +404,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ColorScheme cs,
     TextTheme textTheme,
     AuthStateData authData,
-    CreditStateData creditData,
     SyncStatusData syncData,
     bool isDark,
-    bool isWide,
   ) {
-    final isAdmin = authData.currentTeacher?.role == 'admin';
     return Column(
       children: [
-        // Row 1: Interface Mode + Appearance
-        isWide
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: _buildInterfaceModeCard(cs, textTheme),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildAppearanceCard(
-                        cs, textTheme, isDark),
-                  ),
-                ],
-              )
-            : Column(
-                children: [
-                  _buildInterfaceModeCard(cs, textTheme),
-                  const SizedBox(height: 16),
-                  _buildAppearanceCard(cs, textTheme, isDark),
-                ],
-              ),
+        _buildAppearanceCard(cs, textTheme, isDark),
         const SizedBox(height: 16),
 
-        // Row 2: Account + Credits (side by side on wide)
-        isWide
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: _buildAccountCard(
-                        context, cs, textTheme, authData),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildCreditsCard(
-                        context, cs, textTheme, creditData,
-                        isAdmin: isAdmin),
-                  ),
-                ],
-              )
-            : Column(
-                children: [
-                  _buildAccountCard(
-                      context, cs, textTheme, authData),
-                  const SizedBox(height: 16),
-                  _buildCreditsCard(
-                      context, cs, textTheme, creditData,
-                      isAdmin: isAdmin),
-                ],
-              ),
+        _buildAccountCard(context, cs, textTheme, authData),
         const SizedBox(height: 16),
 
-        // Row 3: Sync (full width)
-        _buildSyncCard(
-            context, cs, textTheme, syncData),
+        _buildSyncCard(context, cs, textTheme, syncData),
         const SizedBox(height: 16),
 
-        // Row 4: About + System Actions
         _buildAboutCard(context, cs, textTheme),
       ],
-    );
-  }
-
-  // ---------------------------------------------------------------
-  // Interface Mode Card
-  // ---------------------------------------------------------------
-  Widget _buildInterfaceModeCard(ColorScheme cs, TextTheme textTheme) {
-    return _StitchCard(
-      cs: cs,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.display_settings_rounded,
-                size: 28,
-                color: cs.primary,
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Interface Mode',
-                style: textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Select your preferred interaction mode for the platform.',
-            style: textTheme.bodyMedium?.copyWith(
-              color: cs.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _ModeOption(
-            label: 'Auto (System Default)',
-            value: 'auto',
-            groupValue: _interfaceMode,
-            cs: cs,
-            textTheme: textTheme,
-            onChanged: (v) {
-              if (v != null) _setInterfaceMode(v);
-            },
-          ),
-          const SizedBox(height: 8),
-          _ModeOption(
-            label: 'Reader (Optimized for grading)',
-            value: 'reader',
-            groupValue: _interfaceMode,
-            cs: cs,
-            textTheme: textTheme,
-            onChanged: (v) {
-              if (v != null) _setInterfaceMode(v);
-            },
-          ),
-          const SizedBox(height: 8),
-          _ModeOption(
-            label: 'Editor (Lesson planning focus)',
-            value: 'editor',
-            groupValue: _interfaceMode,
-            cs: cs,
-            textTheme: textTheme,
-            onChanged: (v) {
-              if (v != null) _setInterfaceMode(v);
-            },
-          ),
-        ],
-      ),
     );
   }
 
@@ -787,107 +640,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Sign Out button
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: OutlinedButton.icon(
-              onPressed: () => _showLogoutConfirmation(),
-              icon: const Icon(Icons.logout_rounded),
-              label: const Text('Sign Out'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: cs.error,
-                side: BorderSide(color: cs.error.withValues(alpha: 0.5)),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------
-  // Credits Card
-  // ---------------------------------------------------------------
-  Widget _buildCreditsCard(BuildContext context, ColorScheme cs,
-      TextTheme textTheme, CreditStateData creditData,
-      {bool isAdmin = false}) {
-    return _StitchCard(
-      cs: cs,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.monetization_on_outlined,
-                size: 28,
-                color: cs.primary,
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Credits',
-                style: textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Balance
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Flexible(
-                child: Text(
-                  'Current Balance',
-                  style: textTheme.bodyLarge?.copyWith(
-                    overflow: TextOverflow.clip,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  '${creditData.currentCredits}',
-                  textAlign: TextAlign.end,
-                  style: textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: cs.primary,
-                    overflow: TextOverflow.clip,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (creditData.loading)
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: LinearProgressIndicator(),
-            ),
-          if (creditData.errorMessage != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                creditData.errorMessage!,
-                style: textTheme.bodySmall
-                    ?.copyWith(color: cs.error),
-              ),
-            ),
-          const SizedBox(height: 16),
-
-          // Purchase button (admin only)
-          if (isAdmin)
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: FilledButton.icon(
-                onPressed: () => context.push('/payment'),
-                icon: const Icon(Icons.shopping_cart_outlined),
-                label: const Text('Purchase Credits'),
-              ),
-            ),
         ],
       ),
     );
@@ -1423,89 +1175,6 @@ class _SettingsNavItem extends StatelessWidget {
                 color: isActive
                     ? cs.onSecondaryContainer
                     : cs.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Mode Option (Radio)
-// ---------------------------------------------------------------------------
-class _ModeOption extends StatelessWidget {
-  final String label;
-  final String value;
-  final String groupValue;
-  final ColorScheme cs;
-  final TextTheme textTheme;
-  final ValueChanged<String?> onChanged;
-
-  const _ModeOption({
-    required this.label,
-    required this.value,
-    required this.groupValue,
-    required this.cs,
-    required this.textTheme,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isSelected = value == groupValue;
-    return GestureDetector(
-      onTap: () => onChanged(value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? cs.primary.withValues(alpha: 0.05)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected
-                ? cs.primary
-                : cs.outlineVariant,
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isSelected ? cs.primary : cs.outline,
-                  width: 2,
-                ),
-                color: isSelected ? cs.primary : Colors.transparent,
-              ),
-              child: isSelected
-                  ? Center(
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: cs.onPrimary,
-                        ),
-                      ),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 12),
-            Flexible(
-              child: Text(
-                label,
-                style: textTheme.bodyMedium?.copyWith(
-                  color: cs.onSurface,
-                  fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
-                  overflow: TextOverflow.clip,
-                ),
               ),
             ),
           ],

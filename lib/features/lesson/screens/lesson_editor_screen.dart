@@ -332,6 +332,15 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   Future<void> _handleGenerate() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final topic = _topicController.text.trim();
+    if (_isManualTopicEntry && topic.isEmpty) {
+      showErrorToast(
+        context: context,
+        message: 'Please enter a topic before generating.',
+      );
+      return;
+    }
+
     final authTier =
         ref.read(authProvider).currentSchool?.subscriptionTier ?? _subscriptionTier;
     if (authTier == 'free') {
@@ -352,7 +361,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         'NERDC',
         _classLevel,
         _week,
-        _topicController.text.trim(),
+        topic,
         _difficulty,
         bloomsStr,
         teacherName: _teacherName,
@@ -393,7 +402,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         await aiService.logGeneration(
           teacherId: _teacherId,
           schoolId: _schoolId,
-          topic: _topicController.text.trim(),
+          topic: topic,
         );
       }
 
