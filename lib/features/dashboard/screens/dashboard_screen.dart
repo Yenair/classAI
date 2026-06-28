@@ -15,6 +15,7 @@ import 'package:classai/features/dashboard/providers/unresolved_conflicts_provid
 import 'package:classai/features/settings/providers/theme_provider.dart';
 import 'package:classai/core/services/payment_service.dart';
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
 void _goToLessonsDeferred(BuildContext context) {
@@ -545,6 +546,9 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
 
                 // ── Conflict Banner ────────────────────────────────
                 const ConflictBanner(),
+
+                // ── Announcement Banner ──────────────────────────────
+                const _AnnouncementBanner(),
 
                 // ── Free Plan Banner ──────────────────────────────
                 if (authData.currentSchool?.subscriptionTier == 'free')
@@ -1880,6 +1884,9 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
       ),
       body: Column(
         children: [
+          // ── Announcement Banner ──────────────────────────────
+          const _AnnouncementBanner(),
+
           // ── Free Plan Banner ──────────────────────────────
           if (authData.currentSchool?.subscriptionTier == 'free')
             _FreePlanBanner(
@@ -2565,6 +2572,50 @@ class _CurrentWeekProgressCard extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Shows an announcement banner from remote config when [announcementText] is
+/// non‑empty.
+class _AnnouncementBanner extends ConsumerWidget {
+  const _AnnouncementBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final config = ref.watch(configServiceProvider);
+    final text = config.announcementText;
+    if (text.isEmpty) return const SizedBox.shrink();
+
+    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: cs.primaryContainer.withValues(alpha: 0.6),
+        border: Border(
+          bottom: BorderSide(
+            color: cs.primary.withValues(alpha: 0.3),
+            width: 1.5,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.campaign_rounded, size: 18, color: cs.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: cs.onPrimaryContainer,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

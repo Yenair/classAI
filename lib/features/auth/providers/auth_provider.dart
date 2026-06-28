@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' show ClientException;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/core/services/auth_service.dart';
 import 'package:classai/core/services/emergency_flush_service.dart';
@@ -206,6 +208,68 @@ class AuthNotifier extends Notifier<AuthStateData> {
       // Reload school from local DB and update state
       await refreshSchoolFromDb();
     }
+  }
+
+  /// Checks the remote [minAppVersion] against the installed app version and
+  /// shows a non‑dismissible update dialog if the app is outdated.
+  Future<void> _checkMinAppVersion() async {
+    try {
+      final configService = ref.read(configServiceProvider);
+      await configService.refresh();
+      final required = configService.minAppVersion;
+      if (required.isEmpty) return;
+
+      final info = await PackageInfo.fromPlatform();
+      final installed = info.version;
+
+      if (_isVersionLessThan(installed, required)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final ctx = navigatorKey.currentContext;
+          if (ctx == null || !ctx.mounted) return;
+          showDialog<void>(
+            context: ctx,
+            barrierDismissible: false,
+            builder: (dialogCtx) => AlertDialog(
+              backgroundColor: Theme.of(dialogCtx).colorScheme.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              title: const Text('Update Required'),
+              content: Text(
+                'Your app version ($installed) is outdated. '
+                'Please update to version $required or later to continue.',
+              ),
+              actions: [
+                FilledButton(
+                  onPressed: () {
+                    // Open app store — for now just close the dialog.
+                    Navigator.of(dialogCtx).pop();
+                  },
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        });
+      }
+    } catch (e) {
+      debugPrint('[AuthNotifier] _checkMinAppVersion failed: $e');
+    }
+  }
+
+  /// Compares two semantic version strings (e.g. "1.2.3").
+  /// Returns true if [a] is strictly less than [b].
+  bool _isVersionLessThan(String a, String b) {
+    final aParts = a.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    final bParts = b.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    final maxLen = aParts.length > bParts.length ? aParts.length : bParts.length;
+    for (int i = 0; i < maxLen; i++) {
+      final aVal = i < aParts.length ? aParts[i] : 0;
+      final bVal = i < bParts.length ? bParts[i] : 0;
+      if (aVal < bVal) return true;
+      if (aVal > bVal) return false;
+    }
+    return false;
   }
 
   bool _isSessionMismatchError(Object error) {
@@ -485,6 +549,9 @@ class AuthNotifier extends Notifier<AuthStateData> {
       _startSessionTimer();
       // Check subscription expiry using server time (fire-and-forget)
       unawaited(_checkSubscriptionExpiry());
+
+      // Check min app version (fire-and-forget, shows an update dialog if outdated)
+      unawaited(_checkMinAppVersion());
 
       // Navigate based on role — admin goes to /admin, teachers go to /
       WidgetsBinding.instance.addPostFrameCallback((_) {

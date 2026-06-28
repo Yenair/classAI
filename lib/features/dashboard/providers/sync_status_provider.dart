@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/core/services/sync_service.dart';
 import 'package:classai/core/widgets/app_toast.dart';
@@ -171,6 +172,7 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
       await syncService.onConnectivityRestored(jwt: jwt);
       await refresh();
       await ref.read(creditStateProvider.notifier).refresh();
+      await ref.read(configServiceProvider).refresh();
     } on SessionMismatchException {
       // Session was invalidated by a login on another device — force logout
       await ref.read(authProvider.notifier).manualLogout();
@@ -249,6 +251,7 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
     // Refresh display state after successful sync
     await refresh();
     await ref.read(creditStateProvider.notifier).refresh();
+    await ref.read(configServiceProvider).refresh();
   }
 
   /// Refresh sync status from the database and service.

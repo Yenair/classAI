@@ -351,17 +351,23 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
         );
       }
     } on FunctionException catch (e) {
+      debugPrint('[PUSH-ERROR] FunctionException caught in pushChanges()');
+      debugPrint('[PUSH-ERROR] Status: ${e.status}');
+      debugPrint('[PUSH-ERROR] Details: ${e.details}');
       if (e.status == 401) {
         final code = (e.details is Map)
             ? (e.details as Map)['code'] as String?
             : null;
         if (code == 'token_version_mismatch') {
+          debugPrint('[PUSH-ERROR] Throwing SessionMismatchException');
           throw SessionMismatchException();
         }
       }
       // Other FunctionExceptions — log and fall through
       await Sentry.captureException(e);
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('[PUSH-ERROR] Exception caught in pushChanges(): $e');
+      debugPrint('[PUSH-ERROR] Stack trace: $stackTrace');
       // Edge Function not deployed — log and fall through
       await Sentry.captureException(
         e,
@@ -992,10 +998,19 @@ class SyncService {
 
     for (final entry in sorted) {
       final result = resultsByLocalId[entry.recordLocalId];
+
+      debugPrint('[PUSH-RESULT] Entry ID: ${entry.id}, '
+          'Table: ${entry.queueTable}, Operation: ${entry.operation}, '
+          'Attempts: ${entry.attempts}');
+
       if (result == null) {
+        debugPrint('[PUSH-RESULT] No result returned from server for this entry');
         await store.markQueueAttempt(entry.id);
         continue;
       }
+
+      debugPrint('[PUSH-RESULT] Status: ${result.status}, '
+          'ServerId: ${result.serverId}, Retryable: ${result.retryable}');
 
       if (result.status == 'created' ||
           result.status == 'updated' ||
@@ -1024,9 +1039,11 @@ class SyncService {
         continue;
       }
 
+      debugPrint('[PUSH-RESULT] Entry ${entry.id} not successful — marking attempt');
       await store.markQueueAttempt(entry.id);
 
       if (result.retryable && entry.attempts < 5) {
+        debugPrint('[PUSH-RESULT] Entry ${entry.id} is retryable (attempt ${entry.attempts}/5), entering backoff');
         _setState(SyncState.backoff);
       } else if (entry.attempts >= 5) {
         // ── Stuck item cleanup ──────────────────────────────────
@@ -1034,7 +1051,7 @@ class SyncService {
         // non-retryable would remain in the queue forever, causing
         // "stuck pending" displays. Remove them with a diagnostic log.
         debugPrint(
-          '[SyncService] Removing stuck queue entry '
+          '[PUSH-RESULT] Removing stuck queue entry '
           '(id=${entry.id}, table=${entry.queueTable}, '
           'operation=${entry.operation}, attempts=${entry.attempts})',
         );

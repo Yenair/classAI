@@ -8,6 +8,7 @@ import 'package:classai/core/services/payment_service.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/core/constants/app_constants.dart';
 import 'package:classai/core/utils/currency_formatter.dart';
+import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
@@ -305,41 +306,46 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     );
   }
 
-  // Plan definitions
-  static const _plans = [
-    _PlanDef(
-      name: 'Basic',
-      amountNaira: AppConstants.basicPlanPriceNaira,
-      tier: 'basic',
-      description: 'Essential tools for small classrooms. Up to 30 students.',
-      features: ['50 credits per month', 'Access to basic vault items'],
-    ),
-    _PlanDef(
-      name: 'Standard',
-      amountNaira: AppConstants.standardPlanPriceNaira,
-      tier: 'standard',
-      description:
-          'Advanced analytics and resources. Up to 100 students.',
-      features: [
-        '120 credits per month',
-        'Access to standard vault items',
-        'Vault publishing',
-      ],
-      isBestValue: true,
-    ),
-    _PlanDef(
-      name: 'Elite',
-      amountNaira: AppConstants.elitePlanPriceNaira,
-      tier: 'elite',
-      description:
-          'Unlimited students, priority support, and custom modules.',
-      features: [
-        '350 credits per month',
-        'Full vault access',
-        'Priority support',
-      ],
-    ),
-  ];
+  // Build plan definitions from remote config if available, falling back to
+  // AppConstants.
+  List<_PlanDef> _buildPlans() {
+    final config = ref.read(configServiceProvider);
+    final prices = config.subscriptionPrices;
+    return [
+      _PlanDef(
+        name: 'Basic',
+        amountNaira: prices['basic'] as int? ?? AppConstants.basicPlanPriceNaira,
+        tier: 'basic',
+        description: 'Essential tools for small classrooms. Up to 30 students.',
+        features: ['50 credits per month', 'Access to basic vault items'],
+      ),
+      _PlanDef(
+        name: 'Standard',
+        amountNaira: prices['standard'] as int? ?? AppConstants.standardPlanPriceNaira,
+        tier: 'standard',
+        description:
+            'Advanced analytics and resources. Up to 100 students.',
+        features: [
+          '120 credits per month',
+          'Access to standard vault items',
+          'Vault publishing',
+        ],
+        isBestValue: true,
+      ),
+      _PlanDef(
+        name: 'Elite',
+        amountNaira: prices['elite'] as int? ?? AppConstants.elitePlanPriceNaira,
+        tier: 'elite',
+        description:
+            'Unlimited students, priority support, and custom modules.',
+        features: [
+          '350 credits per month',
+          'Full vault access',
+          'Priority support',
+        ],
+      ),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -347,8 +353,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     final textTheme = Theme.of(context).textTheme;
     final isWide = MediaQuery.of(context).size.width >= 1024;
 
+    final plans = _buildPlans();
     final selectedPlan =
-        _plans.firstWhere((p) => p.tier == _selectedPlan);
+        plans.firstWhere((p) => p.tier == _selectedPlan);
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -564,8 +571,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   // Plans List (Radio Card selection)
   // ---------------------------------------------------------------
   Widget _buildPlansList(ColorScheme cs, TextTheme textTheme) {
+    final plans = _buildPlans();
     return Column(
-      children: _plans.map((plan) {
+      children: plans.map((plan) {
         final isSelected = _selectedPlan == plan.tier;
         return GestureDetector(
           onTap: () => setState(() => _selectedPlan = plan.tier),

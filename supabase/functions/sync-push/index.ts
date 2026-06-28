@@ -119,6 +119,7 @@ serve(async (req) => {
     );
 
     let processed = 0;
+    const results: Record<string, unknown>[] = [];
 
     for (const change of changes) {
       const { table, operation, rowData } = change;
@@ -184,6 +185,12 @@ serve(async (req) => {
         } else if (op === "SPEND_CREDITS") {
           // Credits are managed client-side and by the sync-credits function.
           // No Supabase table modification needed.
+          results.push({
+            local_id: getValue(fullRowData, 'local_id', 'localId', 'id') ?? 0,
+            server_id: null,
+            status: 'skipped',
+            retryable: false,
+          });
           (change as Record<string, unknown>)["__skipped"] = true;
           continue;
         } else {
@@ -200,18 +207,20 @@ serve(async (req) => {
 
     // Build per-entry results matching SyncPushResponse.fromJson expectations.
     // Each result includes local_id, status, server_id, and retryable.
-    const results: Record<string, unknown>[] = [];
     for (const change of changes) {
+      // SPEND_CREDITS results were already pushed during processing
+      if ((change as Record<string, unknown>)["__skipped"] === true) {
+        continue;
+      }
       const fullRowData = decompressRow(change.rowData as Record<string, unknown>);
       const localId = getValue(fullRowData, "local_id", "localId", "id");
       // Use the generated ID from INSERT, or fall back to the incoming server_id
       const generatedId = (change as Record<string, unknown>)["__generated_id"] as string | undefined;
       const serverId = generatedId ?? getValue(fullRowData, "server_id", "serverId", "id");
-      const isSkipped = (change as Record<string, unknown>)["__skipped"] === true;
       results.push({
         local_id: localId ?? 0,
-        status: isSkipped ? "skipped" : "updated",
-        server_id: isSkipped ? null : (serverId ?? null),
+        status: "updated",
+        server_id: serverId ?? null,
         retryable: false,
       });
     }

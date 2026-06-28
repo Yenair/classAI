@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import '../database.dart';
 import '../tables/security_config.dart';
+import 'package:classai/core/services/config_service.dart';
 
 part 'security_config_dao.g.dart';
 
@@ -149,6 +150,35 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
   }
 
   // -----------------------------------------------------------------------
+  /// Optional [ConfigService] injection for reading limits from remote config.
+  ConfigService? _config;
+
+  void setConfigService(ConfigService config) {
+    _config = config;
+  }
+
+  /// Reads the daily preview limit for [tier] from remote config, falling
+  /// back to the hardcoded defaults.
+  int _previewLimit(String tier) {
+    final limits = _config?.dailyPreviewLimits;
+    if (limits != null && limits[tier] is int) {
+      return limits[tier] as int;
+    }
+    const defaults = {'free': 10, 'basic': 10, 'standard': 10, 'elite': -1};
+    return defaults[tier] ?? 10;
+  }
+
+  /// Reads the daily PDF export limit for [tier] from remote config, falling
+  /// back to the hardcoded defaults.
+  int _pdfLimit(String tier) {
+    final limits = _config?.pdfExportLimits;
+    if (limits != null && limits[tier] is int) {
+      return limits[tier] as int;
+    }
+    const defaults = {'free': 1, 'basic': 3, 'standard': 5, 'elite': -1};
+    return defaults[tier] ?? 1;
+  }
+
   // Daily counter methods for rate limiting
   // -----------------------------------------------------------------------
 
@@ -171,8 +201,7 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
     }
 
     // Check limit based on tier
-    const limits = {'free': 10, 'basic': 10, 'standard': 10, 'elite': -1};
-    final limit = limits[tier] ?? 10;
+    final limit = _previewLimit(tier);
 
     if (limit > 0 && newCount >= limit) {
       return false; // Limit exceeded
@@ -209,8 +238,7 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
     }
 
     // Check limit based on tier
-    const limits = {'free': 10, 'basic': 10, 'standard': 10, 'elite': -1};
-    final limit = limits[tier] ?? 10;
+    final limit = _previewLimit(tier);
 
     if (limit > 0 && newCount >= limit) {
       return false; // Limit exceeded
@@ -246,8 +274,7 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
     }
 
     // Check limit based on tier
-    const limits = {'free': 1, 'basic': 3, 'standard': 5, 'elite': -1};
-    final limit = limits[tier] ?? 1;
+    final limit = _pdfLimit(tier);
 
     if (limit > 0 && newCount >= limit) {
       return false; // Limit exceeded
@@ -274,8 +301,7 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
       return _getTierPdfLimit(tier);
     }
 
-    const limits = {'free': 1, 'basic': 3, 'standard': 5, 'elite': -1};
-    final limit = limits[tier] ?? 1;
+    final limit = _pdfLimit(tier);
 
     if (limit < 0) return -1; // Unlimited
 
@@ -283,7 +309,6 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
   }
 
   int _getTierPdfLimit(String tier) {
-    const limits = {'free': 1, 'basic': 3, 'standard': 5, 'elite': -1};
-    return limits[tier] ?? 1;
+    return _pdfLimit(tier);
   }
 }
