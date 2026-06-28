@@ -327,25 +327,14 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
       );
       final data = response.data as Map<String, dynamic>?;
       if (data != null) {
-        final success = data['success'] as bool? ?? false;
-        final processed = data['processed'] as int? ?? 0;
-        // Build SyncPushResponse from the simplified response.
-        // Each entry is treated as "processed" — per-entry results
-        // are not available with the new contract.
+        final rawResults = data['results'] as List? ?? [];
+        // Parse per-entry results returned by the server, which include
+        // the correct local_id, status, server_id, and retryable for each
+        // change (including SPEND_CREDITS entries with status 'skipped').
         return SyncPushResponse(
-          results: batches.asMap().entries.map((entry) {
-            final idx = entry.key;
-            final batch = entry.value;
-            final localId = _readInt(batch.record, 'localId') ??
-                _readInt(batch.record, 'local_id') ??
-                _readInt(batch.record, 'id') ??
-                idx;
-            return SyncPushResult(
-              localId: localId,
-              status: idx < processed ? 'updated' : 'error',
-              serverId: batch.record['server_id'] as String? ??
-                  batch.record['serverId'] as String?,
-              retryable: !success,
+          results: rawResults.map((item) {
+            return SyncPushResult.fromJson(
+              Map<String, dynamic>.from(item as Map),
             );
           }).toList(),
         );
@@ -1014,7 +1003,8 @@ class SyncService {
 
       if (result.status == 'created' ||
           result.status == 'updated' ||
-          result.status == 'deleted') {
+          result.status == 'deleted' ||
+          result.status == 'skipped') {
         // ── Post-push bookkeeping ──────────────────────────────────
         // 1. Update the local record's serverId if the server returned one
         //    (especially important for INSERTs where the server generates the UUID).
