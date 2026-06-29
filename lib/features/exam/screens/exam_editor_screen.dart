@@ -1106,6 +1106,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       if (_isFromSchemeOfWork) {
         payload['week_number'] = _week;
       }
+      if (termLabel != null) {
+        payload['term'] = termLabel;
+      }
 
       await db.syncQueueDao.insertEntry(
         queueTable: 'exams',

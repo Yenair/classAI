@@ -806,6 +806,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
               'school_server_id': _schoolId,
               if (schemeOfWorkIdStr != null) 'scheme_of_work_id': schemeOfWorkIdStr,
               if (_isFromSchemeOfWork) 'week_number': _week,
+              if (termLabel != null) 'term': termLabel,
             },
           );
 
@@ -858,6 +859,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           'school_server_id': _schoolId,
           if (schemeOfWorkIdStr != null) 'scheme_of_work_id': schemeOfWorkIdStr,
           if (_isFromSchemeOfWork) 'week_number': _week,
+          if (termLabel != null) 'term': termLabel,
         },
       );
 

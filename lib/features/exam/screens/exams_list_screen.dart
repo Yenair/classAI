@@ -472,6 +472,7 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
               ),
               data: (exams) {
                 final filteredExams = _applyFilters(exams);
+                filteredExams.sort((a, b) => (a.weekNumber ?? 0).compareTo(b.weekNumber ?? 0));
                 final termOptions = _termFilters;
                 final classOptions = _buildFilterOptions(
                   exams.map((exam) => exam.classLevel),

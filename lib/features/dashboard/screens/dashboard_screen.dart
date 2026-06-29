@@ -379,10 +379,11 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                               ),
                               if (_isSidebarOpen) ...[
                                 const SizedBox(width: 16),
-                                Flexible(
+                                Expanded(
                                   child: Text(
                                     item.label,
                                     overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
                                     style:
                                         theme.textTheme.labelLarge?.copyWith(
                                       fontWeight: isActive
@@ -1103,8 +1104,10 @@ class _RecentLessonsSection extends ConsumerWidget {
 
             return LayoutBuilder(
               builder: (context, constraints) {
+                final sortedLessons = [...lessons]
+                  ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
                 final twoColumns = constraints.maxWidth >= 600;
-                final displayed = lessons.take(4).toList();
+                final displayed = sortedLessons.take(4).toList();
                 if (twoColumns) {
                   final row1 = displayed.take(2).toList();
                   final row2 = displayed.length > 2
@@ -1121,7 +1124,6 @@ class _RecentLessonsSection extends ConsumerWidget {
                                     right: row1.last == lesson ? 0 : 8,
                                   ),
                                   child: _LessonCard(
-                                    lessonId: lesson.id,
                                     icon: Icons.menu_book_rounded,
                                     iconColor: cs.primary,
                                     title: lesson.topic.isNotEmpty
@@ -1130,16 +1132,17 @@ class _RecentLessonsSection extends ConsumerWidget {
                                     subtitle:
                                         '${lesson.classLevel} • ${lesson.subject}',
                                     status: lesson.difficulty,
-                                    statusColor: cs.primary,
-                                    statusBg: cs.primary.withValues(alpha: 0.1),
-                                    timeAgo: 'Updated ${_timeAgo(lesson.updatedAt)}',
-                                    cs: cs,
-                                    theme: theme,
+                                      statusColor: cs.primary,
+                                      statusBg: cs.primary.withValues(alpha: 0.1),
+                                      timeAgo: 'Updated ${_timeAgo(lesson.updatedAt)}',
+                                      cs: cs,
+                                      theme: theme,
+                                      onTap: () => context.push('/lessons/${lesson.id}'),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            )
-                            .toList(),
+                              )
+                              .toList(),
                       ),
                       if (row2.isNotEmpty) ...[
                         const SizedBox(height: 16),
@@ -1152,7 +1155,6 @@ class _RecentLessonsSection extends ConsumerWidget {
                                       right: row2.last == lesson ? 0 : 8,
                                     ),
                                     child: _LessonCard(
-                                      lessonId: lesson.id,
                                       icon: Icons.menu_book_rounded,
                                       iconColor: cs.tertiary,
                                       title: lesson.topic.isNotEmpty
@@ -1167,6 +1169,7 @@ class _RecentLessonsSection extends ConsumerWidget {
                                           'Updated ${_timeAgo(lesson.updatedAt)}',
                                       cs: cs,
                                       theme: theme,
+                                      onTap: () => context.push('/lessons/${lesson.id}'),
                                     ),
                                   ),
                                 ),
@@ -1183,7 +1186,6 @@ class _RecentLessonsSection extends ConsumerWidget {
                           (lesson) => Padding(
                             padding: const EdgeInsets.only(bottom: 16),
                             child: _LessonCard(
-                              lessonId: lesson.id,
                               icon: Icons.menu_book_rounded,
                               iconColor: cs.primary,
                               title: lesson.topic.isNotEmpty
@@ -1197,6 +1199,7 @@ class _RecentLessonsSection extends ConsumerWidget {
                               timeAgo: 'Updated ${_timeAgo(lesson.updatedAt)}',
                               cs: cs,
                               theme: theme,
+                              onTap: () => context.push('/lessons/${lesson.id}'),
                             ),
                           ),
                         )
@@ -1222,7 +1225,6 @@ class _RecentLessonsSection extends ConsumerWidget {
 
 class _LessonCard extends StatelessWidget {
   const _LessonCard({
-    required this.lessonId,
     required this.icon,
     required this.iconColor,
     required this.title,
@@ -1233,9 +1235,9 @@ class _LessonCard extends StatelessWidget {
     required this.timeAgo,
     required this.cs,
     required this.theme,
+    required this.onTap,
   });
 
-  final int lessonId;
   final IconData icon;
   final Color iconColor;
   final String title;
@@ -1246,13 +1248,136 @@ class _LessonCard extends StatelessWidget {
   final String timeAgo;
   final ColorScheme cs;
   final ThemeData theme;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+            border: Border.all(
+              color: cs.outlineVariant.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: iconColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                    ),
+                    child: Icon(icon, color: iconColor, size: 24),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusBg,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusDefault),
+                    ),
+                    child: Text(
+                      status.toUpperCase(),
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: statusColor,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: cs.primary,
+                  height: 1.2,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: cs.outline,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.only(top: 16),
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(
+                      color: cs.outlineVariant.withValues(alpha: 0.2),
+                    ),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        timeAgo,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                          overflow: TextOverflow.clip,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 20,
+                      color: cs.primary,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReaderTotalOverviewPanel extends ConsumerWidget {
+  const _ReaderTotalOverviewPanel();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final lessonCountAsync = ref.watch(lessonCountProvider);
+    final examCountAsync = ref.watch(examCountProvider);
+    final conflictCount = ref.watch(unresolvedConflictsProvider);
+
+    final lessonCount = lessonCountAsync.asData?.value ?? 0;
+    final examCount = examCountAsync.asData?.value ?? 0;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: cs.surfaceContainerLowest,
+        color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(AppTheme.radiusXl),
         border: Border.all(
           color: cs.outlineVariant.withValues(alpha: 0.3),
@@ -1262,98 +1387,107 @@ class _LessonCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                ),
-                child: Icon(icon, color: iconColor, size: 24),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: statusBg,
-                  borderRadius: BorderRadius.circular(AppTheme.radiusDefault),
-                ),
-                child: Text(
-                  status.toUpperCase(),
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: statusColor,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
-                  ),
+              Icon(Icons.insights_rounded, color: cs.primary, size: 22),
+              const SizedBox(width: 10),
+              Text(
+                'Total Overview',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: cs.primary,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 16),
-          Text(
-            title,
-            style: theme.textTheme.titleLarge?.copyWith(
-              color: cs.primary,
-              height: 1.2,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: cs.outline,
-            ),
-          ),
+          Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.2)),
           const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.only(top: 16),
-            decoration: BoxDecoration(
-              border: Border(
-                top: BorderSide(
-                  color: cs.outlineVariant.withValues(alpha: 0.2),
-                ),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(
-                  child: Text(
-                    timeAgo,
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: cs.onSurfaceVariant,
-                      overflow: TextOverflow.clip,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: () => context.push('/lessons/$lessonId'),
-                  icon: Icon(
-                    Icons.edit_rounded,
-                    size: 20,
-                    color: cs.primary,
-                  ),
-                  style: IconButton.styleFrom(
-                    padding: const EdgeInsets.all(4),
-                    minimumSize: const Size(32, 32),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(
-                        AppTheme.radiusFull,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          _OverviewStatRow(
+            icon: Icons.menu_book,
+            label: 'Lessons',
+            value: lessonCountAsync.isLoading ? '...' : '$lessonCount',
+            cs: cs,
+            theme: theme,
+          ),
+          const SizedBox(height: 12),
+          Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.2)),
+          const SizedBox(height: 12),
+          _OverviewStatRow(
+            icon: Icons.quiz,
+            label: 'Exams',
+            value: examCountAsync.isLoading ? '...' : '$examCount',
+            cs: cs,
+            theme: theme,
+          ),
+          const SizedBox(height: 12),
+          Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.2)),
+          const SizedBox(height: 12),
+          _OverviewStatRow(
+            icon: Icons.warning,
+            label: 'Conflicts',
+            value: '$conflictCount',
+            cs: cs,
+            theme: theme,
           ),
         ],
       ),
+    );
+  }
+}
+
+class _OverviewStatRow extends StatelessWidget {
+  const _OverviewStatRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.cs,
+    required this.theme,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final ColorScheme cs;
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: cs.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          ),
+          child: Icon(icon, color: cs.primary, size: 22),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label.toUpperCase(),
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                  letterSpacing: 0.4,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  color: cs.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1985,7 +2119,9 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  const _CurrentWeekProgressCard(),
+                  const _ReaderTotalOverviewPanel(),
+                  const SizedBox(height: 24),
+                  _RecentLessonsSection(cs: cs, theme: theme),
                   const SizedBox(height: 24),
                 ],
               ),

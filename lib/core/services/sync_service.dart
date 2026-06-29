@@ -135,10 +135,15 @@ class SyncPushResult {
   });
 
   factory SyncPushResult.fromJson(Map<String, dynamic> json) {
+    final localIdValue = json['local_id'];
+    final localId = localIdValue is num
+        ? localIdValue.toInt()
+        : int.tryParse(localIdValue?.toString() ?? '') ?? 0;
+    final status = json['status']?.toString().trim();
     return SyncPushResult(
-      localId: _readInt(json, 'local_id') ?? 0,
-      status: json['status'] as String? ?? 'error',
-      serverId: json['server_id'] as String?,
+      localId: localId,
+      status: status != null && status.isNotEmpty ? status : 'error',
+      serverId: json['server_id']?.toString(),
       retryable: json['retryable'] as bool? ?? false,
     );
   }

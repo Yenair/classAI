@@ -164,7 +164,7 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
         pendingPushCount: state.pendingPushCount,
         pendingPullCount: state.pendingPullCount,
         conflictCount: state.conflictCount,
-        isOnline: state.isOnline,
+        isOnline: isOnline,
       );
 
       final syncService = await ref.read(syncServiceProvider.future);
@@ -275,7 +275,16 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
         isOnline: isOnline,
       );
     } catch (_) {
-      state = const SyncStatusData(status: SyncStatus.offline);
+      // Refresh failed (e.g. DB error) — preserve previous isOnline state
+      // instead of hardcoding false, so real connectivity isn't overridden.
+      state = SyncStatusData(
+        status: SyncStatus.offline,
+        lastSyncTime: state.lastSyncTime,
+        pendingPushCount: state.pendingPushCount,
+        pendingPullCount: state.pendingPullCount,
+        conflictCount: state.conflictCount,
+        isOnline: state.isOnline,
+      );
     }
   }
 

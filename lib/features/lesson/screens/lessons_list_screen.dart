@@ -496,6 +496,7 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
                 ),
                 data: (lessons) {
                   final filteredLessons = _applyFilters(lessons);
+                  filteredLessons.sort((a, b) => (a.weekNumber ?? 0).compareTo(b.weekNumber ?? 0));
                   final termOptions = _termFilters;
                   final classOptions = _buildFilterOptions(
                     lessons.map((lesson) => lesson.classLevel),
