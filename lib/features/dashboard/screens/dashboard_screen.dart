@@ -213,6 +213,56 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
     );
   }
 
+  void _showExamTypePopup(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.quiz_rounded),
+              title: const Text('Individual Topic Exam'),
+              subtitle: const Text('Create an exam for a single topic'),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (context.mounted) {
+                    context.push('/exams');
+                  }
+                });
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.assignment_rounded),
+              title: const Text('Full-Term Exam'),
+              subtitle: const Text('Combine multiple topics into one exam'),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (context.mounted) {
+                    context.push('/full-term-exam');
+                  }
+                });
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _greeting(String? teacherName) {
     final hour = DateTime.now().hour;
     final timeGreeting = hour < 12
@@ -330,6 +380,7 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                 ...List.generate(_navItems.length, (index) {
                   final item = _navItems[index];
                   final isActive = index == _selectedIndex;
+                  final isExamsNav = item.label == 'Exams';
                   return Padding(
                     padding: EdgeInsets.symmetric(
                       horizontal: _isSidebarOpen ? 12 : 8,
@@ -343,7 +394,9 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                         ),
                         onTap: () {
                           setState(() => _selectedIndex = index);
-                          if (item.route != null) {
+                          if (isExamsNav) {
+                            _showExamTypePopup(context);
+                          } else if (item.route != null) {
                             final route = item.route!;
                             WidgetsBinding.instance.addPostFrameCallback((_) {
                               if (context.mounted) {
@@ -1241,106 +1294,108 @@ class _LessonCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: cs.surfaceContainerLowest,
-            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-            border: Border.all(
-              color: cs.outlineVariant.withValues(alpha: 0.3),
-            ),
+      type: MaterialType.transparency,
+      child: Ink(
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+          border: Border.all(
+            color: cs.outlineVariant.withValues(alpha: 0.3),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: iconColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                    ),
-                    child: Icon(icon, color: iconColor, size: 24),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: statusBg,
-                      borderRadius: BorderRadius.circular(AppTheme.radiusDefault),
-                    ),
-                    child: Text(
-                      status.toUpperCase(),
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: statusColor,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  color: cs.primary,
-                  height: 1.2,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: cs.outline,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.only(top: 16),
-                decoration: BoxDecoration(
-                  border: Border(
-                    top: BorderSide(
-                      color: cs.outlineVariant.withValues(alpha: 0.2),
-                    ),
-                  ),
-                ),
-                child: Row(
+        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Flexible(
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: iconColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                      ),
+                      child: Icon(icon, color: iconColor, size: 24),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusBg,
+                        borderRadius: BorderRadius.circular(AppTheme.radiusDefault),
+                      ),
                       child: Text(
-                        timeAgo,
+                        status.toUpperCase(),
                         style: theme.textTheme.labelMedium?.copyWith(
-                          color: cs.onSurfaceVariant,
-                          overflow: TextOverflow.clip,
+                          color: statusColor,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      size: 20,
-                      color: cs.primary,
-                    ),
                   ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                Text(
+                  title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: cs.primary,
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: cs.outline,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.only(top: 16),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      top: BorderSide(
+                        color: cs.outlineVariant.withValues(alpha: 0.2),
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          timeAgo,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: cs.onSurfaceVariant,
+                            overflow: TextOverflow.clip,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 20,
+                        color: cs.primary,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1363,10 +1418,10 @@ class _ReaderTotalOverviewPanel extends ConsumerWidget {
     final examData = examCountAsync.asData?.value;
 
     final lessonLabel = lessonData != null
-        ? '${lessonData.total} (${lessonData.draftCount} drafts)'
+        ? '${lessonData.total} (${lessonData.secondaryCount} completed)'
         : '...';
     final examLabel = examData != null
-        ? '${examData.total} (${examData.draftCount} drafts)'
+        ? '${examData.total} (${examData.secondaryCount} unlocked)'
         : '...';
 
     return Container(
@@ -1502,10 +1557,10 @@ class _RightColumn extends ConsumerWidget {
     final examData = examCountAsync.asData?.value;
 
     final lessonCountLabel = lessonData != null
-        ? '${lessonData.total} (${lessonData.draftCount} drafts)'
+        ? '${lessonData.total} (${lessonData.secondaryCount} completed)'
         : '...';
     final examCountLabel = examData != null
-        ? '${examData.total} (${examData.draftCount} drafts)'
+        ? '${examData.total} (${examData.secondaryCount} unlocked)'
         : '...';
 
     return Column(
@@ -1626,28 +1681,42 @@ final recentLessonsProvider = FutureProvider<List<Lesson>>((ref) async {
   return db.lessonsDao.getRecentLessons(limit: 5);
 });
 
-/// Holds a total count and a draft sub-count.
+/// Holds a total count, a draft sub-count, and a secondary count (completed/unlocked).
 class _CountData {
   final int total;
   final int draftCount;
-  const _CountData({required this.total, required this.draftCount});
+  final int secondaryCount;
+  const _CountData({
+    required this.total,
+    required this.draftCount,
+    this.secondaryCount = 0,
+  });
 }
 
-/// Provider that fetches the total count of lessons and how many are drafts.
+/// Provider that fetches the total count of lessons, drafts, and completed.
 final lessonCountProvider = FutureProvider<_CountData>((ref) async {
   final db = ref.read(databaseProvider);
   final lessons = await db.lessonsDao.getAll();
   final draftCount = lessons.where((l) => l.status == 'draft').length;
-  return _CountData(total: lessons.length, draftCount: draftCount);
+  final completedCount = lessons.where((l) => l.status == 'completed').length;
+  return _CountData(
+    total: lessons.length,
+    draftCount: draftCount,
+    secondaryCount: completedCount,
+  );
 });
 
-/// Provider that fetches the total count of exams and how many are drafts.
-/// Exams have no status column; a draft exam is one that is not unlocked.
+/// Provider that fetches the total count of exams, drafts, and unlocked.
 final examCountProvider = FutureProvider<_CountData>((ref) async {
   final db = ref.read(databaseProvider);
   final exams = await db.examsDao.getAll();
   final draftCount = exams.where((e) => !e.isUnlocked).length;
-  return _CountData(total: exams.length, draftCount: draftCount);
+  final unlockedCount = exams.where((e) => e.isUnlocked).length;
+  return _CountData(
+    total: exams.length,
+    draftCount: draftCount,
+    secondaryCount: unlockedCount,
+  );
 });
 
 final todayLessonCountProvider = FutureProvider<int>((ref) async {
@@ -2161,7 +2230,7 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
         _goToLessonsDeferred(context);
         break;
       case 2:
-        context.go('/exams');
+        _showReaderExamPopup(context);
         break;
       case 3:
         context.go('/scheme-of-work');
@@ -2170,6 +2239,48 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
         context.go('/settings');
         break;
     }
+  }
+
+  void _showReaderExamPopup(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.quiz_rounded),
+              title: const Text('Individual Topic Exam'),
+              subtitle: const Text('Create an exam for a single topic'),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                context.go('/exams');
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.assignment_rounded),
+              title: const Text('Full-Term Exam'),
+              subtitle: const Text('Combine multiple topics into one exam'),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                context.push('/full-term-exam');
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
   }
 }
 

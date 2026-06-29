@@ -15,6 +15,7 @@ import 'package:classai/features/lesson/screens/lesson_editor_screen.dart';
 import 'package:classai/features/lesson/screens/lessons_list_screen.dart';
 import 'package:classai/features/exam/screens/exam_editor_screen.dart';
 import 'package:classai/features/exam/screens/exams_list_screen.dart';
+import 'package:classai/features/exam/screens/full_term_exam_screen.dart';
 import 'package:classai/features/admin/screens/admin_dashboard_screen.dart';
 import 'package:classai/features/admin/screens/teacher_detail_screen.dart';
 // import 'package:classai/features/vault/screens/vault_browser_screen.dart'; // Vault feature disabled
@@ -66,7 +67,8 @@ final appRouter = GoRouter(
         location == '/lesson-editor' ||
         location == '/exams' ||
         location.startsWith('/exams/') ||
-        location == '/exam-editor';
+        location == '/exam-editor' ||
+        location == '/full-term-exam';
     final isAdminRoute =
         location == '/admin' || location.startsWith('/admin/teachers/');
     final isPaymentRoute = location == '/payment';
@@ -198,6 +200,11 @@ final appRouter = GoRouter(
       path: '/insufficient-credit',
       name: 'insufficient-credit',
       builder: (context, state) => const InsufficientCreditScreen(),
+    ),
+    _route(
+      path: '/full-term-exam',
+      name: 'full-term-exam',
+      builder: (context, state) => const FullTermExamScreen(),
     ),
     _route(
       path: '/scheme-of-work',
