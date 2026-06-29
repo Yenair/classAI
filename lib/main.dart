@@ -18,6 +18,7 @@ import 'features/auth/screens/signup_screen.dart';
 import 'features/auth/screens/admin_recovery_screen.dart';
 import 'features/auth/screens/teacher_recovery_dialog.dart';
 import 'features/settings/providers/theme_provider.dart';
+import 'core/providers/config_provider.dart';
 import 'router/app_router.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -249,6 +250,9 @@ class _DatabaseBootstrapperState extends State<DatabaseBootstrapper> {
             authServiceProvider.overrideWithValue(SupabaseAuthService()),
           ],
         );
+        // Wire ConfigService into the DAO so daily limits read remote config.
+        db.securityConfigDao
+            .setConfigService(_overrideContainer!.read(configServiceProvider));
         return UncontrolledProviderScope(
           container: _overrideContainer!,
           child: const _RootKeyboardListener(

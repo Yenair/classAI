@@ -164,7 +164,7 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
     if (limits != null && limits[tier] is int) {
       return limits[tier] as int;
     }
-    const defaults = {'free': 10, 'basic': 10, 'standard': 10, 'elite': -1};
+    const defaults = {'free': 0, 'basic': 10, 'standard': 10, 'elite': -1};
     return defaults[tier] ?? 10;
   }
 
