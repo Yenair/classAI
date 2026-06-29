@@ -93,6 +93,9 @@ class _RootKeyboardListener extends StatefulWidget {
 }
 
 class _RootKeyboardListenerState extends State<_RootKeyboardListener> {
+  /// Guards against showing multiple quit dialogs on repeated ESC presses.
+  bool _quitDialogShowing = false;
+
   @override
   void initState() {
     super.initState();
@@ -102,6 +105,7 @@ class _RootKeyboardListenerState extends State<_RootKeyboardListener> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handleKey);
+    _quitDialogShowing = false;
     super.dispose();
   }
 
@@ -120,13 +124,42 @@ class _RootKeyboardListenerState extends State<_RootKeyboardListener> {
         return;
       }
 
-      // If the navigator cannot pop, attempt to close any open modal
-      // (dialog, bottom sheet, etc.) using the listener's own context.
-      if (mounted && Navigator.canPop(context)) {
-        Navigator.of(context).maybePop();
+      // Nothing to pop — show the quit confirmation dialog (ESC on the
+      // dashboard home or any route that cannot be popped further).
+      if (mounted && !_quitDialogShowing) {
+        _showQuitConfirmation(context);
       }
     });
     return true;
+  }
+
+  void _showQuitConfirmation(BuildContext ctx) {
+    _quitDialogShowing = true;
+    showDialog<void>(
+      context: ctx,
+      barrierDismissible: true,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Quit ClassAI?'),
+        content: const Text('Are you sure you want to quit the app?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              SystemNavigator.pop();
+            },
+            child: const Text('Quit'),
+          ),
+        ],
+      ),
+    ).then((_) {
+      // Reset the guard regardless of how the dialog was dismissed
+      // (Cancel, Quit, ESC, tap outside, system back).
+      _quitDialogShowing = false;
+    });
   }
 
   @override

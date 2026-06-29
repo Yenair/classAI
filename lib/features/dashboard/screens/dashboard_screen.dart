@@ -41,25 +41,30 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   /// Shows a confirmation dialog when the system back button is pressed on the
   /// home route (`/`). If the user confirms, the app is closed.
+  ///
+  /// ESC (desktop) and system back (Android) while the dialog is open will
+  /// dismiss the dialog instead of quitting, because the dialog sits on top of
+  /// the navigator stack and gets popped first.
   void _onBackPressed(bool didPop) {
     if (didPop) return;
-    showDialog<bool>(
+    showDialog<void>(
       context: context,
+      barrierDismissible: true,
       builder: (ctx) => AlertDialog(
         backgroundColor: Theme.of(context).colorScheme.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
         ),
-        title: const Text('Quit App'),
+        title: const Text('Quit ClassAI?'),
         content: const Text('Are you sure you want to quit the app?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
+            onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: () {
-              Navigator.of(ctx).pop(true);
+              Navigator.of(ctx).pop();
               SystemNavigator.pop();
             },
             child: const Text('Quit'),
@@ -1778,7 +1783,7 @@ final currentWeekProgressProvider =
       .map((lesson) => lesson.weekNumber ?? lesson.week)
       .reduce((a, b) => a > b ? a : b);
 
-  final schemes = await db.schemeOfWorkDao.getApproved();
+  final schemes = await db.schemeOfWorkDao.getSaved();
   final matchingSchemes = schemes
       .where((scheme) => scheme.teacherId == teacherId)
       .toList()
