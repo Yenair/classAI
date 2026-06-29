@@ -741,7 +741,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 }
               },
               icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Sync Now'),
+              label: const Text('Check Sync Status'),
             ),
           ),
         ],

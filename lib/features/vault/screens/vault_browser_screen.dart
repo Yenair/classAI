@@ -2,23 +2,14 @@
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/main.dart' show databaseProvider;
 import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/widgets/conflict_banner.dart';
 import 'package:classai/core/widgets/sync_indicator.dart';
 import 'package:classai/core/widgets/credit_counter.dart';
-import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
 import 'package:classai/features/vault/screens/vault_item_detail_screen.dart';
-
-void _goToLessonsDeferred(BuildContext context) {
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    if (!context.mounted) return;
-    context.push('/lessons');
-  });
-}
 
 /// Vault browser screen showing approved items in a searchable grid.
 ///
@@ -113,382 +104,79 @@ class _VaultBrowserScreenState extends ConsumerState<VaultBrowserScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isDesktop = screenWidth >= 768;
-    final authData = ref.watch(authProvider);
-    final teacherName = authData.currentTeacher?.teacherName ?? 'Educator Profile';
-    final teacherInitials = _getInitials(teacherName);
 
     return Scaffold(
       backgroundColor: cs.surface,
-      body: SafeArea(
-        child: Row(
-          children: [
-            // -------------------------------------------------------
-            // Navigation Drawer (Tablet/Desktop)
-            // -------------------------------------------------------
-            if (isDesktop)
-              _NavDrawer(cs: cs, tt: tt, teacherName: teacherName, teacherInitials: teacherInitials),
-
-            // -------------------------------------------------------
-            // Main Content Area
-            // -------------------------------------------------------
-            Expanded(
-              child: Column(
-                children: [
-                  // TopAppBar (Mobile only)
-                  if (!isDesktop)
-                    _MobileHeader(cs: cs, tt: tt, ref: ref, teacherName: teacherName, teacherInitials: teacherInitials),
-
-                  // Conflict Banner
-                  const ConflictBanner(),
-
-                  // Scrollable main canvas
-                  Expanded(
-                    child: _loading
-                        ? const Center(child: CircularProgressIndicator())
-                        : _errorMessage != null
-                            ? _ErrorState(
-                                cs: cs,
-                                tt: tt,
-                                errorMessage: _errorMessage!,
-                                onRetry: _loadItems,
-                              )
-                            : _items.isEmpty
-                                ? _EmptyState(cs: cs, tt: tt)
-                                : _VaultContent(
-                                    cs: cs,
-                                    tt: tt,
-                                    items: _items,
-                                    searchQuery: _searchQuery,
-                                    filterSubject: _filterSubject,
-                                    filterClassLevel: _filterClassLevel,
-                                    filterCurriculum: _filterCurriculum,
-                                    sortBy: _sortBy,
-                                    onSearchChanged: (q) =>
-                                        setState(() => _searchQuery = q),
-                                    onFilterSubjectChanged: (v) => setState(
-                                        () => _filterSubject = v),
-                                    onFilterClassLevelChanged: (v) =>
-                                        setState(
-                                            () => _filterClassLevel = v),
-                                    onFilterCurriculumChanged: (v) =>
-                                        setState(
-                                            () => _filterCurriculum = v),
-                                    onSortChanged: (v) {
-                                      setState(() => _sortBy = v);
-                                      _loadItems();
-                                    },
-                                    onApplyFilters: _loadItems,
-                                    subjectOptions: _subjectOptions,
-                                    classLevelOptions: _classLevelOptions,
-                                    curriculumOptions: _curriculumOptions,
-                                    onOpenDetail: _openDetail,
-                                    getInitials: _getInitials,
-                                  ),
-                  ),
-
-                  // BottomNavBar (Mobile only)
-                  if (!isDesktop)
-                    _BottomNav(cs: cs, tt: tt),
-                ],
-              ),
-            ),
-          ],
+      appBar: AppBar(
+        leading: IconButton(
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.arrow_back_rounded),
+          tooltip: 'Back',
         ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Navigation Drawer (Tablet/Desktop)
-// ---------------------------------------------------------------------------
-class _NavDrawer extends StatelessWidget {
-  final ColorScheme cs;
-  final TextTheme tt;
-  final String teacherName;
-  final String teacherInitials;
-
-  const _NavDrawer({
-    required this.cs,
-    required this.tt,
-    required this.teacherName,
-    required this.teacherInitials,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 288,
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        border: Border(
-          right: BorderSide(
-            color: cs.outlineVariant.withValues(alpha: 0.3),
+        title: Text(
+          'Resource Vault',
+          style: tt.titleLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.12,
           ),
         ),
-      ),
-      child: Column(
-        children: [
-          const SizedBox(height: 24),
-          // Branding
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'ClassAI',
-                  style: tt.headlineLarge?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    color: cs.primary,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Nigerian Academic Partner',
-                  style: tt.bodyMedium?.copyWith(
-                    color: cs.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 32),
-          // Nav items
-          Expanded(
-            child: Column(
-              children: [
-                _navItem(
-                  cs: cs,
-                  tt: tt,
-                  icon: Icons.home_outlined,
-                  label: 'Home',
-                  isActive: false,
-                  onTap: () => context.go('/'),
-                ),
-                _navItem(
-                  cs: cs,
-                  tt: tt,
-                  icon: Icons.menu_book_rounded,
-                  label: 'Lessons',
-                  isActive: false,
-                  onTap: () => _goToLessonsDeferred(context),
-                ),
-                _navItem(
-                  cs: cs,
-                  tt: tt,
-                  icon: Icons.quiz_outlined,
-                  label: 'Exams',
-                  isActive: false,
-                  onTap: () => context.push('/exams'),
-                ),
-                _navItem(
-                  cs: cs,
-                  tt: tt,
-                  icon: Icons.inventory_2_rounded,
-                  label: 'Vault',
-                  isActive: true,
-                  onTap: () {},
-                ),
-                _navItem(
-                  cs: cs,
-                  tt: tt,
-                  icon: Icons.admin_panel_settings_outlined,
-                  label: 'Admin',
-                  isActive: false,
-                  onTap: () => context.go('/admin'),
-                ),
-              ],
-            ),
-          ),
-          // Profile footer
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            margin: const EdgeInsets.only(top: 16),
-            child: Column(
-              children: [
-                const Divider(height: 1),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: cs.primaryContainer,
-                        borderRadius:
-                            BorderRadius.circular(AppTheme.radiusFull),
-                      ),
-                      child: Center(
-                        child: Text(
-                          teacherInitials,
-                          style: tt.bodyLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: cs.onPrimary,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            teacherName,
-                            style: tt.labelLarge?.copyWith(
-                              color: cs.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: cs.primary,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Synced',
-                                style: tt.labelMedium?.copyWith(
-                                  color: cs.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _navItem({
-    required ColorScheme cs,
-    required TextTheme tt,
-    required IconData icon,
-    required String label,
-    required bool isActive,
-    required VoidCallback onTap,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Container(
-        height: AppTheme.touchTarget,
-        margin: const EdgeInsets.symmetric(vertical: 2),
-        decoration: BoxDecoration(
-          color: isActive ? cs.secondaryFixed : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-        ),
-        transform: isActive ? Matrix4.translationValues(4.0, 0.0, 0.0) : null,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Icon(
-                  icon,
-                  size: 22,
-                  color: isActive
-                      ? cs.onSecondaryFixed
-                      : cs.onSurfaceVariant,
-                ),
-                const SizedBox(width: 16),
-                Text(
-                  label,
-                  style: tt.labelLarge?.copyWith(
-                    color: isActive
-                        ? cs.onSecondaryFixed
-                        : cs.onSurfaceVariant,
-                    fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Mobile Header
-// ---------------------------------------------------------------------------
-class _MobileHeader extends StatelessWidget {
-  final ColorScheme cs;
-  final TextTheme tt;
-  final WidgetRef ref;
-  final String teacherName;
-  final String teacherInitials;
-
-  const _MobileHeader({
-    required this.cs,
-    required this.tt,
-    required this.ref,
-    required this.teacherName,
-    required this.teacherInitials,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: AppTheme.spacingMarginMobile),
-      decoration: BoxDecoration(
-        color: cs.surface,
-        border: Border(
-          bottom: BorderSide(
-            color: cs.outlineVariant.withValues(alpha: 0.3),
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          // Avatar placeholder
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: cs.primaryContainer,
-              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-            ),
-            child: Center(
-              child: Text(
-                teacherInitials,
-                style: tt.labelMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: cs.onPrimary,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            'ClassAI',
-            style: tt.headlineLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const Spacer(),
+        actions: [
           const SyncIndicator(),
           const SizedBox(width: 8),
           CreditCounter(visible: ref.watch(isOfflineProvider)),
+          const SizedBox(width: 8),
+        ],
+        elevation: 0,
+        backgroundColor: cs.surface,
+        foregroundColor: cs.onSurface,
+        surfaceTintColor: cs.surface,
+      ),
+      body: Column(
+        children: [
+          const ConflictBanner(),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _errorMessage != null
+                    ? _ErrorState(
+                        cs: cs,
+                        tt: tt,
+                        errorMessage: _errorMessage!,
+                        onRetry: _loadItems,
+                      )
+                    : _items.isEmpty
+                        ? _EmptyState(cs: cs, tt: tt)
+                        : _VaultContent(
+                            cs: cs,
+                            tt: tt,
+                            items: _items,
+                            searchQuery: _searchQuery,
+                            filterSubject: _filterSubject,
+                            filterClassLevel: _filterClassLevel,
+                            filterCurriculum: _filterCurriculum,
+                            sortBy: _sortBy,
+                            onSearchChanged: (q) =>
+                                setState(() => _searchQuery = q),
+                            onFilterSubjectChanged: (v) => setState(
+                                () => _filterSubject = v),
+                            onFilterClassLevelChanged: (v) =>
+                                setState(
+                                    () => _filterClassLevel = v),
+                            onFilterCurriculumChanged: (v) =>
+                                setState(
+                                    () => _filterCurriculum = v),
+                            onSortChanged: (v) {
+                              setState(() => _sortBy = v);
+                              _loadItems();
+                            },
+                            onApplyFilters: _loadItems,
+                            subjectOptions: _subjectOptions,
+                            classLevelOptions: _classLevelOptions,
+                            curriculumOptions: _curriculumOptions,
+                            onOpenDetail: _openDetail,
+                            getInitials: _getInitials,
+                          ),
+          ),
         ],
       ),
     );
@@ -1548,138 +1236,6 @@ class _ThumbnailPlaceholder extends StatelessWidget {
             color: cs.primary.withValues(alpha: 0.2),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Bottom Navigation (Mobile)
-// ---------------------------------------------------------------------------
-class _BottomNav extends StatelessWidget {
-  final ColorScheme cs;
-  final TextTheme tt;
-
-  const _BottomNav({required this.cs, required this.tt});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 80,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        border: Border(
-          top: BorderSide(
-            color: cs.outlineVariant.withValues(alpha: 0.2),
-          ),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _bottomItem(
-            cs: cs,
-            tt: tt,
-            icon: Icons.home_outlined,
-            label: 'Home',
-            isActive: false,
-            onTap: () => context.go('/'),
-          ),
-          _bottomItem(
-            cs: cs,
-            tt: tt,
-            icon: Icons.menu_book_rounded,
-            label: 'Lessons',
-            isActive: false,
-            onTap: () => _goToLessonsDeferred(context),
-          ),
-          _bottomItem(
-            cs: cs,
-            tt: tt,
-            icon: Icons.quiz_outlined,
-            label: 'Exams',
-            isActive: false,
-            onTap: () => context.push('/exams'),
-          ),
-          _bottomItem(
-            cs: cs,
-            tt: tt,
-            icon: Icons.inventory_2_rounded,
-            label: 'Vault',
-            isActive: true,
-            onTap: () {},
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _bottomItem({
-    required ColorScheme cs,
-    required TextTheme tt,
-    required IconData icon,
-    required String label,
-    required bool isActive,
-    required VoidCallback onTap,
-  }) {
-    if (isActive) {
-      return Container(
-        width: 80,
-        height: 64,
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        decoration: BoxDecoration(
-          color: cs.secondaryContainer,
-          borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-        ),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 22,
-                color: cs.onSecondaryContainer,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                style: tt.labelMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: cs.onSecondaryContainer,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return SizedBox(
-      width: 64,
-      height: 64,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 22,
-              color: cs.onSurfaceVariant,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: tt.labelMedium?.copyWith(
-                color: cs.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

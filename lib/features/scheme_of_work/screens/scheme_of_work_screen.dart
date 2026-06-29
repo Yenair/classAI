@@ -709,28 +709,30 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
         backgroundColor: cs.surface,
         foregroundColor: cs.onSurface,
       ),
-      body: SingleChildScrollView(
+      body: SafeArea(
+        child: SingleChildScrollView(
 
-        physics: (Platform.isAndroid || Platform.isIOS)
-            ? const BouncingScrollPhysics()
-            : null,
-        padding: const EdgeInsets.all(16),
-        child: isWide
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: _buildConfigColumn(theme, cs)),
-                  const SizedBox(width: 24),
-                  Expanded(child: _buildPreviewColumn(theme, cs)),
-                ],
-              )
-            : Column(
-                children: [
-                  _buildConfigColumn(theme, cs),
-                  const SizedBox(height: 24),
-                  _buildPreviewColumn(theme, cs),
-                ],
-              ),
+          physics: (Platform.isAndroid || Platform.isIOS)
+              ? const BouncingScrollPhysics()
+              : null,
+          padding: const EdgeInsets.all(16),
+          child: isWide
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _buildConfigColumn(theme, cs)),
+                    const SizedBox(width: 24),
+                    Expanded(child: _buildPreviewColumn(theme, cs)),
+                  ],
+                )
+              : Column(
+                  children: [
+                    _buildConfigColumn(theme, cs),
+                    const SizedBox(height: 24),
+                    _buildPreviewColumn(theme, cs),
+                  ],
+                ),
+        ),
       ),
     );
   }

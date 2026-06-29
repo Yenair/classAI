@@ -663,14 +663,6 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
 
                             const SizedBox(height: 24),
 
-                            // ── Today at a Glance ──────────────────────
-
-                            const SizedBox(height: 24),
-
-                            // ── Resume Last Lesson ─────────────────────
-
-                            const SizedBox(height: 32),
-
                             // Bento Grid
                             LayoutBuilder(
                               builder: (context, constraints) {
@@ -1131,7 +1123,7 @@ class _RecentLessonsSection extends ConsumerWidget {
                                         : lesson.subject,
                                     subtitle:
                                         '${lesson.classLevel} • ${lesson.subject}',
-                                    status: lesson.difficulty,
+                                    status: lesson.status == 'completed' ? 'Completed' : 'Draft',
                                       statusColor: cs.primary,
                                       statusBg: cs.primary.withValues(alpha: 0.1),
                                       timeAgo: 'Updated ${_timeAgo(lesson.updatedAt)}',
@@ -1162,7 +1154,7 @@ class _RecentLessonsSection extends ConsumerWidget {
                                           : lesson.subject,
                                       subtitle:
                                           '${lesson.classLevel} • ${lesson.subject}',
-                                      status: lesson.difficulty,
+                                      status: lesson.status == 'completed' ? 'Completed' : 'Draft',
                                       statusColor: cs.onSurfaceVariant,
                                       statusBg: cs.surfaceContainerHighest,
                                       timeAgo:
@@ -1193,7 +1185,7 @@ class _RecentLessonsSection extends ConsumerWidget {
                                   : lesson.subject,
                               subtitle:
                                   '${lesson.classLevel} • ${lesson.subject}',
-                              status: lesson.difficulty,
+                              status: lesson.status == 'completed' ? 'Completed' : 'Draft',
                               statusColor: cs.primary,
                               statusBg: cs.primary.withValues(alpha: 0.1),
                               timeAgo: 'Updated ${_timeAgo(lesson.updatedAt)}',
@@ -1371,8 +1363,15 @@ class _ReaderTotalOverviewPanel extends ConsumerWidget {
     final examCountAsync = ref.watch(examCountProvider);
     final conflictCount = ref.watch(unresolvedConflictsProvider);
 
-    final lessonCount = lessonCountAsync.asData?.value ?? 0;
-    final examCount = examCountAsync.asData?.value ?? 0;
+    final lessonData = lessonCountAsync.asData?.value;
+    final examData = examCountAsync.asData?.value;
+
+    final lessonLabel = lessonData != null
+        ? '${lessonData.total} (${lessonData.draftCount} drafts)'
+        : '...';
+    final examLabel = examData != null
+        ? '${examData.total} (${examData.draftCount} drafts)'
+        : '...';
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1405,7 +1404,7 @@ class _ReaderTotalOverviewPanel extends ConsumerWidget {
           _OverviewStatRow(
             icon: Icons.menu_book,
             label: 'Lessons',
-            value: lessonCountAsync.isLoading ? '...' : '$lessonCount',
+            value: lessonCountAsync.isLoading ? '...' : lessonLabel,
             cs: cs,
             theme: theme,
           ),
@@ -1415,7 +1414,7 @@ class _ReaderTotalOverviewPanel extends ConsumerWidget {
           _OverviewStatRow(
             icon: Icons.quiz,
             label: 'Exams',
-            value: examCountAsync.isLoading ? '...' : '$examCount',
+            value: examCountAsync.isLoading ? '...' : examLabel,
             cs: cs,
             theme: theme,
           ),
@@ -1503,8 +1502,15 @@ class _RightColumn extends ConsumerWidget {
     final examCountAsync = ref.watch(examCountProvider);
     final conflictCount = ref.watch(unresolvedConflictsProvider);
 
-    final lessonCount = lessonCountAsync.asData?.value ?? 0;
-    final examCount = examCountAsync.asData?.value ?? 0;
+    final lessonData = lessonCountAsync.asData?.value;
+    final examData = examCountAsync.asData?.value;
+
+    final lessonCountLabel = lessonData != null
+        ? '${lessonData.total} (${lessonData.draftCount} drafts)'
+        : '...';
+    final examCountLabel = examData != null
+        ? '${examData.total} (${examData.draftCount} drafts)'
+        : '...';
 
     return Column(
       children: [
@@ -1551,7 +1557,7 @@ class _RightColumn extends ConsumerWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          lessonCountAsync.isLoading ? '...' : '$lessonCount',
+                          lessonCountAsync.isLoading ? '...' : lessonCountLabel,
                           style: theme.textTheme.headlineMedium?.copyWith(
                             color: cs.onPrimary,
                           ),
@@ -1579,7 +1585,7 @@ class _RightColumn extends ConsumerWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        examCountAsync.isLoading ? '...' : '$examCount',
+                        examCountAsync.isLoading ? '...' : examCountLabel,
                         style: theme.textTheme.headlineMedium?.copyWith(
                           color: cs.onPrimary,
                         ),
@@ -1624,18 +1630,28 @@ final recentLessonsProvider = FutureProvider<List<Lesson>>((ref) async {
   return db.lessonsDao.getRecentLessons(limit: 5);
 });
 
-/// Provider that fetches the total count of lessons.
-final lessonCountProvider = FutureProvider<int>((ref) async {
+/// Holds a total count and a draft sub-count.
+class _CountData {
+  final int total;
+  final int draftCount;
+  const _CountData({required this.total, required this.draftCount});
+}
+
+/// Provider that fetches the total count of lessons and how many are drafts.
+final lessonCountProvider = FutureProvider<_CountData>((ref) async {
   final db = ref.read(databaseProvider);
   final lessons = await db.lessonsDao.getAll();
-  return lessons.length;
+  final draftCount = lessons.where((l) => l.status == 'draft').length;
+  return _CountData(total: lessons.length, draftCount: draftCount);
 });
 
-/// Provider that fetches the total count of exams.
-final examCountProvider = FutureProvider<int>((ref) async {
+/// Provider that fetches the total count of exams and how many are drafts.
+/// Exams have no status column; a draft exam is one that is not unlocked.
+final examCountProvider = FutureProvider<_CountData>((ref) async {
   final db = ref.read(databaseProvider);
   final exams = await db.examsDao.getAll();
-  return exams.length;
+  final draftCount = exams.where((e) => !e.isUnlocked).length;
+  return _CountData(total: exams.length, draftCount: draftCount);
 });
 
 final todayLessonCountProvider = FutureProvider<int>((ref) async {

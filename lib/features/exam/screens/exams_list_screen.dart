@@ -14,6 +14,7 @@ import 'package:classai/main.dart' show databaseProvider;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Provider that fetches all exams from the database.
 final examsListProvider = FutureProvider<List<Exam>>((ref) async {
@@ -47,14 +48,27 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
   bool _schemeDraftsBootstrapped = false;
   final Map<int, SchemeOfWorkData> _schemesById = {};
 
+  static const _prefPrefix = 'exams_filter_';
+
   @override
   void initState() {
     super.initState();
+    _loadFilterPreferences();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(syncStatusProvider.notifier).refresh();
       ref.read(creditStateProvider.notifier).refresh();
       ref.read(unresolvedConflictsProvider.notifier).refresh();
       _bootstrapSchemeDrafts();
+    });
+  }
+
+  Future<void> _loadFilterPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _selectedStatusFilter = prefs.getString('${_prefPrefix}status') ?? 'All';
+      _selectedTermFilter = prefs.getString('${_prefPrefix}term') ?? 'All';
+      _selectedClassFilter = prefs.getString('${_prefPrefix}class') ?? 'All';
+      _selectedSubjectFilter = prefs.getString('${_prefPrefix}subject') ?? 'All';
     });
   }
 
@@ -230,18 +244,30 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
 
   void _setStatusFilter(String filter) {
     setState(() => _selectedStatusFilter = filter);
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('${_prefPrefix}status', filter);
+    });
   }
 
   void _setTermFilter(String filter) {
     setState(() => _selectedTermFilter = filter);
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('${_prefPrefix}term', filter);
+    });
   }
 
   void _setClassFilter(String filter) {
     setState(() => _selectedClassFilter = filter);
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('${_prefPrefix}class', filter);
+    });
   }
 
   void _setSubjectFilter(String filter) {
     setState(() => _selectedSubjectFilter = filter);
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('${_prefPrefix}subject', filter);
+    });
   }
 
   List<String> _buildFilterOptions(Iterable<String> values) {
@@ -375,6 +401,58 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
         term: term,
       ),
     );
+  }
+
+  Future<void> _confirmDeleteExam(Exam exam) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Exam'),
+        content: Text('Are you sure you want to delete "${exam.topic}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Theme.of(ctx).colorScheme.onError,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        final db = ref.read(databaseProvider);
+        await db.examsDao.deleteExam(exam.id);
+        await db.syncQueueDao.insertEntry(
+          queueTable: 'exams',
+          recordLocalId: exam.id,
+          operation: 'DELETE',
+          payload: {
+            'id': exam.id,
+            if (exam.serverId != null) 'server_id': exam.serverId,
+          },
+        );
+        ref.invalidate(examsListProvider);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Exam deleted')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to delete: $e')),
+          );
+        }
+      }
+    }
   }
 
   @override
@@ -632,6 +710,8 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
                                 exam: exam,
                                 classLevelLabel: _classLevelLabelForExam(exam),
                                 onTap: () => context.push('/exams/${exam.id}'),
+                                onEdit: () => context.push('/exams/${exam.id}'),
+                                onDelete: () => _confirmDeleteExam(exam),
                               ),
                             );
                           },
@@ -873,11 +953,15 @@ class _ExamCard extends StatelessWidget {
   final Exam exam;
   final String classLevelLabel;
   final VoidCallback onTap;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   const _ExamCard({
     required this.exam,
     required this.classLevelLabel,
     required this.onTap,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   @override
@@ -969,12 +1053,44 @@ class _ExamCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Text(
-              _formatDate(exam.createdAt),
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: cs.onSurfaceVariant.withValues(alpha: 0.7),
-                letterSpacing: 0.2,
-              ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  _formatDate(exam.createdAt),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.edit_rounded, size: 20, color: cs.primary),
+                      onPressed: onEdit,
+                      tooltip: 'Edit',
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        Icons.delete_outline_rounded,
+                        size: 20,
+                        color: cs.error,
+                      ),
+                      onPressed: onDelete,
+                      tooltip: 'Delete',
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                    ),
+                  ],
+                ),
+              ],
             ),
             const SizedBox(width: 4),
             Icon(

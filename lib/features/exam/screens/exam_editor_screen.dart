@@ -51,6 +51,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   bool _isRegenerating = false;
   bool _hasGenerated = false;
   bool _isUnlocked = false;
+  bool _isOnline = true;
   int? _examId;
   bool _editorSidebarOpen = true;
   int _creditBalance = 3;
@@ -129,6 +130,12 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   @override
   void initState() {
     super.initState();
+    _checkConnectivity();
+  }
+
+  Future<void> _checkConnectivity() async {
+    final online = await PlatformHelper.isOnline();
+    if (mounted) setState(() => _isOnline = online);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _registerWithEmergencyFlush();
       _loadCreditBalance();
@@ -1329,6 +1336,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                         theme: theme,
                                         hasGenerated: _hasGenerated,
                                         isUnlocked: _isUnlocked,
+                                        isOnline: _isOnline,
                                         mcqs: _mcqs,
                                         theoryQuestions: _theoryQuestions,
                                         subjectiveQuestions: _subjectiveQuestions,
@@ -1407,6 +1415,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                       theme: theme,
                                       hasGenerated: _hasGenerated,
                                       isUnlocked: _isUnlocked,
+                                      isOnline: _isOnline,
                                       mcqs: _mcqs,
                                       theoryQuestions: _theoryQuestions,
                                       subjectiveQuestions: _subjectiveQuestions,
@@ -2378,6 +2387,7 @@ class _PreviewPanel extends StatelessWidget {
   final ThemeData theme;
   final bool hasGenerated;
   final bool isUnlocked;
+  final bool isOnline;
   final List<Map<String, dynamic>> mcqs;
   final List<Map<String, dynamic>> theoryQuestions;
   final List<Map<String, dynamic>> subjectiveQuestions;
@@ -2395,6 +2405,7 @@ class _PreviewPanel extends StatelessWidget {
     required this.theme,
     required this.hasGenerated,
     required this.isUnlocked,
+    required this.isOnline,
     required this.mcqs,
     required this.theoryQuestions,
     required this.subjectiveQuestions,
@@ -2560,7 +2571,7 @@ class _PreviewPanel extends StatelessWidget {
                           ),
                         ),
                         icon: const Icon(Icons.lock_open_rounded),
-                        label: const Text('Unlock for 1 Credit'),
+                        label: Text(isOnline ? 'Unlock for 1 Credit' : 'Unlock Offline'),
                       ),
                     ),
                   ],

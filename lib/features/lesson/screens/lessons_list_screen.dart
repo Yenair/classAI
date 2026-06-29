@@ -14,6 +14,7 @@ import 'package:classai/main.dart' show databaseProvider;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Provider that fetches all lessons from the database.
 final lessonsListProvider = FutureProvider<List<Lesson>>((ref) async {
@@ -47,14 +48,27 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
   bool _schemeDraftsBootstrapped = false;
   final Map<int, SchemeOfWorkData> _schemesById = {};
 
+  static const _prefPrefix = 'lessons_filter_';
+
   @override
   void initState() {
     super.initState();
+    _loadFilterPreferences();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(syncStatusProvider.notifier).refresh();
       ref.read(creditStateProvider.notifier).refresh();
       ref.read(unresolvedConflictsProvider.notifier).refresh();
       _bootstrapSchemeDrafts();
+    });
+  }
+
+  Future<void> _loadFilterPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _selectedStatusFilter = prefs.getString('${_prefPrefix}status') ?? 'All';
+      _selectedTermFilter = prefs.getString('${_prefPrefix}term') ?? 'All';
+      _selectedClassFilter = prefs.getString('${_prefPrefix}class') ?? 'All';
+      _selectedSubjectFilter = prefs.getString('${_prefPrefix}subject') ?? 'All';
     });
   }
 
@@ -235,18 +249,30 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
 
   void _setStatusFilter(String filter) {
     setState(() => _selectedStatusFilter = filter);
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('${_prefPrefix}status', filter);
+    });
   }
 
   void _setTermFilter(String filter) {
     setState(() => _selectedTermFilter = filter);
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('${_prefPrefix}term', filter);
+    });
   }
 
   void _setClassFilter(String filter) {
     setState(() => _selectedClassFilter = filter);
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('${_prefPrefix}class', filter);
+    });
   }
 
   void _setSubjectFilter(String filter) {
     setState(() => _selectedSubjectFilter = filter);
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('${_prefPrefix}subject', filter);
+    });
   }
 
   List<String> _buildFilterOptions(Iterable<String> values) {

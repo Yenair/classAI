@@ -32,6 +32,7 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
   final _classLevelCtrl = TextEditingController();
   final _curriculumCtrl = TextEditingController();
   final _contentCtrl = TextEditingController();
+  final _contentFocusNode = FocusNode();
   final _thumbnailUrlCtrl = TextEditingController();
 
   int _creditCost = 0;
@@ -108,6 +109,7 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
     _classLevelCtrl.dispose();
     _curriculumCtrl.dispose();
     _contentCtrl.dispose();
+    _contentFocusNode.dispose();
     _thumbnailUrlCtrl.dispose();
     super.dispose();
   }
@@ -330,6 +332,7 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
                               classLevelCtrl: _classLevelCtrl,
                               curriculumCtrl: _curriculumCtrl,
                               contentCtrl: _contentCtrl,
+                              contentFocusNode: _contentFocusNode,
                               thumbnailUrlCtrl: _thumbnailUrlCtrl,
                               creditCost: _creditCost,
                               submitting: _submitting,
@@ -372,6 +375,7 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
                             classLevelCtrl: _classLevelCtrl,
                             curriculumCtrl: _curriculumCtrl,
                             contentCtrl: _contentCtrl,
+                            contentFocusNode: _contentFocusNode,
                             thumbnailUrlCtrl: _thumbnailUrlCtrl,
                             creditCost: _creditCost,
                             submitting: _submitting,
@@ -760,6 +764,7 @@ class _FormContent extends StatelessWidget {
   final TextEditingController classLevelCtrl;
   final TextEditingController curriculumCtrl;
   final TextEditingController contentCtrl;
+  final FocusNode contentFocusNode;
   final TextEditingController thumbnailUrlCtrl;
   final int creditCost;
   final bool submitting;
@@ -777,6 +782,7 @@ class _FormContent extends StatelessWidget {
     required this.tt,
     required this.formKey,
     required this.titleCtrl,
+    required this.contentFocusNode,
     required this.descriptionCtrl,
     required this.subjectCtrl,
     required this.classLevelCtrl,
@@ -878,9 +884,7 @@ class _FormContent extends StatelessWidget {
             _FieldLabel(text: 'Resource Content', tt: tt),
             const SizedBox(height: 4),
             GestureDetector(
-              onTap: () {
-                // Focus the content field when tapping the upload area
-              },
+              onTap: () => FocusScope.of(context).requestFocus(contentFocusNode),
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(32),
@@ -1274,7 +1278,7 @@ class _RecentSubmissionsPanel extends StatelessWidget {
                 const SizedBox(width: 8),
                 Flexible(
                   child: Text(
-                    'EmergencyFlushService: Background Sync Active',
+                    'Auto\u2011save active \u2014 submissions sync in the background',
                     style: tt.labelMedium?.copyWith(
                       color: cs.outline,
                       fontWeight: FontWeight.w500,

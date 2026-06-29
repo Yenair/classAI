@@ -59,6 +59,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   int _previewRevision = 0;
   final _reviewController = TextEditingController();
   bool _isUnlocked = false;
+  bool _isOnline = true;
   bool _editorSidebarOpen = true;
   int _creditBalance = 0;
   String? _encryptedContent;
@@ -128,6 +129,12 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   void initState() {
     super.initState();
     _lessonId = widget.lessonId;
+    _checkConnectivity();
+  }
+
+  Future<void> _checkConnectivity() async {
+    final online = await PlatformHelper.isOnline();
+    if (mounted) setState(() => _isOnline = online);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _registerWithEmergencyFlush();
       _loadCreditBalance();
@@ -1179,6 +1186,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                               theme: theme,
                                               hasGenerated: _hasGenerated,
                                               isUnlocked: _isUnlocked,
+                                              isOnline: _isOnline,
                                               isRegenerating: _isRegenerating,
                                               objectivesText: _objectivesText,
                                               vocabularyText: _vocabularyText,
@@ -1276,6 +1284,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                             theme: theme,
                                             hasGenerated: _hasGenerated,
                                             isUnlocked: _isUnlocked,
+                                            isOnline: _isOnline,
                                             isRegenerating: _isRegenerating,
                                             objectivesText: _objectivesText,
                                             vocabularyText: _vocabularyText,
@@ -2125,6 +2134,7 @@ class _PreviewColumn extends StatelessWidget {
   final ThemeData theme;
   final bool hasGenerated;
   final bool isUnlocked;
+  final bool isOnline;
   final bool isRegenerating;
   final String objectivesText;
   final String vocabularyText;
@@ -2152,6 +2162,7 @@ class _PreviewColumn extends StatelessWidget {
     required this.theme,
     required this.hasGenerated,
     required this.isUnlocked,
+    required this.isOnline,
     this.isRegenerating = false,
     required this.objectivesText,
     required this.vocabularyText,
@@ -2336,7 +2347,7 @@ class _PreviewColumn extends StatelessWidget {
                           ),
                         ),
                         icon: const Icon(Icons.lock_open_rounded),
-                        label: const Text('Unlock for 1 Credit'),
+                        label: Text(isOnline ? 'Unlock for 1 Credit' : 'Unlock Offline'),
                       ),
                     ),
                   ],

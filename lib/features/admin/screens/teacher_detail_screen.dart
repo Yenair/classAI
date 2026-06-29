@@ -1,6 +1,7 @@
 // lib/features/admin/screens/teacher_detail_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:drift/drift.dart' hide Column;
 import 'package:classai/core/database/database.dart';
 import 'package:classai/features/admin/providers/admin_provider.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
@@ -35,6 +36,13 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
   bool _subjectsLoading = false;
   bool _savingSubjects = false;
 
+  // Scheme progress state
+  int _generatedCount = 0;
+  int _completedCount = 0;
+  String _schemeStatus = 'none';
+  int _completedWeeks = 0;
+  int _totalWeeks = 0;
+
   @override
   void initState() {
     super.initState();
@@ -54,9 +62,77 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
         // Load devices and subjects once teacher is loaded
         _loadDevices();
         _loadSubjects();
+        _loadSchemeProgress(results.first);
       }
     } finally {
       setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadSchemeProgress(Teacher teacher) async {
+    final db = ref.read(databaseProvider);
+    try {
+      final generatedCount = teacher.serverId != null
+          ? await db.lessonsDao.countByTeacher(teacher.serverId!)
+          : 0;
+      final completedCount = teacher.serverId != null
+          ? await db.lessonsDao.countCompletedByTeacher(teacher.serverId!)
+          : 0;
+
+      final teacherSchemes = await (db.select(db.schemeOfWork)
+            ..where((s) => s.teacherId.equals(teacher.localId))
+            ..orderBy([
+              (s) => OrderingTerm(
+                    expression: s.createdAt,
+                    mode: OrderingMode.desc,
+                  )
+            ]))
+          .get();
+
+      String schemeStatus = 'none';
+      int completedWeeks = 0;
+      int totalWeeks = 0;
+
+      if (teacherSchemes.isNotEmpty) {
+        final latestScheme = teacherSchemes.first;
+        schemeStatus = latestScheme.status;
+        if (latestScheme.status == 'approved') {
+          final approvedSchemes = teacherSchemes
+              .where((scheme) =>
+                  scheme.status == 'approved' &&
+                  scheme.subjectId == latestScheme.subjectId &&
+                  scheme.term == latestScheme.term)
+              .toList();
+          totalWeeks = approvedSchemes.map((s) => s.weekNumber).toSet().length;
+
+          if (teacher.serverId != null && totalWeeks > 0) {
+            final approvedWeekNumbers =
+                approvedSchemes.map((s) => s.weekNumber).toSet();
+            final completedLessons = await (db.select(db.lessons)
+                  ..where((lesson) =>
+                      lesson.teacherServerId.equals(teacher.serverId!) &
+                      lesson.status.equals('completed')))
+                .get();
+            completedWeeks = completedLessons
+                .map((lesson) => lesson.week)
+                .where(approvedWeekNumbers.contains)
+                .toSet()
+                .length;
+          }
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _generatedCount = generatedCount;
+          _completedCount = completedCount;
+          _schemeStatus = schemeStatus;
+          _completedWeeks = completedWeeks;
+          _totalWeeks = totalWeeks;
+        });
+      }
+    } catch (_) {
+      // Silently fail - progress data is supplementary
     }
   }
 
@@ -381,6 +457,92 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
           ),
           const SizedBox(height: 16),
 
+          // Scheme Progress section
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Scheme Progress',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Generated & Completed counts
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildStatCard(
+                          context,
+                          icon: Icons.auto_awesome_rounded,
+                          label: 'Generated',
+                          value: '$_generatedCount',
+                          color: cs.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildStatCard(
+                          context,
+                          icon: Icons.check_circle_rounded,
+                          label: 'Completed',
+                          value: '$_completedCount',
+                          color: Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // Scheme status chip
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: _schemeStatusColor(cs).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _schemeStatusColor(cs).withValues(alpha: 0.25),
+                          ),
+                        ),
+                        child: Text(
+                          _schemeStatusLabel(),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _schemeStatusColor(cs),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_totalWeeks > 0) ...[
+                    const SizedBox(height: 16),
+                    // Progress bar
+                    LinearProgressIndicator(
+                      value: (_completedWeeks / _totalWeeks).clamp(0.0, 1.0),
+                      minHeight: 8,
+                      backgroundColor: cs.outlineVariant.withValues(alpha: 0.25),
+                      valueColor: AlwaysStoppedAnimation<Color>(cs.primary),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Week $_completedWeeks of $_totalWeeks completed',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
           // Recovery Code section
           Card(
             child: Padding(
@@ -697,5 +859,73 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
   String _formatDate(DateTime dt) {
     return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
         '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildStatCard(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: color.withValues(alpha: 0.15),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _schemeStatusColor(ColorScheme cs) {
+    switch (_schemeStatus) {
+      case 'draft':
+        return Colors.orange;
+      case 'pending':
+        return Colors.blue;
+      case 'approved':
+        return Colors.green;
+      default:
+        return cs.onSurfaceVariant;
+    }
+  }
+
+  String _schemeStatusLabel() {
+    switch (_schemeStatus) {
+      case 'draft':
+        return 'Draft';
+      case 'pending':
+        return 'Pending';
+      case 'approved':
+        return 'Approved';
+      default:
+        return 'No Scheme';
+    }
   }
 }
