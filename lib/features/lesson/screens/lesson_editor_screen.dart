@@ -2521,8 +2521,8 @@ class _PreviewColumn extends StatelessWidget {
               ),
             ),
 
-          // ── Preview Cards ───────────────────────────────────────
-          if (hasGenerated)
+          // ── Preview Cards (unlocked only) ─────────────────────
+          if (hasGenerated && isUnlocked)
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -2662,9 +2662,7 @@ class _PreviewColumn extends StatelessWidget {
               ),
             ),
 
-          // Action footer — uses Divider + minimumSize buttons to
-          // avoid Container decoration that triggered RenderBox
-          // assertion errors during warm-up frames.
+          // Divider + Action footer — always visible after generation
           if (hasGenerated)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
