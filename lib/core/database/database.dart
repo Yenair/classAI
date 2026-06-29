@@ -96,7 +96,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
 
   static QueryExecutor _openConnection() {
     return LazyDatabase(() async {
@@ -857,6 +857,38 @@ class AppDatabase extends _$AppDatabase {
               );
             }
           }
+          if (from < 20) {
+            final lessonCols = await customSelect(
+              "SELECT name FROM pragma_table_info('lessons')",
+            ).get();
+            final lessonColNames =
+                lessonCols.map((r) => r.read<String>('name')).toSet();
+            if (!lessonColNames.contains('term')) {
+              await customStatement(
+                "ALTER TABLE lessons ADD COLUMN term TEXT",
+              );
+            }
+            final examCols = await customSelect(
+              "SELECT name FROM pragma_table_info('exams')",
+            ).get();
+            final examColNames =
+                examCols.map((r) => r.read<String>('name')).toSet();
+            if (!examColNames.contains('term')) {
+              await customStatement(
+                "ALTER TABLE exams ADD COLUMN term TEXT",
+                );
+              }
+              final sowCols = await customSelect(
+                "SELECT name FROM pragma_table_info('scheme_of_work')",
+              ).get();
+              final sowColNames =
+                  sowCols.map((r) => r.read<String>('name')).toSet();
+              if (!sowColNames.contains('class_level')) {
+                await customStatement(
+                  "ALTER TABLE scheme_of_work ADD COLUMN class_level TEXT NOT NULL DEFAULT ''",
+                );
+              }
+            }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys=ON');

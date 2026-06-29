@@ -255,28 +255,18 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
   }
 
   String? _termLabelForExam(Exam exam) {
-    final directTerm = _normalizeTermLabel(_termValueForExam(exam) ?? '');
-    if (directTerm.isNotEmpty) {
-      return directTerm;
+    // Use the real term column first
+    if (exam.term != null && exam.term!.trim().isNotEmpty) {
+      final normalized = _normalizeTermLabel(exam.term!);
+      if (normalized.isNotEmpty) return normalized;
     }
 
+    // Fall back to linked scheme of work
     final schemeId = int.tryParse(exam.schemeOfWorkId ?? '');
     if (schemeId == null) return null;
     final scheme = _schemesById[schemeId];
     if (scheme == null) return null;
     return _normalizeTermLabel(scheme.term);
-  }
-
-  String? _termValueForExam(Exam exam) {
-    try {
-      final dynamic source = exam;
-      final dynamic term = source.term;
-      final value = term?.toString().trim();
-      if (value == null || value.isEmpty) return null;
-      return value;
-    } on NoSuchMethodError {
-      return null;
-    }
   }
 
   String _classLevelLabelForExam(Exam exam) {

@@ -272,6 +272,51 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     } catch (_) {}
   }
 
+  Future<String?> _resolveTermLabel(AppDatabase db) async {
+    try {
+      final schoolLocalId =
+          ref.read(authProvider).currentSchool?.localId ??
+              (await db.schoolsDao.get())?.localId;
+      if (schoolLocalId == null) return null;
+
+      if (_schemeOfWorkLocalId != null) {
+        final scheme = await db.schemeOfWorkDao.getById(_schemeOfWorkLocalId!);
+        final schemeTerm = scheme?.term.trim();
+        if (schemeTerm != null && schemeTerm.isNotEmpty) {
+          return _normalizeTermLabel(schemeTerm);
+        }
+      }
+
+      final currentTerm =
+          await db.termsDao.getCurrent(schoolLocalId) ??
+              await db.termsDao.getTermForDate(
+                schoolLocalId,
+                DateTime.now(),
+              );
+      final termName = currentTerm?.name.trim();
+      if (termName == null || termName.isEmpty) return null;
+      return _normalizeTermLabel(termName);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _normalizeTermLabel(String term) {
+    final cleaned = term.trim();
+    if (cleaned.isEmpty) return '';
+    final lower = cleaned.toLowerCase();
+    if (lower.contains('1st') || lower.contains('first') || lower == '1') {
+      return '1st Term';
+    }
+    if (lower.contains('2nd') || lower.contains('second') || lower == '2') {
+      return '2nd Term';
+    }
+    if (lower.contains('3rd') || lower.contains('third') || lower == '3') {
+      return '3rd Term';
+    }
+    return cleaned;
+  }
+
   Future<void> _loadExistingExam(int examId) async {
     try {
       final db = ref.read(databaseProvider);
@@ -975,6 +1020,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
           ? _schemeOfWorkLocalId.toString()
           : null;
 
+      // Resolve the term label for this exam
+      final termLabel = await _resolveTermLabel(db);
+
       // Build companion
       final companion = ExamsCompanion(
         subject: Value(_subject),
@@ -992,6 +1040,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         weekNumber: _isFromSchemeOfWork
             ? Value(_week)
             : const Value.absent(),
+        term: termLabel != null ? Value(termLabel) : const Value.absent(),
         updatedAt: Value(DateTime.now()),
       );
 
@@ -1030,6 +1079,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
           weekNumber: _isFromSchemeOfWork
               ? Value(_week)
               : const Value.absent(),
+          term: termLabel != null ? Value(termLabel) : const Value.absent(),
           createdAt: Value(DateTime.now()),
           isDeleted: const Value(false),
         );

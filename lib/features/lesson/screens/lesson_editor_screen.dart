@@ -302,6 +302,110 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     } catch (_) {}
   }
 
+  Future<String?> _resolveGenerationTermLabel(AppDatabase db) async {
+    try {
+      final schoolLocalId =
+          ref.read(authProvider).currentSchool?.localId ??
+              (await db.schoolsDao.get())?.localId;
+      if (schoolLocalId == null) return null;
+
+      if (_schemeOfWorkLocalId != null) {
+        final scheme = await db.schemeOfWorkDao.getById(_schemeOfWorkLocalId!);
+        final schemeTerm = scheme?.term.trim();
+        if (schemeTerm != null && schemeTerm.isNotEmpty) {
+          return _normalizeTermLabel(schemeTerm);
+        }
+      }
+
+      final currentTerm =
+          await db.termsDao.getCurrent(schoolLocalId) ??
+              await db.termsDao.getTermForDate(
+                schoolLocalId,
+                DateTime.now(),
+              );
+      final termName = currentTerm?.name.trim();
+      if (termName == null || termName.isEmpty) return null;
+      return _normalizeTermLabel(termName);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> _resolveLessonTermLabel(
+    AppDatabase db,
+    Lesson lesson,
+    int schoolLocalId,
+  ) async {
+    try {
+      final schemeId = int.tryParse(lesson.schemeOfWorkId ?? '');
+      if (schemeId != null) {
+        final scheme = await db.schemeOfWorkDao.getById(schemeId);
+        final schemeTerm = scheme?.term.trim();
+        if (schemeTerm != null && schemeTerm.isNotEmpty) {
+          return _normalizeTermLabel(schemeTerm);
+        }
+      }
+
+      final lessonTerm = await db.termsDao.getTermForDate(
+        schoolLocalId,
+        lesson.createdAt,
+      );
+      final termName = lessonTerm?.name.trim();
+      if (termName == null || termName.isEmpty) return null;
+      return _normalizeTermLabel(termName);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _normalizeTermLabel(String term) {
+    final cleaned = term.trim();
+    if (cleaned.isEmpty) return '';
+    final lower = cleaned.toLowerCase();
+    if (lower.contains('1st') || lower.contains('first') || lower == '1') {
+      return '1st Term';
+    }
+    if (lower.contains('2nd') || lower.contains('second') || lower == '2') {
+      return '2nd Term';
+    }
+    if (lower.contains('3rd') || lower.contains('third') || lower == '3') {
+      return '3rd Term';
+    }
+    return cleaned;
+  }
+
+  Future<bool> _hasDuplicateLessonForGeneration(AppDatabase db) async {
+    try {
+      final teacherServerId = _teacherId;
+      if (teacherServerId == null || teacherServerId.isEmpty) return false;
+
+      final schoolLocalId =
+          ref.read(authProvider).currentSchool?.localId ??
+              (await db.schoolsDao.get())?.localId;
+      if (schoolLocalId == null) return false;
+
+      final targetTerm = await _resolveGenerationTermLabel(db);
+      if (targetTerm == null || targetTerm.isEmpty) return false;
+
+      final lessons = await db.lessonsDao.getAll();
+      for (final lesson in lessons) {
+        if (_lessonId != null && lesson.id == _lessonId) continue;
+        if (lesson.teacherServerId != teacherServerId) continue;
+        if (lesson.subject != _subject || lesson.week != _week) continue;
+
+        final lessonTerm =
+            await _resolveLessonTermLabel(db, lesson, schoolLocalId);
+        if (lessonTerm == null || lessonTerm.isEmpty) continue;
+        if (_normalizeTermLabel(lessonTerm) == targetTerm) {
+          return true;
+        }
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _showUpgradeRequiredDialog() async {
     if (!mounted) return;
     await showDialog<void>(
@@ -367,6 +471,15 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         teacherName: _teacherName,
         schoolName: _schoolName,
       );
+
+      if (await _hasDuplicateLessonForGeneration(db)) {
+        showErrorToast(
+          context: context,
+          message:
+              'A lesson already exists for this week. Edit the existing one instead.',
+        );
+        return;
+      }
 
       // Generate via callback or fallback to AiService
       // NOTE: No credit is spent on AI generation - credit is spent on unlock
@@ -634,6 +747,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
 
       final db = ref.read(databaseProvider);
 
+      // Resolve the term label for this lesson
+      final termLabel = await _resolveGenerationTermLabel(db);
+
       // Build companion with common fields
       final schemeOfWorkIdStr = _schemeOfWorkLocalId?.toString();
       LessonsCompanion companion = LessonsCompanion(
@@ -654,6 +770,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         weekNumber: _isFromSchemeOfWork
             ? Value(_week)
             : const Value.absent(),
+        term: termLabel != null ? Value(termLabel) : const Value.absent(),
         updatedAt: Value(DateTime.now()),
       );
 
@@ -720,6 +837,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           weekNumber: _isFromSchemeOfWork
               ? Value(_week)
               : const Value.absent(),
+          term: termLabel != null ? Value(termLabel) : const Value.absent(),
         ),
       );
 

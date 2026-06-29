@@ -329,6 +329,14 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
         subjectId = await db.subjectsDao.insert(name: _subject);
       }
       _subjectId = subjectId;
+
+      // Resolve server IDs for draft creation
+      final teacher = await db.teachersDao.getById(_teacherId!);
+      final teacherServerId = teacher?.serverId;
+      final school = await db.schoolsDao.get();
+      final schoolServerId = school?.serverId;
+      final termLabel = _normalizeTermLabelForDraft(_term);
+
       for (var index = 0; index < _weeks.length; index++) {
         final week = _weeks[index];
         final weekNumber = index + 1;
@@ -350,6 +358,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
               teacherId: Value(_teacherId!),
               subjectId: Value(subjectId),
               term: Value(_term),
+              classLevel: Value(_classLevel),
               weekNumber: Value(weekNumber),
               topic: Value(topicText),
               objectives: Value(objectivesText),
@@ -359,6 +368,83 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
             ),
           );
           _weekRecordIds[weekNumber] = newId;
+        }
+
+        // Auto-create draft lesson if not already existing
+        if (teacherServerId != null && termLabel.isNotEmpty) {
+          final existingLessons = await db.lessonsDao.getAll();
+          final lessonExists = existingLessons.any((l) =>
+              !l.isDeleted &&
+              l.teacherServerId == teacherServerId &&
+              l.subject == _subject &&
+              l.classLevel == _classLevel &&
+              (l.term ?? '') == termLabel &&
+              (l.weekNumber ?? l.week) == weekNumber &&
+              l.status == 'draft');
+          if (!lessonExists) {
+            await db.lessonsDao.insertLesson(
+              LessonsCompanion.insert(
+                subject: _subject,
+                classLevel: _classLevel,
+                week: weekNumber,
+                topic: topicText,
+                difficulty: 'medium',
+                bloomsVerbs: '',
+                curriculum: 'NERDC',
+                content: jsonEncode({
+                  'objectives': [],
+                  'vocabulary': [],
+                  'materials': [],
+                  'presentation': [],
+                  'assessment': '',
+                  'homework': '',
+                }),
+                teacherServerId: Value(teacherServerId),
+                schoolServerId: schoolServerId != null
+                    ? Value(schoolServerId)
+                    : const Value.absent(),
+                schemeOfWorkId: Value(_weekRecordIds[weekNumber].toString()),
+                weekNumber: Value(weekNumber),
+                isUnlocked: const Value(false),
+                status: const Value('draft'),
+                term: Value(termLabel),
+              ),
+            );
+          }
+
+          // Auto-create draft exam if not already existing
+          final existingExams = await db.examsDao.getAll();
+          final examExists = existingExams.any((e) =>
+              !e.isDeleted &&
+              e.teacherServerId == teacherServerId &&
+              e.subject == _subject &&
+              e.classLevel == _classLevel &&
+              (e.term ?? '') == termLabel &&
+              e.weekNumber == weekNumber);
+          if (!examExists) {
+            await db.examsDao.insertExam(
+              ExamsCompanion.insert(
+                subject: _subject,
+                classLevel: _classLevel,
+                topic: topicText,
+                difficulty: 'medium',
+                curriculum: 'NERDC',
+                content: jsonEncode({
+                  'mcqs': [],
+                  'theory': [],
+                  'subjective': [],
+                }),
+                teacherServerId: Value(teacherServerId),
+                schoolServerId: schoolServerId != null
+                    ? Value(schoolServerId)
+                    : const Value.absent(),
+                isUnlocked: const Value(false),
+                schemeOfWorkId: Value(_weekRecordIds[weekNumber].toString()),
+                weekNumber: Value(weekNumber),
+                term: Value(termLabel),
+              ),
+            );
+          }
         }
       }
       await _loadSchemeForSelection();
@@ -403,10 +489,109 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
         return;
       }
       final adminEdit = _adminEditControllers[schemeWeekId]?.text;
+      final topicToUse = (adminEdit != null && adminEdit.isNotEmpty)
+          ? adminEdit
+          : null;
       if (adminEdit != null && adminEdit.isNotEmpty) {
         await db.schemeOfWorkDao.updateAdminEditedTopic(schemeWeekId, adminEdit);
       }
       await db.schemeOfWorkDao.updateStatus(schemeWeekId, 'approved');
+
+      // Fetch the approved scheme week to get metadata for draft creation
+      final schemeWeek = await db.schemeOfWorkDao.getById(schemeWeekId);
+      if (schemeWeek != null) {
+        final teacher = await db.teachersDao.getById(schemeWeek.teacherId);
+        final teacherServerId = teacher?.serverId;
+        final school = await db.schoolsDao.get();
+        final schoolServerId = school?.serverId;
+        final termLabel = _normalizeTermLabelForDraft(schemeWeek.term);
+        final classLevel = schemeWeek.classLevel;
+        final subjectRow = await db.subjectsDao.getById(schemeWeek.subjectId);
+        final subjectName = subjectRow?.name ?? '';
+        final weekNumber = schemeWeek.weekNumber;
+        final topic = topicToUse ?? schemeWeek.topic;
+
+        if (teacherServerId != null &&
+            termLabel.isNotEmpty &&
+            subjectName.isNotEmpty &&
+            classLevel.isNotEmpty) {
+          // Check for and create draft lesson
+          final existingLessons = await db.lessonsDao.getAll();
+          final lessonExists = existingLessons.any((l) =>
+              !l.isDeleted &&
+              l.teacherServerId == teacherServerId &&
+              l.subject == subjectName &&
+              l.classLevel == classLevel &&
+              (l.term ?? '') == termLabel &&
+              (l.weekNumber ?? l.week) == weekNumber &&
+              l.status == 'draft');
+          if (!lessonExists) {
+            await db.lessonsDao.insertLesson(
+              LessonsCompanion.insert(
+                subject: subjectName,
+                classLevel: classLevel,
+                week: weekNumber,
+                topic: topic,
+                difficulty: 'medium',
+                bloomsVerbs: '',
+                curriculum: 'NERDC',
+                content: jsonEncode({
+                  'objectives': [],
+                  'vocabulary': [],
+                  'materials': [],
+                  'presentation': [],
+                  'assessment': '',
+                  'homework': '',
+                }),
+                teacherServerId: Value(teacherServerId),
+                schoolServerId: schoolServerId != null
+                    ? Value(schoolServerId)
+                    : const Value.absent(),
+                schemeOfWorkId: Value(schemeWeekId.toString()),
+                weekNumber: Value(weekNumber),
+                isUnlocked: const Value(false),
+                status: const Value('draft'),
+                term: Value(termLabel),
+              ),
+            );
+          }
+
+          // Check for and create draft exam
+          final existingExams = await db.examsDao.getAll();
+          final examExists = existingExams.any((e) =>
+              !e.isDeleted &&
+              e.teacherServerId == teacherServerId &&
+              e.subject == subjectName &&
+              e.classLevel == classLevel &&
+              (e.term ?? '') == termLabel &&
+              e.weekNumber == weekNumber);
+          if (!examExists) {
+            await db.examsDao.insertExam(
+              ExamsCompanion.insert(
+                subject: subjectName,
+                classLevel: classLevel,
+                topic: topic,
+                difficulty: 'medium',
+                curriculum: 'NERDC',
+                content: jsonEncode({
+                  'mcqs': [],
+                  'theory': [],
+                  'subjective': [],
+                }),
+                teacherServerId: Value(teacherServerId),
+                schoolServerId: schoolServerId != null
+                    ? Value(schoolServerId)
+                    : const Value.absent(),
+                isUnlocked: const Value(false),
+                schemeOfWorkId: Value(schemeWeekId.toString()),
+                weekNumber: Value(weekNumber),
+                term: Value(termLabel),
+              ),
+            );
+          }
+        }
+      }
+
       await _loadExistingSow();
       if (mounted) {
         showInfoToast(context: context, message: 'Approved!');
@@ -471,6 +656,22 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
         ],
       ),
     );
+  }
+
+  String _normalizeTermLabelForDraft(String term) {
+    final cleaned = term.trim();
+    if (cleaned.isEmpty) return '';
+    final lower = cleaned.toLowerCase();
+    if (lower.contains('1st') || lower.contains('first') || lower == '1') {
+      return '1st Term';
+    }
+    if (lower.contains('2nd') || lower.contains('second') || lower == '2') {
+      return '2nd Term';
+    }
+    if (lower.contains('3rd') || lower.contains('third') || lower == '3') {
+      return '3rd Term';
+    }
+    return cleaned;
   }
 
   void _disposeControllers() {

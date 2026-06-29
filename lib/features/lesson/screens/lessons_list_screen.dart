@@ -260,28 +260,18 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
   }
 
   String? _termLabelForLesson(Lesson lesson) {
-    final directTerm = _normalizeTermLabel(_termValueForLesson(lesson) ?? '');
-    if (directTerm.isNotEmpty) {
-      return directTerm;
+    // Use the real term column first
+    if (lesson.term != null && lesson.term!.trim().isNotEmpty) {
+      final normalized = _normalizeTermLabel(lesson.term!);
+      if (normalized.isNotEmpty) return normalized;
     }
 
+    // Fall back to linked scheme of work
     final schemeId = int.tryParse(lesson.schemeOfWorkId ?? '');
     if (schemeId == null) return null;
     final scheme = _schemesById[schemeId];
     if (scheme == null) return null;
     return _normalizeTermLabel(scheme.term);
-  }
-
-  String? _termValueForLesson(Lesson lesson) {
-    try {
-      final dynamic source = lesson;
-      final dynamic term = source.term;
-      final value = term?.toString().trim();
-      if (value == null || value.isEmpty) return null;
-      return value;
-    } on NoSuchMethodError {
-      return null;
-    }
   }
 
   String _classLevelLabelForLesson(Lesson lesson) {
