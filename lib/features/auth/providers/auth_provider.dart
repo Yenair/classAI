@@ -368,6 +368,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
           _startSessionTimer();
           // Check subscription expiry using server time (fire-and-forget)
           unawaited(_checkSubscriptionExpiry());
+          // Check min app version (fire-and-forget, shows update dialog if outdated)
+          unawaited(_checkMinAppVersion());
 
           // Navigate based on role
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -482,6 +484,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
       ),
     );
     _startSessionTimer();
+    // Check min app version (fire-and-forget, shows update dialog if outdated)
+    unawaited(_checkMinAppVersion());
     return true;
   }
 
@@ -637,6 +641,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
         currentSchool: result.school,
       );
       _startSessionTimer();
+      // Check min app version (fire-and-forget, shows update dialog if outdated)
+      unawaited(_checkMinAppVersion());
     } on AuthException catch (e) {
       if (await _logoutIfSessionMismatch(e)) {
         return;
@@ -887,6 +893,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
         currentSchool: result.school,
       );
       _startSessionTimer();
+      // Check min app version (fire-and-forget, shows update dialog if outdated)
+      unawaited(_checkMinAppVersion());
     } on AuthException catch (e) {
       if (await _logoutIfSessionMismatch(e)) {
         return;
