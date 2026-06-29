@@ -17,8 +17,8 @@ import 'package:classai/features/exam/screens/exam_editor_screen.dart';
 import 'package:classai/features/exam/screens/exams_list_screen.dart';
 import 'package:classai/features/admin/screens/admin_dashboard_screen.dart';
 import 'package:classai/features/admin/screens/teacher_detail_screen.dart';
-import 'package:classai/features/vault/screens/vault_browser_screen.dart';
-import 'package:classai/features/vault/screens/vault_publisher_screen.dart';
+// import 'package:classai/features/vault/screens/vault_browser_screen.dart'; // Vault feature disabled
+// import 'package:classai/features/vault/screens/vault_publisher_screen.dart'; // Vault feature disabled
 import 'package:classai/features/payment/screens/payment_screen.dart';
 import 'package:classai/features/settings/screens/settings_screen.dart';
 import 'package:classai/features/credit/screens/insufficient_credit_screen.dart';
@@ -36,8 +36,8 @@ import 'package:classai/features/scheme_of_work/screens/scheme_of_work_screen.da
 /// - `/conflicts` → Conflict resolution screen
 /// - `/admin` → Admin dashboard (teacher management, vault queue, sync health)
 /// - `/admin/teachers/:id` → Teacher detail screen
-/// - `/vault` → Vault browser (approved items grid with filters)
-/// - `/vault/publish` → Vault publisher (submit new item for review)
+/// - `/vault` → Vault browser (approved items grid with filters)  // Vault feature disabled
+/// - `/vault/publish` → Vault publisher (submit new item for review)  // Vault feature disabled
 /// - `/settings` → Settings screen
 /// - `/payment` → Payment flow (plan selection)
 ///
@@ -159,16 +159,16 @@ final appRouter = GoRouter(
         return TeacherDetailScreen(teacherLocalId: teacherLocalId);
       },
     ),
-    _route(
-      path: '/vault',
-      name: 'vault',
-      builder: (context, state) => const VaultBrowserScreen(),
-    ),
-    _route(
-      path: '/vault/publish',
-      name: 'vault-publish',
-      builder: (context, state) => const VaultPublisherScreen(),
-    ),
+    // _route(
+    //   path: '/vault',
+    //   name: 'vault',
+    //   builder: (context, state) => const VaultBrowserScreen(),
+    // ),
+    // _route(
+    //   path: '/vault/publish',
+    //   name: 'vault-publish',
+    //   builder: (context, state) => const VaultPublisherScreen(),
+    // ),
     _route(
       path: '/settings',
       name: 'settings',

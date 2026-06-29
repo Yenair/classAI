@@ -26,7 +26,7 @@ import 'package:classai/main.dart' show databaseProvider;
 /// Assessment format segmented control.
 /// "Generate with AI" builds a prompt, calls the provided [generateCallback],
 /// then populates preview cards with editable text fields per section.
-/// "Save to Vault" inserts into `lessons` table.
+/// "Save" inserts into `lessons` table.
 /// Registers with [EmergencyFlushService] on init.
 class LessonEditorScreen extends ConsumerStatefulWidget {
   /// Callback invoked with the generated prompt; returns parsed JSON map.
@@ -435,6 +435,52 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     }
   }
 
+  void _showCenteredToast({
+    required BuildContext context,
+    required String message,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final overlay = Overlay.of(context);
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (_) => Material(
+        color: Colors.transparent,
+        child: Center(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 32),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            decoration: BoxDecoration(
+              color: cs.tertiaryContainer,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: cs.tertiary.withValues(alpha: 0.4),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: cs.onSurface.withValues(alpha: 0.12),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: DefaultTextStyle(
+              style: tt.bodyMedium?.copyWith(
+                color: cs.onTertiaryContainer,
+                fontWeight: FontWeight.w500,
+              ) ?? const TextStyle(),
+              child: Text(message, textAlign: TextAlign.center),
+            ),
+          ),
+        ),
+      ),
+    );
+    overlay.insert(entry);
+    Future.delayed(const Duration(seconds: 2), () {
+      entry.remove();
+    });
+  }
+
   Future<void> _showUpgradeRequiredDialog() async {
     if (!mounted) return;
     await showDialog<void>(
@@ -502,11 +548,13 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       );
 
       if (await _hasDuplicateLessonForGeneration(db)) {
-        showErrorToast(
-          context: context,
-          message:
-              'A lesson already exists for this week. Edit the existing one instead.',
-        );
+        if (mounted) {
+          _showCenteredToast(
+            context: context,
+            message:
+                'A lesson already exists for this week. Edit the existing one instead.',
+          );
+        }
         return;
       }
 
@@ -943,6 +991,45 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     }
   }
 
+  Future<void> _handleMarkCompleted() async {
+    if (_lessonId == null || _schoolId == null || _teacherId == null) return;
+    try {
+      final db = ref.read(databaseProvider);
+      await db.lessonsDao.updateStatus(_lessonId!, 'completed');
+      final school = await db.schoolsDao.get();
+      final teacher = await db.teachersDao.findByServerId(_teacherId!);
+      final teacherLocalId = teacher?.localId ?? 0;
+      final logId = await db.progressLogsDao.insert(
+        ProgressLogsCompanion.insert(
+          eventType: 'lesson_completed',
+          lessonId: Value(_lessonId!),
+          teacherId: Value(teacherLocalId),
+          schoolId: Value(school?.localId ?? 0),
+        ),
+      );
+      await db.syncQueueDao.insertEntry(
+        queueTable: 'progress_logs',
+        recordLocalId: logId,
+        operation: 'INSERT',
+        payload: {
+          'event_type': 'lesson_completed',
+          'lesson_id': _lessonId,
+          'teacher_id': _teacherId,
+          'school_id': _schoolId,
+        },
+      );
+      setState(() => _lessonStatus = 'completed');
+      await _saveLesson(notify: false);
+      if (mounted) {
+        _showCenteredToast(context: context, message: 'Lesson marked as completed.');
+      }
+    } catch (e) {
+      if (mounted) {
+        showErrorToast(context: context, message: 'Failed to mark lesson as completed: $e');
+      }
+    }
+  }
+
   void _onSchemeOfWorkSelected(SchemeOfWorkData? scheme) {
     if (scheme == null) {
       setState(() {
@@ -1040,7 +1127,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     _NavItem('Home', Icons.home_rounded, false),
     _NavItem('Lessons', Icons.menu_book_rounded, true),
     _NavItem('Exams', Icons.quiz_rounded, false),
-    _NavItem('Vault', Icons.inventory_2_rounded, false),
+    // _NavItem('Vault', Icons.inventory_2_rounded, false), // Vault feature disabled
     _NavItem('Admin', Icons.admin_panel_settings_rounded, false),
   ];
 
@@ -1067,6 +1154,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             cs: cs,
             theme: theme,
             isOpen: _editorSidebarOpen,
+            onToggleSidebar: () => setState(
+                () => _editorSidebarOpen = !_editorSidebarOpen),
           ),
 
           // ── Main Content ────────────────────────────────────────
@@ -1243,6 +1332,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                               onDiscard: _discard,
                                               onRegenerate: _isUnlocked ? _handleRegenerate : null,
                                               lessonStatus: _lessonStatus,
+                                              onMarkCompleted: _isUnlocked ? _handleMarkCompleted : null,
                                               onToggleComplete: _isUnlocked ? _handleToggleComplete : null,
                                             ),
                                           ),
@@ -1342,6 +1432,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                             onSave: _saveLesson,
                                             onDiscard: _discard,
                                             onRegenerate: _isUnlocked ? _handleRegenerate : null,
+                                            lessonStatus: _lessonStatus,
+                                            onMarkCompleted: _isUnlocked ? _handleMarkCompleted : null,
                                           ),
                                         ],
                                       ),
@@ -1389,10 +1481,12 @@ class _NavigationDrawer extends StatelessWidget {
   final ColorScheme cs;
   final ThemeData theme;
   final bool isOpen;
+  final VoidCallback? onToggleSidebar;
   const _NavigationDrawer({
     required this.cs,
     required this.theme,
     required this.isOpen,
+    this.onToggleSidebar,
   });
 
   @override
@@ -1411,16 +1505,59 @@ class _NavigationDrawer extends StatelessWidget {
           child: Column(
             children: [
               SizedBox(height: isOpen ? 24 : 16),
-              // Logo area
-              if (isOpen)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
+              // Logo area — tapping toggles sidebar
+              InkWell(
+                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                onTap: onToggleSidebar,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isOpen ? 24 : 12,
+                  ),
+                  child: isOpen
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: cs.primaryContainer,
+                                    borderRadius: BorderRadius.circular(
+                                      AppTheme.radiusFull,
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    Icons.person_rounded,
+                                    color: cs.onPrimaryContainer,
+                                    size: 22,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  'ClassAI',
+                                  style: theme.textTheme.headlineMedium?.copyWith(
+                                    fontWeight: FontWeight.w900,
+                                    color: cs.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Padding(
+                              padding: const EdgeInsets.only(left: 52),
+                              child: Text(
+                                'Nigerian Academic Partner',
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : Center(
+                          child: Container(
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
@@ -1430,53 +1567,14 @@ class _NavigationDrawer extends StatelessWidget {
                               ),
                             ),
                             child: Icon(
-                              Icons.person_rounded,
+                              Icons.menu_rounded,
                               color: cs.onPrimaryContainer,
                               size: 22,
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Text(
-                            'ClassAI',
-                            style: theme.textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.w900,
-                              color: cs.primary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 52),
-                        child: Text(
-                          'Nigerian Academic Partner',
-                          style: theme.textTheme.labelMedium?.copyWith(
-                            color: cs.onSurfaceVariant,
-                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: cs.primaryContainer,
-                      borderRadius: BorderRadius.circular(
-                        AppTheme.radiusFull,
-                      ),
-                    ),
-                    child: Icon(
-                      Icons.person_rounded,
-                      color: cs.onPrimaryContainer,
-                      size: 22,
-                    ),
-                  ),
                 ),
+              ),
               SizedBox(height: isOpen ? 32 : 16),
               // Nav items
               Expanded(
@@ -1563,9 +1661,9 @@ class _NavigationDrawer extends StatelessWidget {
       case 'Exams':
         context.go('/exams');
         break;
-      case 'Vault':
-        context.go('/vault');
-        break;
+      // case 'Vault':
+      //   context.go('/vault');
+      //   break;
       case 'Admin':
         context.go('/admin');
         break;
@@ -1718,18 +1816,6 @@ class _ToolHeader extends StatelessWidget {
                         ),
                       ],
                     ),
-                  ),
-                ),
-              // Sidebar toggle (tablet+)
-              if (onToggleSidebar != null)
-                IconButton(
-                  onPressed: onToggleSidebar,
-                  icon: Icon(sidebarOpen
-                      ? Icons.menu_open_rounded
-                      : Icons.menu_rounded),
-                  tooltip: sidebarOpen ? 'Close sidebar' : 'Open sidebar',
-                  style: IconButton.styleFrom(
-                    foregroundColor: cs.onSurfaceVariant,
                   ),
                 ),
               const Spacer(),
@@ -2179,6 +2265,7 @@ class _PreviewColumn extends StatelessWidget {
   final ValueChanged<String> onHomeworkChanged;
   final VoidCallback onUnlock;
   final VoidCallback onSave;
+  final VoidCallback? onMarkCompleted;
   final VoidCallback onDiscard;
   final VoidCallback? onRegenerate;
   final String lessonStatus;
@@ -2209,6 +2296,7 @@ class _PreviewColumn extends StatelessWidget {
     required this.onHomeworkChanged,
     required this.onUnlock,
     required this.onSave,
+    this.onMarkCompleted,
     required this.onDiscard,
     this.onRegenerate,
     this.lessonStatus = 'draft',
@@ -2382,6 +2470,20 @@ class _PreviewColumn extends StatelessWidget {
                     ),
                   ],
                 ),
+              ),
+            ),
+
+          // ── Locked preview (brief draft preview) ───────────────
+          if (hasGenerated && !isUnlocked)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildLockedPreviewCard('Objectives', objectivesText),
+                  const SizedBox(height: 12),
+                  _buildLockedPreviewCard('Presentation', presentationText),
+                ],
               ),
             ),
 
@@ -2613,7 +2715,11 @@ class _PreviewColumn extends StatelessWidget {
                   ],
                   const SizedBox(width: 12),
                   FilledButton(
-                    onPressed: onSave,
+                    onPressed: lessonStatus == 'completed'
+                        ? null
+                        : (isUnlocked && lessonStatus == 'draft'
+                            ? onMarkCompleted ?? onSave
+                            : onSave),
                     style: FilledButton.styleFrom(
                       shape: RoundedRectangleBorder(
                         borderRadius:
@@ -2624,7 +2730,11 @@ class _PreviewColumn extends StatelessWidget {
                       minimumSize:
                           const Size(100, AppTheme.touchTarget),
                     ),
-                    child: const Text('Save to Vault'),
+                    child: Text(lessonStatus == 'completed'
+                        ? 'Completed'
+                        : (isUnlocked && lessonStatus == 'draft'
+                            ? 'Mark Lesson as Completed'
+                            : 'Save')),
                   ),
                 ],
               ),
@@ -2709,6 +2819,64 @@ class _PreviewColumn extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: widgets,
+    );
+  }
+
+  Widget _buildLockedPreviewCard(String title, String content) {
+    // Show first 2 sentences with maxLines:5 ellipsis
+    final sentences = content
+        .split(RegExp(r'(?<=[.!?])\s+'))
+        .take(2)
+        .join(' ');
+    final displayText = sentences.isNotEmpty ? sentences : content;
+    return Card(
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        side: BorderSide(
+          color: cs.outlineVariant.withValues(alpha: 0.4),
+        ),
+      ),
+      color: cs.surfaceBright,
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: cs.onSurface,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              displayText,
+              maxLines: 5,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.lock_rounded, size: 14, color: cs.tertiary),
+                const SizedBox(width: 4),
+                Text(
+                  'Full content visible after unlock',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: cs.tertiary,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 

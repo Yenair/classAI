@@ -161,7 +161,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeInOut,
-      width: _sidebarOpen ? 288 : 0,
+      width: _sidebarOpen ? 288 : 72,
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
         border: Border(
@@ -171,46 +171,68 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
-          const SizedBox(height: 24),
-          // Branding header
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: cs.primaryContainer,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.school_rounded,
-                    color: cs.onPrimaryContainer,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'ClassAI',
-                      style: textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        color: cs.primary,
-                        fontSize: 28,
+          SizedBox(height: _sidebarOpen ? 24 : 16),
+          // Branding header — tapping toggles sidebar
+          InkWell(
+            borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+            onTap: () => setState(() => _sidebarOpen = !_sidebarOpen),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: _sidebarOpen ? 24 : 12,
+              ),
+              child: _sidebarOpen
+                  ? Row(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: cs.primaryContainer,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.school_rounded,
+                            color: cs.onPrimaryContainer,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'ClassAI',
+                              style: textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.w900,
+                                color: cs.primary,
+                                fontSize: 28,
+                              ),
+                            ),
+                            Text(
+                              'Nigerian Academic Partner',
+                              style: textTheme.labelSmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    )
+                  : Center(
+                      child: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: cs.primaryContainer,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.menu_rounded,
+                          color: cs.onPrimaryContainer,
+                          size: 24,
+                        ),
                       ),
                     ),
-                    Text(
-                      'Nigerian Academic Partner',
-                      style: textTheme.labelSmall?.copyWith(
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
             ),
           ),
           const SizedBox(height: 16),
@@ -243,18 +265,18 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   onTap: () => setState(() => _selectedTabIndex = 1),
                 ),
                 const SizedBox(height: 4),
-                _NavItem(
-                  icon: Icons.verified_rounded,
-                  label: 'Vault Approve Queue',
-                  isActive: _selectedTabIndex == 2,
-                  onTap: () => setState(() => _selectedTabIndex = 2),
-                ),
-                const SizedBox(height: 4),
+                // _NavItem( // Vault feature disabled
+                //   icon: Icons.verified_rounded,
+                //   label: 'Vault Approve Queue',
+                //   isActive: _selectedTabIndex == 2,
+                //   onTap: () => setState(() => _selectedTabIndex = 2),
+                // ),
+                // const SizedBox(height: 4),
                 _NavItem(
                   icon: Icons.sync_rounded,
                   label: 'Sync Health',
-                  isActive: _selectedTabIndex == 3,
-                  onTap: () => setState(() => _selectedTabIndex = 3),
+                  isActive: _selectedTabIndex == 2,
+                  onTap: () => setState(() => _selectedTabIndex = 2),
                 ),
                 const SizedBox(height: 4),
                 _NavItem(
@@ -296,19 +318,11 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Sidebar toggle + Title
+          // Title
           Flexible(
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                IconButton(
-                  onPressed: () => setState(() => _sidebarOpen = !_sidebarOpen),
-                  icon: Icon(_sidebarOpen ? Icons.menu_open_rounded : Icons.menu_rounded),
-                  tooltip: _sidebarOpen ? 'Close sidebar' : 'Open sidebar',
-                  style: IconButton.styleFrom(
-                    foregroundColor: cs.onSurfaceVariant,
-                  ),
-                ),
                 Flexible(
                   child: Text(
                     'Admin Dashboard',
@@ -577,7 +591,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     final tabs = [
       'Teacher Management',
       'Pending Teachers',
-      'Vault Approval Queue',
+      // 'Vault Approval Queue', // Vault feature disabled
       'Sync Health',
     ];
 
@@ -644,9 +658,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           pendingTeachers: dashboardData.pendingTeachers,
           authData: authData,
         );
+      // case 2:
+      //   return _VaultApprovalTab(authData: authData); // Vault feature disabled
       case 2:
-        return _VaultApprovalTab(authData: authData);
-      case 3:
         return _SyncHealthTab(
           teachers: dashboardData.teachers,
           dashboardData: dashboardData,
@@ -664,7 +678,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     final items = [
       (icon: Icons.people_rounded, label: 'Management'),
       (icon: Icons.person_add_rounded, label: 'Pending'),
-      (icon: Icons.verified_rounded, label: 'Vault Queue'),
+      // (icon: Icons.verified_rounded, label: 'Vault Queue'), // Vault feature disabled
       (icon: Icons.sync_rounded, label: 'Sync'),
       (icon: Icons.calendar_month_rounded, label: 'Scheme of Work'),
       (icon: Icons.settings_rounded, label: 'Settings'),
@@ -2166,195 +2180,195 @@ class _PendingTeachersTabState extends ConsumerState<_PendingTeachersTab> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Vault Approval Tab
-// ---------------------------------------------------------------------------
-
-class _VaultApprovalTab extends ConsumerWidget {
-  final AuthStateData authData;
-
-  const _VaultApprovalTab({required this.authData});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final cs = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-
-    // Tier gate: Standard+ required for vault approval queue visibility
-    final tier = authData.currentSchool?.subscriptionTier ?? 'free';
-    final approvedTiers = ['standard', 'elite'];
-    if (!approvedTiers.contains(tier.toLowerCase())) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.lock_outline_rounded,
-              size: 64,
-              color: cs.onSurfaceVariant.withValues(alpha: 0.4),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Vault approval queue requires a Standard or Elite subscription.',
-              textAlign: TextAlign.center,
-              style:
-                  textTheme.titleMedium?.copyWith(color: cs.onSurfaceVariant),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return FutureBuilder(
-      future: ref.read(databaseProvider).vaultItemsDao.getPendingApproval(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final items = snapshot.data ?? [];
-
-        if (items.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.check_circle_outline_rounded,
-                  size: 64,
-                  color: cs.primary.withValues(alpha: 0.6),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'No pending approvals',
-                  style: textTheme.titleMedium,
-                ),
-              ],
-            ),
-          );
-        }
-
-        return ListView.builder(
-
-          physics: (Platform.isAndroid || Platform.isIOS)
-              ? const BouncingScrollPhysics()
-              : null,
-          padding: const EdgeInsets.all(16),
-          itemCount: items.length,
-          itemBuilder: (context, index) {
-            final item = items[index];
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: cs.outlineVariant.withValues(alpha: 0.2),
-                ),
-              ),
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.title,
-                    style: textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'By ${item.authorName} \u00b7 ${item.subject} \u00b7 ${item.classLevel}',
-                    style: textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    item.description,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      OutlinedButton(
-                        onPressed: () => _rejectItem(context, ref, item.id),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: cs.error,
-                        ),
-                        child: const Text('Reject'),
-                      ),
-                      const SizedBox(width: 8),
-                      FilledButton(
-                        onPressed: () => _approveItem(context, ref, item.id),
-                        child: const Text('Approve'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Future<void> _approveItem(
-      BuildContext context, WidgetRef ref, int itemId) async {
-    await ref.read(databaseProvider).vaultItemsDao.approve(itemId);
-    if (context.mounted) {
-      showInfoToast(context: context, message: 'Item approved');
-    }
-  }
-
-  Future<void> _rejectItem(
-      BuildContext context, WidgetRef ref, int itemId) async {
-    final reason = await showDialog<String>(
-      context: context,
-      builder: (ctx) => const _RejectionDialog(),
-    );
-    if (reason != null && reason.isNotEmpty) {
-      await ref.read(databaseProvider).vaultItemsDao.reject(itemId, reason);
-      if (context.mounted) {
-        showInfoToast(context: context, message: 'Item rejected');
-      }
-    }
-  }
-}
-
-class _RejectionDialog extends ConsumerWidget {
-  const _RejectionDialog();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final controller = TextEditingController();
-    return AlertDialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-      ),
-      title: const Text('Rejection Reason'),
-      content: TextField(
-        controller: controller,
-        decoration: const InputDecoration(
-          hintText: 'Enter reason for rejection...',
-        ),
-        maxLines: 3,
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(controller.text),
-          child: const Text('Submit'),
-        ),
-      ],
-    );
-  }
-}
+// // Vault feature disabled — kept for reference
+// // ---------------------------------------------------------------------------
+// // Vault Approval Tab
+// // ---------------------------------------------------------------------------
+//
+// class _VaultApprovalTab extends ConsumerWidget {
+//   final AuthStateData authData;
+//
+//   const _VaultApprovalTab({required this.authData});
+//
+//   @override
+//   Widget build(BuildContext context, WidgetRef ref) {
+//     final cs = Theme.of(context).colorScheme;
+//     final textTheme = Theme.of(context).textTheme;
+//
+//     // Tier gate: Standard+ required for vault approval queue visibility
+//     final tier = authData.currentSchool?.subscriptionTier ?? 'free';
+//     final approvedTiers = ['standard', 'elite'];
+//     if (!approvedTiers.contains(tier.toLowerCase())) {
+//       return Center(
+//         child: Column(
+//           mainAxisSize: MainAxisSize.min,
+//           children: [
+//             Icon(
+//               Icons.lock_outline_rounded,
+//               size: 64,
+//               color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+//             ),
+//             const SizedBox(height: 16),
+//             Text(
+//               'Vault approval queue requires a Standard or Elite subscription.',
+//               textAlign: TextAlign.center,
+//               style:
+//                   textTheme.titleMedium?.copyWith(color: cs.onSurfaceVariant),
+//             ),
+//           ],
+//         ),
+//       );
+//     }
+//
+//     return FutureBuilder(
+//       future: ref.read(databaseProvider).vaultItemsDao.getPendingApproval(),
+//       builder: (context, snapshot) {
+//         if (snapshot.connectionState != ConnectionState.done) {
+//           return const Center(child: CircularProgressIndicator());
+//         }
+//
+//         final items = snapshot.data ?? [];
+//
+//         if (items.isEmpty) {
+//           return Center(
+//             child: Column(
+//               mainAxisSize: MainAxisSize.min,
+//               children: [
+//                 Icon(
+//                   Icons.check_circle_outline_rounded,
+//                   size: 64,
+//                   color: cs.primary.withValues(alpha: 0.6),
+//                 ),
+//                 const SizedBox(height: 16),
+//                 Text(
+//                   'No pending approvals',
+//                   style: textTheme.titleMedium,
+//                 ),
+//               ],
+//             ),
+//           );
+//         }
+//
+//         return ListView.builder(
+//           physics: (Platform.isAndroid || Platform.isIOS)
+//               ? const BouncingScrollPhysics()
+//               : null,
+//           padding: const EdgeInsets.all(16),
+//           itemCount: items.length,
+//           itemBuilder: (context, index) {
+//             final item = items[index];
+//             return Container(
+//               margin: const EdgeInsets.only(bottom: 12),
+//               decoration: BoxDecoration(
+//                 color: cs.surfaceContainerLow,
+//                 borderRadius: BorderRadius.circular(8),
+//                 border: Border.all(
+//                   color: cs.outlineVariant.withValues(alpha: 0.2),
+//                 ),
+//               ),
+//               padding: const EdgeInsets.all(16),
+//               child: Column(
+//                 crossAxisAlignment: CrossAxisAlignment.start,
+//                 children: [
+//                   Text(
+//                     item.title,
+//                     style: textTheme.titleMedium?.copyWith(
+//                       fontWeight: FontWeight.w700,
+//                     ),
+//                   ),
+//                   const SizedBox(height: 4),
+//                   Text(
+//                     'By ${item.authorName} \u00b7 ${item.subject} \u00b7 ${item.classLevel}',
+//                     style: textTheme.bodySmall,
+//                   ),
+//                   const SizedBox(height: 4),
+//                   Text(
+//                     item.description,
+//                     maxLines: 2,
+//                     overflow: TextOverflow.ellipsis,
+//                     style: textTheme.bodyMedium,
+//                   ),
+//                   const SizedBox(height: 12),
+//                   Row(
+//                     mainAxisAlignment: MainAxisAlignment.end,
+//                     children: [
+//                       OutlinedButton(
+//                         onPressed: () => _rejectItem(context, ref, item.id),
+//                         style: OutlinedButton.styleFrom(
+//                           foregroundColor: cs.error,
+//                         ),
+//                         child: const Text('Reject'),
+//                       ),
+//                       const SizedBox(width: 8),
+//                       FilledButton(
+//                         onPressed: () => _approveItem(context, ref, item.id),
+//                         child: const Text('Approve'),
+//                       ),
+//                     ],
+//                   ),
+//                 ],
+//               ),
+//             );
+//           },
+//         );
+//       },
+//     );
+//   }
+//
+//   Future<void> _approveItem(
+//       BuildContext context, WidgetRef ref, int itemId) async {
+//     await ref.read(databaseProvider).vaultItemsDao.approve(itemId);
+//     if (context.mounted) {
+//       showInfoToast(context: context, message: 'Item approved');
+//     }
+//   }
+//
+//   Future<void> _rejectItem(
+//       BuildContext context, WidgetRef ref, int itemId) async {
+//     final reason = await showDialog<String>(
+//       context: context,
+//       builder: (ctx) => const _RejectionDialog(),
+//     );
+//     if (reason != null && reason.isNotEmpty) {
+//       await ref.read(databaseProvider).vaultItemsDao.reject(itemId, reason);
+//       if (context.mounted) {
+//         showInfoToast(context: context, message: 'Item rejected');
+//       }
+//     }
+//   }
+// }
+//
+// class _RejectionDialog extends ConsumerWidget {
+//   const _RejectionDialog();
+//
+//   @override
+//   Widget build(BuildContext context, WidgetRef ref) {
+//     final controller = TextEditingController();
+//     return AlertDialog(
+//       shape: RoundedRectangleBorder(
+//         borderRadius: BorderRadius.circular(8),
+//       ),
+//       title: const Text('Rejection Reason'),
+//       content: TextField(
+//         controller: controller,
+//         decoration: const InputDecoration(
+//           hintText: 'Enter reason for rejection...',
+//         ),
+//         maxLines: 3,
+//       ),
+//       actions: [
+//         TextButton(
+//           onPressed: () => Navigator.of(context).pop(),
+//           child: const Text('Cancel'),
+//         ),
+//         FilledButton(
+//           onPressed: () => Navigator.of(context).pop(controller.text),
+//           child: const Text('Submit'),
+//         ),
+//       ],
+//     );
+//   }
+// }
 
 // ---------------------------------------------------------------------------
 // Sync Health Tab

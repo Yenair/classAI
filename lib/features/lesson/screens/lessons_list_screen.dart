@@ -302,10 +302,11 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
 
   String _classLevelLabelForLesson(Lesson lesson) {
     final termLabel = _termLabelForLesson(lesson);
+    final weekLabel = lesson.weekNumber != null ? ' - Week ${lesson.weekNumber}' : '';
     if (termLabel == null || termLabel.isEmpty) {
-      return lesson.classLevel;
+      return '${lesson.classLevel}$weekLabel';
     }
-    return '${lesson.classLevel} ($termLabel)';
+    return '${lesson.classLevel} ($termLabel)$weekLabel';
   }
 
   String _draftKey({

@@ -169,7 +169,7 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
       NavItem(icon: Icons.home_rounded, label: 'Home', route: null),
       NavItem(icon: Icons.menu_book_rounded, label: 'Lessons', route: '/lessons'),
       NavItem(icon: Icons.quiz_rounded, label: 'Exams', route: '/exams'),
-      NavItem(icon: Icons.inventory_2_rounded, label: 'Vault', route: '/vault'),
+      // NavItem(icon: Icons.inventory_2_rounded, label: 'Vault', route: '/vault'), // Vault feature disabled
       NavItem(icon: Icons.calendar_month_rounded, label: 'Scheme of Work', route: '/scheme-of-work'),
       if (isAdmin)
         NavItem(icon: Icons.admin_panel_settings_rounded, label: 'Admin', route: '/admin'),
@@ -251,15 +251,63 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 24),
-                  // Logo area
-                  Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: _isSidebarOpen ? 24 : 12,
-                    ),
-                    child: _isSidebarOpen
-                        ? Row(
-                            children: [
-                              Container(
+                  // Logo area — tapping toggles sidebar
+                  InkWell(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                    onTap: () => setState(() => _isSidebarOpen = !_isSidebarOpen),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: _isSidebarOpen ? 24 : 12,
+                      ),
+                      child: _isSidebarOpen
+                          ? Row(
+                              children: [
+                                Container(
+                                  width: 48,
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                    color: cs.primaryContainer,
+                                    borderRadius: BorderRadius.circular(
+                                      AppTheme.radiusFull,
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    Icons.person_rounded,
+                                    color: cs.onPrimaryContainer,
+                                    size: 24,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Text(
+                                          'ClassAI',
+                                          style: theme.textTheme.headlineMedium
+                                              ?.copyWith(
+                                            fontWeight: FontWeight.w900,
+                                            color: cs.primary,
+                                          ),
+                                        ),
+                                      ),
+                                      Text(
+                                        'Nigerian Academic Partner',
+                                        style: theme.textTheme.bodyMedium
+                                            ?.copyWith(
+                                          color: cs.onSurfaceVariant,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Center(
+                              child: Container(
                                 width: 48,
                                 height: 48,
                                 decoration: BoxDecoration(
@@ -269,57 +317,13 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                                   ),
                                 ),
                                 child: Icon(
-                                  Icons.person_rounded,
+                                  Icons.menu_rounded,
                                   color: cs.onPrimaryContainer,
                                   size: 24,
                                 ),
                               ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Text(
-                                        'ClassAI',
-                                        style: theme.textTheme.headlineMedium
-                                            ?.copyWith(
-                                          fontWeight: FontWeight.w900,
-                                          color: cs.primary,
-                                        ),
-                                      ),
-                                    ),
-                                    Text(
-                                      'Nigerian Academic Partner',
-                                      style: theme.textTheme.bodyMedium
-                                          ?.copyWith(
-                                        color: cs.onSurfaceVariant,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          )
-                        : Center(
-                            child: Container(
-                              width: 48,
-                              height: 48,
-                              decoration: BoxDecoration(
-                                color: cs.primaryContainer,
-                                borderRadius: BorderRadius.circular(
-                                  AppTheme.radiusFull,
-                                ),
-                              ),
-                              child: Icon(
-                                Icons.person_rounded,
-                                color: cs.onPrimaryContainer,
-                                size: 24,
-                              ),
                             ),
-                          ),
+                    ),
                   ),
                   const SizedBox(height: 32),
                 // Nav items
@@ -428,14 +432,6 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                   ),
                   child: Row(
                     children: [
-                      IconButton(
-                        onPressed: () => setState(() => _isSidebarOpen = !_isSidebarOpen),
-                        icon: Icon(_isSidebarOpen ? Icons.menu_open_rounded : Icons.menu_rounded),
-                        tooltip: _isSidebarOpen ? 'Close sidebar' : 'Open sidebar',
-                        style: IconButton.styleFrom(
-                          foregroundColor: cs.onSurfaceVariant,
-                        ),
-                      ),
                       Flexible(
                         child: Text(
                           'Dashboard',

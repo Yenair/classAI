@@ -1267,7 +1267,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     _NavDef('Home', Icons.home_rounded, false),
     _NavDef('Lessons', Icons.menu_book_rounded, false),
     _NavDef('Exams', Icons.quiz_rounded, true),
-    _NavDef('Vault', Icons.inventory_2_rounded, false),
+    // _NavDef('Vault', Icons.inventory_2_rounded, false), // Vault feature disabled
     _NavDef('Admin', Icons.admin_panel_settings_rounded, false),
   ];
 
@@ -1294,6 +1294,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
             cs: cs,
             theme: theme,
             isOpen: _editorSidebarOpen,
+            onToggleSidebar: () => setState(
+                () => _editorSidebarOpen = !_editorSidebarOpen),
           ),
 
           // ── Main Content ─────────────────────────────────────────
@@ -1566,10 +1568,12 @@ class _NavDrawer extends StatelessWidget {
   final ColorScheme cs;
   final ThemeData theme;
   final bool isOpen;
+  final VoidCallback? onToggleSidebar;
   const _NavDrawer({
     required this.cs,
     required this.theme,
     required this.isOpen,
+    this.onToggleSidebar,
   });
 
   @override
@@ -1588,72 +1592,76 @@ class _NavDrawer extends StatelessWidget {
           child: Column(
             children: [
               SizedBox(height: isOpen ? 32 : 16),
-              // Logo area
-              if (isOpen)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: cs.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(
-                            AppTheme.radiusFull,
-                          ),
-                        ),
-                        child: Icon(
-                          Icons.person_rounded,
-                          size: 24,
-                          color: cs.onSurface.withValues(alpha: 0.54),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Flexible(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+              // Logo area — tapping toggles sidebar
+              InkWell(
+                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                onTap: onToggleSidebar,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isOpen ? 24 : 12,
+                  ),
+                  child: isOpen
+                      ? Row(
                           children: [
-                            Text(
-                              'ClassAI',
-                              style: theme.textTheme.headlineMedium?.copyWith(
-                                fontWeight: FontWeight.w900,
-                                color: cs.primary,
+                            Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: cs.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(
+                                  AppTheme.radiusFull,
+                                ),
                               ),
-                              overflow: TextOverflow.ellipsis,
+                              child: Icon(
+                                Icons.person_rounded,
+                                size: 24,
+                                color: cs.onSurface.withValues(alpha: 0.54),
+                              ),
                             ),
-                            Text(
-                              'Nigerian Academic Partner',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: cs.onSurfaceVariant,
+                            const SizedBox(width: 12),
+                            Flexible(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'ClassAI',
+                                    style: theme.textTheme.headlineMedium?.copyWith(
+                                      fontWeight: FontWeight.w900,
+                                      color: cs.primary,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    'Nigerian Academic Partner',
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                               ),
-                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
+                        )
+                      : Center(
+                          child: Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: cs.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(
+                                AppTheme.radiusFull,
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.menu_rounded,
+                              size: 24,
+                              color: cs.onSurface.withValues(alpha: 0.54),
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: cs.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(
-                        AppTheme.radiusFull,
-                      ),
-                    ),
-                    child: Icon(
-                      Icons.person_rounded,
-                      size: 24,
-                      color: cs.onSurface.withValues(alpha: 0.54),
-                    ),
-                  ),
                 ),
+              ),
               SizedBox(height: isOpen ? 32 : 16),
               Expanded(
                 child: Column(
@@ -1739,9 +1747,9 @@ class _NavDrawer extends StatelessWidget {
       case 'Exams':
         context.go('/exams');
         break;
-      case 'Vault':
-        context.go('/vault');
-        break;
+      // case 'Vault':
+      //   context.go('/vault');
+      //   break;
       case 'Admin':
         context.go('/admin');
         break;
@@ -1789,18 +1797,6 @@ class _TopBar extends StatelessWidget {
               onPressed: () => Navigator.of(context).maybePop(),
               icon: const Icon(Icons.arrow_back_rounded),
               tooltip: 'Back',
-              style: IconButton.styleFrom(
-                foregroundColor: cs.onSurfaceVariant,
-              ),
-            ),
-          // Sidebar toggle (tablet+)
-          if (onToggleSidebar != null)
-            IconButton(
-              onPressed: onToggleSidebar,
-              icon: Icon(sidebarOpen
-                  ? Icons.menu_open_rounded
-                  : Icons.menu_rounded),
-              tooltip: sidebarOpen ? 'Close sidebar' : 'Open sidebar',
               style: IconButton.styleFrom(
                 foregroundColor: cs.onSurfaceVariant,
               ),
@@ -2678,7 +2674,112 @@ class _PreviewPanel extends StatelessWidget {
             ),
           ],
 
-          // MCQ Section
+          // ── Locked preview: MCQ (first 2) ─────────────────────
+          if (hasGenerated && mcqs.isNotEmpty && !isUnlocked) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: _SectionHeader(
+                label: 'Section A',
+                subtitle: 'Multiple Choice',
+                cs: cs,
+                theme: theme,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: Column(
+                children: [
+                  ...List.generate(
+                    mcqs.length > 2 ? 2 : mcqs.length,
+                    (i) => _buildLockedMcqCard(i, theme, cs),
+                  ),
+                  if (mcqs.length > 2)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        '... and ${mcqs.length - 2} more MCQ questions',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: cs.tertiary,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+
+          // ── Locked preview: Theory (first 2) ──────────────────
+          if (hasGenerated && theoryQuestions.isNotEmpty && !isUnlocked) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+              child: _SectionHeader(
+                label: 'Section B',
+                subtitle: 'Theory / Essay',
+                cs: cs,
+                theme: theme,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: Column(
+                children: [
+                  ...List.generate(
+                    theoryQuestions.length > 2 ? 2 : theoryQuestions.length,
+                    (i) => _buildLockedTheoryCard(i, theme, cs, theoryQuestions),
+                  ),
+                  if (theoryQuestions.length > 2)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        '... and ${theoryQuestions.length - 2} more theory questions',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: cs.tertiary,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+
+          // ── Locked preview: Subjective (first 2) ──────────────
+          if (hasGenerated && subjectiveQuestions.isNotEmpty && !isUnlocked) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+              child: _SectionHeader(
+                label: 'Section C',
+                subtitle: 'Subjective / Practical',
+                cs: cs,
+                theme: theme,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: Column(
+                children: [
+                  ...List.generate(
+                    subjectiveQuestions.length > 2 ? 2 : subjectiveQuestions.length,
+                    (i) => _buildLockedTheoryCard(i, theme, cs, subjectiveQuestions),
+                  ),
+                  if (subjectiveQuestions.length > 2)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        '... and ${subjectiveQuestions.length - 2} more subjective questions',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: cs.tertiary,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+
+          // MCQ Section (unlocked — full)
           if (hasGenerated && mcqs.isNotEmpty && isUnlocked) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -2698,7 +2799,7 @@ class _PreviewPanel extends StatelessWidget {
             ),
           ],
 
-          // Theory Section
+          // Theory Section (unlocked — full)
           if (hasGenerated && theoryQuestions.isNotEmpty && isUnlocked) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
@@ -2718,7 +2819,7 @@ class _PreviewPanel extends StatelessWidget {
             ),
           ],
 
-          // Subjective Questions Section
+          // Subjective Questions Section (unlocked — full)
           if (hasGenerated && subjectiveQuestions.isNotEmpty && isUnlocked) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
@@ -2784,7 +2885,7 @@ class _PreviewPanel extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(horizontal: 32),
                         ),
                         icon: const Icon(Icons.save_rounded),
-                        label: const Text('Save to Vault'),
+                        label: const Text('Save'),
                       ),
                     ),
                   ),
@@ -2849,11 +2950,146 @@ class _PreviewPanel extends StatelessWidget {
     );
   }
 
+  Widget _buildLockedMcqCard(int index, ThemeData theme, ColorScheme cs) {
+    final mcq = mcqs[index];
+    final question = mcq['question'] as String? ?? '';
+    final options = mcq['options'] as Map<String, dynamic>? ?? {};
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.4),
+        ),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+            ),
+            child: Center(
+              child: Text(
+                '${index + 1}',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  question,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: cs.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ...options.entries.take(2).map((e) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    '${e.key}. ${e.value}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                )),
+                if (options.length > 2)
+                  Text(
+                    '... ${options.length - 2} more options',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: cs.tertiary,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                const SizedBox(height: 4),
+                Icon(Icons.lock_rounded, size: 14, color: cs.tertiary),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLockedTheoryCard(int index, ThemeData theme, ColorScheme cs, List<Map<String, dynamic>> questions) {
+    final q = questions[index];
+    final question = q['question'] as String? ?? '';
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.4),
+        ),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+            ),
+            child: Center(
+              child: Text(
+                '${index + 1}',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  question,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: cs.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Icon(Icons.lock_rounded, size: 14, color: cs.tertiary),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMcqCard(int index, ThemeData theme, ColorScheme cs) {
     final mcq = mcqs[index];
     final question = mcq['question'] as String? ?? '';
     final options = mcq['options'] as Map<String, dynamic>? ?? {};
-    final correct = mcq['correct'] as String? ?? 'A';
+    final correct = mcq['correct']?.toString() ?? 'A';
 
     return Container(
       width: double.infinity,

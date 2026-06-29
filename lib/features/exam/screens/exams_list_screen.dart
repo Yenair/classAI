@@ -297,10 +297,11 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
 
   String _classLevelLabelForExam(Exam exam) {
     final termLabel = _termLabelForExam(exam);
+    final weekLabel = exam.weekNumber != null ? ' - Week ${exam.weekNumber}' : '';
     if (termLabel == null || termLabel.isEmpty) {
-      return exam.classLevel;
+      return '${exam.classLevel}$weekLabel';
     }
-    return '${exam.classLevel} ($termLabel)';
+    return '${exam.classLevel} ($termLabel)$weekLabel';
   }
 
   String _draftKey({

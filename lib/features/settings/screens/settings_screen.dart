@@ -302,14 +302,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       onTap: () => context.push('/exams')),
                   const SizedBox(height: 4),
                 ],
-                _SettingsNavItem(
-                    icon: Icons.inventory_2_rounded,
-                    label: 'Vault',
-                    isActive: false,
-                    cs: cs,
-                    textTheme: textTheme,
-                    onTap: () => context.push('/vault')),
-                const SizedBox(height: 4),
+                // _SettingsNavItem(
+                //     icon: Icons.inventory_2_rounded,
+                //     label: 'Vault', // Vault feature disabled
+                //     isActive: false,
+                //     cs: cs,
+                //     textTheme: textTheme,
+                //     onTap: () => context.push('/vault')),
+                // const SizedBox(height: 4),
                 _SettingsNavItem(
                     icon: Icons.admin_panel_settings_rounded,
                     label: 'Admin',
