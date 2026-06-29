@@ -21,7 +21,7 @@ import 'package:classai/main.dart' show databaseProvider;
 void _goToLessonsDeferred(BuildContext context) {
   WidgetsBinding.instance.addPostFrameCallback((_) {
     if (!context.mounted) return;
-    context.push('/lessons');
+    context.go('/lessons');
   });
 }
 
@@ -2165,13 +2165,13 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
         _goToLessonsDeferred(context);
         break;
       case 2:
-        context.push('/exams');
+        context.go('/exams');
         break;
       case 3:
-        context.push('/scheme-of-work');
+        context.go('/scheme-of-work');
         break;
       case 4:
-        context.push('/settings');
+        context.go('/settings');
         break;
     }
   }

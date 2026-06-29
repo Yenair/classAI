@@ -16,6 +16,7 @@ import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Stitch‑designed exam editor with AI generation.
 ///
@@ -55,6 +56,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   int? _examId;
   bool _editorSidebarOpen = true;
   int _creditBalance = 3;
+  int _remainingDailyPreviews = 10;
   String? _teacherId;
   String? _schoolId;
   String _subscriptionTier = 'free';
@@ -139,12 +141,15 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _registerWithEmergencyFlush();
       _loadCreditBalance();
+      _loadDailyPreviewData();
       _loadAuthInfo();
       _loadSubjects();
       _loadSchemesForContext();
       _loadTeacherLessons();
       if (widget.examId != null) {
         _loadExistingExam(widget.examId!);
+      } else {
+        _restoreLastQuestionCounts();
       }
     });
   }
@@ -277,6 +282,31 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         setState(() => _sourceMissing = !exists);
       }
     } catch (_) {}
+  }
+
+  /// Change 4: Restore last used question counts from SharedPreferences.
+  Future<void> _restoreLastQuestionCounts() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final mcq = prefs.getInt('exam_last_mcq_count');
+      final theory = prefs.getInt('exam_last_theory_count');
+      final subjective = prefs.getInt('exam_last_subjective_count');
+      final selectedTypes = prefs.getStringList('exam_last_selected_types');
+      if (mcq != null || theory != null || subjective != null) {
+        setState(() {
+          _questionCounts['MCQ'] = mcq ?? _defaultQuestionCounts['MCQ']!;
+          _questionCounts['Theory'] = theory ?? _defaultQuestionCounts['Theory']!;
+          _questionCounts['Subjective'] = subjective ?? _defaultQuestionCounts['Subjective']!;
+          if (selectedTypes != null && selectedTypes.isNotEmpty) {
+            _selectedQuestionTypes
+              ..clear()
+              ..addAll(selectedTypes);
+          }
+        });
+      }
+    } catch (_) {
+      // Silently fall back to defaults
+    }
   }
 
   Future<String?> _resolveTermLabel(AppDatabase db) async {
@@ -467,6 +497,28 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     } catch (_) {}
   }
 
+  Future<void> _loadDailyPreviewData() async {
+    try {
+      final db = ref.read(databaseProvider);
+      final config = await db.securityConfigDao.get();
+      final today = DateTime.now().toIso8601String().split('T').first;
+      final currentCount = config.dailyPreviewCount;
+      final currentDate = config.dailyPreviewDate ?? '';
+      // Reset counter if date changed
+      int count = currentCount;
+      if (currentDate != today) {
+        count = 0;
+      }
+      // Calculate remaining previews based on tier
+      const limits = {'free': 10, 'basic': 10, 'standard': 10, 'elite': -1};
+      final limit = limits[_subscriptionTier] ?? 10;
+      final remaining = limit < 0 ? -1 : (limit - count).clamp(0, limit);
+      if (mounted) {
+        setState(() => _remainingDailyPreviews = remaining);
+      }
+    } catch (_) {}
+  }
+
   Future<void> _loadCreditBalance() async {
     try {
       await ref.read(creditStateProvider.notifier).refresh();
@@ -506,6 +558,34 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
 
   Future<void> _handleGenerate() async {
     if (!_formKey.currentState!.validate()) return;
+
+    // Change 1: Check if at least one question type has a count > 0
+    final hasAnyTypeWithCount = _selectedQuestionTypes.any(
+      (type) => (_questionCounts[type] ?? 0) > 0,
+    );
+    if (!hasAnyTypeWithCount) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showErrorToast(
+          context: context,
+          message: 'Please select at least one question type (MCQ, Theory, or Subjective).',
+        );
+      });
+      return;
+    }
+
+    // Change 4: Check if total questions is 0
+    final totalCount = _questionCounts.values.fold(0, (sum, c) => sum + c);
+    if (totalCount == 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showErrorToast(
+          context: context,
+          message: 'Please set the number of questions to generate.',
+        );
+      });
+      return;
+    }
 
     final authTier =
         ref.read(authProvider).currentSchool?.subscriptionTier ?? _subscriptionTier;
@@ -598,6 +678,16 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         teacherId: _teacherId,
         schoolId: _schoolId,
         topic: topic,
+      );
+
+      // Change 4: Save question counts to SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('exam_last_mcq_count', _questionCounts['MCQ'] ?? 0);
+      await prefs.setInt('exam_last_theory_count', _questionCounts['Theory'] ?? 0);
+      await prefs.setInt('exam_last_subjective_count', _questionCounts['Subjective'] ?? 0);
+      await prefs.setStringList(
+        'exam_last_selected_types',
+        _selectedQuestionTypes.toList(),
       );
 
       setState(() {
@@ -1337,6 +1427,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                         hasGenerated: _hasGenerated,
                                         isUnlocked: _isUnlocked,
                                         isOnline: _isOnline,
+                                        subscriptionTier: _subscriptionTier,
+                                        remainingDailyPreviews: _remainingDailyPreviews,
                                         mcqs: _mcqs,
                                         theoryQuestions: _theoryQuestions,
                                         subjectiveQuestions: _subjectiveQuestions,
@@ -1416,6 +1508,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                       hasGenerated: _hasGenerated,
                                       isUnlocked: _isUnlocked,
                                       isOnline: _isOnline,
+                                      subscriptionTier: _subscriptionTier,
+                                      remainingDailyPreviews: _remainingDailyPreviews,
                                       mcqs: _mcqs,
                                       theoryQuestions: _theoryQuestions,
                                       subjectiveQuestions: _subjectiveQuestions,
@@ -1891,7 +1985,7 @@ class _ConfigPanel extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed: () => context.go('/lesson-editor'),
+                    onPressed: () => context.push('/lesson-editor'),
                     child: const Text('No lessons yet. Generate a lesson first.'),
                   ),
                 )
@@ -2388,6 +2482,8 @@ class _PreviewPanel extends StatelessWidget {
   final bool hasGenerated;
   final bool isUnlocked;
   final bool isOnline;
+  final String subscriptionTier;
+  final int remainingDailyPreviews;
   final List<Map<String, dynamic>> mcqs;
   final List<Map<String, dynamic>> theoryQuestions;
   final List<Map<String, dynamic>> subjectiveQuestions;
@@ -2406,6 +2502,8 @@ class _PreviewPanel extends StatelessWidget {
     required this.hasGenerated,
     required this.isUnlocked,
     required this.isOnline,
+    required this.subscriptionTier,
+    this.remainingDailyPreviews = 10,
     required this.mcqs,
     required this.theoryQuestions,
     required this.subjectiveQuestions,
@@ -2571,7 +2669,7 @@ class _PreviewPanel extends StatelessWidget {
                           ),
                         ),
                         icon: const Icon(Icons.lock_open_rounded),
-                        label: Text(isOnline ? 'Unlock for 1 Credit' : 'Unlock Offline'),
+                        label: Text(_buildUnlockLabel()),
                       ),
                     ),
                   ],
@@ -2704,6 +2802,15 @@ class _PreviewPanel extends StatelessWidget {
     if (theoryQuestions.isNotEmpty) parts.add('${theoryQuestions.length} theory');
     if (subjectiveQuestions.isNotEmpty) parts.add('${subjectiveQuestions.length} subjective');
     return 'Generated ${parts.join(', ')} questions';
+  }
+
+  String _buildUnlockLabel() {
+    if (!isOnline) return 'Unlock Offline';
+    if (subscriptionTier == 'elite') return 'Unlock \u2014 Unlimited previews';
+    if (remainingDailyPreviews > 0) {
+      return 'Unlock \u2014 $remainingDailyPreviews previews left';
+    }
+    return 'Unlock for 1 Credit';
   }
 
   Widget _previewHeader(int? totalQuestions) {

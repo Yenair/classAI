@@ -62,6 +62,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   bool _isOnline = true;
   bool _editorSidebarOpen = true;
   int _creditBalance = 0;
+  int _remainingDailyPreviews = 10;
   String? _encryptedContent;
   String? _teacherId;
   String? _schoolId;
@@ -138,6 +139,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _registerWithEmergencyFlush();
       _loadCreditBalance();
+      _loadDailyPreviewData();
       _loadAuthInfo();
       _loadSubjects();
       _loadSchemesForContext();
@@ -296,6 +298,26 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       }
       if (mounted) setState(() {});
       await _refreshSourceMissing();
+    } catch (_) {}
+  }
+
+  Future<void> _loadDailyPreviewData() async {
+    try {
+      final db = ref.read(databaseProvider);
+      final config = await db.securityConfigDao.get();
+      final today = DateTime.now().toIso8601String().split('T').first;
+      final currentCount = config.dailyPreviewCount;
+      final currentDate = config.dailyPreviewDate ?? '';
+      int count = currentCount;
+      if (currentDate != today) {
+        count = 0;
+      }
+      const limits = {'free': 10, 'basic': 10, 'standard': 10, 'elite': -1};
+      final limit = limits[_subscriptionTier] ?? 10;
+      final remaining = limit < 0 ? -1 : (limit - count).clamp(0, limit);
+      if (mounted) {
+        setState(() => _remainingDailyPreviews = remaining);
+      }
     } catch (_) {}
   }
 
@@ -1187,6 +1209,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                               hasGenerated: _hasGenerated,
                                               isUnlocked: _isUnlocked,
                                               isOnline: _isOnline,
+                                              subscriptionTier: _subscriptionTier,
+                                              remainingDailyPreviews: _remainingDailyPreviews,
                                               isRegenerating: _isRegenerating,
                                               objectivesText: _objectivesText,
                                               vocabularyText: _vocabularyText,
@@ -1285,6 +1309,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                             hasGenerated: _hasGenerated,
                                             isUnlocked: _isUnlocked,
                                             isOnline: _isOnline,
+                                            subscriptionTier: _subscriptionTier,
+                                            remainingDailyPreviews: _remainingDailyPreviews,
                                             isRegenerating: _isRegenerating,
                                             objectivesText: _objectivesText,
                                             vocabularyText: _vocabularyText,
@@ -2135,6 +2161,8 @@ class _PreviewColumn extends StatelessWidget {
   final bool hasGenerated;
   final bool isUnlocked;
   final bool isOnline;
+  final String subscriptionTier;
+  final int remainingDailyPreviews;
   final bool isRegenerating;
   final String objectivesText;
   final String vocabularyText;
@@ -2163,6 +2191,8 @@ class _PreviewColumn extends StatelessWidget {
     required this.hasGenerated,
     required this.isUnlocked,
     required this.isOnline,
+    required this.subscriptionTier,
+    this.remainingDailyPreviews = 10,
     this.isRegenerating = false,
     required this.objectivesText,
     required this.vocabularyText,
@@ -2347,7 +2377,7 @@ class _PreviewColumn extends StatelessWidget {
                           ),
                         ),
                         icon: const Icon(Icons.lock_open_rounded),
-                        label: Text(isOnline ? 'Unlock for 1 Credit' : 'Unlock Offline'),
+                        label: Text(_buildUnlockLabel()),
                       ),
                     ),
                   ],
@@ -2739,6 +2769,15 @@ class _PreviewColumn extends StatelessWidget {
               ),
       ),
     );
+  }
+
+  String _buildUnlockLabel() {
+    if (!isOnline) return 'Unlock Offline';
+    if (subscriptionTier == 'elite') return 'Unlock \u2014 Unlimited previews';
+    if (remainingDailyPreviews > 0) {
+      return 'Unlock \u2014 $remainingDailyPreviews previews left';
+    }
+    return 'Unlock for 1 Credit';
   }
 }
 

@@ -612,7 +612,7 @@ class _NavDrawer extends StatelessWidget {
             icon: Icons.menu_book_rounded,
             label: 'Lessons',
             isActive: false,
-            onTap: () => context.go('/lessons'),
+            onTap: () => context.push('/lessons'),
           ),
           _navItem(
             cs: cs,
@@ -620,7 +620,7 @@ class _NavDrawer extends StatelessWidget {
             icon: Icons.quiz_outlined,
             label: 'Exams',
             isActive: false,
-            onTap: () => context.go('/exams'),
+            onTap: () => context.push('/exams'),
           ),
           _navItem(
             cs: cs,
@@ -1577,7 +1577,7 @@ class _BottomNav extends StatelessWidget {
             icon: Icons.menu_book_rounded,
             label: 'Lessons',
             isActive: false,
-            onTap: () => context.go('/lessons'),
+            onTap: () => context.push('/lessons'),
           ),
           _bottomItem(
             cs: cs,
@@ -1585,7 +1585,7 @@ class _BottomNav extends StatelessWidget {
             icon: Icons.quiz_outlined,
             label: 'Exams',
             isActive: false,
-            onTap: () => context.go('/exams'),
+            onTap: () => context.push('/exams'),
           ),
           _bottomItem(
             cs: cs,
