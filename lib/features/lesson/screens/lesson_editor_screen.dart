@@ -56,6 +56,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   bool _isGenerating = false;
   bool _isRegenerating = false;
   bool _hasGenerated = false;
+  bool _configExpanded = false;
   int _previewRevision = 0;
   final _reviewController = TextEditingController();
   bool _isUnlocked = false;
@@ -626,6 +627,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             _assessmentText = parsedRaw['assessment'] as String? ?? '';
             _homeworkText = parsedRaw['homework'] as String? ?? '';
             _hasGenerated = true;
+            _configExpanded = false;
             _isUnlocked = false;
             _isGenerating = false;
             _previewRevision++;
@@ -686,19 +688,20 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       // and the mouse_tracker assertion during device update.
       WidgetsBinding.instance.scheduleFrame();
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        setState(() {
-          _encryptedContent = result['encryptedContent'] as String?;
-          _objectivesText = _formatList(raw['objectives']);
-          _vocabularyText = _formatList(raw['vocabulary']);
-          _materialsText = _formatList(raw['materials']);
-          _presentationText = _formatJson(raw['presentation']);
-          _assessmentText = raw['assessment'] as String? ?? '';
-          _homeworkText = raw['homework'] as String? ?? '';
-          _hasGenerated = true;
-          _isRegenerating = false;
-          _previewRevision++;
-        });
+      if (!mounted) return;
+      setState(() {
+        _encryptedContent = result['encryptedContent'] as String?;
+        _objectivesText = _formatList(raw['objectives']);
+        _vocabularyText = _formatList(raw['vocabulary']);
+        _materialsText = _formatList(raw['materials']);
+        _presentationText = _formatJson(raw['presentation']);
+        _assessmentText = raw['assessment'] as String? ?? '';
+        _homeworkText = raw['homework'] as String? ?? '';
+        _hasGenerated = true;
+        _configExpanded = false;
+        _isRegenerating = false;
+        _previewRevision++;
+      });
       });
 
       await _saveLesson(notify: false);
@@ -1115,6 +1118,81 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     });
   }
 
+  Widget _buildConfigArea({required Widget child}) {
+    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+
+    final summary = '$_subject · $_classLevel · Week $_week';
+    final icon = _configExpanded
+        ? Icons.keyboard_arrow_up_rounded
+        : Icons.keyboard_arrow_down_rounded;
+
+    return Column(
+      children: [
+        // Collapsible header
+        InkWell(
+          onTap: () => setState(() => _configExpanded = !_configExpanded),
+          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Generation Parameters',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                      if (!_configExpanded && summary.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            summary,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(icon, color: cs.onSurfaceVariant),
+              ],
+            ),
+          ),
+        ),
+        // Collapsible body
+        AnimatedSize(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          alignment: Alignment.topCenter,
+          child: _configExpanded
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 24),
+                  child: child,
+                )
+              : const SizedBox.shrink(),
+        ),
+      ],
+    );
+  }
+
   @override
   void dispose() {
     _topicController.dispose();
@@ -1236,57 +1314,59 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                           // Left column: config
                                           SizedBox(
                                             width: 450,
-                                            child: _ConfigColumn(
-                                                  cs: cs,
-                                                  theme: theme,
-                                                  subject: _subject,
-                                                  classLevel: _classLevel,
-                                                  week: _week,
-                                                  difficulty: _difficulty,
-                                                  assessmentFormat:
-                                                      _assessmentFormat,
-                                                  selectedBlooms: _selectedBlooms,
-                                                  isGenerating: _isGenerating,
-                                                  hasGenerated: _hasGenerated,
-                                                  subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
-                                                  classLevels: _classLevels,
-                                                  difficulties: _difficulties,
-                                                  bloomVerbs: _bloomVerbs,
-                                                  topicController: _topicController,
-                                                  onSubjectChanged: (v) {
-                                                    setState(() => _subject = v);
-                                                    _loadSchemesForContext();
-                                                  },
-                                                  onClassChanged: (v) {
-                                                    setState(() => _classLevel = v);
-                                                    _loadSchemesForContext();
-                                                  },
-                                                  onWeekChanged: (v) => setState(() => _week = v),
-                                                  onDifficultyChanged: (v) =>
-                                                      setState(() =>
-                                                          _difficulty = v),
-                                                  onAssessmentFormatChanged: (v) =>
-                                                      setState(() =>
-                                                          _assessmentFormat = v),
-                                                  onBloomToggled: (verb) {
-                                                    setState(() {
-                                                      if (_selectedBlooms
-                                                          .contains(verb)) {
-                                                        _selectedBlooms
-                                                            .remove(verb);
-                                                      } else {
-                                                        _selectedBlooms.add(verb);
-                                                      }
-                                                    });
-                                                  },
-                                                  onGenerate: _handleGenerate,
-                                                  schemes: _schemes,
-                                                  schemeOfWorkLocalId: _schemeOfWorkLocalId,
-                                                  isFromSchemeOfWork: _isFromSchemeOfWork,
-                                                  isManualTopicEntry: _isManualTopicEntry,
-                                                  onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
-                                                  onManualTopicSelected: _onManualTopicSelected,
-                                                ),
+                                            child: _buildConfigArea(
+                                              child: _ConfigColumn(
+                                                    cs: cs,
+                                                    theme: theme,
+                                                    subject: _subject,
+                                                    classLevel: _classLevel,
+                                                    week: _week,
+                                                    difficulty: _difficulty,
+                                                    assessmentFormat:
+                                                        _assessmentFormat,
+                                                    selectedBlooms: _selectedBlooms,
+                                                    isGenerating: _isGenerating,
+                                                    hasGenerated: _hasGenerated,
+                                                    subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
+                                                    classLevels: _classLevels,
+                                                    difficulties: _difficulties,
+                                                    bloomVerbs: _bloomVerbs,
+                                                    topicController: _topicController,
+                                                    onSubjectChanged: (v) {
+                                                      setState(() => _subject = v);
+                                                      _loadSchemesForContext();
+                                                    },
+                                                    onClassChanged: (v) {
+                                                      setState(() => _classLevel = v);
+                                                      _loadSchemesForContext();
+                                                    },
+                                                    onWeekChanged: (v) => setState(() => _week = v),
+                                                    onDifficultyChanged: (v) =>
+                                                        setState(() =>
+                                                            _difficulty = v),
+                                                    onAssessmentFormatChanged: (v) =>
+                                                        setState(() =>
+                                                            _assessmentFormat = v),
+                                                    onBloomToggled: (verb) {
+                                                      setState(() {
+                                                        if (_selectedBlooms
+                                                            .contains(verb)) {
+                                                          _selectedBlooms
+                                                              .remove(verb);
+                                                        } else {
+                                                          _selectedBlooms.add(verb);
+                                                        }
+                                                      });
+                                                    },
+                                                    onGenerate: _handleGenerate,
+                                                    schemes: _schemes,
+                                                    schemeOfWorkLocalId: _schemeOfWorkLocalId,
+                                                    isFromSchemeOfWork: _isFromSchemeOfWork,
+                                                    isManualTopicEntry: _isManualTopicEntry,
+                                                    onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
+                                                    onManualTopicSelected: _onManualTopicSelected,
+                                                  ),
+                                            ),
                                           ),
                                           const SizedBox(width: 24),
                                           // Right column: preview
@@ -1340,56 +1420,58 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                       )
                                     : Column(
                                         children: [
-                                          _ConfigColumn(
-                                            cs: cs,
-                                            theme: theme,
-                                            subject: _subject,
-                                            classLevel: _classLevel,
-                                            week: _week,
-                                            difficulty: _difficulty,
-                                            assessmentFormat:
-                                                _assessmentFormat,
-                                            selectedBlooms: _selectedBlooms,
-                                            isGenerating: _isGenerating,
-                                            hasGenerated: _hasGenerated,
-                                            subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
-                                            classLevels: _classLevels,
-                                            difficulties: _difficulties,
-                                            bloomVerbs: _bloomVerbs,
-                                            topicController: _topicController,
-                                            onSubjectChanged: (v) {
-                                              setState(() => _subject = v);
-                                              _loadSchemesForContext();
-                                            },
-                                            onClassChanged: (v) {
-                                              setState(() => _classLevel = v);
-                                              _loadSchemesForContext();
-                                            },
-                                            onWeekChanged: (v) => setState(() => _week = v),
-                                            onDifficultyChanged: (v) =>
-                                                setState(
-                                                    () => _difficulty = v),
-                                            onAssessmentFormatChanged: (v) =>
-                                                setState(() =>
-                                                    _assessmentFormat = v),
-                                            onBloomToggled: (verb) {
-                                              setState(() {
-                                                if (_selectedBlooms
-                                                    .contains(verb)) {
-                                                  _selectedBlooms.remove(verb);
-                                                } else {
-                                                  _selectedBlooms.add(verb);
-                                                }
-                                              });
-                                            },
-                                            onGenerate: _handleGenerate,
-                                            onAddNewSubject: _showAddSubjectDialog,
-                                            schemes: _schemes,
-                                            schemeOfWorkLocalId: _schemeOfWorkLocalId,
-                                            isFromSchemeOfWork: _isFromSchemeOfWork,
-                                            isManualTopicEntry: _isManualTopicEntry,
-                                            onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
-                                            onManualTopicSelected: _onManualTopicSelected,
+                                          _buildConfigArea(
+                                            child: _ConfigColumn(
+                                              cs: cs,
+                                              theme: theme,
+                                              subject: _subject,
+                                              classLevel: _classLevel,
+                                              week: _week,
+                                              difficulty: _difficulty,
+                                              assessmentFormat:
+                                                  _assessmentFormat,
+                                              selectedBlooms: _selectedBlooms,
+                                              isGenerating: _isGenerating,
+                                              hasGenerated: _hasGenerated,
+                                              subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
+                                              classLevels: _classLevels,
+                                              difficulties: _difficulties,
+                                              bloomVerbs: _bloomVerbs,
+                                              topicController: _topicController,
+                                              onSubjectChanged: (v) {
+                                                setState(() => _subject = v);
+                                                _loadSchemesForContext();
+                                              },
+                                              onClassChanged: (v) {
+                                                setState(() => _classLevel = v);
+                                                _loadSchemesForContext();
+                                              },
+                                              onWeekChanged: (v) => setState(() => _week = v),
+                                              onDifficultyChanged: (v) =>
+                                                  setState(
+                                                      () => _difficulty = v),
+                                              onAssessmentFormatChanged: (v) =>
+                                                  setState(() =>
+                                                      _assessmentFormat = v),
+                                              onBloomToggled: (verb) {
+                                                setState(() {
+                                                  if (_selectedBlooms
+                                                      .contains(verb)) {
+                                                    _selectedBlooms.remove(verb);
+                                                  } else {
+                                                    _selectedBlooms.add(verb);
+                                                  }
+                                                });
+                                              },
+                                              onGenerate: _handleGenerate,
+                                              onAddNewSubject: _showAddSubjectDialog,
+                                              schemes: _schemes,
+                                              schemeOfWorkLocalId: _schemeOfWorkLocalId,
+                                              isFromSchemeOfWork: _isFromSchemeOfWork,
+                                              isManualTopicEntry: _isManualTopicEntry,
+                                              onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
+                                              onManualTopicSelected: _onManualTopicSelected,
+                                            ),
                                           ),
                                           const SizedBox(height: 24),
                                           _PreviewColumn(

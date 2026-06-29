@@ -51,6 +51,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   bool _isGenerating = false;
   bool _isRegenerating = false;
   bool _hasGenerated = false;
+  bool _configExpanded = false;
   bool _isUnlocked = false;
   bool _isOnline = true;
   int? _examId;
@@ -695,6 +696,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         _theoryQuestions = theoryQuestions;
         _subjectiveQuestions = subjectiveQuestions;
         _hasGenerated = true;
+        _configExpanded = false;
         _isUnlocked = false;
         _isGenerating = false;
         _previewRevision++;
@@ -1255,6 +1257,73 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     });
   }
 
+  Widget _buildConfigArea({required Widget child}) {
+    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final hasSelection = _subject.isNotEmpty && _classLevel.isNotEmpty;
+    final summaryItems = <String>[];
+    if (_subject.isNotEmpty) summaryItems.add(_subject);
+    if (_classLevel.isNotEmpty) summaryItems.add(_classLevel);
+    if (_week > 0) summaryItems.add('Week $_week');
+    final summary = summaryItems.join(' · ');
+    final icon = _configExpanded
+        ? Icons.keyboard_arrow_up_rounded
+        : Icons.keyboard_arrow_down_rounded;
+    return Column(
+      children: [
+        // Collapsible header
+        InkWell(
+          onTap: () => setState(() => _configExpanded = !_configExpanded),
+          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Exam Configuration',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600, color: cs.onSurface,
+                        ),
+                      ),
+                      if (!_configExpanded && summary.isNotEmpty && hasSelection)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(summary, style: theme.textTheme.bodySmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(icon, color: cs.onSurfaceVariant),
+              ],
+            ),
+          ),
+        ),
+        // Collapsible body
+        AnimatedSize(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          alignment: Alignment.topCenter,
+          child: _configExpanded
+              ? Padding(padding: const EdgeInsets.only(top: 24), child: child)
+              : const SizedBox.shrink(),
+        ),
+      ],
+    );
+  }
+
   @override
   void dispose() {
     _topicController.dispose();
@@ -1364,7 +1433,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                   children: [
                                     SizedBox(
                                       width: 380,
-                                      child: _ConfigPanel(
+                                      child: _buildConfigArea(
+                                        child: _ConfigPanel(
                                           cs: cs,
                                           theme: theme,
                                           subject: _subject,
@@ -1419,6 +1489,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                           onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
                                           onManualTopicSelected: () => _onLessonSelected(null),
                                         ),
+                                      ),
                                     ),
                                     const SizedBox(width: 24),
                                     Expanded(
@@ -1447,60 +1518,62 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                 )
                                   : Column(
                                   children: [
-                                    _ConfigPanel(
-                                      cs: cs,
-                                      theme: theme,
-                                      subject: _subject,
-                                      classLevel: _classLevel,
-                                      week: _week,
-                                      topicController: _topicController,
-                                      selectedQuestionTypes:
-                                          _selectedQuestionTypes,
-                                      questionCounts: _questionCounts,
-                                      difficulty: _difficulty,
-                                      isGenerating: _isGenerating,
-                                      isRegenerating: _isRegenerating,
-                                      onRegenerate: _isUnlocked ? _handleRegenerate : null,
-                                      reviewController: _reviewController,
-                                      creditBalance: _creditBalance,
-                                      subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
-                                      classLevels: _classLevels,
-                                      difficulties: _difficulties,
-                                      onSubjectChanged: (v) => setState(() {
-                                          _subject = v;
+                                    _buildConfigArea(
+                                      child: _ConfigPanel(
+                                        cs: cs,
+                                        theme: theme,
+                                        subject: _subject,
+                                        classLevel: _classLevel,
+                                        week: _week,
+                                        topicController: _topicController,
+                                        selectedQuestionTypes:
+                                            _selectedQuestionTypes,
+                                        questionCounts: _questionCounts,
+                                        difficulty: _difficulty,
+                                        isGenerating: _isGenerating,
+                                        isRegenerating: _isRegenerating,
+                                        onRegenerate: _isUnlocked ? _handleRegenerate : null,
+                                        reviewController: _reviewController,
+                                        creditBalance: _creditBalance,
+                                        subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
+                                        classLevels: _classLevels,
+                                        difficulties: _difficulties,
+                                        onSubjectChanged: (v) => setState(() {
+                                            _subject = v;
+                                            _selectedLessonId = null;
+                                            _isManualTopicEntry = true;
+                                            _loadSchemesForContext();
+                                          }),
+                                        onClassChanged: (v) => setState(() {
+                                          _classLevel = v;
                                           _selectedLessonId = null;
                                           _isManualTopicEntry = true;
-                                          _loadSchemesForContext();
                                         }),
-                                      onClassChanged: (v) => setState(() {
-                                        _classLevel = v;
-                                        _selectedLessonId = null;
-                                        _isManualTopicEntry = true;
-                                      }),
-                                      onDifficultyChanged: (v) => setState(
-                                          () => _difficulty = v),
-                                      onTypeToggled: (type) => setState(() {
-                                        if (_selectedQuestionTypes.contains(type)) {
-                                          _selectedQuestionTypes.remove(type);
-                                        } else {
-                                          _selectedQuestionTypes.add(type);
-                                        }
-                                      }),
-                                      onCountChanged: (type, count) => setState(() {
-                                        _questionCounts[type] = count;
-                                      }),
-                                      onGenerate: _handleGenerate,
-                                      onAddNewSubject: _showAddSubjectDialog,
-                                      teacherLessons: _teacherLessons,
-                                      schemes: _schemes,
-                                      schemeOfWorkLocalId: _schemeOfWorkLocalId,
-                                      isFromSchemeOfWork: _isFromSchemeOfWork,
-                                      isManualTopicEntry: _isManualTopicEntry,
-                                      selectedLessonId: _selectedLessonId,
-                                      onWeekChanged: (v) => setState(() => _week = v),
-                                      onLessonSelected: _onLessonSelected,
-                                      onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
-                                      onManualTopicSelected: () => _onLessonSelected(null),
+                                        onDifficultyChanged: (v) => setState(
+                                            () => _difficulty = v),
+                                        onTypeToggled: (type) => setState(() {
+                                          if (_selectedQuestionTypes.contains(type)) {
+                                            _selectedQuestionTypes.remove(type);
+                                          } else {
+                                            _selectedQuestionTypes.add(type);
+                                          }
+                                        }),
+                                        onCountChanged: (type, count) => setState(() {
+                                          _questionCounts[type] = count;
+                                        }),
+                                        onGenerate: _handleGenerate,
+                                        onAddNewSubject: _showAddSubjectDialog,
+                                        teacherLessons: _teacherLessons,
+                                        schemes: _schemes,
+                                        schemeOfWorkLocalId: _schemeOfWorkLocalId,
+                                        isFromSchemeOfWork: _isFromSchemeOfWork,
+                                        isManualTopicEntry: _isManualTopicEntry,
+                                        selectedLessonId: _selectedLessonId,
+                                        onWeekChanged: (v) => setState(() => _week = v),
+                                        onLessonSelected: _onLessonSelected,
+                                        onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
+                                        onManualTopicSelected: () => _onLessonSelected(null),
+                                      ),
                                     ),
                                     const SizedBox(height: 24),
                                     _PreviewPanel(
