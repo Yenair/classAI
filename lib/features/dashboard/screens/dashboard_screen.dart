@@ -1968,7 +1968,7 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
             bottom: false,
             child: Row(
               children: [
-                // Profile popup
+                // Profile popup (left side)
                 PopupMenuButton<String>(
                   onSelected: (value) {
                     switch (value) {
@@ -2077,15 +2077,18 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Text(
-                  'ClassAI',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: cs.primary,
+                // Centered title
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      'ClassAI',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: cs.primary,
+                      ),
+                    ),
                   ),
                 ),
-                const Spacer(),
                 // Sync status indicator (live from syncStatusProvider)
                 Material(
                   color: Colors.transparent,

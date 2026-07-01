@@ -5,13 +5,19 @@ import { validateTokenVersion } from "../_shared/validate_token.ts";
 // Key compression map (mirrors PayloadCompressor._keyMap on the Dart side)
 // Also includes camelCase→snake_case fallbacks for keys the Dart side may
 // send uncompressed (e.g. 'classLevel', 'bloomsVerbs').
+//
+// IMPORTANT: For lessons/exams, the Dart side sends:
+//   - school_server_id (TEXT) → already a UUID, maps to school_id (UUID FK)
+//   - teacher_server_id (TEXT) → already a UUID, maps to teacher_id (UUID FK)
+//   - subject (TEXT name)     → needs lookup to subject_id (UUID FK)
+//   - classLevel              → maps to class_level (TEXT column, no FK)
 const KEY_MAP: Record<string, string> = {
   lid: "local_id",
   sid: "server_id",
   slid: "school_local_id",
-  ssid: "school_server_id",
+  ssid: "school_id",          // school_server_id IS already a UUID → use school_id FK directly
   tlid: "teacher_local_id",
-  tsid: "teacher_server_id",
+  tsid: "teacher_id",         // teacher_server_id IS already a UUID → use teacher_id FK directly
   subid: "subject_id",
   ca: "created_at",
   ua: "updated_at",
@@ -56,6 +62,9 @@ const KEY_MAP: Record<string, string> = {
   bloomsVerbs: "blooms_verbs",
   // short code for blooms_verbs
   bv: "blooms_verbs",
+  // Full-key fallbacks so payloads that arrive uncompressed also map correctly
+  school_server_id: "school_id",
+  teacher_server_id: "teacher_id",
 };
 
 /** Decompress a compressed rowData map back to full key names. */
@@ -74,6 +83,86 @@ function getValue(rowData: Record<string, unknown>, ...keys: string[]): unknown 
     if (rowData[key] !== undefined) return rowData[key];
   }
   return undefined;
+}
+
+/** Tables whose rows need a `subject` name → `subject_id` UUID resolution. */
+const TABLES_WITH_SUBJECT_FK = new Set(["lessons", "exams"]);
+
+/**
+ * After decompression, resolve any foreign-key names to their UUIDs.
+ *
+ * Currently handles:
+ *   - `subject` (text name) → `subject_id` (UUID) for lessons & exams
+ *
+ * Mutates `rowData` in place.
+ */
+async function resolveForeignKeys(
+  supabase: ReturnType<typeof createClient>,
+  table: string,
+  rowData: Record<string, unknown>,
+): Promise<void> {
+  if (!TABLES_WITH_SUBJECT_FK.has(table)) return;
+
+  const subjectName = rowData["subject"] as string | undefined;
+  if (!subjectName || typeof subjectName !== "string" || subjectName.trim() === "") {
+    // No subject name to resolve — remove the string key so it doesn't
+    // cause a type mismatch on the FK column, if a subject_id was provided
+    // directly (e.g. via subid in the compression map) it will already be
+    // present as subject_id.
+    delete rowData["subject"];
+    return;
+  }
+
+  // We need the school_id to scope the lookup
+  const schoolId = (rowData["school_id"] as string) ?? undefined;
+  if (!schoolId) {
+    console.warn(
+      `resolveForeignKeys: skipping subject lookup for "${table}" — no school_id in payload`,
+    );
+    // Remove the string subject key so it doesn't cause a type error
+    delete rowData["subject"];
+    return;
+  }
+
+  // Look up the subject UUID from the subjects table
+  const { data: subjectRows, error } = await supabase
+    .from("subjects")
+    .select("id")
+    .eq("subject_name", subjectName.trim())
+    .eq("school_id", schoolId)
+    .limit(1);
+
+  if (error) {
+    console.warn(
+      `resolveForeignKeys: error looking up subject "${subjectName}" for ${table}: ${error.message}`,
+    );
+    delete rowData["subject"];
+    return;
+  }
+
+  if (!subjectRows || subjectRows.length === 0) {
+    // Subject name not found in the subjects table —
+    // insert a new row so the lesson/exam can reference it.
+    const { data: newSubject, error: insertError } = await supabase
+      .from("subjects")
+      .insert({ subject_name: subjectName.trim(), school_id: schoolId })
+      .select("id")
+      .limit(1);
+    if (insertError || !newSubject || newSubject.length === 0) {
+      console.warn(
+        `resolveForeignKeys: failed to insert subject "${subjectName}" for school ${schoolId}: ${insertError?.message ?? "unknown error"}`,
+      );
+      delete rowData["subject"];
+      return;
+    }
+    rowData["subject_id"] = newSubject[0].id;
+    delete rowData["subject"];
+    return;
+  }
+
+  // Replace the string subject name with the UUID foreign key
+  rowData["subject_id"] = subjectRows[0].id;
+  delete rowData["subject"];
 }
 
 serve(async (req) => {
@@ -145,6 +234,8 @@ serve(async (req) => {
         if (op === "INSERT") {
           // Remove local-only fields; let server generate UUIDs
           const { local_id, localId, ...insertData } = fullRowData;
+          // Resolve foreign-key names (e.g. subject name → subject_id UUID)
+          await resolveForeignKeys(supabase, table, insertData);
           const { data: insertData_, error } = await supabase
             .from(table)
             .insert(insertData)
@@ -160,12 +251,14 @@ serve(async (req) => {
             (change as Record<string, unknown>)["__generated_id"] = generatedId;
           }
         } else if (op === "UPDATE") {
-          const serverId = getValue(fullRowData, "server_id", "serverId", "id", "school_server_id", "teacher_server_id");
+          const serverId = getValue(fullRowData, "id", "server_id", "serverId");
           if (!serverId) {
             console.warn(`sync-push: UPDATE on "${table}" missing server id`);
             continue;
           }
           const { local_id, localId, server_id, serverId: _sid, id, school_server_id, teacher_server_id, ...updateData } = fullRowData;
+          // Resolve foreign-key names for UPDATEs too
+          await resolveForeignKeys(supabase, table, updateData);
           const { error } = await supabase
             .from(table)
             .update(updateData)
@@ -175,7 +268,7 @@ serve(async (req) => {
             continue;
           }
         } else if (op === "DELETE") {
-          const serverId = getValue(fullRowData, "server_id", "serverId", "id", "school_server_id", "teacher_server_id");
+          const serverId = getValue(fullRowData, "id", "server_id", "serverId");
           if (!serverId) {
             console.warn(`sync-push: DELETE on "${table}" missing server id`);
             continue;
