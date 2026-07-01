@@ -336,16 +336,55 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
   /// Called on app start. Tries silent auto-login from stored JWT.
   ///
-  /// 1. Reads stored JWT from flutter_secure_storage (via SecurityService).
-  /// 2. If found, calls validate-session edge function.
-  /// 3. If valid, transitions to [AuthState.authenticated] and navigates.
-  /// 4. If invalid/expired/offline, falls back to the local credential cache.
+  /// 1. First checks device connectivity.
+  /// 2. If **offline**, reads the local credential cache directly:
+  ///    - cached credentials found → [AuthState.authenticated]
+  ///    - no cached credentials → [AuthState.onlineLoginRequired] with a message
+  /// 3. If **online**, tries JWT validation first, then falls back to the local
+  ///    credential cache, and finally shows the login screen.
   Future<void> checkLocalAuth() async {
     state = state.copyWith(
       state: AuthState.checkingLocalAuth,
       clearError: true,
     );
 
+    // --- Offline-first: skip network calls when there is no connectivity ---
+    if (!await PlatformHelper.isOnline()) {
+      final cachedAuth = await _loadLocalCredentialCache();
+      if (cachedAuth != null) {
+        state = state.copyWith(
+          state: AuthState.authenticated,
+          currentTeacher: cachedAuth.teacher,
+          currentSchool: cachedAuth.school,
+          clearError: true,
+        );
+        _applyThemeFromTeacher(
+          AuthResult(
+            teacher: cachedAuth.teacher,
+            school: cachedAuth.school,
+            wrappedSchoolKey: cachedAuth.teacher.schoolKeyWrapped,
+            passwordHashVersion: cachedAuth.teacher.passwordHashVersion,
+            offlineCredits: (await _db.securityConfigDao.get()).offlineCredits,
+            lastCreditRefillServerTime:
+                cachedAuth.teacher.lastCreditRefillDate ?? DateTime.now(),
+            emailVerified: true,
+            newDevice: false,
+          ),
+        );
+        _startSessionTimer();
+        return;
+      }
+
+      // No cached credentials — show login with offline message
+      state = state.copyWith(
+        state: AuthState.onlineLoginRequired,
+        errorMessage:
+            'No internet connection. Connect to the internet to sign in.',
+      );
+      return;
+    }
+
+    // --- Online flow ---
     try {
       // Try auto-login from stored JWT
       final storedJwt = await _securityService.getStoredJwt();
@@ -712,6 +751,9 @@ class AuthNotifier extends Notifier<AuthStateData> {
   void _startSessionTimer() {
     _stopSessionTimer(); // cancel any existing timer first
     _sessionTimer = Timer.periodic(_sessionCheckInterval, (_) async {
+      if (!await PlatformHelper.isOnline()) {
+        return; // skip validation when offline
+      }
       try {
         await _authService.validateSession();
       } catch (e) {
