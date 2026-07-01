@@ -3,6 +3,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { validateTokenVersion } from "../_shared/validate_token.ts";
 
 // Key compression map (mirrors PayloadCompressor._keyMap on the Dart side)
+// Also includes camelCase→snake_case fallbacks for keys the Dart side may
+// send uncompressed (e.g. 'classLevel', 'bloomsVerbs').
 const KEY_MAP: Record<string, string> = {
   lid: "local_id",
   sid: "server_id",
@@ -49,6 +51,11 @@ const KEY_MAP: Record<string, string> = {
   ay: "academic_year",
   sd: "start_date",
   ic: "is_current",
+  // camelCase→snake_case fallbacks for keys the Dart side may send uncompressed
+  classLevel: "class_level",
+  bloomsVerbs: "blooms_verbs",
+  // short code for blooms_verbs
+  bv: "blooms_verbs",
 };
 
 /** Decompress a compressed rowData map back to full key names. */
