@@ -1143,8 +1143,22 @@ Future<void> _handleSubmit() async {
     }
 
     final code = _codeController.text.trim().toUpperCase();
+
+    // Pass the custom JWT so the edge function can identify the school
+    final jwt = ref.read(authServiceProvider).currentJwt;
+    if (jwt == null || jwt.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _errorMessage = 'No active session. Please login again.';
+      });
+      return;
+    }
+
     final response = await Supabase.instance.client.functions
-        .invoke('redeem-activation', body: {'activation_code': code});
+        .invoke('redeem-activation',
+          headers: {'Authorization': 'Bearer $jwt'},
+          body: {'activation_code': code});
 
     if (response.data != null && response.data is Map) {
       final data = response.data as Map<String, dynamic>;

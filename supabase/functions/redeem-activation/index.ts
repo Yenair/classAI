@@ -20,7 +20,11 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 serve(async (req) => {
   try {
-    const { activation_code } = await req.json();
+    console.log("redeem-activation: Function invoked");
+    const body = await req.json();
+    console.log("redeem-activation: Request body", JSON.stringify(body));
+
+    const { activation_code } = body;
 
     if (!activation_code || typeof activation_code !== "string") {
       return new Response(
@@ -42,9 +46,11 @@ serve(async (req) => {
 
     // ── 2. Get the caller's school_id from the JWT ─────────────────────────
     const authHeader = req.headers.get("Authorization") ?? "";
+    console.log("redeem-activation: Authorization header present:", authHeader ? "yes" : "no");
     const jwt = authHeader.replace("Bearer ", "");
 
     if (!jwt) {
+      console.error("redeem-activation: Missing Authorization header");
       return new Response(
         JSON.stringify({ error: "Missing Authorization header" }),
         { status: 401, headers: { "Content-Type": "application/json" } },
@@ -63,6 +69,7 @@ serve(async (req) => {
           Uint8Array.from(atob(parts[1]), (c) => c.charCodeAt(0)),
         ),
       );
+      console.log("redeem-activation: JWT payload", JSON.stringify(payload));
       schoolId = payload.school_id;
       if (!schoolId) {
         throw new Error("No school_id in token");
@@ -73,6 +80,8 @@ serve(async (req) => {
         { status: 401, headers: { "Content-Type": "application/json" } },
       );
     }
+
+    console.log("redeem-activation: schoolId extracted:", schoolId);
 
     // ── 3. Look up the school ──────────────────────────────────────────────
     const supabase = createClient(
@@ -85,6 +94,8 @@ serve(async (req) => {
       .select("id, subscription_tier, activation_code")
       .eq("id", schoolId)
       .single();
+
+    console.log("redeem-activation: school query result", JSON.stringify({ school, error: schoolError?.message }));
 
     if (schoolError || !school) {
       return new Response(

@@ -127,9 +127,18 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
 
   /// Sets the JWT on the remote API so edge function calls are authenticated.
   /// Returns the JWT, or null if not available.
-  String? _setJwtOnRemoteApi(SyncService syncService) {
+  Future<String?> _setJwtOnRemoteApi(SyncService syncService) async {
     final authService = ref.read(authServiceProvider);
-    final jwt = authService.currentJwt;
+    final securityService = ref.read(securityServiceProvider);
+    String? jwt = authService.currentJwt;
+    if (jwt == null || jwt.isEmpty) {
+      // In-memory JWT may have been cleared by a failed session timer
+      // while offline — fall back to secure storage.
+      jwt = await securityService.getStoredJwt();
+      if (jwt != null && jwt.isNotEmpty) {
+        authService.setJwt(jwt);
+      }
+    }
     if (jwt != null && jwt.isNotEmpty && syncService.remoteApi is SupabaseSyncRemoteApi) {
       (syncService.remoteApi as SupabaseSyncRemoteApi).setJwt(jwt);
     }
@@ -168,7 +177,7 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
       );
 
       final syncService = await ref.read(syncServiceProvider.future);
-      final jwt = _setJwtOnRemoteApi(syncService);
+      final jwt = await _setJwtOnRemoteApi(syncService);
       await syncService.onConnectivityRestored(jwt: jwt);
       await refresh();
       await ref.read(creditStateProvider.notifier).refresh();
@@ -222,7 +231,7 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
       // Resolve SyncService (may load school info asynchronously)
       final syncService = await ref.read(syncServiceProvider.future);
 
-      final jwt = _setJwtOnRemoteApi(syncService);
+      final jwt = await _setJwtOnRemoteApi(syncService);
 
       // Run the full sync cycle
       await syncService.onConnectivityRestored(jwt: jwt);

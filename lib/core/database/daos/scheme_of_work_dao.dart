@@ -30,16 +30,16 @@ class SchemeOfWorkDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
-  Future<List<SchemeOfWorkData>> getApproved() {
+  Future<List<SchemeOfWorkData>> getSaved() {
     return (select(schemeOfWork)
-          ..where((t) => t.status.equals('approved'))
+          ..where((t) => t.status.equals('rejected').not())
           ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)]))
         .get();
   }
 
-  Future<List<SchemeOfWorkData>> getApprovedBySubject(int subjectId) {
+  Future<List<SchemeOfWorkData>> getSavedBySubject(int subjectId) {
     return (select(schemeOfWork)
-          ..where((t) => t.status.equals('approved'))
+          ..where((t) => t.status.equals('rejected').not())
           ..where((t) => t.subjectId.equals(subjectId))
           ..orderBy([(t) => OrderingTerm(expression: t.weekNumber, mode: OrderingMode.asc)]))
         .get();

@@ -82,7 +82,7 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
       final school = authState.currentSchool ?? await db.schoolsDao.get();
       if (school == null) return;
 
-      final schemes = (await db.schemeOfWorkDao.getApproved())
+      final schemes = (await db.schemeOfWorkDao.getSaved())
           .where((scheme) => scheme.schoolId == school.localId)
           .toList();
       if (schemes.isEmpty) return;

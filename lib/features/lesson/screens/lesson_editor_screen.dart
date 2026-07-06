@@ -528,6 +528,14 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       return;
     }
 
+    if (!await PlatformHelper.isOnline()) {
+      showErrorToast(
+        context: context,
+        message: 'Generation requires internet — try again when connected.',
+      );
+      return;
+    }
+
     setState(() => _isGenerating = true);
 
     try {
@@ -1059,7 +1067,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       final subjectRow = await db.subjectsDao.getByName(_subject);
       final subjectId = subjectRow?.id;
       if (subjectId != null) {
-        final schemes = await db.schemeOfWorkDao.getApprovedBySubject(subjectId);
+        final schemes = await db.schemeOfWorkDao.getSavedBySubject(subjectId);
         if (mounted) {
           setState(() => _schemes = schemes);
         }

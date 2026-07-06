@@ -240,7 +240,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       final subjectRow = await db.subjectsDao.getByName(_subject);
       final subjectId = subjectRow?.id;
       if (subjectId != null) {
-        final schemes = await db.schemeOfWorkDao.getApprovedBySubject(subjectId);
+        final schemes = await db.schemeOfWorkDao.getSavedBySubject(subjectId);
         if (mounted) {
           setState(() => _schemes = schemes);
         }
@@ -592,6 +592,17 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         ref.read(authProvider).currentSchool?.subscriptionTier ?? _subscriptionTier;
     if (authTier == 'free') {
       await _showUpgradeRequiredDialog();
+      return;
+    }
+
+    if (!await PlatformHelper.isOnline()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showErrorToast(
+          context: context,
+          message: 'Generation requires internet — try again when connected.',
+        );
+      });
       return;
     }
 
