@@ -1131,8 +1131,29 @@ Future<void> _handleSubmit() async {
   });
 
   try {
-    final school = await ref.read(databaseProvider).schoolsDao.get();
+    final authData = ref.read(authProvider);
+    final school = authData.currentSchool ??
+        await ref.read(databaseProvider).schoolsDao.get();
     final serverId = school?.serverId;
+    final teacher = authData.currentTeacher;
+    final email = teacher == null ? null : teacher.email.trim();
+    final cachedSchool = authData.currentSchool;
+    final schoolName = cachedSchool == null
+        ? school?.schoolName.trim()
+        : cachedSchool.schoolName.trim();
+
+    if (email == null ||
+        email.isEmpty ||
+        schoolName == null ||
+        schoolName.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _isSubmitting = false;
+        _errorMessage = 'School details are missing. Please sync and try again.';
+      });
+      return;
+    }
+
     if (serverId == null) {
       if (!mounted) return;
       setState(() {
@@ -1144,33 +1165,29 @@ Future<void> _handleSubmit() async {
 
     final code = _codeController.text.trim().toUpperCase();
 
-    // Pass the custom JWT so the edge function can identify the school
-    final jwt = ref.read(authServiceProvider).currentJwt;
-    if (jwt == null || jwt.isEmpty) {
-      if (!mounted) return;
-      setState(() {
-        _isSubmitting = false;
-        _errorMessage = 'No active session. Please login again.';
-      });
-      return;
-    }
-
     final response = await Supabase.instance.client.functions
-        .invoke('redeem-activation',
-          headers: {'Authorization': 'Bearer $jwt'},
-          body: {'activation_code': code});
+        .invoke('redeem-activation', body: {
+          'code': code,
+          'email': email,
+          'school_name': schoolName,
+        });
 
     if (response.data != null && response.data is Map) {
       final data = response.data as Map<String, dynamic>;
-      final tier = data['subscription_tier'] as String? ?? 'premium';
-      final expiryStr = data['expiry_date'] as String?;
+      final tier = data['subscription_tier'] as String? ??
+          data['tier'] as String? ??
+          'standard';
+      final expiryStr =
+          data['expiry_date'] as String? ?? data['expiry'] as String?;
       final expiry = expiryStr != null ? DateTime.tryParse(expiryStr) : null;
+      final activationCode =
+          data['activation_code'] as String? ?? data['code'] as String? ?? code;
 
       await ref.read(databaseProvider).schoolsDao.updateSubscriptionFields(
             serverId: serverId,
             subscriptionTier: tier,
             expiryDate: expiry,
-            activationCode: code,
+            activationCode: activationCode,
           );
     }
 
@@ -1178,16 +1195,28 @@ Future<void> _handleSubmit() async {
 
     if (!mounted) return;
     Navigator.of(context).pop();
+    final responseData = response.data;
+    final tier = responseData is Map<String, dynamic>
+        ? responseData['subscription_tier'] as String? ??
+            responseData['tier'] as String? ??
+            'standard'
+        : 'standard';
+    final expiryStr = responseData is Map<String, dynamic>
+        ? responseData['expiry_date'] as String? ??
+            responseData['expiry'] as String?
+        : null;
+    final expiry = expiryStr != null ? DateTime.tryParse(expiryStr) : null;
     showInfoToast(
       context: context,
-      message: 'Activation code applied successfully!',
+      message:
+          'Activation code applied successfully. Tier: $tier, expiry: ${expiry?.toLocal().toString() ?? 'unknown'}.',
     );
   } catch (e) {
     if (!mounted) return;
     String message = 'Failed to redeem code. Please try again.';
     final errorStr = e.toString();
-    if (errorStr.contains('409') || errorStr.contains('already been used')) {
-      message = 'This activation code has already been used.';
+    if (errorStr.contains('already used activation code')) {
+      message = 'Invalid or already used activation code.';
     } else if (errorStr.contains('400') || errorStr.contains('Invalid code')) {
       message = 'Invalid activation code format.';
     } else if (errorStr.contains('404') || errorStr.contains('not found')) {
@@ -1264,7 +1293,7 @@ Widget build(BuildContext context) {
               textCapitalization: TextCapitalization.characters,
               decoration: const InputDecoration(
                 labelText: 'Activation Code',
-                hintText: 'CLASS-XXXX-XXXX-XXXX',
+                hintText: 'CLA-XXXX-XXXX-XXXX',
                 prefixIcon: Icon(Icons.vpn_key_rounded),
               ),
               validator: (value) {
@@ -1272,10 +1301,10 @@ Widget build(BuildContext context) {
                   return 'Please enter an activation code';
                 }
                 if (!RegExp(
-                  r'^CLASS-[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$',
+                  r'^CLA-[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$',
                   caseSensitive: false,
                 ).hasMatch(value.trim())) {
-                  return 'Format: CLASS-XXXX-XXXX-XXXX';
+                  return 'Format: CLA-XXXX-XXXX-XXXX';
                 }
                 return null;
               },

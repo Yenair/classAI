@@ -1,155 +1,160 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// ---------------------------------------------------------------------------
-// redeem-activation Edge Function
-//
-// Validates and redeems an activation code for a school.
-// Called by school admins to manually activate a subscription.
-//
-// Request body:
-//   activation_code (string, required) – The code to redeem
-//
-// Response:
-//   success: true
-//   subscription_tier: string
-//   expiry_date: string (ISO 8601)
-//
-// The caller's JWT is used to determine which school to update.
-// ---------------------------------------------------------------------------
+const CODE_PATTERN = /^CLA-[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/i;
+
+function jsonResponse(body: Record<string, unknown>, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 serve(async (req) => {
   try {
-    console.log("redeem-activation: Function invoked");
+    if (req.method !== "POST") {
+      return jsonResponse({ error: "Method not allowed" }, 405);
+    }
+
     const body = await req.json();
-    console.log("redeem-activation: Request body", JSON.stringify(body));
+    const activationCodeInput =
+      body.code ?? body.activation_code ?? body.activationCode;
+    const emailInput = body.email;
+    const schoolNameInput = body.school_name;
 
-    const { activation_code } = body;
-
-    if (!activation_code || typeof activation_code !== "string") {
-      return new Response(
-        JSON.stringify({ error: "Missing required field: activation_code" }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
+    if (
+      !activationCodeInput || typeof activationCodeInput !== "string" ||
+      !emailInput || typeof emailInput !== "string" ||
+      !schoolNameInput || typeof schoolNameInput !== "string"
+    ) {
+      return jsonResponse(
+        {
+          error:
+            "Missing required fields: code, email, school_name",
+        },
+        400,
       );
     }
 
-    // ── 1. Validate activation code format: CLASS-XXXX-XXXX-XXXX ────────────
-    const codePattern = /^CLASS-[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/;
-    if (!codePattern.test(activation_code.trim().toUpperCase())) {
-      return new Response(
-        JSON.stringify({ error: "Invalid activation code format" }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
+    const normalizedCode = activationCodeInput.trim().toUpperCase();
+    if (!CODE_PATTERN.test(normalizedCode)) {
+      return jsonResponse(
+        { error: "Invalid activation code format" },
+        400,
       );
     }
 
-    const normalizedCode = activation_code.trim().toUpperCase();
+    const normalizedEmail = emailInput.trim().toLowerCase();
+    const normalizedSchoolName = schoolNameInput.trim();
+    const now = new Date();
 
-    // ── 2. Get the caller's school_id from the JWT ─────────────────────────
-    const authHeader = req.headers.get("Authorization") ?? "";
-    console.log("redeem-activation: Authorization header present:", authHeader ? "yes" : "no");
-    const jwt = authHeader.replace("Bearer ", "");
-
-    if (!jwt) {
-      console.error("redeem-activation: Missing Authorization header");
-      return new Response(
-        JSON.stringify({ error: "Missing Authorization header" }),
-        { status: 401, headers: { "Content-Type": "application/json" } },
-      );
-    }
-
-    // Decode the JWT payload (base64) to extract the school_id.
-    let schoolId: string;
-    try {
-      const parts = jwt.split(".");
-      if (parts.length !== 3) {
-        throw new Error("Invalid JWT format");
-      }
-      const payload = JSON.parse(
-        new TextDecoder().decode(
-          Uint8Array.from(atob(parts[1]), (c) => c.charCodeAt(0)),
-        ),
-      );
-      console.log("redeem-activation: JWT payload", JSON.stringify(payload));
-      schoolId = payload.school_id;
-      if (!schoolId) {
-        throw new Error("No school_id in token");
-      }
-    } catch {
-      return new Response(
-        JSON.stringify({ error: "Unable to extract school_id from token" }),
-        { status: 401, headers: { "Content-Type": "application/json" } },
-      );
-    }
-
-    console.log("redeem-activation: schoolId extracted:", schoolId);
-
-    // ── 3. Look up the school ──────────────────────────────────────────────
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
+    const { data: activationRow, error: activationError } = await supabase
+      .from("activation_codes")
+      .select("code, school_id, tier, duration_days")
+      .eq("code", normalizedCode)
+      .eq("used", false)
+      .maybeSingle();
+
+    if (activationError || !activationRow) {
+      return jsonResponse(
+        { error: "Invalid or already used activation code." },
+        400,
+      );
+    }
+
     const { data: school, error: schoolError } = await supabase
       .from("schools")
-      .select("id, subscription_tier, activation_code")
-      .eq("id", schoolId)
-      .single();
+      .select("id, school_name")
+      .eq("id", activationRow.school_id)
+      .maybeSingle();
 
-    console.log("redeem-activation: school query result", JSON.stringify({ school, error: schoolError?.message }));
-
-    if (schoolError || !school) {
-      return new Response(
-        JSON.stringify({ error: "School not found" }),
-        { status: 404, headers: { "Content-Type": "application/json" } },
+    if (
+      schoolError || !school ||
+      school.school_name.trim().toLowerCase() !== normalizedSchoolName.toLowerCase()
+    ) {
+      return jsonResponse(
+        { error: "This activation code does not match the provided school." },
+        403,
       );
     }
 
-    // ── 4. Check if already activated at the same or higher tier ────────────
-    if (school.activation_code === normalizedCode) {
-      return new Response(
-        JSON.stringify({
-          error: "This activation code has already been redeemed for this school",
-        }),
-        { status: 409, headers: { "Content-Type": "application/json" } },
+    const { data: adminTeacher, error: adminError } = await supabase
+      .from("teachers")
+      .select("id, school_id, email, role")
+      .eq("email", normalizedEmail)
+      .eq("role", "admin")
+      .maybeSingle();
+
+    if (adminError || !adminTeacher) {
+      return jsonResponse(
+        { error: "Admin account not found for the provided email." },
+        404,
       );
     }
 
-    // ── 5. Apply the subscription upgrade (premium, 365 days from now) ──────
-    const now = new Date();
-    const expiryDate = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
+    if (adminTeacher.school_id !== activationRow.school_id) {
+      return jsonResponse(
+        { error: "This admin does not belong to the activation code school." },
+        403,
+      );
+    }
 
-    const { error: updateError } = await supabase
+    const durationDays = activationRow.duration_days ?? 365;
+    const expiryDate = new Date(
+      now.getTime() + durationDays * 24 * 60 * 60 * 1000,
+    );
+
+    const { error: updateSchoolError } = await supabase
       .from("schools")
       .update({
-        subscription_tier: "premium",
+        subscription_tier: activationRow.tier,
         expiry_date: expiryDate.toISOString(),
-        activation_code: normalizedCode,
+        activation_code: activationRow.code,
         updated_at: now.toISOString(),
       })
-      .eq("id", schoolId);
+      .eq("id", activationRow.school_id);
 
-    if (updateError) {
-      console.error("redeem-activation: update error", updateError.message);
-      return new Response(
-        JSON.stringify({ error: `Failed to update school: ${updateError.message}` }),
-        { status: 500, headers: { "Content-Type": "application/json" } },
+    if (updateSchoolError) {
+      return jsonResponse(
+        { error: `Failed to update school: ${updateSchoolError.message}` },
+        500,
       );
     }
 
-    // ── 6. Return success ──────────────────────────────────────────────────
-    return new Response(
-      JSON.stringify({
-        success: true,
-        subscription_tier: "premium",
-        expiry_date: expiryDate.toISOString(),
-        activation_code: normalizedCode,
-      }),
-      { headers: { "Content-Type": "application/json" } },
-    );
+    const { error: markUsedError } = await supabase
+      .from("activation_codes")
+      .update({
+        used: true,
+        redeemed_at: now.toISOString(),
+      })
+      .eq("code", activationRow.code)
+      .eq("used", false);
+
+    if (markUsedError) {
+      return jsonResponse(
+        {
+          error: `Failed to finalize activation code: ${markUsedError.message}`,
+        },
+        500,
+      );
+    }
+
+    return jsonResponse({
+      success: true,
+      subscription_tier: activationRow.tier,
+      expiry_date: expiryDate.toISOString(),
+      activation_code: activationRow.code,
+      tier: activationRow.tier,
+      expiry: expiryDate.toISOString(),
+      code: activationRow.code,
+    });
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      { status: 500, headers: { "Content-Type": "application/json" } },
-    );
+    const message = err instanceof Error ? err.message : String(err);
+    return jsonResponse({ error: message }, 500);
   }
 });

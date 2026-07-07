@@ -1,40 +1,99 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// ---------------------------------------------------------------------------
-// confirm-payment Edge Function
-//
-// Called after a successful Paystack payment to:
-//   1. Verify the transaction with Paystack server-to-server
-//   2. Generate a unique activation code (receipt)
-//   3. Update the school's subscription_tier, expiry_date, and activation_code
-//   4. Return the activation code to the client
-// ---------------------------------------------------------------------------
-
 const PAYSTACK_BASE = "https://api.paystack.co";
+const ALLOWED_TIERS = new Set(["basic", "standard", "elite"]);
+const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const CODE_PREFIX = "CLA";
+const DEFAULT_DURATION_DAYS = 365;
+
+function jsonResponse(body: Record<string, unknown>, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function normalizeTier(plan: unknown): string | null {
+  if (typeof plan !== "string") return null;
+  const tier = plan.trim().toLowerCase();
+  return ALLOWED_TIERS.has(tier) ? tier : null;
+}
+
+function generateActivationCode(): string {
+  const randomGroup = () => {
+    let group = "";
+    const bytes = crypto.getRandomValues(new Uint8Array(4));
+    for (const byte of bytes) {
+      group += CODE_ALPHABET.charAt(byte % CODE_ALPHABET.length);
+    }
+    return group;
+  };
+
+  return `${CODE_PREFIX}-${randomGroup()}-${randomGroup()}-${randomGroup()}`;
+}
+
+async function sendActivationCodeEmail(
+  email: string,
+  code: string,
+  tier: string,
+  expiryDate: Date,
+): Promise<void> {
+  const gmailUser = Deno.env.get("GMAIL_USER");
+  const gmailAppPassword = Deno.env.get("GMAIL_APP_PASSWORD");
+  if (!gmailUser || !gmailAppPassword) return;
+
+  const nodemailer = await import("npm:nodemailer");
+  const transporter = nodemailer.default.createTransport({
+    service: "gmail",
+    auth: {
+      user: gmailUser,
+      pass: gmailAppPassword,
+    },
+  });
+
+  await transporter.sendMail({
+    from: gmailUser,
+    to: email,
+    subject: "ClassAI Activation Code",
+    html: `
+      <h2>Your ClassAI activation code</h2>
+      <p>Your payment has been confirmed and your subscription has been upgraded to <strong>${tier}</strong>.</p>
+      <p><strong>Activation code:</strong> ${code}</p>
+      <p><strong>Expiry date:</strong> ${expiryDate.toISOString()}</p>
+      <p>This code is your permanent receipt. Keep it safe.</p>
+    `,
+  });
+}
 
 serve(async (req) => {
   try {
-    const { reference, plan, school_id } = await req.json();
-
-    if (!reference || !plan || !school_id) {
-      return new Response(
-        JSON.stringify({
-          error: "Missing required fields: reference, plan, school_id",
-        }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
-      );
+    if (req.method !== "POST") {
+      return jsonResponse({ error: "Method not allowed" }, 405);
     }
 
     const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
     if (!paystackSecretKey) {
-      return new Response(
-        JSON.stringify({ error: "Paystack secret key not configured" }),
-        { status: 500, headers: { "Content-Type": "application/json" } },
+      return jsonResponse({ error: "Paystack secret key not configured" }, 500);
+    }
+
+    const { reference, plan, school_id, email } = await req.json();
+
+    if (!reference || !plan || !school_id) {
+      return jsonResponse(
+        { error: "Missing required fields: reference, plan, school_id" },
+        400,
       );
     }
 
-    // ── 1. Verify the transaction with Paystack ─────────────────────────
+    const tier = normalizeTier(plan);
+    if (!tier) {
+      return jsonResponse(
+        { error: "Invalid subscription tier. Use basic, standard, or elite." },
+        400,
+      );
+    }
+
     const verifyResponse = await fetch(
       `${PAYSTACK_BASE}/transaction/verify/${encodeURIComponent(reference)}`,
       {
@@ -46,80 +105,158 @@ serve(async (req) => {
     );
 
     if (!verifyResponse.ok) {
-      return new Response(
-        JSON.stringify({
+      return jsonResponse(
+        {
           error: `Paystack verification failed: ${verifyResponse.statusText}`,
-        }),
-        { status: 502, headers: { "Content-Type": "application/json" } },
+        },
+        502,
       );
     }
 
     const verifyData = await verifyResponse.json();
     const txStatus = verifyData?.data?.status;
-
     if (txStatus !== "success") {
-      return new Response(
-        JSON.stringify({
+      return jsonResponse(
+        {
           error: `Payment not successful. Status: ${txStatus ?? "unknown"}`,
-        }),
-        { status: 402, headers: { "Content-Type": "application/json" } },
+        },
+        402,
       );
     }
 
-    // ── 2. Generate activation code ─────────────────────────────────────
-    // Format: CLASS-XXXX-XXXX-XXXX (uppercase alphanumeric)
-    function randomGroup(length: number): string {
-      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no I/O/0/1 for clarity
-      let result = "";
-      for (let i = 0; i < length; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-      return result;
-    }
-
-    const activationCode = `CLASS-${randomGroup(4)}-${randomGroup(4)}-${randomGroup(4)}`;
-
-    // ── 3. Calculate expiry date (30 days from now) ─────────────────────
-    const now = new Date();
-    const expiryDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-    // ── 4. Update the school record in Supabase ─────────────────────────
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
+    const { data: school, error: schoolError } = await supabase
+      .from("schools")
+      .select("id, school_name")
+      .eq("id", school_id)
+      .maybeSingle();
+
+    if (schoolError || !school) {
+      return jsonResponse({ error: "School not found" }, 404);
+    }
+
+    const { data: adminTeacher } = await supabase
+      .from("teachers")
+      .select("email")
+      .eq("school_id", school_id)
+      .eq("role", "admin")
+      .maybeSingle();
+
+    const adminEmail = typeof adminTeacher?.email === "string"
+      ? adminTeacher.email.toLowerCase()
+      : null;
+    const activationEmail =
+      typeof email === "string" && email.trim().length > 0
+        ? email.trim().toLowerCase()
+        : adminEmail;
+
+    const now = new Date();
+    const expiryDate = new Date(
+      now.getTime() + DEFAULT_DURATION_DAYS * 24 * 60 * 60 * 1000,
+    );
+
+    let activationCode = "";
+    let inserted = false;
+    let activationRow: { code: string; duration_days: number } | null = null;
+
+    for (let attempt = 0; attempt < 8 && !inserted; attempt++) {
+      activationCode = generateActivationCode();
+      const { data, error } = await supabase
+        .from("activation_codes")
+        .insert({
+          code: activationCode,
+          school_id,
+          tier,
+          duration_days: DEFAULT_DURATION_DAYS,
+          used: false,
+        })
+        .select("code, duration_days")
+        .single();
+
+      if (!error && data) {
+        activationRow = data as { code: string; duration_days: number };
+        inserted = true;
+        break;
+      }
+
+      if (error && error.code !== "23505") {
+        return jsonResponse(
+          { error: `Failed to create activation code: ${error.message}` },
+          500,
+        );
+      }
+    }
+
+    if (!inserted || !activationRow) {
+      return jsonResponse(
+        { error: "Failed to generate a unique activation code" },
+        500,
+      );
+    }
+
     const { error: updateError } = await supabase
       .from("schools")
       .update({
-        subscription_tier: plan,
+        subscription_tier: tier,
         expiry_date: expiryDate.toISOString(),
-        activation_code: activationCode,
+        activation_code: activationRow.code,
         updated_at: now.toISOString(),
       })
       .eq("id", school_id);
 
     if (updateError) {
-      console.error("confirm-payment: update error", updateError.message);
-      return new Response(
-        JSON.stringify({ error: `Failed to update school: ${updateError.message}` }),
-        { status: 500, headers: { "Content-Type": "application/json" } },
+      return jsonResponse(
+        { error: `Failed to update school: ${updateError.message}` },
+        500,
       );
     }
 
-    // ── 5. Return success with activation code ──────────────────────────
-    return new Response(
-      JSON.stringify({
-        activation_code: activationCode,
-        subscription_tier: plan,
-        expiry_date: expiryDate.toISOString(),
-      }),
-      { headers: { "Content-Type": "application/json" } },
-    );
+    const { error: markUsedError } = await supabase
+      .from("activation_codes")
+      .update({
+        used: true,
+        redeemed_at: now.toISOString(),
+      })
+      .eq("code", activationRow.code)
+      .eq("used", false);
+
+    if (markUsedError) {
+      return jsonResponse(
+        {
+          error: `Failed to finalize activation code: ${markUsedError.message}`,
+        },
+        500,
+      );
+    }
+
+    if (activationEmail) {
+      try {
+        await sendActivationCodeEmail(
+          activationEmail,
+          activationRow.code,
+          tier,
+          expiryDate,
+        );
+      } catch {
+        // Email delivery is best-effort; the payment and activation already succeeded.
+      }
+    }
+
+    return jsonResponse({
+      success: true,
+      activation_code: activationRow.code,
+      subscription_tier: tier,
+      expiry_date: expiryDate.toISOString(),
+      code: activationRow.code,
+      tier,
+      expiry: expiryDate.toISOString(),
+    });
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: err.message }),
-      { status: 500, headers: { "Content-Type": "application/json" } },
-    );
+    const message = err instanceof Error ? err.message : String(err);
+    return jsonResponse({ error: message }, 500);
   }
 });
