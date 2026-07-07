@@ -1,8 +1,8 @@
 // lib/features/payment/screens/payment_screen.dart
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:classai/core/services/payment_service.dart';
 import 'package:classai/core/widgets/app_toast.dart';
@@ -11,6 +11,287 @@ import 'package:classai/core/utils/currency_formatter.dart';
 import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
+Future<void> showUpgradePlanComparisonDialog(
+  BuildContext context,
+  WidgetRef ref,
+) {
+  final cs = Theme.of(context).colorScheme;
+  final textTheme = Theme.of(context).textTheme;
+  final tiers = _buildTierComparisonRows(ref);
+
+  return showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    useRootNavigator: true,
+    builder: (dialogContext) {
+      return Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 980),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: cs.primaryContainer,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.workspace_premium_rounded,
+                        color: cs.onPrimaryContainer,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Compare Plans',
+                            style: textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Review the tiers before you continue to checkout.',
+                            style: textTheme.bodyMedium?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    columnSpacing: 24,
+                    dataRowMinHeight: 52,
+                    dataRowMaxHeight: 72,
+                    headingRowHeight: 56,
+                    columns: const [
+                      DataColumn(label: Text('Plan name')),
+                      DataColumn(label: Text('Price (per year)')),
+                      DataColumn(label: Text('Preview limit')),
+                      DataColumn(label: Text('PDF exports')),
+                      DataColumn(label: Text('Vault publishing')),
+                      DataColumn(label: Text('Watermark')),
+                    ],
+                    rows: tiers
+                        .map(
+                          (tier) => DataRow(
+                            cells: [
+                              DataCell(Text(tier.name)),
+                              DataCell(Text(tier.price)),
+                              DataCell(Text(tier.previewLimit)),
+                              DataCell(Text(tier.pdfExports)),
+                              DataCell(Text(tier.vaultPublishing)),
+                              DataCell(Text(tier.watermark)),
+                            ],
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton(
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop();
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (context.mounted) {
+                          context.push('/payment');
+                        }
+                      });
+                    },
+                    child: const Text('Choose Plan'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
+  final config = ref.read(configServiceProvider);
+  final prices = config.subscriptionPrices;
+  final previewLimits = config.dailyPreviewLimits;
+  final pdfLimits = config.pdfExportLimits;
+
+  return [
+    _TierComparisonRow(
+      name: 'Free',
+      price: 'Free',
+      previewLimit: _tierLimitText(previewLimits['free'], fallback: 0),
+      pdfExports: _tierLimitText(pdfLimits['free'], fallback: 1),
+      vaultPublishing: 'No',
+      watermark: 'Yes',
+    ),
+    _TierComparisonRow(
+      name: 'Basic',
+      price: _tierPrice(prices['basic'], AppConstants.basicPlanPriceNaira),
+      previewLimit: _tierLimitText(previewLimits['basic'], fallback: 10),
+      pdfExports: _tierLimitText(pdfLimits['basic'], fallback: 3),
+      vaultPublishing: 'No',
+      watermark: 'No',
+    ),
+    _TierComparisonRow(
+      name: 'Standard',
+      price: _tierPrice(prices['standard'], AppConstants.standardPlanPriceNaira),
+      previewLimit: _tierLimitText(previewLimits['standard'], fallback: 10),
+      pdfExports: _tierLimitText(pdfLimits['standard'], fallback: 5),
+      vaultPublishing: 'Yes',
+      watermark: 'No',
+    ),
+    _TierComparisonRow(
+      name: 'Elite',
+      price: _tierPrice(prices['elite'], AppConstants.elitePlanPriceNaira),
+      previewLimit: _tierLimitText(previewLimits['elite'], fallback: -1),
+      pdfExports: _tierLimitText(pdfLimits['elite'], fallback: -1),
+      vaultPublishing: 'Yes',
+      watermark: 'No',
+    ),
+  ];
+}
+
+String _tierPrice(dynamic value, int fallback) {
+  final amount = value is int
+      ? value
+      : value is num
+          ? value.toInt()
+          : fallback;
+  return '${CurrencyFormatter.formatNairaCompact(amount)}/yr';
+}
+
+String _tierLimitText(dynamic value, {required int fallback}) {
+  final limit = value is int
+      ? value
+      : value is num
+          ? value.toInt()
+          : fallback;
+  if (limit < 0) return 'Unlimited';
+  return limit.toString();
+}
+
+Future<void> _showUpgradeSuccessOverlay(
+  BuildContext context,
+  String planName,
+) async {
+  if (!context.mounted) return;
+
+  final overlayFuture = showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    barrierColor: Colors.black.withValues(alpha: 0.24),
+    useRootNavigator: true,
+    builder: (dialogContext) {
+      final dialogCs = Theme.of(dialogContext).colorScheme;
+      final dialogTextTheme = Theme.of(dialogContext).textTheme;
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: dialogCs.surface,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: dialogCs.outlineVariant),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: dialogCs.primaryContainer,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.check_circle_rounded,
+                      color: dialogCs.onPrimaryContainer,
+                      size: 30,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Subscription upgraded successfully!',
+                    textAlign: TextAlign.center,
+                    style: dialogTextTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'You are now on the $planName plan.',
+                    textAlign: TextAlign.center,
+                    style: dialogTextTheme.bodyMedium?.copyWith(
+                      color: dialogCs.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+
+  Future.delayed(const Duration(seconds: 2), () {
+    if (!context.mounted) return;
+    final navigator = Navigator.of(context, rootNavigator: true);
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
+  });
+
+  await overlayFuture;
+}
+
+String _displayPlanName(String plan) {
+  if (plan.isEmpty) return 'Selected';
+  return plan[0].toUpperCase() + plan.substring(1).toLowerCase();
+}
+
+class _TierComparisonRow {
+  final String name;
+  final String price;
+  final String previewLimit;
+  final String pdfExports;
+  final String vaultPublishing;
+  final String watermark;
+
+  const _TierComparisonRow({
+    required this.name,
+    required this.price,
+    required this.previewLimit,
+    required this.pdfExports,
+    required this.vaultPublishing,
+    required this.watermark,
+  });
+}
 
 /// Payment screen that shows plan selection options — Google Stitch design.
 ///
@@ -199,7 +480,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   ) async {
     try {
       // Call the Edge Function to generate activation code and update the school
-      final confirmation = await paymentService.confirmPayment(
+      await paymentService.confirmPayment(
         reference: reference,
         plan: plan,
         schoolId: schoolId,
@@ -209,101 +490,21 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
       // Refresh the auth provider so the free-plan banner, credit dialog tier,
       // and other tier-dependent widgets react immediately.
-      ref.read(authProvider.notifier).refreshSchoolFromDb();
+      await ref.read(authProvider.notifier).refreshSchoolFromDb();
 
-      // Show activation code dialog
-      await _showActivationCodeDialog(context, confirmation.activationCode);
+      await _showUpgradeSuccessOverlay(
+        context,
+        _displayPlanName(plan),
+      );
+
+      if (context.mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
     } catch (e) {
       if (!context.mounted) return;
       showErrorToast(
           context: context, message: 'Failed to confirm payment: $e');
     }
-  }
-
-  Future<void> _showActivationCodeDialog(
-      BuildContext context, String activationCode) async {
-    final cs = Theme.of(context).colorScheme;
-    return showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-          title: Row(
-            children: [
-              Icon(Icons.check_circle_rounded,
-                  color: cs.primary.withValues(alpha: 0.9)),
-              const SizedBox(width: 8),
-              const Text('Payment Successful!'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Your plan has been upgraded. Keep this activation code '
-                'for your records.',
-                style: TextStyle(fontSize: 14),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 16,
-                ),
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerHighest.withValues(alpha: 0.65),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: cs.outlineVariant.withValues(alpha: 0.6),
-                  ),
-                ),
-                child: SelectableText(
-                  activationCode,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.5,
-                    fontFamily: 'monospace',
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Copy and save your activation code:',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: cs.onSurfaceVariant,
-                    ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton.icon(
-              icon: const Icon(Icons.copy_rounded, size: 18),
-              label: const Text('Copy'),
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: activationCode));
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  const SnackBar(
-                    content: Text('Activation code copied to clipboard!'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              },
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Done'),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   // Build plan definitions from remote config if available, falling back to

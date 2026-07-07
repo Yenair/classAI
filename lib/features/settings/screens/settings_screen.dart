@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
+import 'package:classai/features/payment/screens/payment_screen.dart';
 import 'package:classai/features/settings/providers/theme_provider.dart';
 
 void _goToLessonsDeferred(BuildContext context) {
@@ -415,6 +416,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         _buildAccountCard(context, cs, textTheme, authData),
         const SizedBox(height: 16),
 
+        if (authData.currentTeacher?.role == 'admin') ...[
+          _buildUpgradePlanCard(context, cs, textTheme),
+          const SizedBox(height: 16),
+        ],
+
         _buildSyncCard(context, cs, textTheme, syncData),
         const SizedBox(height: 16),
 
@@ -641,6 +647,74 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 16),
 
         ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------
+  // Upgrade Plan Card
+  // ---------------------------------------------------------------
+  Widget _buildUpgradePlanCard(
+    BuildContext context,
+    ColorScheme cs,
+    TextTheme textTheme,
+  ) {
+    return _StitchCard(
+      cs: cs,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => showUpgradePlanComparisonDialog(context, ref),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: cs.primary.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.workspace_premium_rounded,
+                    color: cs.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Upgrade Plan',
+                        style: textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Compare tiers and upgrade to unlock more features.',
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => showUpgradePlanComparisonDialog(context, ref),
+                icon: const Icon(Icons.arrow_forward_rounded),
+                label: const Text('Upgrade Plan'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

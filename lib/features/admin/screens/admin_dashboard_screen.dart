@@ -14,6 +14,7 @@ import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/core/widgets/sync_indicator.dart';
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
+import 'package:classai/features/payment/screens/payment_screen.dart';
 import 'package:classai/features/settings/providers/theme_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
@@ -131,6 +132,16 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     // === TopAppBar (desktop only) ===
                     if (isWide)
                       _buildTopAppBar(cs, textTheme, authData, themeMode),
+
+                    if (authData.currentSchool?.subscriptionTier == 'free')
+                      _FreePlanBanner(
+                        cs: cs,
+                        theme: Theme.of(context),
+                        onUpgrade: () => showUpgradePlanComparisonDialog(
+                          context,
+                          ref,
+                        ),
+                      ),
 
                     // === Main canvas ===
                     Expanded(
@@ -825,6 +836,64 @@ class _NavItem extends StatelessWidget {
   }
   }
   
+/// Stitch-style banner displayed on the Free plan.
+///
+/// Renders an amber/yellow bar with an "Upgrade" CTA. Disappears
+/// reactively when the school's subscription tier changes away from
+/// `'free'` because the widget is guarded by the caller with the same
+/// condition from the same authProvider watch.
+class _FreePlanBanner extends StatelessWidget {
+  const _FreePlanBanner({
+    required this.cs,
+    required this.theme,
+    required this.onUpgrade,
+  });
+
+  final ColorScheme cs;
+  final ThemeData theme;
+  final VoidCallback onUpgrade;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade100,
+        border: Border(
+          bottom: BorderSide(color: Colors.amber.shade400, width: 1.5),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, size: 18, color: Colors.amber.shade800),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              "You're on the Free plan. Upgrade to unlock more features.",
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: Colors.amber.shade900,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: onUpgrade,
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.amber.shade800,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text('Upgrade'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
   // ---------------------------------------------------------------------------
   // Sync Status Chip (online/offline indicator with one-tap sync)
   // ---------------------------------------------------------------------------
