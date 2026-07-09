@@ -6,7 +6,6 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
-import 'package:classai/features/payment/screens/payment_screen.dart';
 import 'package:classai/features/settings/providers/theme_provider.dart';
 
 void _goToLessonsDeferred(BuildContext context) {
@@ -663,8 +662,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       cs: cs,
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap: () => showUpgradePlanComparisonDialog(context, ref),
-        child: Column(
+                        onTap: () => context.push('/payment'),
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
@@ -708,7 +707,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: () => showUpgradePlanComparisonDialog(context, ref),
+                onPressed: () => context.push('/payment'),
                 icon: const Icon(Icons.arrow_forward_rounded),
                 label: const Text('Upgrade Plan'),
               ),
@@ -1310,3 +1309,4 @@ class _SyncStatusRow extends StatelessWidget {
     );
   }
 }
+

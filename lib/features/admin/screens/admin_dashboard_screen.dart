@@ -14,8 +14,8 @@ import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/core/widgets/sync_indicator.dart';
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
-import 'package:classai/features/payment/screens/payment_screen.dart';
 import 'package:classai/features/settings/providers/theme_provider.dart';
+import 'package:classai/features/scheme_of_work/screens/scheme_of_work_screen.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
 /// Admin dashboard screen with teacher management, vault approval queue,
@@ -137,10 +137,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                       _FreePlanBanner(
                         cs: cs,
                         theme: Theme.of(context),
-                        onUpgrade: () => showUpgradePlanComparisonDialog(
-                          context,
-                          ref,
-                        ),
+                        onUpgrade: () => context.push('/payment'),
                       ),
 
                     // === Main canvas ===
@@ -1629,6 +1626,10 @@ class _TeacherManagementTabState extends ConsumerState<_TeacherManagementTab> {
                     onDetailsTap: () {
                       context.push('/admin/teachers/${teacher.localId}');
                     },
+                    onSchemeTap: () {
+                      selectedSchemeTeacherSelection.value = teacher.localId;
+                      context.push('/scheme-of-work');
+                    },
                   );
                 }),
               ],
@@ -1746,12 +1747,14 @@ class _TeacherCardWidget extends StatelessWidget {
   final ColorScheme cs;
   final TextTheme textTheme;
   final VoidCallback onDetailsTap;
+  final VoidCallback onSchemeTap;
 
   const _TeacherCardWidget({
     required this.teacher,
     required this.cs,
     required this.textTheme,
     required this.onDetailsTap,
+    required this.onSchemeTap,
   });
 
   @override
@@ -1768,162 +1771,168 @@ class _TeacherCardWidget extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
+      child: Material(
         color: cs.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.2),
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: _avatarBgColor(teacher.statusColor),
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    initials,
-                    style: textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: _avatarTextColor(teacher.statusColor),
-                    ),
-                  ),
-                ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onDetailsTap,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.2),
               ),
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: Container(
-                  width: 16,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: statusColor,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: cs.surface, width: 2),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
+            ),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  teacher.teacherName,
-                  style: textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: cs.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${teacher.email} ? ${teacher.role}'
-                  '${teacher.generatedCount > 0 ? ' ? ${teacher.generatedCount} generated' : ''}'
-                  '${teacher.completedCount > 0 ? ' ? ${teacher.completedCount} completed' : ''}'
-                  '${teacher.deviceCount > 0 ? ' ? ${teacher.deviceCount} device(s)' : ''}',
-                  style: textTheme.labelMedium?.copyWith(
-                    color: cs.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+                Stack(
                   children: [
-                    Chip(
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      visualDensity: VisualDensity.compact,
-                      label: Text(
-                        schemeLabel,
-                        style: textTheme.labelSmall?.copyWith(
-                          color: schemeColor,
-                          fontWeight: FontWeight.w600,
-                        ),
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: _avatarBgColor(teacher.statusColor),
+                        shape: BoxShape.circle,
                       ),
-                      backgroundColor: schemeColor.withValues(alpha: 0.12),
-                      side: BorderSide(
-                        color: schemeColor.withValues(alpha: 0.25),
+                      child: Center(
+                        child: Text(
+                          initials,
+                          style: textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: _avatarTextColor(teacher.statusColor),
+                          ),
+                        ),
                       ),
                     ),
-                    if (hasSchemeProgress)
-                      SizedBox(
-                        width: 220,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            LinearProgressIndicator(
-                              value: progressValue,
-                              minHeight: 6,
-                              backgroundColor:
-                                  cs.outlineVariant.withValues(alpha: 0.25),
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                cs.primary,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Week ${teacher.completedWeeks} of ${teacher.totalWeeks} completed',
-                              style: textTheme.labelSmall?.copyWith(
-                                color: cs.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: statusColor,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: cs.surface, width: 2),
                         ),
                       ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        teacher.teacherName,
+                        style: textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        <String>[
+                          teacher.email,
+                          teacher.role,
+                          if (teacher.generatedCount > 0)
+                            '${teacher.generatedCount} lessons generated',
+                          if (teacher.completedCount > 0)
+                            '${teacher.completedCount} lessons completed',
+                          if (teacher.deviceCount > 0)
+                            '${teacher.deviceCount} device(s)',
+                        ].join(' - '),
+                        style: textTheme.labelMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          _SchemeStatusChip(
+                            label: schemeLabel,
+                            color: schemeColor,
+                            textTheme: textTheme,
+                            onTap: onSchemeTap,
+                          ),
+                          if (hasSchemeProgress)
+                            SizedBox(
+                              width: 220,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  LinearProgressIndicator(
+                                    value: progressValue,
+                                    minHeight: 6,
+                                    backgroundColor:
+                                        cs.outlineVariant.withValues(alpha: 0.25),
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      cs.primary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Week ${teacher.completedWeeks} of ${teacher.totalWeeks} completed',
+                                    style: textTheme.labelSmall?.copyWith(
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (isError)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          'Action Required',
+                          style: textTheme.labelMedium?.copyWith(
+                            color: cs.error,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    OutlinedButton(
+                      onPressed: onDetailsTap,
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 40),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          side: BorderSide(color: cs.outline),
+                        ),
+                      ),
+                      child: Text(
+                        'Details',
+                        style: textTheme.labelMedium?.copyWith(
+                          color: cs.primary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 12),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              if (isError)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    'Action Required',
-                    style: textTheme.labelMedium?.copyWith(
-                      color: cs.error,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              OutlinedButton(
-                onPressed: onDetailsTap,
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(0, 40),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    side: BorderSide(color: cs.outline),
-                  ),
-                ),
-                child: Text(
-                  'Details',
-                  style: textTheme.labelMedium?.copyWith(
-                    color: cs.primary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1995,6 +2004,46 @@ class _TeacherCardWidget extends StatelessWidget {
       default:
         return 'No Scheme';
     }
+  }
+}
+
+class _SchemeStatusChip extends StatelessWidget {
+  final String label;
+  final Color color;
+  final TextTheme textTheme;
+  final VoidCallback onTap;
+
+  const _SchemeStatusChip({
+    required this.label,
+    required this.color,
+    required this.textTheme,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withValues(alpha: 0.25)),
+          ),
+          child: Text(
+            label,
+            style: textTheme.labelSmall?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -2614,7 +2663,7 @@ class _SyncHealthTab extends StatelessWidget {
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  'Sync Health Summary',
+                  'How many teachers are online',
                   style: textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                     overflow: TextOverflow.clip,
@@ -2663,7 +2712,7 @@ class _SyncHealthTab extends StatelessWidget {
               ? Row(
                   children: [
                     _statusCountChip(
-                        cs, textTheme, 'Synced', greenCount, cs.primary),
+                        cs, textTheme, 'staff synced', greenCount, cs.primary),
                     const SizedBox(width: 16),
                     _statusCountChip(
                         cs, textTheme, 'Warning', yellowCount, cs.tertiary),
@@ -2671,7 +2720,7 @@ class _SyncHealthTab extends StatelessWidget {
                     _statusCountChip(
                         cs, textTheme, 'Error', redCount, cs.error),
                     const SizedBox(width: 16),
-                    _statusCountChip(cs, textTheme, 'Offline', grayCount,
+                    _statusCountChip(cs, textTheme, 'staff offline', grayCount,
                         cs.onSurfaceVariant),
                   ],
                 )
@@ -2680,12 +2729,12 @@ class _SyncHealthTab extends StatelessWidget {
                   runSpacing: 12,
                   children: [
                     _statusCountChip(
-                        cs, textTheme, 'Synced', greenCount, cs.primary),
+                        cs, textTheme, 'staff synced', greenCount, cs.primary),
                     _statusCountChip(
                         cs, textTheme, 'Warning', yellowCount, cs.tertiary),
                     _statusCountChip(
                         cs, textTheme, 'Error', redCount, cs.error),
-                    _statusCountChip(cs, textTheme, 'Offline', grayCount,
+                    _statusCountChip(cs, textTheme, 'staff offline', grayCount,
                         cs.onSurfaceVariant),
                   ],
                 ),

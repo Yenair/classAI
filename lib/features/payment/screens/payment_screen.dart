@@ -96,365 +96,6 @@ String _displayPlanName(String plan) {
   return plan[0].toUpperCase() + plan.substring(1).toLowerCase();
 }
 
-Future<void> showUpgradePlanComparisonDialog(
-  BuildContext context,
-  WidgetRef ref,
-) {
-  final tiers = _buildTierComparisonRows(ref);
-
-  return showGeneralDialog<void>(
-    context: context,
-    barrierDismissible: true,
-    barrierLabel: 'Dismiss',
-    useRootNavigator: true,
-    barrierColor: Colors.black54,
-    pageBuilder: (dialogContext, animation, secondaryAnimation) {
-      final selectedTierNotifier = ValueNotifier<String>('elite');
-      final screenSize = MediaQuery.sizeOf(dialogContext);
-      final screenWidth = screenSize.width;
-      final screenHeight = screenSize.height;
-
-      // Responsive dialog sizing
-      final double heightFactor;
-      final double widthFactor;
-      final double horizontalInset;
-      if (screenWidth < 400) {
-        heightFactor = 0.90;
-        widthFactor = 0.98;
-        horizontalInset = 4;
-      } else if (screenWidth < 600) {
-        heightFactor = 0.88;
-        widthFactor = 0.96;
-        horizontalInset = 8;
-      } else {
-        heightFactor = 0.82;
-        widthFactor = 0.96;
-        horizontalInset = 12;
-      }
-      final double maxHeight = screenHeight * heightFactor;
-      final double dialogWidth = screenWidth * widthFactor;
-      final double finalWidth = dialogWidth > 1320 ? 1320.0 : dialogWidth;
-      final bool isWide = screenWidth >= 1100;
-
-      // Calculate available width for the comparison table
-      const double contentPadding = 48.0; // 24 left + 24 right
-      const double gap = 32.0;
-      final double tableAvailableWidth = isWide
-          ? (finalWidth - contentPadding - gap) * (8 / 12)
-          : finalWidth - contentPadding;
-
-      void choosePlan(String tier) {
-        Navigator.of(dialogContext).pop();
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (context.mounted) {
-            context.push('/payment?plan=$tier');
-          }
-        });
-      }
-
-      // Direct setter — no setState, no addPostFrameCallback wrapper needed
-      void _selectTier(String tier) {
-        selectedTierNotifier.value = tier;
-      }
-
-      final cs = Theme.of(dialogContext).colorScheme;
-      final textTheme = Theme.of(dialogContext).textTheme;
-
-      return Center(
-        child: Container(
-          margin: EdgeInsets.symmetric(
-            horizontal: horizontalInset,
-            vertical: 24,
-          ),
-          width: finalWidth,
-          height: maxHeight,
-          decoration: BoxDecoration(
-            color: cs.surface,
-            borderRadius: BorderRadius.circular(28),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Static header — never rebuilds
-                Row(
-                  children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: cs.primaryContainer,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.workspace_premium_rounded,
-                        color: cs.onPrimaryContainer,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Compare Plans',
-                            style: textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Review the tiers before you continue to checkout.',
-                            style: textTheme.bodyMedium?.copyWith(
-                              color: cs.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                // Only the scrollable section rebuilds when selectedTier changes
-                Expanded(
-                  child: ValueListenableBuilder<String>(
-                    valueListenable: selectedTierNotifier,
-                    builder: (context, selectedTier, _) {
-                      final selectedPlan = tiers.firstWhere(
-                        (tier) => tier.tier == selectedTier,
-                        orElse: () => tiers.last,
-                      );
-
-                      return SingleChildScrollView(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8.0),
-                          child: isWide
-                              ? Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      flex: 8,
-                                      child: SingleChildScrollView(
-                                        scrollDirection: Axis.horizontal,
-                                        child: _buildComparisonTable(
-                                          cs,
-                                          textTheme,
-                                          tiers,
-                                          selectedTier: selectedTier,
-                                          onSelectTier: _selectTier,
-                                          onChoosePlan: choosePlan,
-                                          availableWidth: tableAvailableWidth,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 32),
-                                    Expanded(
-                                      flex: 4,
-                                      child: _buildPopupOrderSummary(
-                                        cs,
-                                        textTheme,
-                                        selectedPlan,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    SingleChildScrollView(
-                                      scrollDirection: Axis.horizontal,
-                                      child: _buildComparisonTable(
-                                        cs,
-                                        textTheme,
-                                        tiers,
-                                        selectedTier: selectedTier,
-                                        onSelectTier: _selectTier,
-                                        onChoosePlan: choosePlan,
-                                        availableWidth: tableAvailableWidth,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 20),
-                                    _buildPopupOrderSummary(
-                                      cs,
-                                      textTheme,
-                                      selectedPlan,
-                                    ),
-                                  ],
-                                ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    },
-  );
-}
-
-Widget _buildPopupOrderSummary(
-  ColorScheme cs,
-  TextTheme textTheme,
-  _TierComparisonRow plan,
-) {
-  return Container(
-    padding: const EdgeInsets.all(24),
-    decoration: BoxDecoration(
-      color: cs.surfaceContainerLowest,
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(
-        color: cs.outlineVariant.withValues(alpha: 0.2),
-      ),
-      boxShadow: [
-        BoxShadow(
-          color: cs.onSurface.withValues(alpha: 0.04),
-          blurRadius: 8,
-          offset: const Offset(0, 2),
-        ),
-      ],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Order Summary',
-          style: textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: cs.onSurface,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Divider(
-          height: 1,
-          color: cs.outlineVariant.withValues(alpha: 0.2),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Flexible(
-              child: Text(
-                'Selected Plan',
-                style: textTheme.bodyMedium?.copyWith(
-                  color: cs.onSurfaceVariant,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                plan.name,
-                textAlign: TextAlign.end,
-                style: textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
-                  color: cs.onSurface,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Flexible(
-              child: Text(
-                'Duration',
-                style: textTheme.bodyMedium?.copyWith(
-                  color: cs.onSurfaceVariant,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                '1 Year',
-                textAlign: TextAlign.end,
-                style: textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
-                  color: cs.onSurface,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Divider(
-          height: 1,
-          color: cs.outlineVariant.withValues(alpha: 0.2),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Flexible(
-              child: Text(
-                'Total Due',
-                style: textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: cs.onSurface,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                plan.price,
-                textAlign: TextAlign.end,
-                style: textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: cs.primary,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: cs.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: cs.outlineVariant.withValues(alpha: 0.5),
-              strokeAlign: BorderSide.strokeAlignInside,
-            ),
-          ),
-          child: Column(
-            children: [
-              Icon(
-                Icons.account_balance_wallet_rounded,
-                size: 48,
-                color: cs.outline,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Secure checkout powered by Paystack.',
-                textAlign: TextAlign.center,
-                style: textTheme.bodyMedium?.copyWith(
-                  color: cs.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '(WebView Container)',
-                style: textTheme.labelSmall?.copyWith(
-                  color: cs.outline,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-}
 
 Widget _buildComparisonTable(
   ColorScheme cs,
@@ -828,12 +469,18 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   bool _isProcessing = false;
   String _selectedPlanTier = 'elite';
   bool _didInitPlan = false;
+  late ValueNotifier<String> _selectedTierNotifier;
+  List<_TierComparisonRow> _tiers = [];
 
   @override
   void initState() {
     super.initState();
+    _selectedTierNotifier = ValueNotifier<String>('elite');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _resumePendingPayments();
+      setState(() {
+        _tiers = _buildTierComparisonRows(ref);
+      });
     });
   }
 
@@ -849,12 +496,20 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       case 'standard':
       case 'elite':
         _selectedPlanTier = plan!;
+        _selectedTierNotifier.value = _selectedPlanTier;
         break;
       default:
         _selectedPlanTier = 'elite';
+        _selectedTierNotifier.value = 'elite';
         break;
     }
     _didInitPlan = true;
+  }
+
+  @override
+  void dispose() {
+    _selectedTierNotifier.dispose();
+    super.dispose();
   }
 
   List<_PlanDef> _buildPlans() {
@@ -880,10 +535,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     ];
   }
 
-  _PlanDef _selectedPlan() {
+  _PlanDef _planDefFromTierRow(_TierComparisonRow row) {
     final plans = _buildPlans();
     return plans.firstWhere(
-      (plan) => plan.tier == _selectedPlanTier,
+      (plan) => plan.tier == row.tier,
       orElse: () => plans.last,
     );
   }
@@ -1080,151 +735,177 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    final selectedPlan = _selectedPlan();
+
+    if (_tiers.isEmpty) {
+      // Rebuild tiers if not yet initialized
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _tiers = _buildTierComparisonRows(ref);
+          });
+        }
+      });
+    }
+
+    final screenSize = MediaQuery.sizeOf(context);
+    final screenWidth = screenSize.width;
+    final bool isWide = screenWidth >= 1100;
 
     return Scaffold(
       backgroundColor: cs.surface,
-      body: Center(
-        child: LayoutBuilder(
-          builder: (context, _) {
-            final screenSize = MediaQuery.sizeOf(context);
-            final screenWidth = screenSize.width;
-            final screenHeight = screenSize.height;
+      appBar: AppBar(
+        backgroundColor: cs.surface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.close, color: cs.onSurface),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+        title: Text(
+          'Compare Plans',
+          style: textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        centerTitle: false,
+      ),
+      body: _tiers.isEmpty
+          ? const Center(child: CircularProgressIndicator())
+          : ValueListenableBuilder<String>(
+              valueListenable: _selectedTierNotifier,
+              builder: (context, selectedTier, _) {
+                final selectedTierRow = _tiers.firstWhere(
+                  (t) => t.tier == selectedTier,
+                  orElse: () => _tiers.last,
+                );
 
-            // Responsive sizing
-            final double heightFactor;
-            final double widthFactor;
-            final double horizontalInset;
-            if (screenWidth < 400) {
-              heightFactor = 0.92;
-              widthFactor = 0.98;
-              horizontalInset = 4;
-            } else if (screenWidth < 600) {
-              heightFactor = 0.88;
-              widthFactor = 0.96;
-              horizontalInset = 8;
-            } else {
-              heightFactor = 0.82;
-              widthFactor = 0.92;
-              horizontalInset = 16;
-            }
-            final maxHeight = screenHeight * heightFactor;
-            final dialogWidth = screenWidth * widthFactor;
-            final finalWidth = dialogWidth > 1120 ? 1120.0 : dialogWidth;
-
-            return Dialog(
-              insetPadding: EdgeInsets.symmetric(
-                horizontal: horizontalInset,
-                vertical: 24,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(28),
-              ),
-              child: SizedBox(
-                width: finalWidth,
-                height: maxHeight,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-                  child: Stack(
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      // Header row
+                      Row(
                         children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 48,
-                                height: 48,
-                                decoration: BoxDecoration(
-                                  color: cs.primaryContainer,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.workspace_premium_rounded,
-                                  color: cs.onPrimaryContainer,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Compare Plans',
-                                      style: textTheme.titleLarge?.copyWith(
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Review the tiers before you continue to checkout.',
-                                      style: textTheme.bodyMedium?.copyWith(
-                                        color: cs.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.close),
-                                onPressed: () => Navigator.of(context).maybePop(),
-                              ),
-                            ],
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: cs.primaryContainer,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.workspace_premium_rounded,
+                              color: cs.onPrimaryContainer,
+                            ),
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(width: 16),
                           Expanded(
-                            child: SingleChildScrollView(
-                              child: Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 8.0),
-                                child: _buildOrderSummary(
-                                  context,
-                                  cs,
-                                  textTheme,
-                                  selectedPlan,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Compare Plans',
+                                  style: textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Review the tiers before you continue to checkout.',
+                                  style: textTheme.bodyMedium?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                      if (_isProcessing)
-                        Positioned.fill(
-                          child: ColoredBox(
-                            color: cs.scrim,
-                            child: Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const CircularProgressIndicator(),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    'Processing payment...',
-                                    style: TextStyle(
-                                      color: cs.onPrimary,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
+                      const SizedBox(height: 20),
+                      // Comparison table + order summary
+                      if (isWide)
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              flex: 8,
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: _buildComparisonTable(
+                                  cs,
+                                  textTheme,
+                                  _tiers,
+                                  selectedTier: selectedTier,
+                                  onSelectTier: (tier) =>
+                                      _selectedTierNotifier.value = tier,
+                                  onChoosePlan: (tier) {
+                                    _selectedPlanTier = tier;
+                                    _selectedTierNotifier.value = tier;
+                                    setState(() {});
+                                  },
+                                  availableWidth: (screenWidth -
+                                          48 // padding
+                                          - 32 // gap
+                                      ) *
+                                      (8 / 12),
+                                ),
                               ),
                             ),
-                          ),
+                            const SizedBox(width: 32),
+                            Expanded(
+                              flex: 4,
+                              child: _buildOrderSummary(
+                                context,
+                                cs,
+                                textTheme,
+                                _planDefFromTierRow(selectedTierRow),
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: _buildComparisonTable(
+                                cs,
+                                textTheme,
+                                _tiers,
+                                selectedTier: selectedTier,
+                                onSelectTier: (tier) =>
+                                    _selectedTierNotifier.value = tier,
+                                onChoosePlan: (tier) {
+                                  _selectedPlanTier = tier;
+                                  _selectedTierNotifier.value = tier;
+                                  setState(() {});
+                                },
+                                availableWidth:
+                                    screenWidth - 48, // 24 left + 24 right
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            _buildOrderSummary(
+                              context,
+                              cs,
+                              textTheme,
+                              _planDefFromTierRow(selectedTierRow),
+                            ),
+                          ],
+                        ),
+                      if (_isProcessing)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 16),
+                          child: Center(child: CircularProgressIndicator()),
                         ),
                     ],
                   ),
-                ),
-              ),
-            );
-          },
-        ),
-      ),
+                );
+              },
+            ),
     );
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
   }
 
   Widget _buildOrderSummary(
