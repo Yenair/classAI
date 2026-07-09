@@ -12,6 +12,8 @@ import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
+final selectedSchemeTeacherSelection = ValueNotifier<int?>(null);
+
 final schemeOfWeeksProvider = FutureProvider.family<List<SchemeOfWorkData>, int>(
   (ref, schoolId) async {
     final db = ref.read(databaseProvider);
@@ -40,6 +42,9 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
   String _subscriptionTier = 'free';
   int? _subjectId;
   final Map<int, String> _teacherNamesById = {};
+  final Map<int, String> _subjectNamesById = {};
+  List<Teacher> _teachers = [];
+  int? _adminFilterTeacher; // null = All Teachers
 
   // Generated SoW data: each entry is {week, topic, objectives}
   List<Map<String, dynamic>> _weeks = [];
@@ -52,8 +57,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
 
   // Existing SoW records
   List<SchemeOfWorkData> _existingSowRecords = [];
-
-  // Filter state for admin view
+  int? _selectedTeacherId;
   String _adminFilterSubject = '';
   String _adminFilterTerm = '';
 
@@ -91,15 +95,37 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
         _schoolName = school.schoolName;
         _subscriptionTier = school.subscriptionTier;
       }
-      final teachers = await db.teachersDao.getAll();
+      final teachers = _schoolId != null
+          ? await db.teachersDao.getBySchool(_schoolId!)
+          : await db.teachersDao.getAll();
+      _teachers = teachers;
       if (teachers.isNotEmpty) {
-        final teacher = teachers.first;
-        _teacherId = teacher.localId;
-        _teacherName = teacher.teacherName;
+        final preferredTeacherId = selectedSchemeTeacherSelection.value;
+        final teacherIds = teachers.map((t) => t.localId).toSet();
+        final selectedTeacher = preferredTeacherId != null &&
+                teacherIds.contains(preferredTeacherId)
+            ? teachers.firstWhere((t) => t.localId == preferredTeacherId)
+            : teachers.first;
+        _teacherId = selectedTeacher.localId;
+        _selectedTeacherId = selectedTeacher.localId;
+        _teacherName = selectedTeacher.teacherName;
       }
       for (final teacher in teachers) {
         _teacherNamesById[teacher.localId] = teacher.teacherName;
       }
+
+      // Preload subject name map for admin filters
+      final allSubjects = await db.subjectsDao.getAll();
+      for (final subject in allSubjects) {
+        _subjectNamesById[subject.id] = subject.name;
+      }
+
+      // For admin, preload all school schemes so the filtered view works
+      if (_isAdmin && _schoolId != null) {
+        await _loadExistingSow();
+        debugPrint('[SOW ADMIN] Loaded ${_existingSowRecords.length} total schemes for school $_schoolId');
+      }
+
       if (mounted) {
         await _loadSchemeForSelection();
         setState(() {});
@@ -112,6 +138,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     final db = ref.read(databaseProvider);
     try {
       _existingSowRecords = await db.schemeOfWorkDao.getBySchool(_schoolId!);
+      debugPrint('[SOW ADMIN] _loadExistingSow returned ${_existingSowRecords.length} records for school $_schoolId');
       return _existingSowRecords;
     } on FormatException catch (e) {
       debugPrint('[SOW] Skipped corrupted scheme_of_work row: $e');
@@ -128,61 +155,44 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     setState(() => _isLoadingScheme = true);
     try {
       final db = ref.read(databaseProvider);
-      // Resolve subject name to subjectId
-      _subjectId = null;
-      final subjectRow = await db.subjectsDao.getByName(_subject);
-      if (subjectRow != null) {
-        _subjectId = subjectRow.id;
-      }
-
-      // Query existing records by school and filter for this teacher + subject + term
-      final allSchoolRecords = await db.schemeOfWorkDao.getBySchool(_schoolId!);
-      final matching = allSchoolRecords.where((r) =>
-          r.teacherId == _teacherId &&
-          r.subjectId == _subjectId &&
-          r.term == _term &&
-          !r.isDeleted).toList();
-
-      // Dispose old controllers
-      _disposeControllers();
-
-      if (matching.isNotEmpty) {
-        // Sort by week number
-        matching.sort((a, b) => a.weekNumber.compareTo(b.weekNumber));
-        _weeks = [];
-        _topicControllers = {};
-        _objectivesControllers = {};
-        _adminEditControllers = {};
-        _weekRecordIds = {};
-
-        for (final record in matching) {
-          final weekNum = record.weekNumber;
-          _topicControllers[weekNum] = TextEditingController(text: record.topic);
-          _objectivesControllers[weekNum] =
-              TextEditingController(text: record.objectives);
-          _adminEditControllers[weekNum] = TextEditingController();
-          _weekRecordIds[weekNum] = record.id;
-
-          _weeks.add({
-            'week': weekNum,
-            'topic': record.topic,
-            'objectives': record.objectives,
+      if (_isAdmin) {
+        // Admin: reload all school schemes so filters work on full dataset
+        await _loadExistingSow();
+        final selected = _existingSowRecords
+            .where((r) => !r.isDeleted)
+            .toList()
+          ..sort((a, b) {
+            final termCompare = a.term.compareTo(b.term);
+            if (termCompare != 0) return termCompare;
+            final subjectCompare = a.subjectId.compareTo(b.subjectId);
+            if (subjectCompare != 0) return subjectCompare;
+            return a.weekNumber.compareTo(b.weekNumber);
           });
-        }
+        _existingSowRecords = selected;
+        _hydrateSchemeRecords(selected);
       } else {
-        // No scheme found - clear weeks so Generate button and params appear
-        _weeks = [];
-        _topicControllers = {};
-        _objectivesControllers = {};
-        _adminEditControllers = {};
-        _weekRecordIds = {};
+        // Resolve subject name to subjectId
+        _subjectId = null;
+        final subjectRow = await db.subjectsDao.getByName(_subject);
+        if (subjectRow != null) {
+          _subjectId = subjectRow.id;
+        }
+
+        // Query existing records by school and filter for this teacher + subject + term
+        final allSchoolRecords = await db.schemeOfWorkDao.getBySchool(_schoolId!);
+        final matching = allSchoolRecords.where((r) =>
+            r.teacherId == _teacherId &&
+            r.subjectId == _subjectId &&
+            r.term == _term &&
+            !r.isDeleted).toList()
+          ..sort((a, b) => a.weekNumber.compareTo(b.weekNumber));
+
+        _hydrateSchemeRecords(matching);
       }
     } catch (_) {
       // On error, clear weeks to allow generation
+      _disposeControllers();
       _weeks = [];
-      _topicControllers = {};
-      _objectivesControllers = {};
-      _adminEditControllers = {};
       _weekRecordIds = {};
     } finally {
       if (mounted) setState(() => _isLoadingScheme = false);
@@ -244,6 +254,41 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     if (decoded is Map) return decoded.cast<String, dynamic>();
 
     throw FormatException('Scheme response did not contain a JSON object');
+  }
+
+  void _hydrateSchemeRecords(List<SchemeOfWorkData> records) {
+    _disposeControllers();
+    _weeks = [];
+    _weekRecordIds = {};
+
+    for (final record in records) {
+      final key = _isAdmin ? record.id : record.weekNumber;
+      final topicText = _isAdmin &&
+              (record.adminEditedTopic != null &&
+                  record.adminEditedTopic!.isNotEmpty)
+          ? record.adminEditedTopic!
+          : record.topic;
+      _topicControllers[key] = TextEditingController(text: topicText);
+      _objectivesControllers[key] =
+          TextEditingController(text: record.objectives);
+      _adminEditControllers[record.id] =
+          TextEditingController(text: record.adminEditedTopic ?? '');
+      _weekRecordIds[record.weekNumber] = record.id;
+
+      _weeks.add({
+        'id': record.id,
+        'week': record.weekNumber,
+        'topic': record.topic,
+        'objectives': record.objectives,
+        'status': record.status,
+        'teacherId': record.teacherId,
+        'term': record.term,
+        'classLevel': record.classLevel,
+        'subjectId': record.subjectId,
+        'adminEditedTopic': record.adminEditedTopic,
+        'adminComment': record.adminComment,
+      });
+    }
   }
 
   Future<void> _handleGenerate() async {
@@ -488,12 +533,16 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
         await _showReferencedSchemeWarning();
         return;
       }
-      final adminEdit = _adminEditControllers[schemeWeekId]?.text;
-      final topicToUse = (adminEdit != null && adminEdit.isNotEmpty)
-          ? adminEdit
-          : null;
+      final adminEdit = _adminEditControllers[schemeWeekId]?.text.trim();
+      final objectiveEdit = _objectivesControllers[schemeWeekId]?.text.trim();
       if (adminEdit != null && adminEdit.isNotEmpty) {
         await db.schemeOfWorkDao.updateAdminEditedTopic(schemeWeekId, adminEdit);
+      }
+      if (objectiveEdit != null && objectiveEdit.isNotEmpty) {
+        await db.schemeOfWorkDao.updateWeekEntry(
+          schemeWeekId,
+          objectives: objectiveEdit,
+        );
       }
       await db.schemeOfWorkDao.updateStatus(schemeWeekId, 'approved');
 
@@ -509,7 +558,9 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
         final subjectRow = await db.subjectsDao.getById(schemeWeek.subjectId);
         final subjectName = subjectRow?.name ?? '';
         final weekNumber = schemeWeek.weekNumber;
-        final topic = topicToUse ?? schemeWeek.topic;
+        final topic = adminEdit != null && adminEdit.isNotEmpty
+            ? adminEdit
+            : schemeWeek.topic;
 
         if (teacherServerId != null &&
             termLabel.isNotEmpty &&
@@ -716,25 +767,283 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
               ? const BouncingScrollPhysics()
               : null,
           padding: const EdgeInsets.all(16),
-          child: isWide
-              ? Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: _buildConfigColumn(theme, cs)),
-                    const SizedBox(width: 24),
-                    Expanded(child: _buildPreviewColumn(theme, cs)),
-                  ],
-                )
-              : Column(
-                  children: [
-                    _buildConfigColumn(theme, cs),
-                    const SizedBox(height: 24),
-                    _buildPreviewColumn(theme, cs),
-                  ],
-                ),
+          child: _isAdmin
+              ? _buildAdminLayout(theme, cs, isWide)
+              : isWide
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: _buildConfigColumn(theme, cs)),
+                        const SizedBox(width: 24),
+                        Expanded(child: _buildPreviewColumn(theme, cs)),
+                      ],
+                    )
+                  : Column(
+                      children: [
+                        _buildConfigColumn(theme, cs),
+                        const SizedBox(height: 24),
+                        _buildPreviewColumn(theme, cs),
+                      ],
+                    ),
         ),
       ),
     );
+  }
+
+  Widget _buildAdminLayout(ThemeData theme, ColorScheme cs, bool isWide) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildAdminHeader(theme, cs),
+        const SizedBox(height: 16),
+        isWide
+            ? Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 320,
+                    child: _buildTeacherSelectorPanel(theme, cs),
+                  ),
+                  const SizedBox(width: 24),
+                  Expanded(child: _buildAdminView(theme, cs)),
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildTeacherDropdown(theme, cs),
+                  const SizedBox(height: 16),
+                  _buildAdminView(theme, cs),
+                ],
+              ),
+      ],
+    );
+  }
+
+  Widget _buildAdminHeader(ThemeData theme, ColorScheme cs) {
+    final selectedTeacher = _selectedTeacherId == null
+        ? null
+        : _teachers.firstWhere(
+            (teacher) => teacher.localId == _selectedTeacherId,
+            orElse: () => _teachers.first,
+          );
+
+    return Card(
+      color: cs.surfaceContainerLow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: cs.primaryContainer,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.assignment_rounded,
+                color: cs.onPrimaryContainer,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Scheme of Work Review',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    selectedTeacher == null
+                        ? 'Select a teacher to inspect weekly schemes.'
+                        : 'Review and approve ${selectedTeacher.teacherName}\'s weekly scheme entries.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (_selectedTeacherSchemes().isNotEmpty)
+              FilledButton.icon(
+                onPressed: _bulkApproveSelectedTeacher,
+                icon: const Icon(Icons.done_all_rounded),
+                label: const Text('Bulk Approve'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTeacherSelectorPanel(ThemeData theme, ColorScheme cs) {
+    return Card(
+      color: cs.surfaceContainerLow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Teachers',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ..._teachers.map(
+              (teacher) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _buildTeacherSelectorTile(theme, cs, teacher),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTeacherSelectorTile(
+    ThemeData theme,
+    ColorScheme cs,
+    Teacher teacher,
+  ) {
+    final isSelected = teacher.localId == _selectedTeacherId;
+    return Material(
+      color: isSelected ? cs.primaryContainer.withValues(alpha: 0.35) : cs.surface,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: () => _selectTeacher(teacher.localId),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected
+                  ? cs.primary.withValues(alpha: 0.35)
+                  : cs.outlineVariant.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: cs.primaryContainer,
+                foregroundColor: cs.onPrimaryContainer,
+                child: Text(
+                  _getInitials(teacher.teacherName),
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      teacher.teacherName,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      teacher.email,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                isSelected ? Icons.chevron_right_rounded : Icons.chevron_right,
+                color: isSelected ? cs.primary : cs.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTeacherDropdown(ThemeData theme, ColorScheme cs) {
+    return Card(
+      color: cs.surfaceContainerLow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: DropdownButtonFormField<int>(
+          initialValue: _selectedTeacherId,
+          decoration: const InputDecoration(
+            labelText: 'Select teacher',
+          ),
+          items: _teachers
+              .map(
+                (teacher) => DropdownMenuItem<int>(
+                  value: teacher.localId,
+                  child: Text(teacher.teacherName),
+                ),
+              )
+              .toList(),
+          onChanged: (value) {
+            if (value != null) {
+              _selectTeacher(value);
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> _selectedTeacherSchemes() {
+    final selectedTeacherId = _selectedTeacherId;
+    if (selectedTeacherId == null) return [];
+    final records = _weeks.where((weekRecord) {
+      return weekRecord['teacherId'] == selectedTeacherId;
+    }).toList();
+    records.sort(
+      (a, b) => (a['week'] as int).compareTo(b['week'] as int),
+    );
+    return records;
+  }
+
+  Future<void> _selectTeacher(int teacherId) async {
+    if (_selectedTeacherId == teacherId) return;
+    setState(() {
+      _selectedTeacherId = teacherId;
+      _teacherId = teacherId;
+    });
+    selectedSchemeTeacherSelection.value = teacherId;
+    await _loadSchemeForSelection();
+  }
+
+  Future<void> _bulkApproveSelectedTeacher() async {
+    final records = _selectedTeacherSchemes()
+        .where((record) => (record['status'] as String? ?? 'draft') != 'approved')
+        .toList();
+    for (final record in records) {
+      await _adminApprove(record['id'] as int);
+    }
+  }
+
+  String _getInitials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length >= 2) {
+      return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+    }
+    return name.isNotEmpty ? name[0].toUpperCase() : '?';
   }
 
   Widget _buildConfigColumn(ThemeData theme, ColorScheme cs) {
@@ -824,6 +1133,27 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
               Text('Filter existing schemes',
                   style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
               const SizedBox(height: 8),
+              // Teacher filter
+              DropdownButtonFormField<int?>(
+                initialValue: _adminFilterTeacher,
+                decoration: const InputDecoration(
+                  labelText: 'Filter by Teacher',
+                ),
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('All Teachers'),
+                  ),
+                  ..._teachers.map(
+                    (teacher) => DropdownMenuItem<int?>(
+                      value: teacher.localId,
+                      child: Text(teacher.teacherName),
+                    ),
+                  ),
+                ],
+                onChanged: (v) => setState(() => _adminFilterTeacher = v),
+              ),
+              const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 initialValue: _adminFilterSubject.isEmpty ? null : _adminFilterSubject,
                 decoration: const InputDecoration(labelText: 'Filter by Subject'),
@@ -840,9 +1170,11 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
               const SizedBox(height: 8),
               OutlinedButton(
                 onPressed: () {
-                  _adminFilterSubject = '';
-                  _adminFilterTerm = '';
-                  _loadExistingSow();
+                  setState(() {
+                    _adminFilterTeacher = null;
+                    _adminFilterSubject = '';
+                    _adminFilterTerm = '';
+                  });
                 },
                 child: const Text('Clear Filters'),
               ),
@@ -955,14 +1287,48 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
 
   Widget _buildAdminView(ThemeData theme, ColorScheme cs) {
     final filtered = _existingSowRecords.where((r) {
-      if (_adminFilterSubject.isNotEmpty && _adminFilterSubject != r.subjectId.toString()) return false;
+      // Teacher filter
+      if (_adminFilterTeacher != null && r.teacherId != _adminFilterTeacher) return false;
+      // Subject filter: compare by subjectId using the name map
+      if (_adminFilterSubject.isNotEmpty) {
+        final subjectName = _subjectNamesById[r.subjectId] ?? '';
+        if (_adminFilterSubject != subjectName) return false;
+      }
+      // Term filter
       if (_adminFilterTerm.isNotEmpty && _adminFilterTerm != r.term) return false;
       return true;
     }).toList();
 
+    debugPrint('[SOW ADMIN] _buildAdminView: total=${_existingSowRecords.length}, filtered=${filtered.length}'
+        ' teacherFilter=$_adminFilterTeacher subjectFilter=$_adminFilterSubject termFilter=$_adminFilterTerm');
+
+    if (_existingSowRecords.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.assignment_rounded, size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+              const SizedBox(height: 12),
+              Text('No schemes submitted yet',
+                  style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Text('Ask teachers to generate a scheme of work.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (filtered.isEmpty) {
       return Center(
-        child: Text('No schemes to display', style: theme.textTheme.bodyLarge?.copyWith(color: cs.onSurfaceVariant)),
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text('No schemes match the current filters.',
+              style: theme.textTheme.bodyLarge?.copyWith(color: cs.onSurfaceVariant)),
+        ),
       );
     }
 
