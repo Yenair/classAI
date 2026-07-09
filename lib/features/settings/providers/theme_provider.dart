@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
+import 'package:drift/drift.dart' show Value;
+import 'package:classai/core/database/database.dart';
+import 'package:classai/main.dart' show databaseProvider;
 
 /// Provider that manages the app's theme mode.
 /// Saves the preference locally via SharedPreferences and remotely
-/// via Supabase (on the teachers table) when a teacher is logged in.
+/// via Supabase (on the teachers table) when a teacher or admin is logged in.
 class ThemeNotifier extends Notifier<ThemeMode> {
   static const _themeKey = 'theme_mode';
 
@@ -50,17 +53,55 @@ class ThemeNotifier extends Notifier<ThemeMode> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_themeKey, mode.index);
 
+    // Persist to the local teachers table so the choice survives app restarts
+    // even if SharedPreferences is cleared. Also ensures that on re-login
+    // the locally stored theme is applied correctly.
+    await _saveThemeToLocalDb(mode);
+
     // Sync to Supabase if there's an active session
     await _syncThemeToServer(mode);
   }
 
+  Future<void> _saveThemeToLocalDb(ThemeMode mode) async {
+    try {
+      final db = ref.read(databaseProvider);
+      final userId =
+          _auth.currentUser?.id ?? _auth.currentSession?.user.id;
+      if (userId == null || userId.isEmpty) return;
+
+      String themeValue;
+      switch (mode) {
+        case ThemeMode.light:
+          themeValue = 'light';
+          break;
+        case ThemeMode.dark:
+          themeValue = 'dark';
+          break;
+        case ThemeMode.system:
+          themeValue = 'system';
+          break;
+      }
+
+      final teacher = await db.teachersDao.findByServerId(userId);
+      if (teacher != null) {
+        await (db.update(db.teachers)
+              ..where((t) => t.localId.equals(teacher.localId)))
+            .write(TeachersCompanion(
+          themeMode: Value(themeValue),
+          updatedAt: Value(DateTime.now()),
+        ));
+        debugPrint('[ThemeNotifier] Saved theme "$themeValue" to local teachers table');
+      }
+    } catch (e) {
+      debugPrint('[ThemeNotifier] Failed to save theme to local DB: $e');
+    }
+  }
+
   Future<void> _syncThemeToServer(ThemeMode mode) async {
     try {
-      final session = _auth.currentSession;
-      if (session == null) return;
-
       final client = supabase_pkg.Supabase.instance.client;
-      final userId = session.user.id;
+      final userId = _auth.currentUser?.id ?? _auth.currentSession?.user.id;
+      if (userId == null || userId.isEmpty) return;
 
       // Determine the theme string value
       String themeValue;

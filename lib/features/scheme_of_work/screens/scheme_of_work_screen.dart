@@ -62,6 +62,22 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
   String _adminFilterTerm = '';
 
   final List<String> _terms = ['First', 'Second', 'Third'];
+
+  String _friendlyTerm(String t) {
+    switch (t.trim().toLowerCase()) {
+      case 'first':
+      case '1st':
+        return 'First Term';
+      case 'second':
+      case '2nd':
+        return 'Second Term';
+      case 'third':
+      case '3rd':
+        return 'Third Term';
+      default:
+        return t;
+    }
+  }
   final List<String> _classLevels = [
     'JSS 1', 'JSS 2', 'JSS 3',
     'SSS 1', 'SSS 2', 'SSS 3',
@@ -674,7 +690,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     }
   }
 
-  Future<bool> _hasLessonOrExamReferences(dynamic db, int schemeId) async {
+  Future<bool> _hasLessonOrExamReferences(AppDatabase db, int schemeId) async {
     final schemeIdStr = schemeId.toString();
     final lessonRefs = await (db.select(db.lessons)
           ..where((t) => t.schemeOfWorkId.equals(schemeIdStr))
@@ -1360,7 +1376,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
                     color: cs.primaryContainer,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text('Week ${record.weekNumber} · ${record.term}',
+                  child: Text('Week ${record.weekNumber} · ${_friendlyTerm(record.term)}',
                       style: TextStyle(color: cs.onPrimaryContainer, fontWeight: FontWeight.w600)),
                 ),
                 const Spacer(),
@@ -1376,7 +1392,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            Text('Teacher: ${_teacherNamesById[record.teacherId] ?? 'Teacher ${record.teacherId}'}', style: theme.textTheme.bodyMedium),
+            Text('Teacher: ${_teacherNamesById[record.teacherId] ?? 'Unknown Teacher'}', style: theme.textTheme.bodyMedium),
             const SizedBox(height: 4),
             Text('Teacher Topic: ${record.topic}', style: theme.textTheme.bodyMedium),
             if (record.adminEditedTopic != null && record.adminEditedTopic!.isNotEmpty)
