@@ -100,17 +100,36 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       if (authData.currentTeacher?.serverId != null) {
         _teacherName = authData.currentTeacher!.teacherName;
       }
-      if (authData.currentSchool != null) {
-        _schoolName = authData.currentSchool!.schoolName;
-        _subscriptionTier = authData.currentSchool!.subscriptionTier;
-      }
       final db = ref.read(databaseProvider);
-      final school = await db.schoolsDao.get();
-      if (school != null) {
-        _schoolId = school.localId;
-        _schoolName = school.schoolName;
-        _subscriptionTier = school.subscriptionTier;
+
+      // Look up the school by serverId from auth state (not by schoolsDao.get())
+      // to ensure we match the correct school record, since schoolsDao.get()
+      // returns the first non-deleted school which may not match the admin's school.
+      final schoolServerId = authData.currentSchool?.serverId;
+      int? resolvedSchoolId;
+      if (schoolServerId != null) {
+        final schoolByServerId = await (db.select(db.schools)
+              ..where((s) => s.serverId.equals(schoolServerId)))
+            .getSingleOrNull();
+        if (schoolByServerId != null) {
+          resolvedSchoolId = schoolByServerId.localId;
+          _schoolName = schoolByServerId.schoolName;
+          _subscriptionTier = schoolByServerId.subscriptionTier;
+        }
       }
+      if (resolvedSchoolId == null) {
+        final fallbackSchool = await db.schoolsDao.get();
+        if (fallbackSchool != null) {
+          resolvedSchoolId = fallbackSchool.localId;
+          _schoolName = fallbackSchool.schoolName;
+          _subscriptionTier = fallbackSchool.subscriptionTier;
+        }
+      }
+      _schoolId = resolvedSchoolId;
+
+      // Reconcile legacy teacher rows before querying, fixing stale schoolLocalId
+      await db.reconcileLegacyTeachers();
+
       final teachers = _schoolId != null
           ? await db.teachersDao.getBySchool(_schoolId!)
           : await db.teachersDao.getAll();
