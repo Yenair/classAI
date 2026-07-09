@@ -11,6 +11,7 @@ import 'package:classai/core/utils/currency_formatter.dart';
 import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
+
 Future<void> showUpgradePlanComparisonDialog(
   BuildContext context,
   WidgetRef ref,
@@ -24,17 +25,22 @@ Future<void> showUpgradePlanComparisonDialog(
     barrierDismissible: true,
     useRootNavigator: true,
     builder: (dialogContext) {
+      final maxHeight = MediaQuery.sizeOf(dialogContext).height * 0.82;
+      final screenWidth = MediaQuery.sizeOf(dialogContext).width;
+      final dialogWidth = screenWidth * 0.92;
+      final finalWidth = dialogWidth > 1120 ? 1120.0 : dialogWidth;
+
       return Dialog(
         insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(28),
         ),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 980),
+        child: SizedBox(
+          width: finalWidth,
+          height: maxHeight,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
@@ -59,7 +65,7 @@ Future<void> showUpgradePlanComparisonDialog(
                           Text(
                             'Compare Plans',
                             style: textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -75,51 +81,34 @@ Future<void> showUpgradePlanComparisonDialog(
                   ],
                 ),
                 const SizedBox(height: 20),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: DataTable(
-                    columnSpacing: 24,
-                    dataRowMinHeight: 52,
-                    dataRowMaxHeight: 72,
-                    headingRowHeight: 56,
-                    columns: const [
-                      DataColumn(label: Text('Plan name')),
-                      DataColumn(label: Text('Price (per year)')),
-                      DataColumn(label: Text('Preview limit')),
-                      DataColumn(label: Text('PDF exports')),
-                      DataColumn(label: Text('Vault publishing')),
-                      DataColumn(label: Text('Watermark')),
-                    ],
-                    rows: tiers
-                        .map(
-                          (tier) => DataRow(
-                            cells: [
-                              DataCell(Text(tier.name)),
-                              DataCell(Text(tier.price)),
-                              DataCell(Text(tier.previewLimit)),
-                              DataCell(Text(tier.pdfExports)),
-                              DataCell(Text(tier.vaultPublishing)),
-                              DataCell(Text(tier.watermark)),
-                            ],
-                          ),
-                        )
-                        .toList(),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: _buildComparisonTable(cs, textTheme, tiers),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton(
-                    onPressed: () {
-                      Navigator.of(dialogContext).pop();
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (context.mounted) {
-                          context.push('/payment');
-                        }
-                      });
-                    },
-                    child: const Text('Choose Plan'),
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 200),
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          Navigator.of(dialogContext).pop();
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (context.mounted) {
+                              context.push('/payment');
+                            }
+                          });
+                        },
+                        icon: const Icon(Icons.arrow_forward_rounded),
+                        label: const Text('Choose Plan'),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -127,6 +116,193 @@ Future<void> showUpgradePlanComparisonDialog(
         ),
       );
     },
+  );
+}
+
+Widget _buildComparisonTable(
+  ColorScheme cs,
+  TextTheme textTheme,
+  List<_TierComparisonRow> tiers,
+) {
+  final headerColors = <Color>[
+    cs.surfaceContainerLow,
+    cs.primaryContainer.withValues(alpha: 0.35),
+    cs.tertiaryContainer.withValues(alpha: 0.35),
+    cs.secondaryContainer.withValues(alpha: 0.35),
+    cs.surfaceContainerHighest.withValues(alpha: 0.5),
+  ];
+
+  Widget cell(
+    String text, {
+    TextStyle? style,
+    Color? backgroundColor,
+    Alignment alignment = Alignment.centerLeft,
+    EdgeInsetsGeometry padding = const EdgeInsets.symmetric(
+      horizontal: 16,
+      vertical: 16,
+    ),
+  }) {
+    return Container(
+      padding: padding,
+      alignment: alignment,
+      decoration: BoxDecoration(
+        color: backgroundColor ?? cs.surface,
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.2)),
+      ),
+      child: Text(
+        text,
+        style: style,
+        textAlign: alignment == Alignment.center ? TextAlign.center : null,
+      ),
+    );
+  }
+
+  Widget featureCell(
+    bool included, {
+    required Color backgroundColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.2)),
+      ),
+      child: Icon(
+        included ? Icons.check_rounded : Icons.remove_rounded,
+        size: 18,
+        color: included ? cs.primary : cs.onSurfaceVariant,
+      ),
+    );
+  }
+
+  Widget planHeaderCell(String label, Color backgroundColor) {
+    return cell(
+      label,
+      backgroundColor: backgroundColor,
+      alignment: Alignment.center,
+      style: textTheme.titleSmall?.copyWith(
+        fontWeight: FontWeight.w700,
+        color: cs.onSurface,
+      ),
+    );
+  }
+
+  return Table(
+    columnWidths: const {
+      0: FixedColumnWidth(200),
+      1: FixedColumnWidth(180),
+      2: FixedColumnWidth(180),
+      3: FixedColumnWidth(180),
+      4: FixedColumnWidth(180),
+    },
+    defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+    border: TableBorder(
+      horizontalInside: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.16)),
+      verticalInside: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.16)),
+      top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.2)),
+      bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.2)),
+      left: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.2)),
+      right: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.2)),
+    ),
+    children: [
+      TableRow(
+        children: [
+          cell(
+            'Plan',
+            backgroundColor: cs.surfaceContainerLow,
+            style: textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+          planHeaderCell(tiers[0].name, headerColors[1]),
+          planHeaderCell(tiers[1].name, headerColors[2]),
+          planHeaderCell(tiers[2].name, headerColors[3]),
+          planHeaderCell(tiers[3].name, headerColors[4]),
+        ],
+      ),
+      TableRow(
+        children: [
+          cell(
+            'Price per year',
+            backgroundColor: cs.surfaceContainerLow,
+            style: textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: cs.onSurface,
+            ),
+          ),
+          cell(tiers[0].price, backgroundColor: cs.surface),
+          cell(tiers[1].price, backgroundColor: cs.surface),
+          cell(tiers[2].price, backgroundColor: cs.surface),
+          cell(tiers[3].price, backgroundColor: cs.surface),
+        ],
+      ),
+      TableRow(
+        children: [
+          cell(
+            'Daily previews',
+            backgroundColor: cs.surfaceContainerLow,
+            style: textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: cs.onSurface,
+            ),
+          ),
+          cell(tiers[0].dailyPreviews, backgroundColor: cs.surface),
+          cell(tiers[1].dailyPreviews, backgroundColor: cs.surface),
+          cell(tiers[2].dailyPreviews, backgroundColor: cs.surface),
+          cell(tiers[3].dailyPreviews, backgroundColor: cs.surface),
+        ],
+      ),
+      TableRow(
+        children: [
+          cell(
+            'PDF exports',
+            backgroundColor: cs.surfaceContainerLow,
+            style: textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: cs.onSurface,
+            ),
+          ),
+          cell(tiers[0].pdfExports, backgroundColor: cs.surface),
+          cell(tiers[1].pdfExports, backgroundColor: cs.surface),
+          cell(tiers[2].pdfExports, backgroundColor: cs.surface),
+          cell(tiers[3].pdfExports, backgroundColor: cs.surface),
+        ],
+      ),
+      TableRow(
+        children: [
+          cell(
+            'Vault publishing',
+            backgroundColor: cs.surfaceContainerLow,
+            style: textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: cs.onSurface,
+            ),
+          ),
+          featureCell(tiers[0].vaultPublishing, backgroundColor: cs.surface),
+          featureCell(tiers[1].vaultPublishing, backgroundColor: cs.surface),
+          featureCell(tiers[2].vaultPublishing, backgroundColor: cs.surface),
+          featureCell(tiers[3].vaultPublishing, backgroundColor: cs.surface),
+        ],
+      ),
+      TableRow(
+        children: [
+          cell(
+            'Watermark',
+            backgroundColor: cs.surfaceContainerLow,
+            style: textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: cs.onSurface,
+            ),
+          ),
+          featureCell(tiers[0].watermark, backgroundColor: cs.surface),
+          featureCell(tiers[1].watermark, backgroundColor: cs.surface),
+          featureCell(tiers[2].watermark, backgroundColor: cs.surface),
+          featureCell(tiers[3].watermark, backgroundColor: cs.surface),
+        ],
+      ),
+    ],
   );
 }
 
@@ -142,32 +318,32 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
       price: 'Free',
       previewLimit: _tierLimitText(previewLimits['free'], fallback: 0),
       pdfExports: _tierLimitText(pdfLimits['free'], fallback: 1),
-      vaultPublishing: 'No',
-      watermark: 'Yes',
+      vaultPublishing: false,
+      watermark: true,
     ),
     _TierComparisonRow(
       name: 'Basic',
       price: _tierPrice(prices['basic'], AppConstants.basicPlanPriceNaira),
       previewLimit: _tierLimitText(previewLimits['basic'], fallback: 10),
       pdfExports: _tierLimitText(pdfLimits['basic'], fallback: 3),
-      vaultPublishing: 'No',
-      watermark: 'No',
+      vaultPublishing: false,
+      watermark: false,
     ),
     _TierComparisonRow(
       name: 'Standard',
       price: _tierPrice(prices['standard'], AppConstants.standardPlanPriceNaira),
       previewLimit: _tierLimitText(previewLimits['standard'], fallback: 10),
       pdfExports: _tierLimitText(pdfLimits['standard'], fallback: 5),
-      vaultPublishing: 'Yes',
-      watermark: 'No',
+      vaultPublishing: true,
+      watermark: false,
     ),
     _TierComparisonRow(
       name: 'Elite',
       price: _tierPrice(prices['elite'], AppConstants.elitePlanPriceNaira),
       previewLimit: _tierLimitText(previewLimits['elite'], fallback: -1),
       pdfExports: _tierLimitText(pdfLimits['elite'], fallback: -1),
-      vaultPublishing: 'Yes',
-      watermark: 'No',
+      vaultPublishing: true,
+      watermark: false,
     ),
   ];
 }
@@ -280,8 +456,10 @@ class _TierComparisonRow {
   final String price;
   final String previewLimit;
   final String pdfExports;
-  final String vaultPublishing;
-  final String watermark;
+  final bool vaultPublishing;
+  final bool watermark;
+
+  String get dailyPreviews => previewLimit;
 
   const _TierComparisonRow({
     required this.name,
