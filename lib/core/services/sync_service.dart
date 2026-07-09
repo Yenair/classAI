@@ -970,6 +970,9 @@ class SyncService {
 
     for (final entry in sorted) {
       final payload = _decodePayload(entry.payload);
+      // Inject local_id so the server can echo it back in the results
+      // array, enabling the client to match responses to entries.
+      payload['local_id'] = entry.recordLocalId;
       // Compress payload for 2G/3G optimization before pushing.
       final compressed = PayloadCompressor.compress(payload);
       batches.add(

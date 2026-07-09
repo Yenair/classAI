@@ -6,18 +6,17 @@ import { validateTokenVersion } from "../_shared/validate_token.ts";
 // Also includes camelCase→snake_case fallbacks for keys the Dart side may
 // send uncompressed (e.g. 'classLevel', 'bloomsVerbs').
 //
-// IMPORTANT: For lessons/exams, the Dart side sends:
-//   - school_server_id (TEXT) → already a UUID, maps to school_id (UUID FK)
-//   - teacher_server_id (TEXT) → already a UUID, maps to teacher_id (UUID FK)
-//   - subject (TEXT name)     → needs lookup to subject_id (UUID FK)
-//   - classLevel              → maps to class_level (TEXT column, no FK)
+// IMPORTANT: The lessons/exams tables store school_server_id and
+// teacher_server_id as plain TEXT columns (not foreign keys to the
+// schools/teachers tables).  The `subject` text name is resolved to
+// a subject_id UUID via resolveForeignKeys().
 const KEY_MAP: Record<string, string> = {
   lid: "local_id",
   sid: "server_id",
   slid: "school_local_id",
-  ssid: "school_id",          // school_server_id IS already a UUID → use school_id FK directly
+  ssid: "school_server_id",    // school_server_id — TEXT column on lessons/exams (not a FK to schools.id)
   tlid: "teacher_local_id",
-  tsid: "teacher_id",         // teacher_server_id IS already a UUID → use teacher_id FK directly
+  tsid: "teacher_server_id",   // teacher_server_id — TEXT column on lessons/exams (not a FK to teachers.id)
   subid: "subject_id",
   ca: "created_at",
   ua: "updated_at",
@@ -62,9 +61,12 @@ const KEY_MAP: Record<string, string> = {
   bloomsVerbs: "blooms_verbs",
   // short code for blooms_verbs
   bv: "blooms_verbs",
-  // Full-key fallbacks so payloads that arrive uncompressed also map correctly
-  school_server_id: "school_id",
-  teacher_server_id: "teacher_id",
+  // Full-key fallbacks — these keys are the actual snake_case column names,
+  // so they map to themselves (no-op, but defensively listed).
+  school_server_id: "school_server_id",
+  teacher_server_id: "teacher_server_id",
+  scheme_of_work_id: "scheme_of_work_id",
+  week_number: "week_number",
 };
 
 /** Decompress a compressed rowData map back to full key names. */
@@ -85,84 +87,25 @@ function getValue(rowData: Record<string, unknown>, ...keys: string[]): unknown 
   return undefined;
 }
 
-/** Tables whose rows need a `subject` name → `subject_id` UUID resolution. */
-const TABLES_WITH_SUBJECT_FK = new Set(["lessons", "exams"]);
-
 /**
  * After decompression, resolve any foreign-key names to their UUIDs.
  *
- * Currently handles:
- *   - `subject` (text name) → `subject_id` (UUID) for lessons & exams
+ * NOTE: The lessons & exams tables store `subject` as a TEXT column, NOT
+ * as a subject_id UUID FK.  The `subjects` table is used only for AI
+ * generation context on the client — the server-side lessons/exams table
+ * simply stores the subject name string.  Therefore this function is a
+ * no-op for lessons/exams; the subject TEXT value passes through as-is.
  *
  * Mutates `rowData` in place.
  */
 async function resolveForeignKeys(
-  supabase: ReturnType<typeof createClient>,
-  table: string,
-  rowData: Record<string, unknown>,
+  _supabase: ReturnType<typeof createClient>,
+  _table: string,
+  _rowData: Record<string, unknown>,
 ): Promise<void> {
-  if (!TABLES_WITH_SUBJECT_FK.has(table)) return;
-
-  const subjectName = rowData["subject"] as string | undefined;
-  if (!subjectName || typeof subjectName !== "string" || subjectName.trim() === "") {
-    // No subject name to resolve — remove the string key so it doesn't
-    // cause a type mismatch on the FK column, if a subject_id was provided
-    // directly (e.g. via subid in the compression map) it will already be
-    // present as subject_id.
-    delete rowData["subject"];
-    return;
-  }
-
-  // We need the school_id to scope the lookup
-  const schoolId = (rowData["school_id"] as string) ?? undefined;
-  if (!schoolId) {
-    console.warn(
-      `resolveForeignKeys: skipping subject lookup for "${table}" — no school_id in payload`,
-    );
-    // Remove the string subject key so it doesn't cause a type error
-    delete rowData["subject"];
-    return;
-  }
-
-  // Look up the subject UUID from the subjects table
-  const { data: subjectRows, error } = await supabase
-    .from("subjects")
-    .select("id")
-    .eq("subject_name", subjectName.trim())
-    .eq("school_id", schoolId)
-    .limit(1);
-
-  if (error) {
-    console.warn(
-      `resolveForeignKeys: error looking up subject "${subjectName}" for ${table}: ${error.message}`,
-    );
-    delete rowData["subject"];
-    return;
-  }
-
-  if (!subjectRows || subjectRows.length === 0) {
-    // Subject name not found in the subjects table —
-    // insert a new row so the lesson/exam can reference it.
-    const { data: newSubject, error: insertError } = await supabase
-      .from("subjects")
-      .insert({ subject_name: subjectName.trim(), school_id: schoolId })
-      .select("id")
-      .limit(1);
-    if (insertError || !newSubject || newSubject.length === 0) {
-      console.warn(
-        `resolveForeignKeys: failed to insert subject "${subjectName}" for school ${schoolId}: ${insertError?.message ?? "unknown error"}`,
-      );
-      delete rowData["subject"];
-      return;
-    }
-    rowData["subject_id"] = newSubject[0].id;
-    delete rowData["subject"];
-    return;
-  }
-
-  // Replace the string subject name with the UUID foreign key
-  rowData["subject_id"] = subjectRows[0].id;
-  delete rowData["subject"];
+  // No FK columns need resolution on any table currently synced via
+  // sync-push.  The `subject` column on lessons/exams is TEXT, not a
+  // foreign key to `subjects.id`.
 }
 
 serve(async (req) => {
@@ -217,112 +160,115 @@ serve(async (req) => {
     let processed = 0;
     const results: Record<string, unknown>[] = [];
 
-    for (const change of changes) {
+    // Process changes sequentially and push one result per change immediately.
+    // The results array is built in the same order as the changes array so
+    // the client can always find its entries by local_id (which the client
+    // must include in rowData as "local_id" or "lid").
+    for (const [idx, change] of changes.entries()) {
       const { table, operation, rowData } = change;
 
       if (!table || !operation || !rowData) {
-        console.warn(`sync-push: skipping invalid change entry`, change);
+        console.warn(`sync-push: skipping invalid change entry at index ${idx}`, change);
+        results.push({ local_id: 0, server_id: null, status: "error", retryable: true });
         continue;
       }
 
       // Decompress rowData if it has short keys
       const fullRowData = decompressRow(rowData as Record<string, unknown>);
 
+      // Extract local_id early so we can echo it back even on failure.
+      const localId = (fullRowData["local_id"] as number | string | undefined) ?? 0;
+
       const op = (operation as string).toUpperCase();
 
       try {
         if (op === "INSERT") {
           // Remove local-only fields; let server generate UUIDs
-          const { local_id, localId, ...insertData } = fullRowData;
-          // Resolve foreign-key names (e.g. subject name → subject_id UUID)
+          const { local_id: _lid, localId: _lid2, ...insertData } = fullRowData;
           await resolveForeignKeys(supabase, table, insertData);
           const { data: insertData_, error } = await supabase
             .from(table)
             .insert(insertData)
             .select("id");
           if (error) {
-            console.warn(`sync-push: INSERT error on "${table}": ${error.message}`);
+            console.warn(`sync-push: INSERT error on "${table}" (local_id=${localId}): ${error.message}`);
+            results.push({ local_id: localId, server_id: null, status: "error", retryable: true });
             continue;
           }
-          // Capture the server-generated UUID so it can be returned in results
           const generatedId = insertData_?.[0]?.id as string | undefined;
-          if (generatedId) {
-            // Store in a per-change map keyed by local_id
-            (change as Record<string, unknown>)["__generated_id"] = generatedId;
-          }
+          results.push({
+            local_id: localId,
+            server_id: generatedId ?? null,
+            status: "created",
+            retryable: false,
+          });
+          processed++;
         } else if (op === "UPDATE") {
-          const serverId = getValue(fullRowData, "id", "server_id", "serverId");
+          // For UPDATES the client must include server_id in rowData
+          const serverId = getValue(fullRowData, "server_id", "serverId", "id");
           if (!serverId) {
-            console.warn(`sync-push: UPDATE on "${table}" missing server id`);
+            console.warn(`sync-push: UPDATE on "${table}" missing server_id (local_id=${localId})`);
+            results.push({ local_id: localId, server_id: null, status: "error", retryable: true });
             continue;
           }
-          const { local_id, localId, server_id, serverId: _sid, id, school_server_id, teacher_server_id, ...updateData } = fullRowData;
-          // Resolve foreign-key names for UPDATEs too
+          const { local_id: _lid, localId: _lid2, server_id: _sid, serverId: _sid2, id: _id, school_server_id: _ssid, teacher_server_id: _tsid, ...updateData } = fullRowData;
           await resolveForeignKeys(supabase, table, updateData);
           const { error } = await supabase
             .from(table)
             .update(updateData)
             .eq("id", serverId);
           if (error) {
-            console.warn(`sync-push: UPDATE error on "${table}": ${error.message}`);
+            console.warn(`sync-push: UPDATE error on "${table}" (local_id=${localId}): ${error.message}`);
+            results.push({ local_id: localId, server_id: serverId as string, status: "error", retryable: true });
             continue;
           }
+          results.push({
+            local_id: localId,
+            server_id: serverId as string,
+            status: "updated",
+            retryable: false,
+          });
+          processed++;
         } else if (op === "DELETE") {
-          const serverId = getValue(fullRowData, "id", "server_id", "serverId");
+          const serverId = getValue(fullRowData, "server_id", "serverId", "id");
           if (!serverId) {
-            console.warn(`sync-push: DELETE on "${table}" missing server id`);
+            console.warn(`sync-push: DELETE on "${table}" missing server_id (local_id=${localId})`);
+            results.push({ local_id: localId, server_id: null, status: "error", retryable: true });
             continue;
           }
-          // Soft delete
           const { error } = await supabase
             .from(table)
             .update({ is_deleted: true })
             .eq("id", serverId);
           if (error) {
-            console.warn(`sync-push: DELETE error on "${table}": ${error.message}`);
+            console.warn(`sync-push: DELETE error on "${table}" (local_id=${localId}): ${error.message}`);
+            results.push({ local_id: localId, server_id: serverId as string, status: "error", retryable: true });
             continue;
           }
-        } else if (op === "SPEND_CREDITS") {
-          // Credits are managed client-side and by the sync-credits function.
-          // No Supabase table modification needed.
           results.push({
-            local_id: getValue(fullRowData, 'local_id', 'localId', 'id') ?? 0,
-            server_id: null,
-            status: 'skipped',
+            local_id: localId,
+            server_id: serverId as string,
+            status: "deleted",
             retryable: false,
           });
-          (change as Record<string, unknown>)["__skipped"] = true;
+          processed++;
+        } else if (op === "SPEND_CREDITS") {
+          results.push({
+            local_id: localId,
+            server_id: null,
+            status: "skipped",
+            retryable: false,
+          });
           continue;
         } else {
           console.warn(`sync-push: unknown operation "${operation}" on "${table}"`);
+          results.push({ local_id: localId, server_id: null, status: "error", retryable: false });
           continue;
         }
-
-        processed++;
       } catch (innerErr) {
-        console.warn(`sync-push: exception processing ${operation} on ${table}:`, innerErr);
-        // continue processing remaining changes
+        console.warn(`sync-push: exception processing ${operation} on ${table} (local_id=${localId}):`, innerErr);
+        results.push({ local_id: localId, server_id: null, status: "error", retryable: true });
       }
-    }
-
-    // Build per-entry results matching SyncPushResponse.fromJson expectations.
-    // Each result includes local_id, status, server_id, and retryable.
-    for (const change of changes) {
-      // SPEND_CREDITS results were already pushed during processing
-      if ((change as Record<string, unknown>)["__skipped"] === true) {
-        continue;
-      }
-      const fullRowData = decompressRow(change.rowData as Record<string, unknown>);
-      const localId = getValue(fullRowData, "local_id", "localId", "id");
-      // Use the generated ID from INSERT, or fall back to the incoming server_id
-      const generatedId = (change as Record<string, unknown>)["__generated_id"] as string | undefined;
-      const serverId = generatedId ?? getValue(fullRowData, "server_id", "serverId", "id");
-      results.push({
-        local_id: localId ?? 0,
-        status: "updated",
-        server_id: serverId ?? null,
-        retryable: false,
-      });
     }
 
     return new Response(
