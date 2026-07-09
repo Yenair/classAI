@@ -1,371 +1,16 @@
 // lib/features/payment/screens/payment_screen.dart
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dio/dio.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:classai/core/services/payment_service.dart';
-import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/core/constants/app_constants.dart';
-import 'package:classai/core/utils/currency_formatter.dart';
 import 'package:classai/core/providers/config_provider.dart';
+import 'package:classai/core/services/payment_service.dart';
+import 'package:classai/core/utils/currency_formatter.dart';
+import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
-
-Future<void> showUpgradePlanComparisonDialog(
-  BuildContext context,
-  WidgetRef ref,
-) {
-  final cs = Theme.of(context).colorScheme;
-  final textTheme = Theme.of(context).textTheme;
-  final tiers = _buildTierComparisonRows(ref);
-
-  return showDialog<void>(
-    context: context,
-    barrierDismissible: true,
-    useRootNavigator: true,
-    builder: (dialogContext) {
-      final maxHeight = MediaQuery.sizeOf(dialogContext).height * 0.82;
-      final screenWidth = MediaQuery.sizeOf(dialogContext).width;
-      final dialogWidth = screenWidth * 0.92;
-      final finalWidth = dialogWidth > 1120 ? 1120.0 : dialogWidth;
-
-      return Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(28),
-        ),
-        child: SizedBox(
-          width: finalWidth,
-          height: maxHeight,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: cs.primaryContainer,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.workspace_premium_rounded,
-                        color: cs.onPrimaryContainer,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Compare Plans',
-                            style: textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Review the tiers before you continue to checkout.',
-                            style: textTheme.bodyMedium?.copyWith(
-                              color: cs.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: _buildComparisonTable(cs, textTheme, tiers),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 200),
-                      child: FilledButton.icon(
-                        onPressed: () {
-                          Navigator.of(dialogContext).pop();
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (context.mounted) {
-                              context.push('/payment');
-                            }
-                          });
-                        },
-                        icon: const Icon(Icons.arrow_forward_rounded),
-                        label: const Text('Choose Plan'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    },
-  );
-}
-
-Widget _buildComparisonTable(
-  ColorScheme cs,
-  TextTheme textTheme,
-  List<_TierComparisonRow> tiers,
-) {
-  final headerColors = <Color>[
-    cs.surfaceContainerLow,
-    cs.primaryContainer.withValues(alpha: 0.35),
-    cs.tertiaryContainer.withValues(alpha: 0.35),
-    cs.secondaryContainer.withValues(alpha: 0.35),
-    cs.surfaceContainerHighest.withValues(alpha: 0.5),
-  ];
-
-  Widget cell(
-    String text, {
-    TextStyle? style,
-    Color? backgroundColor,
-    Alignment alignment = Alignment.centerLeft,
-    EdgeInsetsGeometry padding = const EdgeInsets.symmetric(
-      horizontal: 16,
-      vertical: 16,
-    ),
-  }) {
-    return Container(
-      padding: padding,
-      alignment: alignment,
-      decoration: BoxDecoration(
-        color: backgroundColor ?? cs.surface,
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.2)),
-      ),
-      child: Text(
-        text,
-        style: style,
-        textAlign: alignment == Alignment.center ? TextAlign.center : null,
-      ),
-    );
-  }
-
-  Widget featureCell(
-    bool included, {
-    required Color backgroundColor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.2)),
-      ),
-      child: Icon(
-        included ? Icons.check_rounded : Icons.remove_rounded,
-        size: 18,
-        color: included ? cs.primary : cs.onSurfaceVariant,
-      ),
-    );
-  }
-
-  Widget planHeaderCell(String label, Color backgroundColor) {
-    return cell(
-      label,
-      backgroundColor: backgroundColor,
-      alignment: Alignment.center,
-      style: textTheme.titleSmall?.copyWith(
-        fontWeight: FontWeight.w700,
-        color: cs.onSurface,
-      ),
-    );
-  }
-
-  return Table(
-    columnWidths: const {
-      0: FixedColumnWidth(200),
-      1: FixedColumnWidth(180),
-      2: FixedColumnWidth(180),
-      3: FixedColumnWidth(180),
-      4: FixedColumnWidth(180),
-    },
-    defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-    border: TableBorder(
-      horizontalInside: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.16)),
-      verticalInside: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.16)),
-      top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.2)),
-      bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.2)),
-      left: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.2)),
-      right: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.2)),
-    ),
-    children: [
-      TableRow(
-        children: [
-          cell(
-            'Plan',
-            backgroundColor: cs.surfaceContainerLow,
-            style: textTheme.labelLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: cs.onSurfaceVariant,
-            ),
-          ),
-          planHeaderCell(tiers[0].name, headerColors[1]),
-          planHeaderCell(tiers[1].name, headerColors[2]),
-          planHeaderCell(tiers[2].name, headerColors[3]),
-          planHeaderCell(tiers[3].name, headerColors[4]),
-        ],
-      ),
-      TableRow(
-        children: [
-          cell(
-            'Price per year',
-            backgroundColor: cs.surfaceContainerLow,
-            style: textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: cs.onSurface,
-            ),
-          ),
-          cell(tiers[0].price, backgroundColor: cs.surface),
-          cell(tiers[1].price, backgroundColor: cs.surface),
-          cell(tiers[2].price, backgroundColor: cs.surface),
-          cell(tiers[3].price, backgroundColor: cs.surface),
-        ],
-      ),
-      TableRow(
-        children: [
-          cell(
-            'Daily previews',
-            backgroundColor: cs.surfaceContainerLow,
-            style: textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: cs.onSurface,
-            ),
-          ),
-          cell(tiers[0].dailyPreviews, backgroundColor: cs.surface),
-          cell(tiers[1].dailyPreviews, backgroundColor: cs.surface),
-          cell(tiers[2].dailyPreviews, backgroundColor: cs.surface),
-          cell(tiers[3].dailyPreviews, backgroundColor: cs.surface),
-        ],
-      ),
-      TableRow(
-        children: [
-          cell(
-            'PDF exports',
-            backgroundColor: cs.surfaceContainerLow,
-            style: textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: cs.onSurface,
-            ),
-          ),
-          cell(tiers[0].pdfExports, backgroundColor: cs.surface),
-          cell(tiers[1].pdfExports, backgroundColor: cs.surface),
-          cell(tiers[2].pdfExports, backgroundColor: cs.surface),
-          cell(tiers[3].pdfExports, backgroundColor: cs.surface),
-        ],
-      ),
-      TableRow(
-        children: [
-          cell(
-            'Vault publishing',
-            backgroundColor: cs.surfaceContainerLow,
-            style: textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: cs.onSurface,
-            ),
-          ),
-          featureCell(tiers[0].vaultPublishing, backgroundColor: cs.surface),
-          featureCell(tiers[1].vaultPublishing, backgroundColor: cs.surface),
-          featureCell(tiers[2].vaultPublishing, backgroundColor: cs.surface),
-          featureCell(tiers[3].vaultPublishing, backgroundColor: cs.surface),
-        ],
-      ),
-      TableRow(
-        children: [
-          cell(
-            'Watermark',
-            backgroundColor: cs.surfaceContainerLow,
-            style: textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: cs.onSurface,
-            ),
-          ),
-          featureCell(tiers[0].watermark, backgroundColor: cs.surface),
-          featureCell(tiers[1].watermark, backgroundColor: cs.surface),
-          featureCell(tiers[2].watermark, backgroundColor: cs.surface),
-          featureCell(tiers[3].watermark, backgroundColor: cs.surface),
-        ],
-      ),
-    ],
-  );
-}
-
-List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
-  final config = ref.read(configServiceProvider);
-  final prices = config.subscriptionPrices;
-  final previewLimits = config.dailyPreviewLimits;
-  final pdfLimits = config.pdfExportLimits;
-
-  return [
-    _TierComparisonRow(
-      name: 'Free',
-      price: 'Free',
-      previewLimit: _tierLimitText(previewLimits['free'], fallback: 0),
-      pdfExports: _tierLimitText(pdfLimits['free'], fallback: 1),
-      vaultPublishing: false,
-      watermark: true,
-    ),
-    _TierComparisonRow(
-      name: 'Basic',
-      price: _tierPrice(prices['basic'], AppConstants.basicPlanPriceNaira),
-      previewLimit: _tierLimitText(previewLimits['basic'], fallback: 10),
-      pdfExports: _tierLimitText(pdfLimits['basic'], fallback: 3),
-      vaultPublishing: false,
-      watermark: false,
-    ),
-    _TierComparisonRow(
-      name: 'Standard',
-      price: _tierPrice(prices['standard'], AppConstants.standardPlanPriceNaira),
-      previewLimit: _tierLimitText(previewLimits['standard'], fallback: 10),
-      pdfExports: _tierLimitText(pdfLimits['standard'], fallback: 5),
-      vaultPublishing: true,
-      watermark: false,
-    ),
-    _TierComparisonRow(
-      name: 'Elite',
-      price: _tierPrice(prices['elite'], AppConstants.elitePlanPriceNaira),
-      previewLimit: _tierLimitText(previewLimits['elite'], fallback: -1),
-      pdfExports: _tierLimitText(pdfLimits['elite'], fallback: -1),
-      vaultPublishing: true,
-      watermark: false,
-    ),
-  ];
-}
-
-String _tierPrice(dynamic value, int fallback) {
-  final amount = value is int
-      ? value
-      : value is num
-          ? value.toInt()
-          : fallback;
-  return '${CurrencyFormatter.formatNairaCompact(amount)}/yr';
-}
-
-String _tierLimitText(dynamic value, {required int fallback}) {
-  final limit = value is int
-      ? value
-      : value is num
-          ? value.toInt()
-          : fallback;
-  if (limit < 0) return 'Unlimited';
-  return limit.toString();
-}
 
 Future<void> _showUpgradeSuccessOverlay(
   BuildContext context,
@@ -451,32 +96,727 @@ String _displayPlanName(String plan) {
   return plan[0].toUpperCase() + plan.substring(1).toLowerCase();
 }
 
-class _TierComparisonRow {
-  final String name;
-  final String price;
-  final String previewLimit;
-  final String pdfExports;
-  final bool vaultPublishing;
-  final bool watermark;
+Future<void> showUpgradePlanComparisonDialog(
+  BuildContext context,
+  WidgetRef ref,
+) {
+  final tiers = _buildTierComparisonRows(ref);
 
-  String get dailyPreviews => previewLimit;
+  return showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: 'Dismiss',
+    useRootNavigator: true,
+    barrierColor: Colors.black54,
+    pageBuilder: (dialogContext, animation, secondaryAnimation) {
+      final selectedTierNotifier = ValueNotifier<String>('elite');
+      final screenSize = MediaQuery.sizeOf(dialogContext);
+      final screenWidth = screenSize.width;
+      final screenHeight = screenSize.height;
 
-  const _TierComparisonRow({
-    required this.name,
-    required this.price,
-    required this.previewLimit,
-    required this.pdfExports,
-    required this.vaultPublishing,
-    required this.watermark,
+      // Responsive dialog sizing
+      final double heightFactor;
+      final double widthFactor;
+      final double horizontalInset;
+      if (screenWidth < 400) {
+        heightFactor = 0.90;
+        widthFactor = 0.98;
+        horizontalInset = 4;
+      } else if (screenWidth < 600) {
+        heightFactor = 0.88;
+        widthFactor = 0.96;
+        horizontalInset = 8;
+      } else {
+        heightFactor = 0.82;
+        widthFactor = 0.96;
+        horizontalInset = 12;
+      }
+      final double maxHeight = screenHeight * heightFactor;
+      final double dialogWidth = screenWidth * widthFactor;
+      final double finalWidth = dialogWidth > 1320 ? 1320.0 : dialogWidth;
+      final bool isWide = screenWidth >= 1100;
+
+      // Calculate available width for the comparison table
+      const double contentPadding = 48.0; // 24 left + 24 right
+      const double gap = 32.0;
+      final double tableAvailableWidth = isWide
+          ? (finalWidth - contentPadding - gap) * (8 / 12)
+          : finalWidth - contentPadding;
+
+      void choosePlan(String tier) {
+        Navigator.of(dialogContext).pop();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted) {
+            context.push('/payment?plan=$tier');
+          }
+        });
+      }
+
+      // Direct setter — no setState, no addPostFrameCallback wrapper needed
+      void _selectTier(String tier) {
+        selectedTierNotifier.value = tier;
+      }
+
+      final cs = Theme.of(dialogContext).colorScheme;
+      final textTheme = Theme.of(dialogContext).textTheme;
+
+      return Center(
+        child: Container(
+          margin: EdgeInsets.symmetric(
+            horizontal: horizontalInset,
+            vertical: 24,
+          ),
+          width: finalWidth,
+          height: maxHeight,
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: BorderRadius.circular(28),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Static header — never rebuilds
+                Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: cs.primaryContainer,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.workspace_premium_rounded,
+                        color: cs.onPrimaryContainer,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Compare Plans',
+                            style: textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Review the tiers before you continue to checkout.',
+                            style: textTheme.bodyMedium?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                // Only the scrollable section rebuilds when selectedTier changes
+                Expanded(
+                  child: ValueListenableBuilder<String>(
+                    valueListenable: selectedTierNotifier,
+                    builder: (context, selectedTier, _) {
+                      final selectedPlan = tiers.firstWhere(
+                        (tier) => tier.tier == selectedTier,
+                        orElse: () => tiers.last,
+                      );
+
+                      return SingleChildScrollView(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8.0),
+                          child: isWide
+                              ? Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      flex: 8,
+                                      child: SingleChildScrollView(
+                                        scrollDirection: Axis.horizontal,
+                                        child: _buildComparisonTable(
+                                          cs,
+                                          textTheme,
+                                          tiers,
+                                          selectedTier: selectedTier,
+                                          onSelectTier: _selectTier,
+                                          onChoosePlan: choosePlan,
+                                          availableWidth: tableAvailableWidth,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 32),
+                                    Expanded(
+                                      flex: 4,
+                                      child: _buildPopupOrderSummary(
+                                        cs,
+                                        textTheme,
+                                        selectedPlan,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: _buildComparisonTable(
+                                        cs,
+                                        textTheme,
+                                        tiers,
+                                        selectedTier: selectedTier,
+                                        onSelectTier: _selectTier,
+                                        onChoosePlan: choosePlan,
+                                        availableWidth: tableAvailableWidth,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 20),
+                                    _buildPopupOrderSummary(
+                                      cs,
+                                      textTheme,
+                                      selectedPlan,
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+Widget _buildPopupOrderSummary(
+  ColorScheme cs,
+  TextTheme textTheme,
+  _TierComparisonRow plan,
+) {
+  return Container(
+    padding: const EdgeInsets.all(24),
+    decoration: BoxDecoration(
+      color: cs.surfaceContainerLowest,
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(
+        color: cs.outlineVariant.withValues(alpha: 0.2),
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: cs.onSurface.withValues(alpha: 0.04),
+          blurRadius: 8,
+          offset: const Offset(0, 2),
+        ),
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Order Summary',
+          style: textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: cs.onSurface,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Divider(
+          height: 1,
+          color: cs.outlineVariant.withValues(alpha: 0.2),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Flexible(
+              child: Text(
+                'Selected Plan',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                plan.name,
+                textAlign: TextAlign.end,
+                style: textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                  color: cs.onSurface,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Flexible(
+              child: Text(
+                'Duration',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                '1 Year',
+                textAlign: TextAlign.end,
+                style: textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                  color: cs.onSurface,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Divider(
+          height: 1,
+          color: cs.outlineVariant.withValues(alpha: 0.2),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Flexible(
+              child: Text(
+                'Total Due',
+                style: textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: cs.onSurface,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                plan.price,
+                textAlign: TextAlign.end,
+                style: textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: cs.primary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: cs.outlineVariant.withValues(alpha: 0.5),
+              strokeAlign: BorderSide.strokeAlignInside,
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(
+                Icons.account_balance_wallet_rounded,
+                size: 48,
+                color: cs.outline,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Secure checkout powered by Paystack.',
+                textAlign: TextAlign.center,
+                style: textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '(WebView Container)',
+                style: textTheme.labelSmall?.copyWith(
+                  color: cs.outline,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _buildComparisonTable(
+  ColorScheme cs,
+  TextTheme textTheme,
+  List<_TierComparisonRow> tiers,
+  {
+  required String selectedTier,
+  required ValueChanged<String> onSelectTier,
+  required ValueChanged<String> onChoosePlan,
+  double availableWidth = 0,
+}
+) {
+  // Determine column widths responsively
+  const double labelColumnWidth = 140;
+  const int totalPlanColumns = 4;
+  final double planColumnWidth;
+
+  if (availableWidth > 0) {
+    final double remaining = availableWidth - labelColumnWidth;
+    planColumnWidth = (remaining / totalPlanColumns).clamp(160, 260);
+  } else {
+    planColumnWidth = 200;
+  }
+
+  final List<_BuildColumnContext> colContexts = [
+    _BuildColumnContext(
+      plan: tiers[0],
+      headerColor: cs.primaryContainer.withValues(alpha: 0.35),
+      isSelected: selectedTier == tiers[0].tier,
+      isClickable: tiers[0].tier != 'free',
+    ),
+    _BuildColumnContext(
+      plan: tiers[1],
+      headerColor: cs.tertiaryContainer.withValues(alpha: 0.35),
+      isSelected: selectedTier == tiers[1].tier,
+      isClickable: tiers[1].tier != 'free',
+    ),
+    _BuildColumnContext(
+      plan: tiers[2],
+      headerColor: cs.secondaryContainer.withValues(alpha: 0.35),
+      isSelected: selectedTier == tiers[2].tier,
+      isClickable: tiers[2].tier != 'free',
+    ),
+    _BuildColumnContext(
+      plan: tiers[3],
+      headerColor: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+      isSelected: selectedTier == tiers[3].tier,
+      isClickable: tiers[3].tier != 'free',
+    ),
+  ];
+
+  // --- Cell building helpers ---
+
+  Widget labelCell(
+    String text, {
+    TextStyle? style,
+    Color? backgroundColor,
+  }) {
+    return Container(
+      width: labelColumnWidth,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      alignment: Alignment.centerLeft,
+      decoration: BoxDecoration(
+        color: backgroundColor ?? cs.surfaceContainerLow,
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.2)),
+      ),
+      child: Text(
+        text,
+        style: style,
+      ),
+    );
+  }
+
+  Widget iconCell(bool included, {Color? backgroundColor}) {
+    return Container(
+      width: planColumnWidth,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: backgroundColor ?? cs.surface,
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.2)),
+      ),
+      child: Icon(
+        included ? Icons.check_rounded : Icons.remove_rounded,
+        size: 18,
+        color: included ? cs.primary : cs.onSurfaceVariant,
+      ),
+    );
+  }
+
+  Widget textCell(String text, {Color? backgroundColor, TextStyle? style}) {
+    return Container(
+      width: planColumnWidth,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: backgroundColor ?? cs.surface,
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.2)),
+      ),
+      child: Text(
+        text,
+        style: style ?? textTheme.bodyMedium,
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+
+  // Build one whole column for a plan
+  Widget _buildPlanColumn(_BuildColumnContext ctx) {
+    final plan = ctx.plan;
+    final bgColor = ctx.isSelected
+        ? cs.primary.withValues(alpha: 0.12)
+        : (ctx.isClickable ? ctx.headerColor : null);
+    final borderColor = ctx.isSelected
+        ? cs.primary
+        : cs.outlineVariant.withValues(alpha: 0.2);
+
+    final List<Widget> cells = [
+      // Header: plan name
+      Container(
+        width: planColumnWidth,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: bgColor,
+          border: Border.all(color: borderColor),
+        ),
+        child: Text(
+          plan.name,
+          style: textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: ctx.isSelected ? cs.primary : cs.onSurface,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ),
+      // Price row
+      textCell(
+        plan.price,
+        backgroundColor: bgColor,
+        style: textTheme.bodyMedium?.copyWith(
+          fontWeight: FontWeight.w600,
+          color: ctx.isSelected ? cs.primary : cs.onSurface,
+        ),
+      ),
+      // Daily previews
+      textCell(plan.dailyPreviews, backgroundColor: bgColor),
+      // PDF exports
+      textCell(plan.pdfExports, backgroundColor: bgColor),
+      // Vault publishing
+      iconCell(plan.vaultPublishing, backgroundColor: bgColor),
+      // Watermark
+      iconCell(plan.watermark, backgroundColor: bgColor),
+    ];
+
+    // Action row: Choose Plan button for paid plans, "Unavailable" for free
+    if (!ctx.isClickable) {
+      cells.add(
+        Container(
+          width: planColumnWidth,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerLow,
+            border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.2)),
+          ),
+          child: Text(
+            'Unavailable',
+            style: textTheme.labelMedium?.copyWith(
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+        ),
+      );
+    } else {
+      cells.add(
+        Container(
+          width: planColumnWidth,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: bgColor,
+            border: Border.all(color: borderColor),
+          ),
+          child: SizedBox(
+            width: planColumnWidth - 16,
+            height: 40,
+            child: FilledButton(
+              onPressed: () => onChoosePlan(plan.tier),
+              style: FilledButton.styleFrom(
+                backgroundColor: cs.primary,
+                foregroundColor: cs.onPrimary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+              ),
+              child: Text(
+                'Choose Plan',
+                style: textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: cs.onPrimary,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final column = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: cells,
+    );
+
+    final Widget sizedColumn = SizedBox(
+      width: planColumnWidth,
+      child: column,
+    );
+
+    // Paid columns are entirely tappable; Free is static
+    // Use GestureDetector instead of InkWell to avoid hit-test/layout race
+    // that causes "RenderBox was not laid out" / "hasSize" errors.
+    if (ctx.isClickable) {
+      return GestureDetector(
+        onTap: () => onSelectTier(plan.tier),
+        child: sizedColumn,
+      );
+    }
+
+    return sizedColumn;
+  }
+
+  // Build the full table as a Row (label column + 4 plan columns)
+  return Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      // Feature labels column — wrapped in SizedBox so CrossAxisAlignment.stretch
+      // never receives infinite width from the horizontal scroll view
+      SizedBox(
+        width: labelColumnWidth,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            labelCell('Plan', style: textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: cs.onSurfaceVariant,
+            )),
+            labelCell('Price per year', style: textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: cs.onSurface,
+            )),
+            labelCell('Daily previews', style: textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: cs.onSurface,
+            )),
+            labelCell('PDF exports', style: textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: cs.onSurface,
+            )),
+            labelCell('Vault publishing', style: textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: cs.onSurface,
+            )),
+            labelCell('Watermark', style: textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: cs.onSurface,
+            )),
+            labelCell('', style: null), // empty cell for action row alignment
+          ],
+        ),
+      ),
+      // Plan columns
+      _buildPlanColumn(colContexts[0]),
+      _buildPlanColumn(colContexts[1]),
+      _buildPlanColumn(colContexts[2]),
+      _buildPlanColumn(colContexts[3]),
+    ],
+  );
+}
+
+class _BuildColumnContext {
+  final _TierComparisonRow plan;
+  final Color headerColor;
+  final bool isSelected;
+  final bool isClickable;
+
+  const _BuildColumnContext({
+    required this.plan,
+    required this.headerColor,
+    required this.isSelected,
+    required this.isClickable,
   });
 }
 
-/// Payment screen that shows plan selection options — Google Stitch design.
-///
-/// Selecting a plan calls [PaymentService.initializePayment]
-/// and opens the returned Paystack authorization URL in a browser/WebView.
-/// After the user completes payment in the browser, the screen polls
-/// for confirmation and displays the activation code.
+List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
+  final config = ref.read(configServiceProvider);
+  final prices = config.subscriptionPrices;
+  final previewLimits = config.dailyPreviewLimits;
+  final pdfLimits = config.pdfExportLimits;
+
+  return [
+    _TierComparisonRow(
+      tier: 'free',
+      name: 'Free',
+      price: 'Free',
+      previewLimit: _tierLimitText(previewLimits['free'], fallback: 0),
+      pdfExports: _tierLimitText(pdfLimits['free'], fallback: 1),
+      vaultPublishing: false,
+      watermark: true,
+    ),
+    _TierComparisonRow(
+      tier: 'basic',
+      name: 'Basic',
+      price: _tierPrice(prices['basic'], AppConstants.basicPlanPriceNaira),
+      previewLimit: _tierLimitText(previewLimits['basic'], fallback: 10),
+      pdfExports: _tierLimitText(pdfLimits['basic'], fallback: 3),
+      vaultPublishing: false,
+      watermark: false,
+    ),
+    _TierComparisonRow(
+      tier: 'standard',
+      name: 'Standard',
+      price: _tierPrice(prices['standard'], AppConstants.standardPlanPriceNaira),
+      previewLimit: _tierLimitText(previewLimits['standard'], fallback: 10),
+      pdfExports: _tierLimitText(pdfLimits['standard'], fallback: 5),
+      vaultPublishing: true,
+      watermark: false,
+    ),
+    _TierComparisonRow(
+      tier: 'elite',
+      name: 'Elite',
+      price: _tierPrice(prices['elite'], AppConstants.elitePlanPriceNaira),
+      previewLimit: _tierLimitText(previewLimits['elite'], fallback: -1),
+      pdfExports: _tierLimitText(pdfLimits['elite'], fallback: -1),
+      vaultPublishing: true,
+      watermark: false,
+    ),
+  ];
+}
+
+String _tierPrice(dynamic value, int fallback) {
+  final amount = value is int
+      ? value
+      : value is num
+          ? value.toInt()
+          : fallback;
+  return '${CurrencyFormatter.formatNairaCompact(amount)}/yr';
+}
+
+String _tierLimitText(dynamic value, {required int fallback}) {
+  final limit = value is int
+      ? value
+      : value is num
+          ? value.toInt()
+          : fallback;
+  if (limit < 0) return 'Unlimited';
+  return limit.toString();
+}
+
 class PaymentScreen extends ConsumerStatefulWidget {
   const PaymentScreen({super.key});
 
@@ -486,7 +826,8 @@ class PaymentScreen extends ConsumerStatefulWidget {
 
 class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   bool _isProcessing = false;
-  String _selectedPlan = 'standard';
+  String _selectedPlanTier = 'elite';
+  bool _didInitPlan = false;
 
   @override
   void initState() {
@@ -494,6 +835,57 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _resumePendingPayments();
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didInitPlan) return;
+
+    final plan = GoRouterState.of(context).uri.queryParameters['plan']
+        ?.toLowerCase();
+    switch (plan) {
+      case 'basic':
+      case 'standard':
+      case 'elite':
+        _selectedPlanTier = plan!;
+        break;
+      default:
+        _selectedPlanTier = 'elite';
+        break;
+    }
+    _didInitPlan = true;
+  }
+
+  List<_PlanDef> _buildPlans() {
+    final config = ref.read(configServiceProvider);
+    final prices = config.subscriptionPrices;
+    return [
+      _PlanDef(
+        name: 'Basic',
+        amountNaira: prices['basic'] as int? ?? AppConstants.basicPlanPriceNaira,
+        tier: 'basic',
+      ),
+      _PlanDef(
+        name: 'Standard',
+        amountNaira:
+            prices['standard'] as int? ?? AppConstants.standardPlanPriceNaira,
+        tier: 'standard',
+      ),
+      _PlanDef(
+        name: 'Elite',
+        amountNaira: prices['elite'] as int? ?? AppConstants.elitePlanPriceNaira,
+        tier: 'elite',
+      ),
+    ];
+  }
+
+  _PlanDef _selectedPlan() {
+    final plans = _buildPlans();
+    return plans.firstWhere(
+      (plan) => plan.tier == _selectedPlanTier,
+      orElse: () => plans.last,
+    );
   }
 
   Future<void> _resumePendingPayments() async {
@@ -536,7 +928,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   }
 
   Future<void> _initializePayment(
-      BuildContext context, WidgetRef ref, String plan, int amountNaira) async {
+    BuildContext context,
+    WidgetRef ref,
+    String plan,
+    int amountNaira,
+  ) async {
     if (_isProcessing) return;
     setState(() => _isProcessing = true);
 
@@ -548,7 +944,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       if (!context.mounted) return;
       setState(() => _isProcessing = false);
       showErrorToast(
-          context: context, message: 'You must be logged in to purchase.');
+        context: context,
+        message: 'You must be logged in to purchase.',
+      );
       return;
     }
 
@@ -556,7 +954,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
     try {
       final db = ref.read(databaseProvider);
-      // Create a minimal Dio client for the payment API call
       final dio = Dio(BaseOptions(
         baseUrl: '',
         connectTimeout: const Duration(seconds: 10),
@@ -573,7 +970,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
       if (!context.mounted) return;
 
-      // Open the Paystack authorization URL in browser
       final uri = Uri.parse(initResult.checkoutUrl);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -581,10 +977,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         await launchUrl(uri, mode: LaunchMode.platformDefault);
       }
 
-      // Store the reference for polling
       final reference = initResult.reference;
-
-      // Start polling for payment confirmation
       if (!context.mounted) return;
       await _pollForPayment(
         context,
@@ -597,7 +990,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     } catch (e) {
       if (!context.mounted) return;
       showErrorToast(
-          context: context, message: 'Payment initialization failed: $e');
+        context: context,
+        message: 'Payment initialization failed: $e',
+      );
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
@@ -611,18 +1006,16 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     String plan,
     String schoolId,
   ) async {
-    // Show a snackbar indicating we're waiting for payment
     if (!context.mounted) return;
     showInfoToast(
-        context: context, message: 'Waiting for payment confirmation\u2026');
+      context: context,
+      message: 'Waiting for payment confirmation...',
+    );
 
-    // Poll up to 10 times (30 seconds apart = 5 minutes total)
     for (int i = 0; i < 10; i++) {
       final confirmed = await paymentService.verifyPayment(reference);
-
       if (confirmed) {
         if (!context.mounted) return;
-        // Payment confirmed — call the Edge Function to generate activation code
         await _confirmAndShowCode(
           context,
           ref,
@@ -639,7 +1032,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       }
     }
 
-    // Polling timed out
     if (!context.mounted) return;
     showErrorToast(
       context: context,
@@ -657,7 +1049,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     String schoolId,
   ) async {
     try {
-      // Call the Edge Function to generate activation code and update the school
       await paymentService.confirmPayment(
         reference: reference,
         plan: plan,
@@ -666,8 +1057,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
       if (!context.mounted) return;
 
-      // Refresh the auth provider so the free-plan banner, credit dialog tier,
-      // and other tier-dependent widgets react immediately.
       await ref.read(authProvider.notifier).refreshSchoolFromDb();
 
       await _showUpgradeSuccessOverlay(
@@ -681,431 +1070,169 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     } catch (e) {
       if (!context.mounted) return;
       showErrorToast(
-          context: context, message: 'Failed to confirm payment: $e');
+        context: context,
+        message: 'Failed to confirm payment: $e',
+      );
     }
-  }
-
-  // Build plan definitions from remote config if available, falling back to
-  // AppConstants.
-  List<_PlanDef> _buildPlans() {
-    final config = ref.read(configServiceProvider);
-    final prices = config.subscriptionPrices;
-    return [
-      _PlanDef(
-        name: 'Basic',
-        amountNaira: prices['basic'] as int? ?? AppConstants.basicPlanPriceNaira,
-        tier: 'basic',
-        description: 'Essential tools for small classrooms. Up to 30 students.',
-        features: ['50 credits per month', 'Access to basic vault items'],
-      ),
-      _PlanDef(
-        name: 'Standard',
-        amountNaira: prices['standard'] as int? ?? AppConstants.standardPlanPriceNaira,
-        tier: 'standard',
-        description:
-            'Advanced analytics and resources. Up to 100 students.',
-        features: [
-          '120 credits per month',
-          'Access to standard vault items',
-          'Vault publishing',
-        ],
-        isBestValue: true,
-      ),
-      _PlanDef(
-        name: 'Elite',
-        amountNaira: prices['elite'] as int? ?? AppConstants.elitePlanPriceNaira,
-        tier: 'elite',
-        description:
-            'Unlimited students, priority support, and custom modules.',
-        features: [
-          '350 credits per month',
-          'Full vault access',
-          'Priority support',
-        ],
-      ),
-    ];
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    final isWide = MediaQuery.of(context).size.width >= 1024;
-
-    final plans = _buildPlans();
-    final selectedPlan =
-        plans.firstWhere((p) => p.tier == _selectedPlan);
+    final selectedPlan = _selectedPlan();
 
     return Scaffold(
       backgroundColor: cs.surface,
-      body: Stack(
-        children: [
-          // Main content
-          SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Mobile TopAppBar (Stitch style)
-                if (!isWide)
-                  _buildMobileHeader(context, cs, textTheme, selectedPlan),
+      body: Center(
+        child: LayoutBuilder(
+          builder: (context, _) {
+            final screenSize = MediaQuery.sizeOf(context);
+            final screenWidth = screenSize.width;
+            final screenHeight = screenSize.height;
 
-                // Main Canvas
-                Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      return SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(16, 24, 16, 100),
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxWidth: 1280,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+            // Responsive sizing
+            final double heightFactor;
+            final double widthFactor;
+            final double horizontalInset;
+            if (screenWidth < 400) {
+              heightFactor = 0.92;
+              widthFactor = 0.98;
+              horizontalInset = 4;
+            } else if (screenWidth < 600) {
+              heightFactor = 0.88;
+              widthFactor = 0.96;
+              horizontalInset = 8;
+            } else {
+              heightFactor = 0.82;
+              widthFactor = 0.92;
+              horizontalInset = 16;
+            }
+            final maxHeight = screenHeight * heightFactor;
+            final dialogWidth = screenWidth * widthFactor;
+            final finalWidth = dialogWidth > 1120 ? 1120.0 : dialogWidth;
+
+            return Dialog(
+              insetPadding: EdgeInsets.symmetric(
+                horizontal: horizontalInset,
+                vertical: 24,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+              child: SizedBox(
+                width: finalWidth,
+                height: maxHeight,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+                  child: Stack(
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             children: [
-                              // Header Section
-                              _buildHeader(context, cs, textTheme),
-
-                              const SizedBox(height: 32),
-
-                              // Plans + Summary grid
-                              isWide
-                                  ? Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        // Left: Pricing cards
-                                        Expanded(
-                                          flex: 7,
-                                          child: _buildPlansList(
-                                              cs, textTheme),
-                                        ),
-                                        const SizedBox(width: 32),
-                                        // Right: Order Summary
-                                        Expanded(
-                                          flex: 5,
-                                          child: _buildOrderSummary(
-                                              context, cs, textTheme,
-                                              selectedPlan),
-                                        ),
-                                      ],
-                                    )
-                                  : Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        // Pricing cards
-                                        _buildPlansList(cs, textTheme),
-                                        const SizedBox(height: 32),
-                                        // Order Summary
-                                        _buildOrderSummary(
-                                            context, cs, textTheme,
-                                            selectedPlan),
-                                      ],
+                              Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  color: cs.primaryContainer,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.workspace_premium_rounded,
+                                  color: cs.onPrimaryContainer,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Compare Plans',
+                                      style: textTheme.titleLarge?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                      ),
                                     ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Review the tiers before you continue to checkout.',
+                                      style: textTheme.bodyMedium?.copyWith(
+                                        color: cs.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close),
+                                onPressed: () => Navigator.of(context).maybePop(),
+                              ),
                             ],
                           ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Processing overlay
-          if (_isProcessing)
-            Positioned.fill(
-              child: ColoredBox(
-                color: cs.scrim,
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const CircularProgressIndicator(),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Processing payment\u2026',
-                        style: TextStyle(
-                          color: cs.onPrimary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------
-  // Mobile Header (Stitch)
-  // ---------------------------------------------------------------
-  Widget _buildMobileHeader(
-      BuildContext context, ColorScheme cs, TextTheme textTheme, _PlanDef selectedPlan) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: cs.surface,
-        border: Border(
-          bottom: BorderSide(
-            color: cs.surfaceContainerHighest,
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHigh,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.person_rounded, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            'ClassAI',
-            style: textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: cs.primary,
-            ),
-          ),
-          const Spacer(),
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Text(
-              selectedPlan.price,
-              style: textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------
-  // Header Section
-  // ---------------------------------------------------------------
-  Widget _buildHeader(
-      BuildContext context, ColorScheme cs, TextTheme textTheme) {
-    return Row(
-      children: [
-        // Back button
-        Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: cs.surface,
-            shape: BoxShape.circle,
-          ),
-          child: IconButton(
-            icon: Icon(
-              Icons.arrow_back_rounded,
-              color: cs.onSurface,
-            ),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Upgrade Your Plan',
-                style: (textTheme.headlineSmall ?? textTheme.titleLarge)
-                    ?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: cs.onSurface,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Select the package that best fits your classroom needs.',
-                style: textTheme.bodyMedium?.copyWith(
-                  color: cs.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ---------------------------------------------------------------
-  // Plans List (Radio Card selection)
-  // ---------------------------------------------------------------
-  Widget _buildPlansList(ColorScheme cs, TextTheme textTheme) {
-    final plans = _buildPlans();
-    return Column(
-      children: plans.map((plan) {
-        final isSelected = _selectedPlan == plan.tier;
-        return GestureDetector(
-          onTap: () => setState(() => _selectedPlan = plan.tier),
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 16),
-            child: Stack(
-              children: [
-                // Best Value badge
-                if (plan.isBestValue)
-                  Positioned(
-                    top: -12,
-                    right: 24,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: cs.primaryContainer,
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: cs.shadow.withValues(alpha: 0.1),
-                            blurRadius: 4,
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.star_rounded,
-                            size: 14,
-                            color: cs.onPrimaryContainer,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Best Value',
-                            style: textTheme.labelMedium?.copyWith(
-                              color: cs.onPrimaryContainer,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                // Card
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: cs.surface,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: isSelected
-                          ? cs.primary
-                          : cs.outlineVariant.withValues(alpha: 0.3),
-                      width: isSelected ? 2 : 1,
-                    ),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Radio circle
-                      Container(
-                        width: 24,
-                        height: 24,
-                        margin: const EdgeInsets.only(top: 2),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: isSelected
-                                ? cs.primary
-                                : cs.outlineVariant,
-                            width: 2,
-                          ),
-                          color: isSelected ? cs.primary : Colors.transparent,
-                        ),
-                        child: isSelected
-                            ? Center(
-                                child: Container(
-                                  width: 12,
-                                  height: 12,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: cs.onPrimary,
-                                  ),
+                          const SizedBox(height: 20),
+                          Expanded(
+                            child: SingleChildScrollView(
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 8.0),
+                                child: _buildOrderSummary(
+                                  context,
+                                  cs,
+                                  textTheme,
+                                  selectedPlan,
                                 ),
-                              )
-                            : null,
-                      ),
-                      const SizedBox(width: 16),
-
-                      // Content
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              plan.name,
-                              style: textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: cs.onSurface,
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              plan.description,
-                              style: textTheme.bodyMedium?.copyWith(
-                                color: cs.onSurfaceVariant,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-
-                      // Price
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            plan.price,
-                            style: textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: cs.onSurface,
-                            ),
-                          ),
-                          Text(
-                            '/yr',
-                            style: textTheme.labelMedium?.copyWith(
-                              color: cs.onSurfaceVariant,
                             ),
                           ),
                         ],
                       ),
+                      if (_isProcessing)
+                        Positioned.fill(
+                          child: ColoredBox(
+                            color: cs.scrim,
+                            child: Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const CircularProgressIndicator(),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'Processing payment...',
+                                    style: TextStyle(
+                                      color: cs.onPrimary,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
-        );
-      }).toList(),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 
-  // ---------------------------------------------------------------
-  // Order Summary
-  // ---------------------------------------------------------------
-  Widget _buildOrderSummary(BuildContext context, ColorScheme cs,
-      TextTheme textTheme, _PlanDef plan) {
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
+  Widget _buildOrderSummary(
+    BuildContext context,
+    ColorScheme cs,
+    TextTheme textTheme,
+    _PlanDef plan,
+  ) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -1125,7 +1252,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title
           Text(
             'Order Summary',
             style: textTheme.titleLarge?.copyWith(
@@ -1139,8 +1265,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             color: cs.outlineVariant.withValues(alpha: 0.2),
           ),
           const SizedBox(height: 16),
-
-          // Selected Plan
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1168,8 +1292,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             ],
           ),
           const SizedBox(height: 8),
-
-          // Duration
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1197,14 +1319,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             ],
           ),
           const SizedBox(height: 16),
-
           Divider(
             height: 1,
             color: cs.outlineVariant.withValues(alpha: 0.2),
           ),
           const SizedBox(height: 16),
-
-          // Total Due
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1221,7 +1340,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  plan.price,
+                  '${plan.price}/yr',
                   textAlign: TextAlign.end,
                   style: textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
@@ -1233,8 +1352,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             ],
           ),
           const SizedBox(height: 24),
-
-          // Payment provider placeholder
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -1256,6 +1373,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                 const SizedBox(height: 8),
                 Text(
                   'Secure checkout powered by Paystack.',
+                  textAlign: TextAlign.center,
                   style: textTheme.bodyMedium?.copyWith(
                     color: cs.onSurfaceVariant,
                   ),
@@ -1271,8 +1389,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             ),
           ),
           const SizedBox(height: 24),
-
-          // Proceed to Checkout button
           SizedBox(
             width: double.infinity,
             height: 48,
@@ -1311,8 +1427,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             ),
           ),
           const SizedBox(height: 16),
-
-          // Security note
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -1336,25 +1450,38 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   }
 }
 
-/// Internal plan definition.
 class _PlanDef {
   final String name;
   final int amountNaira;
   final String tier;
-  final String description;
-  final List<String> features;
-  final bool isBestValue;
 
   const _PlanDef({
     required this.name,
     required this.amountNaira,
     required this.tier,
-    required this.description,
-    this.features = const [],
-    this.isBestValue = false,
   });
 
-  /// Computed price string using the shared currency formatter.
-  String get price =>
-      '${CurrencyFormatter.formatNairaCompact(amountNaira)}/yr';
+  String get price => CurrencyFormatter.formatNairaCompact(amountNaira);
+}
+
+class _TierComparisonRow {
+  final String tier;
+  final String name;
+  final String price;
+  final String previewLimit;
+  final String pdfExports;
+  final bool vaultPublishing;
+  final bool watermark;
+
+  String get dailyPreviews => previewLimit;
+
+  const _TierComparisonRow({
+    required this.tier,
+    required this.name,
+    required this.price,
+    required this.previewLimit,
+    required this.pdfExports,
+    required this.vaultPublishing,
+    required this.watermark,
+  });
 }
