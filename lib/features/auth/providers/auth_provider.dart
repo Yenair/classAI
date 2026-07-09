@@ -375,11 +375,12 @@ class AuthNotifier extends Notifier<AuthStateData> {
         return;
       }
 
-      // No cached credentials — show login with offline message
+      // No cached credentials — show guest dashboard with a Login button.
       state = state.copyWith(
-        state: AuthState.onlineLoginRequired,
-        errorMessage:
-            'No internet connection. Connect to the internet to sign in.',
+        state: AuthState.authenticated,
+        clearTeacher: true,
+        clearSchool: true,
+        clearError: true,
       );
       return;
     }
@@ -461,9 +462,11 @@ class AuthNotifier extends Notifier<AuthStateData> {
       return;
     }
 
-    // No valid stored session or local cache — show login screen.
+    // No valid stored session or local cache — show guest dashboard.
     state = state.copyWith(
-      state: AuthState.onlineLoginRequired,
+      state: AuthState.authenticated,
+      clearTeacher: true,
+      clearSchool: true,
       clearError: true,
     );
   }
@@ -702,9 +705,11 @@ class AuthNotifier extends Notifier<AuthStateData> {
   }
 
   /// Perform a manual logout (clean).
+  /// Transitions to a guest/authenticated state so the dashboard (with Login
+  /// button) is shown instead of the login screen.
   Future<void> manualLogout() async {
     await _performLogout(
-        isForced: false, targetState: AuthState.onlineLoginRequired);
+        isForced: false, targetState: AuthState.authenticated);
   }
 
   /// Perform a forced logout (triggers emergency save).
@@ -1563,6 +1568,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
   // Helpers
   // -----------------------------------------------------------------------
 
+  /// Applies the stored theme mode for the signed-in teacher or admin.
   void _applyThemeFromTeacher(AuthResult result) {
     ref.read(themeProvider.notifier).applyTeacherThemeMode(
           result.teacher.themeMode,

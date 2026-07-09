@@ -507,6 +507,16 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                       // Credit chip
                       _CreditChip(visible: ref.watch(isOfflineProvider)),
                       const SizedBox(width: 8),
+                      // Login button — only visible for guest users
+                      if (authData.currentTeacher == null)
+                        IconButton(
+                          icon: const Icon(Icons.login_rounded),
+                          tooltip: 'Sign in',
+                          onPressed: () => context.push('/login'),
+                          style: IconButton.styleFrom(
+                            foregroundColor: cs.primary,
+                          ),
+                        ),
                       // Profile popup
                       PopupMenuButton<String>(
                         onSelected: (value) {
@@ -2132,6 +2142,16 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
                   ),
                 ),
                 const SizedBox(width: 8),
+                // Login button — only visible for guest users
+                if (authData.currentTeacher == null)
+                  IconButton(
+                    icon: const Icon(Icons.login_rounded),
+                    tooltip: 'Sign in',
+                    onPressed: () => context.push('/login'),
+                    style: IconButton.styleFrom(
+                      foregroundColor: cs.primary,
+                    ),
+                  ),
                 // Credit chip (live from creditStateProvider)
                 Material(
                   color: Colors.transparent,
