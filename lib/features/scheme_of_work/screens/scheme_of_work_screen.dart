@@ -62,6 +62,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
   String _adminFilterTerm = '';
 
   final List<String> _terms = ['First', 'Second', 'Third'];
+  final Set<String> _expandedTerms = {'First', 'Second', 'Third'};
 
   String _friendlyTerm(String t) {
     switch (t.trim().toLowerCase()) {
@@ -808,62 +809,72 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
         foregroundColor: cs.onSurface,
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-
-          physics: (Platform.isAndroid || Platform.isIOS)
-              ? const BouncingScrollPhysics()
-              : null,
-          padding: const EdgeInsets.all(16),
-          child: _isAdmin
-              ? _buildAdminLayout(theme, cs, isWide)
-              : isWide
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(child: _buildConfigColumn(theme, cs)),
-                        const SizedBox(width: 24),
-                        Expanded(child: _buildPreviewColumn(theme, cs)),
-                      ],
-                    )
-                  : Column(
-                      children: [
-                        _buildConfigColumn(theme, cs),
-                        const SizedBox(height: 24),
-                        _buildPreviewColumn(theme, cs),
-                      ],
-                    ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAdminLayout(ThemeData theme, ColorScheme cs, bool isWide) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildAdminHeader(theme, cs),
-        const SizedBox(height: 16),
-        isWide
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        child: _isAdmin
+            ? Column(
                 children: [
-                  SizedBox(
-                    width: 320,
-                    child: _buildTeacherSelectorPanel(theme, cs),
+                  // Fixed header at top
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    child: _buildAdminHeader(theme, cs),
                   ),
-                  const SizedBox(width: 24),
-                  Expanded(child: _buildAdminView(theme, cs)),
+                  const SizedBox(height: 16),
+                  // Scrollable body section (teacher panel + schemes)
+                  Expanded(
+                    child: isWide
+                        ? Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(
+                                  width: 320,
+                                  child: _buildTeacherSelectorPanel(theme, cs),
+                                ),
+                                const SizedBox(width: 24),
+                                Expanded(
+                                  child: _buildAdminSchemeList(theme, cs),
+                                ),
+                              ],
+                            ),
+                          )
+                        : Column(
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                child: _buildTeacherDropdown(theme, cs),
+                              ),
+                              const SizedBox(height: 16),
+                              Expanded(
+                                child: _buildAdminSchemeList(theme, cs),
+                              ),
+                            ],
+                          ),
+                  ),
                 ],
               )
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildTeacherDropdown(theme, cs),
-                  const SizedBox(height: 16),
-                  _buildAdminView(theme, cs),
-                ],
+            : SingleChildScrollView(
+                physics: (Platform.isAndroid || Platform.isIOS)
+                    ? const BouncingScrollPhysics()
+                    : null,
+                padding: const EdgeInsets.all(16),
+                child: isWide
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: _buildConfigColumn(theme, cs)),
+                          const SizedBox(width: 24),
+                          Expanded(child: _buildPreviewColumn(theme, cs)),
+                        ],
+                      )
+                    : Column(
+                        children: [
+                          _buildConfigColumn(theme, cs),
+                          const SizedBox(height: 24),
+                          _buildPreviewColumn(theme, cs),
+                        ],
+                      ),
               ),
-      ],
+      ),
     );
   }
 
@@ -918,10 +929,12 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
               ),
             ),
             if (_selectedTeacherSchemes().isNotEmpty)
-              FilledButton.icon(
-                onPressed: _bulkApproveSelectedTeacher,
-                icon: const Icon(Icons.done_all_rounded),
-                label: const Text('Bulk Approve'),
+              Flexible(
+                child: FilledButton.icon(
+                  onPressed: _bulkApproveSelectedTeacher,
+                  icon: const Icon(Icons.done_all_rounded),
+                  label: const Text('Bulk Approve'),
+                ),
               ),
           ],
         ),
@@ -1237,7 +1250,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
   Widget _buildPreviewColumn(ThemeData theme, ColorScheme cs) {
     debugPrint('[SOW] build: _weeks length = ${_weeks.length}, _isGenerating = $_isGenerating, _isLoadingScheme = $_isLoadingScheme');
     if (_isAdmin) {
-      return _buildAdminView(theme, cs);
+      return _buildAdminSchemeList(theme, cs);
     }
 
     if (_isGenerating || _isLoadingScheme) {
@@ -1334,7 +1347,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     );
   }
 
-  Widget _buildAdminView(ThemeData theme, ColorScheme cs) {
+  Widget _buildAdminSchemeList(ThemeData theme, ColorScheme cs) {
     // DEBUG: Log the first scheme's teacherId vs the selected filter teacher ID
     if (_existingSowRecords.isNotEmpty) {
       final firstRecord = _existingSowRecords.first;
@@ -1397,13 +1410,96 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    // Group filtered records by term
+    final grouped = <String, List<SchemeOfWorkData>>{};
+    for (final r in filtered) {
+      final term = r.term;
+      grouped.putIfAbsent(term, () => []);
+      grouped[term]!.add(r);
+    }
+    // Ensure consistent term order
+    final termOrder = ['First', 'Second', 'Third'];
+    grouped.forEach((key, value) {
+      value.sort((a, b) => a.weekNumber.compareTo(b.weekNumber));
+    });
+
+    return ListView(
+      padding: EdgeInsets.zero,
       children: [
         Text('All Schemes (Admin)', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
         const SizedBox(height: 12),
-        ...filtered.map((r) => _buildAdminSchemeCard(theme, cs, r)),
+        for (final term in termOrder)
+          if (grouped.containsKey(term)) ...[
+            _buildTermSection(theme, cs, term, grouped[term]!),
+            const SizedBox(height: 8),
+          ],
       ],
+    );
+  }
+
+  Widget _buildTermSection(ThemeData theme, ColorScheme cs, String term, List<SchemeOfWorkData> records) {
+    final isExpanded = _expandedTerms.contains(term);
+    return Card(
+      color: cs.surfaceContainerLow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          InkWell(
+            onTap: () {
+              setState(() {
+                if (isExpanded) {
+                  _expandedTerms.remove(term);
+                } else {
+                  _expandedTerms.add(term);
+                }
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Icon(
+                    isExpanded ? Icons.expand_less : Icons.expand_more,
+                    color: cs.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$term Term (${records.length})',
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: cs.primaryContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '${records.length} week${records.length != 1 ? 's' : ''}',
+                      style: TextStyle(
+                        color: cs.onPrimaryContainer,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (isExpanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Column(
+                children: records.map((r) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _buildAdminSchemeCard(theme, cs, r),
+                )).toList(),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
