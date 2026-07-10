@@ -172,7 +172,19 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     if (_schoolId == null) return null;
     final db = ref.read(databaseProvider);
     try {
-      _existingSowRecords = await db.schemeOfWorkDao.getBySchool(_schoolId!);
+      if (_isAdmin && _teachers.isNotEmpty) {
+        // Admin view: schemes may have stale schoolId values, so query by
+        // teacher IDs from the correctly-filtered school teacher list instead
+        // of relying on scheme_of_work.schoolId. The dashboard also uses this
+        // approach (queries by teacherId alone, see admin_provider.dart:252).
+        final teacherIds = _teachers.map((t) => t.localId).toSet();
+        final allSchoolSchemes = await db.schemeOfWorkDao.getAll();
+        _existingSowRecords = allSchoolSchemes
+            .where((s) => teacherIds.contains(s.teacherId) && !s.isDeleted)
+            .toList();
+      } else {
+        _existingSowRecords = await db.schemeOfWorkDao.getBySchool(_schoolId!);
+      }
       debugPrint('[SOW ADMIN] _loadExistingSow returned ${_existingSowRecords.length} records for school $_schoolId');
       return _existingSowRecords;
     } on FormatException catch (e) {
