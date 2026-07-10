@@ -30,10 +30,20 @@ class ThemeNotifier extends Notifier<ThemeMode> {
   }
 
   /// Apply the theme mode from a teacher's stored preference (e.g. on login).
+  /// Only applies the server value if there is NO locally saved preference,
+  /// so the user's toggle is never overwritten on app restart.
   Future<void> applyTeacherThemeMode(String? themeModeStr) async {
+    final prefs = await SharedPreferences.getInstance();
+    final localIndex = prefs.getInt(_themeKey);
+
+    // If user has a locally saved preference, respect it over the server value
+    if (localIndex != null) {
+      state = ThemeMode.values[localIndex];
+      return;
+    }
+
     final mode = _parseThemeMode(themeModeStr);
     state = mode;
-    final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_themeKey, mode.index);
   }
 
@@ -65,9 +75,18 @@ class ThemeNotifier extends Notifier<ThemeMode> {
   Future<void> _saveThemeToLocalDb(ThemeMode mode) async {
     try {
       final db = ref.read(databaseProvider);
-      final userId =
-          _auth.currentUser?.id ?? _auth.currentSession?.user.id;
-      if (userId == null || userId.isEmpty) return;
+
+      // For admins, _auth.currentUser may be null (custom JWT auth).
+      // Look up the teacher from the local DB instead.
+      final teachers = await db.teachersDao.getAll();
+      if (teachers.isEmpty) return;
+
+      // Use the first active teacher record as the current user.
+      // In practice there is usually only one teacher per device for admins.
+      final teacher = teachers.firstWhere(
+        (t) => t.isActive,
+        orElse: () => teachers.first,
+      );
 
       String themeValue;
       switch (mode) {
@@ -82,16 +101,12 @@ class ThemeNotifier extends Notifier<ThemeMode> {
           break;
       }
 
-      final teacher = await db.teachersDao.findByServerId(userId);
-      if (teacher != null) {
-        await (db.update(db.teachers)
-              ..where((t) => t.localId.equals(teacher.localId)))
-            .write(TeachersCompanion(
-          themeMode: Value(themeValue),
-          updatedAt: Value(DateTime.now()),
-        ));
-        debugPrint('[ThemeNotifier] Saved theme "$themeValue" to local teachers table');
-      }
+      await (db.update(db.teachers)
+            ..where((t) => t.localId.equals(teacher.localId)))
+          .write(TeachersCompanion(
+        themeMode: Value(themeValue),
+        updatedAt: Value(DateTime.now()),
+      ));
     } catch (e) {
       debugPrint('[ThemeNotifier] Failed to save theme to local DB: $e');
     }

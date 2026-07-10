@@ -49,7 +49,7 @@ import 'package:classai/features/scheme_of_work/screens/scheme_of_work_screen.da
 final appRouter = GoRouter(
   navigatorKey: navigatorKey,
   initialLocation: '/',
-  debugLogDiagnostics: true,
+  debugLogDiagnostics: false,
   redirect: (context, state) {
     // Read role from the auth provider.
     // Only redirect when the GoRouter is mounted (i.e. user is authenticated).
