@@ -1,0 +1,7 @@
+Analyzing payment_screen.dart...
+
+warning - payment_screen.dart:128:8 - The declaration '_buildPopupOrderSummary' isn't referenced. Try removing the declaration of '_buildPopupOrderSummary'. - unused_element
+warning - payment_screen.dart:287:8 - The declaration '_buildComparisonTable' isn't referenced. Try removing the declaration of '_buildComparisonTable'. - unused_element
+warning - payment_screen.dart:575:26 - The declaration '_buildTierComparisonRows' isn't referenced. Try removing the declaration of '_buildTierComparisonRows'. - unused_element
+
+3 issues found.

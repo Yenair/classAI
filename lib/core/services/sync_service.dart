@@ -332,6 +332,8 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
       );
       final data = response.data as Map<String, dynamic>?;
       if (data != null) {
+        // DIAG: Log the raw server response to see what results we got back
+        debugPrint('[PUSH-DIAG] Raw server response: $data');
         final rawResults = data['results'] as List? ?? [];
         // Parse per-entry results returned by the server, which include
         // the correct local_id, status, server_id, and retryable for each
@@ -973,8 +975,16 @@ class SyncService {
       // Inject local_id so the server can echo it back in the results
       // array, enabling the client to match responses to entries.
       payload['local_id'] = entry.recordLocalId;
+      // DIAG: Log the payload BEFORE compression to verify local_id was injected
+      debugPrint('[PUSH-DIAG] Pre-compress payload for entry ${entry.id} '
+          '(table=${entry.queueTable}, op=${entry.operation}): '
+          'local_id=${payload['local_id']}, '
+          'payload_keys=${payload.keys.join(', ')}');
       // Compress payload for 2G/3G optimization before pushing.
       final compressed = PayloadCompressor.compress(payload);
+      // DIAG: Log the compressed payload keys to verify short-key compression
+      debugPrint('[PUSH-DIAG] Compressed payload for entry ${entry.id}: '
+          'compressed_keys=${compressed.keys.join(', ')}');
       batches.add(
         SyncPushBatch(
           table: entry.queueTable,
@@ -1006,8 +1016,22 @@ class SyncService {
         continue;
       }
 
-      debugPrint('[PUSH-RESULT] Status: ${result.status}, '
-          'ServerId: ${result.serverId}, Retryable: ${result.retryable}');
+      debugPrint('[PUSH-RESULT] Status: "${result.status}", '
+          'ServerId: "${result.serverId}", Retryable: ${result.retryable}');
+
+      // DIAG: Log whether the status will pass the success check
+      final isSuccess = (result.status == 'created' ||
+          result.status == 'updated' ||
+          result.status == 'deleted' ||
+          result.status == 'skipped');
+      debugPrint('[PUSH-DIAG] Entry ${entry.id}: status="${result.status}", '
+          'isSuccess=$isSuccess, '
+          'serverId="${result.serverId}", '
+          'deadChecks={'
+          'created: ${result.status == 'created'}, '
+          'updated: ${result.status == 'updated'}, '
+          'deleted: ${result.status == 'deleted'}, '
+          'skipped: ${result.status == 'skipped'}}');
 
       if (result.status == 'created' ||
           result.status == 'updated' ||
