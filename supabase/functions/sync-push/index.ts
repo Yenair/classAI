@@ -88,24 +88,181 @@ function getValue(rowData: Record<string, unknown>, ...keys: string[]): unknown 
 }
 
 /**
- * After decompression, resolve any foreign-key names to their UUIDs.
+ * Default values for columns the client's INSERT payload may omit.
+ * The Supabase lessons/exams tables have NOT NULL columns that are not
+ * sent directly by the client — they must be derived or defaulted.
  *
- * NOTE: The lessons & exams tables store `subject` as a TEXT column, NOT
- * as a subject_id UUID FK.  The `subjects` table is used only for AI
- * generation context on the client — the server-side lessons/exams table
- * simply stores the subject name string.  Therefore this function is a
- * no-op for lessons/exams; the subject TEXT value passes through as-is.
+ * NOTE: school_id, teacher_id, subject_id are resolved from text
+ * references by resolveForeignKeys().
+ */
+const LESSON_DEFAULTS: Record<string, unknown> = {
+  title: "",
+  credits_spent: 0,
+  objectives: "",
+  vocabulary: "",
+  materials: "",
+  presentation: "",
+  assessment: "",
+  homework: "",
+};
+
+const EXAM_DEFAULTS: Record<string, unknown> = {
+  title: "",
+  credits_spent: 0,
+  questions: "",
+  theory_questions: "",
+  marking_scheme: "",
+};
+
+/**
+ * Apply defaults and resolve text-based references to UUID foreign keys.
  *
- * Mutates `rowData` in place.
+ * KEY INSIGHT about the data model:
+ * - The schools and teachers tables use `id` (UUID) as their PK.
+ *   There is NO `server_id` column on those Supabase tables — the
+ *   schools.id UUID IS the server_id used on the Dart side.
+ * - The client sends `school_server_id` / `teacher_server_id` in the
+ *   lesson payload.  These ARE the UUIDs from schools.id / teachers.id.
+ *
+ * For `lessons` and `exams` tables:
+ *   school_server_id (TEXT, UUID) → school_id (uuid FK)
+ *   teacher_server_id (TEXT, UUID) → teacher_id (uuid FK)
+ *   subject (TEXT name) → subject_id (uuid FK, looked up from subjects)
+ *
+ * For `progress_logs` table:
+ *   school_id (TEXT UUID from client) → school_id (uuid FK on server)
+ *   teacher_id (TEXT UUID from client) → teacher_id (uuid FK on server)
+ *   lesson_id (integer local Drift ID) → lesson_id (uuid FK, looked up)
  */
 async function resolveForeignKeys(
-  _supabase: ReturnType<typeof createClient>,
-  _table: string,
-  _rowData: Record<string, unknown>,
+  supabase: ReturnType<typeof createClient>,
+  table: string,
+  rowData: Record<string, unknown>,
 ): Promise<void> {
-  // No FK columns need resolution on any table currently synced via
-  // sync-push.  The `subject` column on lessons/exams is TEXT, not a
-  // foreign key to `subjects.id`.
+  if (table === "lessons" || table === "exams") {
+    // ── 1. School: school_server_id IS schools.id (UUID) ──────────────
+    if (rowData["school_server_id"] && !rowData["school_id"]) {
+      rowData["school_id"] = rowData["school_server_id"];
+    }
+
+    // ── 2. Teacher: teacher_server_id IS teachers.id (UUID) ────────────
+    if (rowData["teacher_server_id"] && !rowData["teacher_id"]) {
+      rowData["teacher_id"] = rowData["teacher_server_id"];
+    }
+
+    // ── 3. Subject text name → subject_id UUID lookup ────────────────
+    // The subjects table uses `subject_name`, scoped by school_id and class_level.
+    // If we have both a subject name AND a resolved school_id, use them.
+    if (rowData["subject"] && !rowData["subject_id"]) {
+      const subjectName = rowData["subject"] as string;
+      const schoolId = rowData["school_id"] as string | undefined;
+      const classLevel = rowData["class_level"] as string | undefined;
+
+      let subjectQuery = supabase
+        .from("subjects")
+        .select("id")
+        .eq("subject_name", subjectName)
+        .maybeSingle();
+
+      // Narrow by school and class_level if available
+      if (schoolId) {
+        subjectQuery = subjectQuery.eq("school_id", schoolId);
+      }
+      if (classLevel) {
+        subjectQuery = subjectQuery.eq("class_level", classLevel);
+      }
+
+      const { data: subject } = await subjectQuery;
+      if (subject?.id) {
+        rowData["subject_id"] = subject.id;
+      } else {
+        console.warn(
+          `resolveForeignKeys: no subject found for name="${subjectName}" ` +
+          `school="${schoolId}" class="${classLevel}"`
+        );
+        // Use placeholder to avoid NOT NULL violation
+        rowData["subject_id"] = "00000000-0000-0000-0000-000000000000";
+      }
+
+      // Remove the text `subject` field since the server uses `subject_id`
+      delete rowData["subject"];
+    }
+
+    // ── 4. Apply defaults for missing NOT NULL columns ─────────────
+    const defaults = table === "lessons" ? LESSON_DEFAULTS : EXAM_DEFAULTS;
+    for (const [col, defaultVal] of Object.entries(defaults)) {
+      if (rowData[col] === undefined || rowData[col] === null) {
+        rowData[col] = defaultVal;
+      }
+    }
+
+    // ── 5. Derive `title` from `topic` if not already set ──────────
+    if (!rowData["title"] || rowData["title"] === "") {
+      rowData["title"] = rowData["topic"] ?? "";
+    }
+
+    // ── 6. Try to extract sub-fields from `content` JSON if present ─
+    if (table === "lessons" && rowData["content"]) {
+      const contentRaw = rowData["content"] as string;
+      try {
+        const parsed = JSON.parse(contentRaw);
+        if (typeof parsed === "object" && parsed !== null) {
+          const subFields = ["objectives", "vocabulary", "materials", "presentation", "assessment", "homework"];
+          for (const field of subFields) {
+            if (parsed[field] && (!rowData[field] || rowData[field] === "")) {
+              rowData[field] = parsed[field];
+            }
+          }
+        }
+      } catch {
+        // content is encrypted or not valid JSON — leave defaults
+      }
+    }
+  }
+
+  if (table === "progress_logs") {
+    // ── 1. School: client sends UUID string → use directly ─────────
+    // The client sends _schoolId which is the schools.id UUID.
+    if (!rowData["school_id"]) {
+      rowData["school_id"] = "00000000-0000-0000-0000-000000000000";
+    }
+
+    // ── 2. Teacher: client sends UUID string → use directly ────────
+    // The client sends _teacherId which is the teachers.id UUID.
+    if (!rowData["teacher_id"]) {
+      rowData["teacher_id"] = "00000000-0000-0000-0000-000000000000";
+    }
+
+    // ── 3. Lesson: client sends local Drift integer → resolve UUID ─
+    // The client sends a local integer ID for the lesson.  We must
+    // look up the lesson's server UUID from the Supabase lessons table.
+    if (rowData["lesson_id"] !== undefined && rowData["lesson_id"] !== null) {
+      const lessonLocalId = rowData["lesson_id"];
+      // Try matching as local_id first, then as server_id
+      const { data: lesson } = await supabase
+        .from("lessons")
+        .select("id")
+        .eq("local_id", lessonLocalId)
+        .maybeSingle();
+
+      if (lesson?.id) {
+        rowData["lesson_id"] = lesson.id;
+      } else {
+        // Try matching by server_id (text UUID)
+        const { data: lessonBySid } = await supabase
+          .from("lessons")
+          .select("id")
+          .eq("server_id", lessonLocalId)
+          .maybeSingle();
+        if (lessonBySid?.id) {
+          rowData["lesson_id"] = lessonBySid.id;
+        } else {
+          console.warn(`resolveForeignKeys: no lesson found for id="${lessonLocalId}"`);
+          rowData["lesson_id"] = null;
+        }
+      }
+    }
+  }
 }
 
 serve(async (req) => {
@@ -173,29 +330,46 @@ serve(async (req) => {
         continue;
       }
 
+      const op = (operation as string).toUpperCase();
+
+      // DIAG: Log the raw rowData keys BEFORE decompression
+      console.log(`[SYNC-PUSH-DIAG] Entry ${idx}: table=${table}, op=${op}, rawKeys=${Object.keys(rowData as Record<string, unknown>).join(",")}`);
+
       // Decompress rowData if it has short keys
       const fullRowData = decompressRow(rowData as Record<string, unknown>);
 
+      // DIAG: Log decompressed keys to verify KEY_MAP is working
+      console.log(`[SYNC-PUSH-DIAG] Entry ${idx}: decompressedKeys=${Object.keys(fullRowData).join(",")}`);
+
       // Extract local_id early so we can echo it back even on failure.
       const localId = (fullRowData["local_id"] as number | string | undefined) ?? 0;
-
-      const op = (operation as string).toUpperCase();
+      console.log(`[SYNC-PUSH-DIAG] Entry ${idx}: localId=${localId}, server_id=${fullRowData["server_id"] ?? "null"}`);
 
       try {
         if (op === "INSERT") {
           // Remove local-only fields; let server generate UUIDs
           const { local_id: _lid, localId: _lid2, ...insertData } = fullRowData;
+
+          // ════════════════════════════════════════════════════════════
+          // FIX: Resolve FK text references to UUIDs and apply defaults
+          // ════════════════════════════════════════════════════════════
           await resolveForeignKeys(supabase, table, insertData);
+
+          console.log(`[SYNC-PUSH-DIAG] INSERT data after resolveForeignKeys: ${JSON.stringify(insertData)}`);
+
           const { data: insertData_, error } = await supabase
             .from(table)
             .insert(insertData)
             .select("id");
           if (error) {
             console.warn(`sync-push: INSERT error on "${table}" (local_id=${localId}): ${error.message}`);
+            console.warn(`sync-push: INSERT data was: ${JSON.stringify(insertData)}`);
             results.push({ local_id: localId, server_id: null, status: "error", retryable: true });
             continue;
           }
           const generatedId = insertData_?.[0]?.id as string | undefined;
+          // DIAG: Log what INSERT returned
+          console.log(`[SYNC-PUSH-DIAG] INSERT result: localId=${localId}, generatedId=${generatedId ?? "null"}, insertData_=${JSON.stringify(insertData_)}`);
           results.push({
             local_id: localId,
             server_id: generatedId ?? null,
@@ -222,6 +396,8 @@ serve(async (req) => {
             results.push({ local_id: localId, server_id: serverId as string, status: "error", retryable: true });
             continue;
           }
+          // DIAG: Log UPDATE details
+          console.log(`[SYNC-PUSH-DIAG] UPDATE success: localId=${localId}, serverId=${serverId}`);
           results.push({
             local_id: localId,
             server_id: serverId as string,
@@ -270,6 +446,10 @@ serve(async (req) => {
         results.push({ local_id: localId, server_id: null, status: "error", retryable: true });
       }
     }
+
+    // DIAG: Log the complete response before sending
+    console.log(`[SYNC-PUSH-DIAG] Final response: processed=${processed}, resultsCount=${results.length}`);
+    console.log(`[SYNC-PUSH-DIAG] Results: ${JSON.stringify(results)}`);
 
     return new Response(
       JSON.stringify({
