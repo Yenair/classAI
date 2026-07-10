@@ -1059,6 +1059,8 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     setState(() {
       _selectedTeacherId = teacherId;
       _teacherId = teacherId;
+      // Sync the admin filter so the admin view is filtered by this teacher
+      _adminFilterTeacher = teacherId;
     });
     selectedSchemeTeacherSelection.value = teacherId;
     await _loadSchemeForSelection();
@@ -1321,6 +1323,22 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
   }
 
   Widget _buildAdminView(ThemeData theme, ColorScheme cs) {
+    // DEBUG: Log the first scheme's teacherId vs the selected filter teacher ID
+    if (_existingSowRecords.isNotEmpty) {
+      final firstRecord = _existingSowRecords.first;
+      final teacherIds = _existingSowRecords.map((r) => r.teacherId).toSet();
+      debugPrint('[SOW ADMIN] _buildAdminView: ${_existingSowRecords.length} total records, '
+          'unique teacherIds=$teacherIds, '
+          'firstRecord.teacherId=${firstRecord.teacherId}, '
+          '_adminFilterTeacher=$_adminFilterTeacher, '
+          '_selectedTeacherId=$_selectedTeacherId');
+    } else {
+      debugPrint('[SOW ADMIN] _buildAdminView: _existingSowRecords is EMPTY, '
+          '_adminFilterTeacher=$_adminFilterTeacher, '
+          '_selectedTeacherId=$_selectedTeacherId, '
+          '_schoolId=$_schoolId');
+    }
+
     final filtered = _existingSowRecords.where((r) {
       // Teacher filter
       if (_adminFilterTeacher != null && r.teacherId != _adminFilterTeacher) return false;

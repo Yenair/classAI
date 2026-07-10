@@ -2596,6 +2596,14 @@ class _SyncHealthTab extends StatelessWidget {
         _buildSummaryCard(cs, textTheme, greenCount, yellowCount, redCount,
             grayCount, syncPercent, totalTeachers,
             isWide: true),
+        // Per-teacher sync details (same as narrow layout)
+        const SizedBox(height: 16),
+        ...teachers.map((teacher) => _buildTeacherSyncCard(
+              context,
+              cs,
+              textTheme,
+              teacher,
+            )),
       ],
     );
   }
