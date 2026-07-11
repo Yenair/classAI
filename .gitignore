@@ -52,6 +52,7 @@ lib/core/constants/supabase_keys.dart
 
 # Supabase temporary files
 supabase/.temp/
+node_modules/
 
 # Android keystore and signing properties (never commit)
 android/key.properties

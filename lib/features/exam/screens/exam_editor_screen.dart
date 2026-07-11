@@ -10,6 +10,7 @@ import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/core/services/ai_service.dart';
 import 'package:classai/core/services/credit_service.dart';
 import 'package:classai/core/constants/prompt_templates.dart';
+import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/utils/platform_helper.dart';
@@ -563,6 +564,21 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         ],
       ),
     );
+  }
+
+  int _defaultStorageLimit(String tier) {
+    switch (tier) {
+      case 'free':
+        return 10;
+      case 'basic':
+        return 20;
+      case 'standard':
+        return 50;
+      case 'elite':
+        return -1;
+      default:
+        return 10;
+    }
   }
 
   Future<void> _handleGenerate() async {
@@ -1180,6 +1196,20 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         localId = existingExam.id;
         operation = 'UPDATE';
       } else {
+        // Check storage limit before inserting new exam
+        final configService = ref.read(configServiceProvider);
+        final storageLimits = configService.lessonStorageLimits;
+        final limit = storageLimits[_subscriptionTier] as int? ?? _defaultStorageLimit(_subscriptionTier);
+        if (limit >= 0) {
+          final currentCount = await db.examsDao.countNonDeletedBySchool(_schoolId ?? '');
+          if (currentCount >= limit) {
+            if (notify && mounted) {
+              showInfoToast(context: context, message: 'Storage limit reached');
+            }
+            return;
+          }
+        }
+
         // Insert new
         final insertCompanion = ExamsCompanion(
           subject: Value(_subject),

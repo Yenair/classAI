@@ -34,6 +34,16 @@ class ExamsDao extends DatabaseAccessor<AppDatabase>
     return (update(exams)..where((t) => t.id.equals(id))).write(companion);
   }
 
+  /// Count non-deleted exams for a given school.
+  Future<int> countNonDeletedBySchool(String schoolServerId) async {
+    final query = selectOnly(exams)
+      ..addColumns([exams.id.count()])
+      ..where(exams.schoolServerId.equals(schoolServerId))
+      ..where(exams.isDeleted.equals(false));
+    final row = await query.getSingle();
+    return row.read<int>(exams.id.count()) ?? 0;
+  }
+
   /// Soft-delete an exam by marking it as deleted.
   Future<void> deleteExam(int id) {
     return (update(exams)..where((t) => t.id.equals(id))).write(

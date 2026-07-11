@@ -98,6 +98,16 @@ class LessonsDao extends DatabaseAccessor<AppDatabase>
     return (update(lessons)..where((t) => t.id.equals(id))).write(companion);
   }
 
+  /// Count non-deleted lessons for a given school.
+  Future<int> countNonDeletedBySchool(String schoolServerId) async {
+    final query = selectOnly(lessons)
+      ..addColumns([lessons.id.count()])
+      ..where(lessons.schoolServerId.equals(schoolServerId))
+      ..where(lessons.isDeleted.equals(false));
+    final row = await query.getSingle();
+    return row.read<int>(lessons.id.count()) ?? 0;
+  }
+
   /// Soft-delete a lesson by marking it as deleted.
   Future<void> deleteLesson(int id) {
     return (update(lessons)..where((t) => t.id.equals(id))).write(

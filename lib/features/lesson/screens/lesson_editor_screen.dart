@@ -11,12 +11,14 @@ import 'package:classai/core/services/ai_service.dart';
 import 'package:classai/core/services/credit_service.dart';
 import 'package:classai/core/services/emergency_flush_service.dart';
 import 'package:classai/core/constants/prompt_templates.dart';
+import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/features/lesson/screens/lessons_list_screen.dart';
+import 'package:classai/core/services/diagram_service.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
 /// Stitch‑designed lesson note editor with AI generation.
@@ -53,6 +55,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   String _difficulty = 'medium';
   String _assessmentFormat = 'Both';
   final Set<String> _selectedBlooms = {};
+  bool _includeDiagrams = false;
+  List<Map<String, dynamic>> _diagramResults = [];
+  bool _isGeneratingDiagrams = false;
   bool _isGenerating = false;
   bool _isRegenerating = false;
   bool _hasGenerated = false;
@@ -517,6 +522,21 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     );
   }
 
+  int _defaultStorageLimit(String tier) {
+    switch (tier) {
+      case 'free':
+        return 10;
+      case 'basic':
+        return 20;
+      case 'standard':
+        return 50;
+      case 'elite':
+        return -1;
+      default:
+        return 10;
+    }
+  }
+
   Future<void> _handleGenerate() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -622,6 +642,35 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
 
       await _saveLesson(notify: false);
 
+      // ── Generate diagrams (Elite only) ──────────────────────────
+      List<Map<String, dynamic>> generatedDiagrams = [];
+      if (_includeDiagrams && _subscriptionTier == 'elite') {
+        final diagramsRaw = parsedRaw['diagrams'] as List<dynamic>?;
+        if (diagramsRaw != null && diagramsRaw.isNotEmpty) {
+          final requests = diagramsRaw
+              .map((d) => DiagramRequest(
+                    description: (d as Map<String, dynamic>)['description']
+                        as String? ??
+                        'Diagram',
+                  ))
+              .toList();
+          try {
+            final diagramService = DiagramService();
+            final results = await diagramService.generateDiagrams(requests);
+            generatedDiagrams = results
+                .map((r) => <String, dynamic>{
+                      'index': r.index,
+                      'description': r.description,
+                      'base64': r.base64,
+                      'error': r.error,
+                    })
+                .toList();
+          } catch (e) {
+            debugPrint('[LessonEditor] Diagram generation failed: $e');
+          }
+        }
+      }
+
       if (mounted) {
         // Schedule a normal vsync frame instead of calling setState directly.
         // Calling setState from an async continuation triggers
@@ -642,6 +691,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             _presentationText = _formatJson(parsedRaw['presentation']);
             _assessmentText = parsedRaw['assessment'] as String? ?? '';
             _homeworkText = parsedRaw['homework'] as String? ?? '';
+            _diagramResults = generatedDiagrams;
             _hasGenerated = true;
             _configExpanded = false;
             _isUnlocked = false;
@@ -658,6 +708,42 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       if (mounted) {
         setState(() => _isGenerating = false);
         showErrorToast(context: context, message: 'Generation failed: $e');
+      }
+    }
+  }
+
+  Future<void> _handleRegenerateDiagram(int diagramIndex) async {
+    final currentTier = ref.read(authProvider).currentSchool?.subscriptionTier ?? _subscriptionTier;
+    if (currentTier != 'elite') {
+      if (mounted) {
+        showErrorToast(context: context, message: 'Diagram generation requires Elite subscription');
+      }
+      return;
+    }
+    setState(() => _isGeneratingDiagrams = true);
+    try {
+      // Find the diagram description from current results
+      final diagram = _diagramResults.length > diagramIndex ? _diagramResults[diagramIndex] : null;
+      if (diagram == null) return;
+      final description = diagram['description'] as String? ?? 'Diagram';
+      final requests = [DiagramRequest(description: description)];
+      final diagramService = DiagramService();
+      final results = await diagramService.generateDiagrams(requests);
+      if (results.isNotEmpty && mounted) {
+        setState(() {
+          _diagramResults[diagramIndex] = <String, dynamic>{
+            'index': results[0].index,
+            'description': results[0].description,
+            'base64': results[0].base64,
+            'error': results[0].error,
+          };
+          _isGeneratingDiagrams = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[LessonEditor] Diagram regeneration failed: $e');
+      if (mounted) {
+        setState(() => _isGeneratingDiagrams = false);
       }
     }
   }
@@ -912,6 +998,20 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           if (notify && mounted) {
             ref.invalidate(lessonsListProvider);
             showInfoToast(context: context, message: 'Lesson updated (id=$id)');
+          }
+          return;
+        }
+      }
+
+      // Check storage limit before inserting new lesson
+      final configService = ref.read(configServiceProvider);
+      final storageLimits = configService.lessonStorageLimits;
+      final limit = storageLimits[_subscriptionTier] as int? ?? _defaultStorageLimit(_subscriptionTier);
+      if (limit >= 0) {
+        final currentCount = await db.lessonsDao.countNonDeletedBySchool(_schoolId ?? '');
+        if (currentCount >= limit) {
+          if (notify && mounted) {
+            _showCenteredToast(context: context, message: 'Storage limit reached');
           }
           return;
         }
@@ -1388,6 +1488,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                                     isManualTopicEntry: _isManualTopicEntry,
                                                     onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
                                                     onManualTopicSelected: _onManualTopicSelected,
+                                                    subscriptionTier: _subscriptionTier,
+                                                    includeDiagrams: _includeDiagrams,
+                                                    onIncludeDiagramsChanged: (v) => setState(() => _includeDiagrams = v),
                                                   ),
                                             ),
                                           ),
@@ -1404,6 +1507,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                               subscriptionTier: _subscriptionTier,
                                               remainingDailyPreviews: _remainingDailyPreviews,
                                               isRegenerating: _isRegenerating,
+                                              diagramResults: _diagramResults,
+                                              isGeneratingDiagrams: _isGeneratingDiagrams,
+                                              onRegenerateDiagram: _handleRegenerateDiagram,
                                               objectivesText: _objectivesText,
                                               vocabularyText: _vocabularyText,
                                               materialsText: _materialsText,
@@ -1494,6 +1600,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                               isManualTopicEntry: _isManualTopicEntry,
                                               onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
                                               onManualTopicSelected: _onManualTopicSelected,
+                                              subscriptionTier: _subscriptionTier,
+                                              includeDiagrams: _includeDiagrams,
+                                              onIncludeDiagramsChanged: (v) => setState(() => _includeDiagrams = v),
                                             ),
                                           ),
                                           const SizedBox(height: 24),
@@ -1507,6 +1616,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                             subscriptionTier: _subscriptionTier,
                                             remainingDailyPreviews: _remainingDailyPreviews,
                                             isRegenerating: _isRegenerating,
+                                            diagramResults: _diagramResults,
+                                            isGeneratingDiagrams: _isGeneratingDiagrams,
+                                            onRegenerateDiagram: _handleRegenerateDiagram,
                                             objectivesText: _objectivesText,
                                             vocabularyText: _vocabularyText,
                                             materialsText: _materialsText,
@@ -2055,6 +2167,9 @@ class _ConfigColumn extends StatelessWidget {
   final Set<String> selectedBlooms;
   final bool isGenerating;
   final bool hasGenerated;
+  final String subscriptionTier;
+  final bool includeDiagrams;
+  final ValueChanged<bool>? onIncludeDiagramsChanged;
   final List<String> subjects;
   final List<String> classLevels;
   final List<String> difficulties;
@@ -2105,6 +2220,9 @@ class _ConfigColumn extends StatelessWidget {
     required this.isManualTopicEntry,
     required this.onSchemeOfWorkSelected,
     required this.onManualTopicSelected,
+    required this.subscriptionTier,
+    required this.includeDiagrams,
+    this.onIncludeDiagramsChanged,
   });
 
   @override
@@ -2297,6 +2415,34 @@ class _ConfigColumn extends StatelessWidget {
                 value: assessmentFormat,
                 onChanged: onAssessmentFormatChanged,
               ),
+              // ── Include Diagrams (Elite only) ────────────────
+              if (subscriptionTier == 'elite') ...[
+                const SizedBox(height: 8),
+                CheckboxListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                  title: Text(
+                    'Include diagrams',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: cs.onSurface,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Generate AI illustrations for this lesson',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                  value: includeDiagrams,
+                  onChanged: (v) {
+                    if (v != null && onIncludeDiagramsChanged != null) {
+                      onIncludeDiagramsChanged!(v);
+                    }
+                  },
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+              ],
             ],
           ),
         ),
@@ -2355,6 +2501,9 @@ class _PreviewColumn extends StatelessWidget {
   final String subscriptionTier;
   final int remainingDailyPreviews;
   final bool isRegenerating;
+  final List<Map<String, dynamic>> diagramResults;
+  final bool isGeneratingDiagrams;
+  final ValueChanged<int>? onRegenerateDiagram;
   final String objectivesText;
   final String vocabularyText;
   final String materialsText;
@@ -2386,6 +2535,9 @@ class _PreviewColumn extends StatelessWidget {
     required this.subscriptionTier,
     this.remainingDailyPreviews = 10,
     this.isRegenerating = false,
+    this.diagramResults = const [],
+    this.isGeneratingDiagrams = false,
+    this.onRegenerateDiagram,
     required this.objectivesText,
     required this.vocabularyText,
     required this.materialsText,
@@ -2662,6 +2814,140 @@ class _PreviewColumn extends StatelessWidget {
                     readOnly: !isUnlocked,
                     onChanged: onHomeworkChanged,
                   ),
+
+                  // ── Diagram Previews ─────────────────────────────
+                  if (diagramResults.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4, bottom: 8),
+                      child: Text(
+                        'Diagrams',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                    ),
+                    ...diagramResults.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final diagram = entry.value;
+                      final desc = diagram['description'] as String? ?? '';
+                      final base64 = diagram['base64'] as String?;
+                      final error = diagram['error'] as String?;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Card(
+                          margin: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                            side: BorderSide(
+                              color: cs.outlineVariant.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          color: cs.surfaceBright,
+                          clipBehavior: Clip.antiAlias,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                                child: Text(
+                                  'Diagram ${index + 1}',
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                              if (desc.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                                  child: Text(
+                                    desc,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              const SizedBox(height: 8),
+                              if (base64 != null)
+                                Container(
+                                  constraints: const BoxConstraints(maxHeight: 220),
+                                  color: cs.surfaceContainerLowest,
+                                  child: Center(
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Image.memory(
+                                        base64Decode(base64),
+                                        fit: BoxFit.contain,
+                                        errorBuilder: (_, __, ___) => Padding(
+                                          padding: const EdgeInsets.all(32),
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.broken_image_outlined,
+                                                  size: 40, color: cs.error),
+                                              const SizedBox(height: 8),
+                                              Text('Failed to load image',
+                                                  style: theme.textTheme.bodySmall?.copyWith(
+                                                      color: cs.error)),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              else if (error != null)
+                                Padding(
+                                  padding: const EdgeInsets.all(32),
+                                  child: Center(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.error_outline,
+                                            size: 40, color: cs.error),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          error,
+                                          style: theme.textTheme.bodySmall?.copyWith(
+                                            color: cs.error),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              // Regenerate button for this diagram
+                              if (onRegenerateDiagram != null) ...[
+                                const Divider(height: 1),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  child: SizedBox(
+                                    height: 32,
+                                    child: TextButton.icon(
+                                      onPressed: isGeneratingDiagrams
+                                          ? null
+                                          : () => onRegenerateDiagram!(index),
+                                      icon: Icon(Icons.refresh_rounded,
+                                          size: 16, color: cs.primary),
+                                      label: Text(
+                                        isGeneratingDiagrams ? 'Regenerating...' : 'Regenerate',
+                                        style: theme.textTheme.labelSmall?.copyWith(
+                                          color: cs.primary),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
 
                   // ── Review & Regenerate ────────────────────────
                   if (onRegenerate != null) ...[

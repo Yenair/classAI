@@ -19,7 +19,9 @@ class PromptTemplates {
         '## Homework\n'
         'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
         'Return ONLY valid JSON: '
-        '{"objectives":[...],"vocabulary":[...],"materials":[...],"presentation":{...},"assessment":"...","homework":"...","attribution":"$attribution"} '
+        '{"objectives":[...],"vocabulary":[...],"materials":[...],"presentation":{...},"assessment":"...","homework":"...","diagrams":[{"description":"..."}],"attribution":"$attribution"} '
+        'Include 1-3 diagram descriptions in the "diagrams" array that would help illustrate this lesson. '
+        'Each diagram description should be a concise prompt for generating a visual diagram relevant to the topic. '
         '$_selfCheckInstruction';
   }
 

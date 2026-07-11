@@ -416,7 +416,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const SizedBox(height: 16),
 
         if (authData.currentTeacher?.role == 'admin') ...[
-          _buildUpgradePlanCard(context, cs, textTheme),
+          _buildUpgradePlanCard(context, cs, textTheme, authData),
           const SizedBox(height: 16),
         ],
 
@@ -657,6 +657,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     BuildContext context,
     ColorScheme cs,
     TextTheme textTheme,
+    AuthStateData authData,
   ) {
     return _StitchCard(
       cs: cs,
@@ -699,6 +700,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ),
                       ),
                     ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Teacher seat usage label
+            Row(
+              children: [
+                Icon(
+                  Icons.people_rounded,
+                  size: 18,
+                  color: cs.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Teachers',
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${authData.currentSchool?.totalSeats ?? 0} seats',
+                  style: textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],

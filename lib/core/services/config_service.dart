@@ -102,6 +102,14 @@ class ConfigService {
   /// PDF export limits per tier: { "free": 1, "basic": 3, ... }
   Map<String, dynamic> get pdfExportLimits => getJsonMap('pdf_export_limits');
 
+  /// Teacher seat limits per tier: { "free": 5, "basic": 10, "standard": 20, "elite": 100 }
+  Map<String, dynamic> get teacherSeatLimits =>
+      getJsonMap('teacher_seat_limits');
+
+  /// Lesson/exam storage limits per tier: { "free": 10, "basic": 20, "standard": 50, "elite": -1 }
+  Map<String, dynamic> get lessonStorageLimits =>
+      getJsonMap('lesson_storage_limits');
+
   bool get featureVaultPublishing =>
       getBool('feature_vault_publishing', defaultValue: true);
 

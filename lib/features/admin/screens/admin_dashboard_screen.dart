@@ -11,6 +11,7 @@ import 'package:classai/features/admin/providers/admin_provider.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/core/services/auth_service.dart';
 import 'package:classai/core/theme/app_theme.dart';
+import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/core/widgets/sync_indicator.dart';
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
@@ -1731,10 +1732,64 @@ class _TeacherManagementTabState extends ConsumerState<_TeacherManagementTab> {
   }
 
   void _showAddTeacherDialog(BuildContext context, WidgetRef ref) {
+    final dashboardData = ref.read(adminDashboardProvider);
+    final authData = ref.read(authProvider);
+    final configService = ref.read(configServiceProvider);
+
+    final activeCount = dashboardData.activeTeacherCount;
+    final tier = authData.currentSchool?.subscriptionTier ?? 'free';
+
+    // Get limit from config, fall back to tier limits
+    final seatLimits = configService.teacherSeatLimits;
+    final limit = seatLimits[tier] as int? ??
+        _defaultSeatLimit(tier);
+
+    if (limit > 0 && activeCount >= limit) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Teacher Limit Reached'),
+          content: Text(
+            'You are using $activeCount of $limit teacher seats ($tier plan). '
+            'Upgrade to a higher plan to add more teachers.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                context.push('/payment');
+              },
+              child: const Text('Upgrade Plan'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (_) => const _AddTeacherDialog(),
     );
+  }
+
+  int _defaultSeatLimit(String tier) {
+    switch (tier) {
+      case 'free':
+        return 5;
+      case 'basic':
+        return 10;
+      case 'standard':
+        return 20;
+      case 'elite':
+        return 100;
+      default:
+        return 5;
+    }
   }
 }
 

@@ -96,6 +96,8 @@ class AdminDashboardData {
   final int pendingVaultApprovals;
   final bool loading;
   final String? errorMessage;
+  final int activeTeacherCount;
+  final int totalSeats;
 
   const AdminDashboardData({
     this.teachers = const [],
@@ -103,6 +105,8 @@ class AdminDashboardData {
     this.pendingVaultApprovals = 0,
     this.loading = false,
     this.errorMessage,
+    this.activeTeacherCount = 0,
+    this.totalSeats = 0,
   });
 }
 
@@ -237,10 +241,14 @@ class AdminDashboardNotifier extends Notifier<AdminDashboardData> {
         '${pendingTeachersFromDao.length} pending teachers for this school',
       );
 
+      final totalSeatsValue = authState.currentSchool?.totalSeats ?? 0;
+
       state = AdminDashboardData(
         teachers: teacherDataList,
         pendingTeachers: pendingTeacherList,
         pendingVaultApprovals: pendingItems.length,
+        activeTeacherCount: uniqueTeachers.length,
+        totalSeats: totalSeatsValue,
       );
     } catch (e) {
       state = AdminDashboardData(
