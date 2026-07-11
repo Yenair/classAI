@@ -232,5 +232,5 @@ String statusLabel(SyncStatus s) => switch (s) {
       SyncStatus.offline => 'Offline',
       SyncStatus.syncing => 'Syncing…',
       SyncStatus.synced => 'Synced',
-      SyncStatus.error => 'Sync error',
+      SyncStatus.error => 'Tap to sync',
     };
