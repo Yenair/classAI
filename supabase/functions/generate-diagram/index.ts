@@ -17,7 +17,7 @@ interface DiagramRequest {
 interface DiagramResult {
   index: number;
   description: string;
-  base64: string | null;
+  imageUrl: string | null;
   error?: string;
 }
 
@@ -64,7 +64,11 @@ serve(async (req) => {
       );
     }
 
-    const { diagrams } = await req.json() as { diagrams: DiagramRequest[] };
+    const { diagrams, lessonId, oldUrl } = await req.json() as {
+      diagrams: DiagramRequest[];
+      lessonId?: string;
+      oldUrl?: string;
+    };
 
     if (!Array.isArray(diagrams) || diagrams.length === 0) {
       return new Response(
@@ -80,6 +84,14 @@ serve(async (req) => {
       );
     }
 
+    // ── 2b. Initialise Supabase admin client for Storage ──────────────
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    const BUCKET_NAME = "diagrams";
+
     // ── 3. Generate each diagram via Replicate/gpt-image-2, fallback to Gemini ──
     const results: DiagramResult[] = [];
 
@@ -90,7 +102,7 @@ serve(async (req) => {
         "for secondary school students. Format as a clean visual diagram.";
 
       let providerUsed = "none";
-      let base64Image: string | null = null;
+      let imageBytes: Uint8Array | null = null;
       let lastError: string | undefined;
 
       // ── 3a. Try Replicate/gpt-image-2 (primary) ──────────────────────
@@ -98,7 +110,7 @@ serve(async (req) => {
         try {
           const replicateResult = await generateViaReplicate(prompt);
           if (replicateResult) {
-            base64Image = replicateResult;
+            imageBytes = replicateResult;
             providerUsed = "replicate";
           } else {
             lastError = "Replicate returned no output";
@@ -113,11 +125,11 @@ serve(async (req) => {
       }
 
       // ── 3b. Fallback to Gemini Imagen 4 Fast ─────────────────────────
-      if (!base64Image) {
+      if (!imageBytes) {
         try {
           const geminiResult = await generateViaGemini(prompt);
           if (geminiResult) {
-            base64Image = geminiResult;
+            imageBytes = geminiResult;
             providerUsed = "gemini_fallback";
           } else {
             if (!lastError) lastError = "Gemini returned no image data";
@@ -132,17 +144,77 @@ serve(async (req) => {
 
       console.log(`[generate-diagram] Index ${i} served by: ${providerUsed}`);
 
-      if (base64Image) {
-        results.push({
-          index: i,
-          description,
-          base64: base64Image,
-        });
+      if (imageBytes) {
+        // ── Upload to Supabase Storage ───────────────────────────────
+        try {
+          const timestamp = Date.now(); // millisecond precision
+          const lessonPart = lessonId ?? `unknown_${i}`;
+          const fileName = `${lessonPart}_${timestamp}.png`;
+
+          const { data: uploadData, error: uploadError } = await supabase
+            .storage
+            .from(BUCKET_NAME)
+            .upload(fileName, imageBytes, {
+              contentType: "image/png",
+              upsert: false,
+            });
+
+          if (uploadError) {
+            throw new Error(`Storage upload failed: ${uploadError.message}`);
+          }
+
+          // Get the public URL
+          const { data: publicUrlData } = supabase
+            .storage
+            .from(BUCKET_NAME)
+            .getPublicUrl(fileName);
+
+          const imageUrl = publicUrlData.publicUrl;
+
+          // ── Clean up old object AFTER successful upload ────────────
+          if (oldUrl && oldUrl.trim().length > 0) {
+            // Extract the object path from the old URL
+            const oldPath = extractStoragePath(oldUrl, BUCKET_NAME);
+            if (oldPath) {
+              const { error: deleteError } = await supabase
+                .storage
+                .from(BUCKET_NAME)
+                .remove([oldPath]);
+
+              if (deleteError) {
+                // Log but don't fail — orphaned old file is minor cleanup
+                console.warn(
+                  `[generate-diagram] Index ${i}: failed to delete old object "${oldPath}": ${deleteError.message}`,
+                );
+              } else {
+                console.log(
+                  `[generate-diagram] Index ${i}: deleted old object "${oldPath}"`,
+                );
+              }
+            }
+          }
+
+          results.push({
+            index: i,
+            description,
+            imageUrl,
+          });
+        } catch (uploadErr) {
+          // Upload failed (e.g. image >5MB, Storage error, etc.)
+          const uploadMsg = uploadErr instanceof Error ? uploadErr.message : "Storage upload failed";
+          console.error(`[generate-diagram] Index ${i}: ${uploadMsg}`);
+          results.push({
+            index: i,
+            description,
+            imageUrl: null,
+            error: uploadMsg,
+          });
+        }
       } else {
         results.push({
           index: i,
           description,
-          base64: null,
+          imageUrl: null,
           error: lastError ?? "All image providers failed",
         });
       }
@@ -165,7 +237,7 @@ serve(async (req) => {
 // ---------------------------------------------------------------------------
 // Replicate / gpt-image-2 helper
 // ---------------------------------------------------------------------------
-async function generateViaReplicate(prompt: string): Promise<string | null> {
+async function generateViaReplicate(prompt: string): Promise<Uint8Array | null> {
   // Step 1: Create the prediction
   const createResponse = await fetch(`${REPLICATE_BASE}/predictions`, {
     method: "POST",
@@ -181,8 +253,6 @@ async function generateViaReplicate(prompt: string): Promise<string | null> {
         aspect_ratio: "1:1",
         output_format: "png",
         number_of_images: 1,
-        // Omit background — let it default (gpt-image-2 does not support transparent for all formats)
-        // Omit num_inference_steps, guidance_scale, scheduler — these are not part of gpt-image-2's schema
       },
     }),
   });
@@ -242,17 +312,15 @@ async function generateViaReplicate(prompt: string): Promise<string | null> {
     throw new Error(`Failed to fetch Replicate output image: ${imageResponse.status}`);
   }
 
-  // Convert to base64
+  // Return raw bytes — no base64 encoding needed
   const imageBytes = await imageResponse.arrayBuffer();
-  const base64 = bytesToBase64(new Uint8Array(imageBytes));
-
-  return base64;
+  return new Uint8Array(imageBytes);
 }
 
 // ---------------------------------------------------------------------------
-// Gemini Imagen 4 Fast helper (unchanged logic, extracted for fallback reuse)
+// Gemini Imagen 4 Fast helper
 // ---------------------------------------------------------------------------
-async function generateViaGemini(prompt: string): Promise<string | null> {
+async function generateViaGemini(prompt: string): Promise<Uint8Array | null> {
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/imagen-4-fast:generateImages?key=${GEMINI_API_KEY}`,
     {
@@ -274,7 +342,16 @@ async function generateViaGemini(prompt: string): Promise<string | null> {
   }
 
   const geminiResult = await response.json();
-  return geminiResult?.predictions?.[0]?.bytesBase64Encoded as string | null;
+  const base64Image = geminiResult?.predictions?.[0]?.bytesBase64Encoded as string | null;
+  if (!base64Image) return null;
+
+  // Decode base64 to raw bytes for Storage upload
+  const binaryStr = atob(base64Image);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+  return bytes;
 }
 
 // ---------------------------------------------------------------------------
@@ -284,11 +361,18 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function bytesToBase64(bytes: Uint8Array): string {
-  // Deno-compatible base64 encoding
-  let binary = "";
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
+/**
+ * Extract the object path from a Supabase Storage public URL.
+ * e.g. "https://<project>.supabase.co/storage/v1/object/public/diagrams/abc.png"
+ *      -> "abc.png"
+ */
+function extractStoragePath(publicUrl: string, bucketName: string): string | null {
+  try {
+    const marker = `/object/public/${bucketName}/`;
+    const idx = publicUrl.indexOf(marker);
+    if (idx === -1) return null;
+    return publicUrl.substring(idx + marker.length);
+  } catch {
+    return null;
   }
-  return btoa(binary);
 }

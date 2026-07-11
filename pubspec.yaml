@@ -41,6 +41,7 @@ dependencies:
   # Secure Storage & Biometrics
   flutter_secure_storage: ^10.2.0
   shared_preferences: ^2.5.5
+  flutter_cache_manager: ^3.4.1
   local_auth: ^3.0.1
 
   # Cryptography (pure Dart, cross-platform, Argon2id built-in)

@@ -19,7 +19,8 @@ import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/features/lesson/screens/lessons_list_screen.dart';
-import 'package:classai/core/services/diagram_service.dart';
+import 'package:classai/core/services/diagram_service.dart'
+    show DiagramService, DiagramRequest, DiagramImage;
 import 'package:classai/main.dart' show databaseProvider;
 
 /// Stitch‑designed lesson note editor with AI generation.
@@ -265,6 +266,13 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             _assessmentText = parsedContent['assessment'] as String? ?? '';
             _homeworkText = parsedContent['homework'] as String? ?? '';
             _hasGenerated = true;
+            // Restore diagram results if present in stored content
+            final storedDiagrams = parsedContent['diagrams'] as List<dynamic>?;
+            if (storedDiagrams != null && storedDiagrams.isNotEmpty) {
+              _diagramResults = storedDiagrams
+                  .map((d) => d as Map<String, dynamic>)
+                  .toList();
+            }
           }
         });
       }
@@ -638,18 +646,22 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           final requests = diagramsRaw
               .map((d) => DiagramRequest(
                     description: (d as Map<String, dynamic>)['description']
-                        as String? ??
+                            as String? ??
                         'Diagram',
                   ))
               .toList();
           try {
             final diagramService = DiagramService();
-            final results = await diagramService.generateDiagrams(requests);
+            final lessonIdStr = _lessonId?.toString();
+            final results = await diagramService.generateDiagrams(
+              requests,
+              lessonId: lessonIdStr ?? 'new_${DateTime.now().millisecondsSinceEpoch}',
+            );
             generatedDiagrams = results
                 .map((r) => <String, dynamic>{
                       'index': r.index,
                       'description': r.description,
-                      'base64': r.base64,
+                      'imageUrl': r.imageUrl,
                       'error': r.error,
                     })
                 .toList();
@@ -714,15 +726,21 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       final diagram = _diagramResults.length > diagramIndex ? _diagramResults[diagramIndex] : null;
       if (diagram == null) return;
       final description = diagram['description'] as String? ?? 'Diagram';
+      final oldUrl = diagram['imageUrl'] as String?;
       final requests = [DiagramRequest(description: description)];
       final diagramService = DiagramService();
-      final results = await diagramService.generateDiagrams(requests);
+      final lessonIdStr = _lessonId?.toString();
+      final results = await diagramService.generateDiagrams(
+        requests,
+        lessonId: lessonIdStr ?? 'regenerate_${DateTime.now().millisecondsSinceEpoch}',
+        oldUrl: oldUrl,
+      );
       if (results.isNotEmpty && mounted) {
         setState(() {
           _diagramResults[diagramIndex] = <String, dynamic>{
             'index': results[0].index,
             'description': results[0].description,
-            'base64': results[0].base64,
+            'imageUrl': results[0].imageUrl,
             'error': results[0].error,
           };
           _isGeneratingDiagrams = false;
@@ -912,6 +930,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         'presentation': _presentationText,
         'assessment': _assessmentText,
         'homework': _homeworkText,
+        if (_diagramResults.isNotEmpty) 'diagrams': _diagramResults,
       };
       final topic = _topicController.text.trim();
 
@@ -2820,7 +2839,7 @@ class _PreviewColumn extends StatelessWidget {
                       final index = entry.key;
                       final diagram = entry.value;
                       final desc = diagram['description'] as String? ?? '';
-                      final base64 = diagram['base64'] as String?;
+                      final imageUrl = diagram['imageUrl'] as String?;
                       final error = diagram['error'] as String?;
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
@@ -2860,34 +2879,8 @@ class _PreviewColumn extends StatelessWidget {
                                   ),
                                 ),
                               const SizedBox(height: 8),
-                              if (base64 != null)
-                                Container(
-                                  constraints: const BoxConstraints(maxHeight: 220),
-                                  color: cs.surfaceContainerLowest,
-                                  child: Center(
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: Image.memory(
-                                        base64Decode(base64),
-                                        fit: BoxFit.contain,
-                                        errorBuilder: (_, __, ___) => Padding(
-                                          padding: const EdgeInsets.all(32),
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(Icons.broken_image_outlined,
-                                                  size: 40, color: cs.error),
-                                              const SizedBox(height: 8),
-                                              Text('Failed to load image',
-                                                  style: theme.textTheme.bodySmall?.copyWith(
-                                                      color: cs.error)),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                )
+                              if (imageUrl != null)
+                                DiagramImage(url: imageUrl)
                               else if (error != null)
                                 Padding(
                                   padding: const EdgeInsets.all(32),
