@@ -249,6 +249,12 @@ Widget _buildComparisonTable(
       iconCell(plan.vaultPublishing, backgroundColor: bgColor),
       // Watermark
       iconCell(plan.watermark, backgroundColor: bgColor),
+      // Teacher seats
+      textCell(plan.teacherSeats, backgroundColor: bgColor),
+      // Lesson storage
+      textCell(plan.lessonStorage, backgroundColor: bgColor),
+      // AI diagrams
+      iconCell(plan.aiDiagrams, backgroundColor: bgColor),
     ];
 
     // Action row: Choose Plan button for paid plans, "Unavailable" for free
@@ -366,6 +372,18 @@ Widget _buildComparisonTable(
               fontWeight: FontWeight.w600,
               color: cs.onSurface,
             )),
+            labelCell('Teacher seats', style: textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: cs.onSurface,
+            )),
+            labelCell('Lesson storage', style: textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: cs.onSurface,
+            )),
+            labelCell('AI diagrams', style: textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: cs.onSurface,
+            )),
             labelCell('', style: null), // empty cell for action row alignment
           ],
         ),
@@ -399,6 +417,20 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
   final previewLimits = config.dailyPreviewLimits;
   final pdfLimits = config.pdfExportLimits;
 
+  const fallbackTeacherSeats = <String, dynamic>{
+    'free': 5, 'basic': 10, 'standard': 20, 'elite': 100,
+  };
+  const fallbackLessonStorage = <String, dynamic>{
+    'free': 10, 'basic': 20, 'standard': 50, 'elite': -1,
+  };
+
+  final teacherSeatLimits = config.teacherSeatLimits.isNotEmpty
+      ? config.teacherSeatLimits
+      : fallbackTeacherSeats;
+  final lessonStorageLimits = config.lessonStorageLimits.isNotEmpty
+      ? config.lessonStorageLimits
+      : fallbackLessonStorage;
+
   return [
     _TierComparisonRow(
       tier: 'free',
@@ -408,6 +440,9 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
       pdfExports: _tierLimitText(pdfLimits['free'], fallback: 1),
       vaultPublishing: false,
       watermark: true,
+      teacherSeats: _tierLimitText(teacherSeatLimits['free'], fallback: 5),
+      lessonStorage: _tierLimitText(lessonStorageLimits['free'], fallback: 10),
+      aiDiagrams: false,
     ),
     _TierComparisonRow(
       tier: 'basic',
@@ -417,6 +452,9 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
       pdfExports: _tierLimitText(pdfLimits['basic'], fallback: 3),
       vaultPublishing: false,
       watermark: false,
+      teacherSeats: _tierLimitText(teacherSeatLimits['basic'], fallback: 10),
+      lessonStorage: _tierLimitText(lessonStorageLimits['basic'], fallback: 20),
+      aiDiagrams: false,
     ),
     _TierComparisonRow(
       tier: 'standard',
@@ -426,6 +464,9 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
       pdfExports: _tierLimitText(pdfLimits['standard'], fallback: 5),
       vaultPublishing: true,
       watermark: false,
+      teacherSeats: _tierLimitText(teacherSeatLimits['standard'], fallback: 20),
+      lessonStorage: _tierLimitText(lessonStorageLimits['standard'], fallback: 50),
+      aiDiagrams: false,
     ),
     _TierComparisonRow(
       tier: 'elite',
@@ -435,6 +476,9 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
       pdfExports: _tierLimitText(pdfLimits['elite'], fallback: -1),
       vaultPublishing: true,
       watermark: false,
+      teacherSeats: _tierLimitText(teacherSeatLimits['elite'], fallback: 100),
+      lessonStorage: _tierLimitText(lessonStorageLimits['elite'], fallback: -1),
+      aiDiagrams: true,
     ),
   ];
 }
@@ -1153,6 +1197,9 @@ class _TierComparisonRow {
   final String pdfExports;
   final bool vaultPublishing;
   final bool watermark;
+  final String teacherSeats;
+  final String lessonStorage;
+  final bool aiDiagrams;
 
   String get dailyPreviews => previewLimit;
 
@@ -1164,5 +1211,8 @@ class _TierComparisonRow {
     required this.pdfExports,
     required this.vaultPublishing,
     required this.watermark,
+    required this.teacherSeats,
+    required this.lessonStorage,
+    required this.aiDiagrams,
   });
 }
