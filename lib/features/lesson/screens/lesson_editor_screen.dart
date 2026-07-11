@@ -13,6 +13,7 @@ import 'package:classai/core/services/emergency_flush_service.dart';
 import 'package:classai/core/constants/prompt_templates.dart';
 import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/core/widgets/app_toast.dart';
+import 'package:classai/core/widgets/upgrade_request_dialog.dart';
 import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
@@ -497,29 +498,16 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
 
   Future<void> _showUpgradeRequiredDialog() async {
     if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        content: const Text(
-          'Upgrade to a paid plan to generate lessons and exams.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Close'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              if (mounted) {
-                context.push('/payment');
-              }
-            },
-            child: const Text('View Plans'),
-          ),
-        ],
-      ),
-    );
+    final role = ref.read(authProvider).currentTeacher?.role;
+    if (role == 'admin') {
+      // Admin navigates directly to payment
+      if (mounted) {
+        context.push('/payment');
+      }
+      return;
+    }
+    // Teacher sees the upgrade-request dialog
+    await showUpgradeRequestDialog(context, ref, requestedTier: 'elite');
   }
 
   int _defaultStorageLimit(String tier) {

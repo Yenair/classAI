@@ -16,6 +16,7 @@ import 'package:classai/features/settings/providers/theme_provider.dart';
 import 'package:classai/core/services/payment_service.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/providers/config_provider.dart';
+import 'package:classai/core/widgets/upgrade_request_dialog.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
 void _goToLessonsDeferred(BuildContext context) {
@@ -645,7 +646,13 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                   _FreePlanBanner(
                     cs: cs,
                     theme: theme,
-                    onUpgrade: () => context.push('/payment'),
+                    onUpgrade: () {
+                      if (authData.currentTeacher?.role == 'admin') {
+                        context.push('/payment');
+                      } else {
+                        showUpgradeRequestDialog(context, ref, requestedTier: 'elite');
+                      }
+                    },
                   ),
 
                 // ── Canvas ─────────────────────────────────────────
@@ -2202,7 +2209,13 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
             _FreePlanBanner(
               cs: cs,
               theme: theme,
-              onUpgrade: () => context.push('/payment'),
+              onUpgrade: () {
+                if (authData.currentTeacher?.role == 'admin') {
+                  context.push('/payment');
+                } else {
+                  showUpgradeRequestDialog(context, ref, requestedTier: 'elite');
+                }
+              },
             ),
           Expanded(
             child: SingleChildScrollView(
