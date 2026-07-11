@@ -669,34 +669,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       }
       await db.schemeOfWorkDao.updateStatus(schemeWeekId, 'approved');
 
-      // Queue the status change for sync
-      try {
-        final weekData = await db.schemeOfWorkDao.getById(schemeWeekId);
-        if (weekData != null) {
-          await db.syncQueueDao.insertEntry(
-            queueTable: 'scheme_of_work',
-            recordLocalId: schemeWeekId,
-            operation: 'UPDATE',
-            payload: {
-              'status': 'approved',
-              'teacher_server_id': weekData.teacherServerId,
-              'school_server_id': weekData.schoolServerId,
-              'subject_id': weekData.subjectId,
-              'term': weekData.term,
-              'week_number': weekData.weekNumber,
-              'topic': weekData.topic,
-              'objectives': weekData.objectives,
-              'class_level': weekData.classLevel,
-              'admin_edited_topic': weekData.adminEditedTopic,
-              'admin_comment': weekData.adminComment,
-            },
-          );
-        }
-      } catch (_) {
-        // Non-critical — sync failure shouldn't block approval
-      }
-
-      // Fetch the approved scheme week to get metadata for draft creation
+      // Fetch the approved scheme week to get metadata for draft creation & sync
       final schemeWeek = await db.schemeOfWorkDao.getById(schemeWeekId);
       if (schemeWeek != null) {
         final teacher = await db.teachersDao.getById(schemeWeek.teacherId);
@@ -711,6 +684,30 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
         final topic = adminEdit != null && adminEdit.isNotEmpty
             ? adminEdit
             : schemeWeek.topic;
+
+        // Queue the status change for sync
+        try {
+          await db.syncQueueDao.insertEntry(
+            queueTable: 'scheme_of_work',
+            recordLocalId: schemeWeekId,
+            operation: 'UPDATE',
+            payload: {
+              'status': 'approved',
+              'teacher_server_id': teacherServerId,
+              'school_server_id': schoolServerId,
+              'subject_id': schemeWeek.subjectId,
+              'term': schemeWeek.term,
+              'week_number': schemeWeek.weekNumber,
+              'topic': schemeWeek.topic,
+              'objectives': schemeWeek.objectives,
+              'class_level': schemeWeek.classLevel,
+              'admin_edited_topic': schemeWeek.adminEditedTopic,
+              'admin_comment': schemeWeek.adminComment,
+            },
+          );
+        } catch (_) {
+          // Non-critical — sync failure shouldn't block approval
+        }
 
         if (teacherServerId != null &&
             termLabel.isNotEmpty &&
