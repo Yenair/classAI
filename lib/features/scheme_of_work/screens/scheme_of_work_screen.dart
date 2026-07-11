@@ -430,6 +430,10 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       final schoolServerId = school?.serverId;
       final termLabel = _normalizeTermLabelForDraft(_term);
 
+      // Resolve subject server ID for sync payload
+      final subject = await db.subjectsDao.getById(subjectId);
+      final subjectServerId = subject?.serverId;
+
       for (var index = 0; index < _weeks.length; index++) {
         final week = _weeks[index];
         final weekNumber = index + 1;
@@ -443,6 +447,29 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
             topic: topicText,
             objectives: objectivesText,
           );
+
+          // Queue UPDATE sync entry
+          final sowRecord = await db.schemeOfWorkDao.getById(existingId);
+          if (sowRecord != null) {
+            await db.syncQueueDao.insertEntry(
+              queueTable: 'scheme_of_work',
+              recordLocalId: existingId,
+              operation: 'UPDATE',
+              payload: {
+                'teacher_server_id': teacherServerId,
+                'school_server_id': schoolServerId,
+                'subject_id': subjectServerId ?? subjectId.toString(),
+                'term': _term,
+                'week_number': weekNumber,
+                'topic': topicText,
+                'objectives': objectivesText,
+                'status': sowRecord.status,
+                'admin_edited_topic': sowRecord.adminEditedTopic,
+                'admin_comment': sowRecord.adminComment,
+                'class_level': _classLevel,
+              },
+            );
+          }
         } else {
           // Insert new record
           final newId = await db.schemeOfWorkDao.insert(
@@ -461,6 +488,26 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
             ),
           );
           _weekRecordIds[weekNumber] = newId;
+
+          // Queue INSERT sync entry
+          await db.syncQueueDao.insertEntry(
+            queueTable: 'scheme_of_work',
+            recordLocalId: newId,
+            operation: 'INSERT',
+            payload: {
+              'teacher_server_id': teacherServerId,
+              'school_server_id': schoolServerId,
+              'subject_id': subjectServerId ?? subjectId.toString(),
+              'term': _term,
+              'week_number': weekNumber,
+              'topic': topicText,
+              'objectives': objectivesText,
+              'status': 'draft',
+              'admin_edited_topic': null,
+              'admin_comment': null,
+              'class_level': _classLevel,
+            },
+          );
         }
 
         // Auto-create draft lesson if not already existing
@@ -560,8 +607,36 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       if (_weeks.isEmpty) return;
 
       final db = ref.read(databaseProvider);
+      final teacher = await db.teachersDao.getById(_teacherId!);
+      final teacherServerId = teacher?.serverId;
+      final school = await db.schoolsDao.get();
+      final schoolServerId = school?.serverId;
+      final subject = await db.subjectsDao.getById(_subjectId!);
+      final subjectServerId = subject?.serverId;
+
       for (final recordId in _weekRecordIds.values) {
         await db.schemeOfWorkDao.updateStatus(recordId, 'pending');
+        final sowRecord = await db.schemeOfWorkDao.getById(recordId);
+        if (sowRecord != null) {
+          await db.syncQueueDao.insertEntry(
+            queueTable: 'scheme_of_work',
+            recordLocalId: recordId,
+            operation: 'UPDATE',
+            payload: {
+              'teacher_server_id': teacherServerId,
+              'school_server_id': schoolServerId,
+              'subject_id': subjectServerId ?? _subjectId.toString(),
+              'term': _term,
+              'week_number': sowRecord.weekNumber,
+              'topic': sowRecord.topic,
+              'objectives': sowRecord.objectives,
+              'status': 'pending',
+              'admin_edited_topic': sowRecord.adminEditedTopic,
+              'admin_comment': sowRecord.adminComment,
+              'class_level': _classLevel,
+            },
+          );
+        }
       }
       await _loadSchemeForSelection();
       if (mounted) {
@@ -593,6 +668,33 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
         );
       }
       await db.schemeOfWorkDao.updateStatus(schemeWeekId, 'approved');
+
+      // Queue the status change for sync
+      try {
+        final weekData = await db.schemeOfWorkDao.getById(schemeWeekId);
+        if (weekData != null) {
+          await db.syncQueueDao.insertEntry(
+            queueTable: 'scheme_of_work',
+            recordLocalId: schemeWeekId,
+            operation: 'UPDATE',
+            payload: {
+              'status': 'approved',
+              'teacher_server_id': weekData.teacherServerId,
+              'school_server_id': weekData.schoolServerId,
+              'subject_id': weekData.subjectId,
+              'term': weekData.term,
+              'week_number': weekData.weekNumber,
+              'topic': weekData.topic,
+              'objectives': weekData.objectives,
+              'class_level': weekData.classLevel,
+              'admin_edited_topic': weekData.adminEditedTopic,
+              'admin_comment': weekData.adminComment,
+            },
+          );
+        }
+      } catch (_) {
+        // Non-critical — sync failure shouldn't block approval
+      }
 
       // Fetch the approved scheme week to get metadata for draft creation
       final schemeWeek = await db.schemeOfWorkDao.getById(schemeWeekId);

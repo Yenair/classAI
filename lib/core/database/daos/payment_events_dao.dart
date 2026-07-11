@@ -9,14 +9,14 @@ class PaymentEventsDao extends DatabaseAccessor<AppDatabase>
     with _$PaymentEventsDaoMixin {
   PaymentEventsDao(AppDatabase db) : super(db);
 
-  Future<void> insert({
+  Future<int> insert({
     required String transactionReference,
     required bool confirmedByWebhook,
     required int amount,
     required String plan,
     required DateTime createdAt,
   }) async {
-    await into(paymentEvents).insert(
+    final id = await into(paymentEvents).insert(
       PaymentEventsCompanion.insert(
         transactionReference: transactionReference,
         confirmedByWebhook: Value(confirmedByWebhook),
@@ -25,6 +25,24 @@ class PaymentEventsDao extends DatabaseAccessor<AppDatabase>
         createdAt: Value(createdAt),
       ),
     );
+    try {
+      final school = await db.schoolsDao.get();
+      await db.syncQueueDao.insertEntry(
+        queueTable: 'payment_events',
+        recordLocalId: id,
+        operation: 'INSERT',
+        payload: {
+          'transaction_reference': transactionReference,
+          'confirmed_by_webhook': confirmedByWebhook,
+          'amount': amount,
+          'plan': plan,
+          'school_server_id': school?.serverId,
+        },
+      );
+    } catch (_) {
+      // Non-critical — payment event sync failure shouldn't block
+    }
+    return id;
   }
 
   Future<List<PaymentEvent>> getUnconfirmed() {

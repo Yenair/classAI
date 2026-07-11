@@ -1633,6 +1633,27 @@ class AuthNotifier extends Notifier<AuthStateData> {
     );
     final schoolLocalIdToUse = schoolRow.localId;
 
+    // Queue school record for sync if it has a serverId
+    if (schoolRow.serverId != null && schoolRow.serverId!.isNotEmpty) {
+      try {
+        await _db.syncQueueDao.insertEntry(
+          queueTable: 'schools',
+          recordLocalId: schoolRow.localId,
+          operation: 'UPDATE',
+          payload: {
+            'server_id': schoolRow.serverId,
+            'school_name': schoolRow.schoolName,
+            'short_code': schoolRow.shortCode,
+            'subscription_tier': schoolRow.subscriptionTier,
+            'active_curriculum': schoolRow.activeCurriculum,
+            'total_seats': schoolRow.totalSeats,
+          },
+        );
+      } catch (_) {
+        // Non-critical — school sync failure shouldn't block auth
+      }
+    }
+
     // Upsert teacher record - schoolLocalIdToUse is guaranteed non-zero
     if (result.teacher.serverId != null) {
       final existingTeachers = await (_db.select(_db.teachers)
@@ -1660,6 +1681,27 @@ class AuthNotifier extends Notifier<AuthStateData> {
             updateCounter: Value(existing.updateCounter + 1),
           ),
         );
+
+        // Queue teacher update for sync
+        if (result.teacher.serverId != null) {
+          try {
+            await _db.syncQueueDao.insertEntry(
+              queueTable: 'teachers',
+              recordLocalId: existing.localId,
+              operation: 'UPDATE',
+              payload: {
+                'server_id': result.teacher.serverId,
+                'email': result.teacher.email,
+                'teacher_name': result.teacher.teacherName,
+                'role': result.teacher.role,
+                'school_server_id': result.teacher.schoolServerId,
+                'is_active': result.teacher.isActive,
+              },
+            );
+          } catch (_) {
+            // Non-critical
+          }
+        }
         return;
       }
     }
@@ -1680,6 +1722,34 @@ class AuthNotifier extends Notifier<AuthStateData> {
         lastCreditRefillDate: Value(result.lastCreditRefillServerTime),
       ),
     );
+
+    // Get the local ID of the newly inserted teacher
+    final insertedTeacherLocalId = await (_db.select(_db.teachers)
+          ..where((t) => t.serverId.equals(result.teacher.serverId!))
+          ..limit(1))
+        .getSingleOrNull()
+        .then((t) => t?.localId);
+
+    // Queue teacher insert for sync
+    if (insertedTeacherLocalId != null && result.teacher.serverId != null) {
+      try {
+        await _db.syncQueueDao.insertEntry(
+          queueTable: 'teachers',
+          recordLocalId: insertedTeacherLocalId,
+          operation: 'INSERT',
+          payload: {
+            'server_id': result.teacher.serverId,
+            'email': result.teacher.email,
+            'teacher_name': result.teacher.teacherName,
+            'role': result.teacher.role,
+            'school_server_id': result.teacher.schoolServerId,
+            'is_active': result.teacher.isActive,
+          },
+        );
+      } catch (_) {
+        // Non-critical
+      }
+    }
 
     // Update security config with server credit state
     await _db.securityConfigDao.updateConfig(

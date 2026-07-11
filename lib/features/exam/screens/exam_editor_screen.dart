@@ -211,7 +211,15 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     if (result != null && result.isNotEmpty) {
       try {
         final db = ref.read(databaseProvider);
-        await db.subjectsDao.insert(name: result);
+        final newSubjectId = await db.subjectsDao.insert(name: result);
+        await db.syncQueueDao.insertEntry(
+          queueTable: 'subjects',
+          recordLocalId: newSubjectId,
+          operation: 'INSERT',
+          payload: {
+            'name': result,
+          },
+        );
         await _loadSubjects();
         setState(() => _subject = result);
       } catch (_) {
@@ -1209,6 +1217,8 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         'curriculum': 'NERDC',
         'teacher_server_id': _teacherId,
         'school_server_id': _schoolId,
+        'content': jsonEncode(content),
+        'is_unlocked': _isUnlocked,
       };
       if (schemeOfWorkIdStr != null) {
         payload['scheme_of_work_id'] = schemeOfWorkIdStr;

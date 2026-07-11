@@ -179,7 +179,15 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     if (result != null && result.isNotEmpty) {
       try {
         final db = ref.read(databaseProvider);
-        await db.subjectsDao.insert(name: result);
+        final newSubjectId = await db.subjectsDao.insert(name: result);
+        await db.syncQueueDao.insertEntry(
+          queueTable: 'subjects',
+          recordLocalId: newSubjectId,
+          operation: 'INSERT',
+          payload: {
+            'name': result,
+          },
+        );
         await _loadSubjects();
         setState(() => _subject = result);
       } catch (_) {
@@ -878,6 +886,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           await db.lessonsDao.updateLesson(id, companion);
 
           // Queue UPDATE sync entry
+          final lessonContent = _encryptedContent ?? jsonEncode(content);
           await db.syncQueueDao.insertEntry(
             queueTable: 'lessons',
             recordLocalId: id,
@@ -892,6 +901,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
               'curriculum': 'NERDC',
               'teacher_server_id': _teacherId,
               'school_server_id': _schoolId,
+              'content': lessonContent,
+              'is_unlocked': _isUnlocked,
               if (schemeOfWorkIdStr != null) 'scheme_of_work_id': schemeOfWorkIdStr,
               if (_isFromSchemeOfWork) 'week_number': _week,
               if (termLabel != null) 'term': termLabel,
@@ -931,6 +942,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       );
 
       // Queue sync entry
+      final lessonContent = _encryptedContent ?? jsonEncode(content);
       await db.syncQueueDao.insertEntry(
         queueTable: 'lessons',
         recordLocalId: id,
@@ -945,6 +957,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           'curriculum': 'NERDC',
           'teacher_server_id': _teacherId,
           'school_server_id': _schoolId,
+          'content': lessonContent,
+          'content_hash': lessonContent.hashCode.toString(),
+          'is_unlocked': _isUnlocked,
           if (schemeOfWorkIdStr != null) 'scheme_of_work_id': schemeOfWorkIdStr,
           if (_isFromSchemeOfWork) 'week_number': _week,
           if (termLabel != null) 'term': termLabel,

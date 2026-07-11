@@ -209,15 +209,27 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
       );
 
       // Queue sync entry so this item gets pushed to the server
+      final subject = await db.subjectsDao.getByName(_subjectCtrl.text.trim());
       await db.syncQueueDao.insertEntry(
         queueTable: 'vault_items',
         recordLocalId: itemLocalId,
         operation: 'INSERT',
         payload: {
           'title': _titleCtrl.text.trim(),
-          'encrypted': school?.schoolMasterKeyWrapped != null,
+          'description': _descriptionCtrl.text.trim(),
+          'subject': _subjectCtrl.text.trim(),
+          'subject_id': subject?.serverId ?? subject?.id.toString(),
+          'class_level': _classLevelCtrl.text.trim(),
+          'curriculum': _curriculumCtrl.text.trim(),
+          'content': contentToStore,
+          'author_name': teacher.teacherName,
           'teacher_server_id': teacher.serverId ?? teacher.email,
           'school_server_id': school?.serverId,
+          'credit_cost': _creditCost,
+          'needs_approval': true,
+          'thumbnail_url': _thumbnailUrlCtrl.text.trim().isNotEmpty
+              ? _thumbnailUrlCtrl.text.trim()
+              : _imageAsDataUri(),
         },
       );
 

@@ -67,6 +67,21 @@ const KEY_MAP: Record<string, string> = {
   teacher_server_id: "teacher_server_id",
   scheme_of_work_id: "scheme_of_work_id",
   week_number: "week_number",
+  // scheme_of_work fields
+  admin_edited_topic: "admin_edited_topic",
+  admin_comment: "admin_comment",
+  class_level: "class_level",
+  // vault_items fields
+  subject_id: "subject_id",
+  author_name: "author_name",
+  credit_cost: "credit_cost",
+  needs_approval: "needs_approval",
+  thumbnail_url: "thumbnail_url",
+  // audit_logs / payment_events fields
+  transaction_reference: "transaction_reference",
+  confirmed_by_webhook: "confirmed_by_webhook",
+  // subjects
+  subject_name: "subject_name",
 };
 
 /** Decompress a compressed rowData map back to full key names. */
@@ -112,6 +127,18 @@ const EXAM_DEFAULTS: Record<string, unknown> = {
   questions: "",
   theory_questions: "",
   marking_scheme: "",
+};
+
+const SCHEME_OF_WORK_DEFAULTS: Record<string, unknown> = {
+  status: "draft",
+};
+
+const VAULT_ITEMS_DEFAULTS: Record<string, unknown> = {
+  min_tier: "free",
+  credit_cost: 0,
+  needs_approval: true,
+  approval_status: "pending",
+  is_deleted: false,
 };
 
 /**
@@ -263,6 +290,135 @@ async function resolveForeignKeys(
       }
     }
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// scheme_of_work handler
+// ═══════════════════════════════════════════════════════════════
+if (table === "scheme_of_work") {
+  // Resolve teacher_server_id → teacher_id (UUID)
+  if (rowData["teacher_server_id"] && !rowData["teacher_id"]) {
+    rowData["teacher_id"] = rowData["teacher_server_id"];
+  }
+  // Resolve school_server_id → school_id (UUID)
+  if (rowData["school_server_id"] && !rowData["school_id"]) {
+    rowData["school_id"] = rowData["school_server_id"];
+  }
+  // Resolve subject_id — the client may send it as a local integer or a UUID string.
+  // If it looks like a UUID, use it directly; otherwise skip (server has its own FKs).
+  if (rowData["subject_id"]) {
+    const subId = rowData["subject_id"] as string;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(subId)) {
+      // It's a local integer ID — we can't resolve it server-side.
+      delete rowData["subject_id"];
+    }
+  }
+  // Apply defaults
+  for (const [col, defaultVal] of Object.entries(SCHEME_OF_WORK_DEFAULTS)) {
+    if (rowData[col] === undefined || rowData[col] === null) {
+      rowData[col] = defaultVal;
+    }
+  }
+  // Remove local-only fields
+  delete rowData["teacher_server_id"];
+  delete rowData["school_server_id"];
+  delete rowData["local_id"];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// vault_items handler
+// ═══════════════════════════════════════════════════════════════
+if (table === "vault_items") {
+  // Resolve teacher_server_id → teacher_id (UUID)
+  if (rowData["teacher_server_id"] && !rowData["teacher_id"]) {
+    rowData["teacher_id"] = rowData["teacher_server_id"];
+  }
+  // Resolve school_server_id → school_id (UUID)
+  if (rowData["school_server_id"] && !rowData["school_id"]) {
+    rowData["school_id"] = rowData["school_server_id"];
+  }
+  // Map subject text name → subject_id if needed
+  if (rowData["subject"] && !rowData["subject_id"]) {
+    const subjectName = rowData["subject"] as string;
+    const { data: subject } = await supabase
+      .from("subjects")
+      .select("id")
+      .eq("subject_name", subjectName)
+      .maybeSingle();
+    if (subject?.id) {
+      rowData["subject_id"] = subject.id;
+    }
+  }
+  // Map author_name → author_name (already correct field)
+  // Apply defaults
+  for (const [col, defaultVal] of Object.entries(VAULT_ITEMS_DEFAULTS)) {
+    if (rowData[col] === undefined || rowData[col] === null) {
+      rowData[col] = defaultVal;
+    }
+  }
+  // Remove local-only fields
+  delete rowData["teacher_server_id"];
+  delete rowData["school_server_id"];
+  delete rowData["local_id"];
+  delete rowData["encrypted"];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// teachers handler
+// ═══════════════════════════════════════════════════════════════
+if (table === "teachers") {
+  // school_server_id → school_id (UUID FK)
+  if (rowData["school_server_id"] && !rowData["school_id"]) {
+    rowData["school_id"] = rowData["school_server_id"];
+  }
+  delete rowData["school_server_id"];
+  delete rowData["local_id"];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// schools handler
+// ═══════════════════════════════════════════════════════════════
+if (table === "schools") {
+  delete rowData["local_id"];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// subjects handler
+// ═══════════════════════════════════════════════════════════════
+if (table === "subjects") {
+  // Map name → subject_name for the server column
+  if (rowData["name"] && !rowData["subject_name"]) {
+    rowData["subject_name"] = rowData["name"];
+  }
+  delete rowData["name"];
+  delete rowData["local_id"];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// audit_logs handler
+// ═══════════════════════════════════════════════════════════════
+if (table === "audit_logs") {
+  // teacher_id and school_id are already UUIDs — use them directly
+  delete rowData["local_id"];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// payment_events handler
+// ═══════════════════════════════════════════════════════════════
+if (table === "payment_events") {
+  // Resolve school_server_id → school_id
+  if (rowData["school_server_id"] && !rowData["school_id"]) {
+    rowData["school_id"] = rowData["school_server_id"];
+  }
+  delete rowData["school_server_id"];
+  delete rowData["local_id"];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// security_config handler
+// ═══════════════════════════════════════════════════════════════
+if (table === "security_config") {
+  delete rowData["local_id"];
 }
 
 serve(async (req) => {

@@ -14,6 +14,27 @@ class AuditLogsDao extends DatabaseAccessor<AppDatabase>
     return into(auditLogs).insert(companion);
   }
 
+  /// Insert an audit log and queue it for sync.
+  Future<int> insertWithSync(AuditLogsCompanion companion) async {
+    final id = await into(auditLogs).insert(companion);
+    try {
+      await db.syncQueueDao.insertEntry(
+        queueTable: 'audit_logs',
+        recordLocalId: id,
+        operation: 'INSERT',
+        payload: {
+          'teacher_id': companion.teacherId.value,
+          'school_id': companion.schoolId.value,
+          'action': companion.action.value,
+          if (companion.metadata.value != null) 'metadata': companion.metadata.value,
+        },
+      );
+    } catch (_) {
+      // Non-critical — audit log sync failure shouldn't block
+    }
+    return id;
+  }
+
   /// Get all audit logs for a teacher.
   Future<List<AuditLog>> getByTeacher(String teacherId) {
     return (select(auditLogs)

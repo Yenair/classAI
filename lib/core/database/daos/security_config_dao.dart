@@ -134,6 +134,22 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
             : const Value.absent(),
       ),
     );
+
+    // Queue security_config update for sync
+    try {
+      await db.syncQueueDao.insertEntry(
+        queueTable: 'security_config',
+        recordLocalId: 1,
+        operation: 'UPDATE',
+        payload: {
+          'offline_credits': offlineCredits,
+          'daily_preview_count': dailyPreviewCount,
+          'daily_preview_date': dailyPreviewDate,
+        },
+      );
+    } catch (_) {
+      // Non-critical — security_config sync shouldn't block the operation
+    }
   }
 
   Future<void> updateOfflineCredits(int newValue) async {
@@ -215,6 +231,19 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
       ),
     );
 
+    // Queue security_config update after generation count change
+    try {
+      await db.syncQueueDao.insertEntry(
+        queueTable: 'security_config',
+        recordLocalId: 1,
+        operation: 'UPDATE',
+        payload: {
+          'daily_generations': newCount + 1,
+          'daily_generation_date': newDate,
+        },
+      );
+    } catch (_) {}
+
     return true;
   }
 
@@ -252,6 +281,19 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
       ),
     );
 
+    // Queue security_config update after preview count change
+    try {
+      await db.syncQueueDao.insertEntry(
+        queueTable: 'security_config',
+        recordLocalId: 1,
+        operation: 'UPDATE',
+        payload: {
+          'daily_preview_count': newCount + 1,
+          'daily_preview_date': newDate,
+        },
+      );
+    } catch (_) {}
+
     return true;
   }
 
@@ -287,6 +329,19 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
         dailyPdfExportDate: Value(newDate),
       ),
     );
+
+    // Queue security_config update after PDF export count change
+    try {
+      await db.syncQueueDao.insertEntry(
+        queueTable: 'security_config',
+        recordLocalId: 1,
+        operation: 'UPDATE',
+        payload: {
+          'daily_pdf_exports': newCount + 1,
+          'daily_pdf_export_date': newDate,
+        },
+      );
+    } catch (_) {}
 
     return true;
   }

@@ -247,6 +247,10 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
     'vault_items',
     'scheme_of_work',
     'teachers',
+    'schools',
+    'security_config',
+    'audit_logs',
+    'payment_events',
   ];
 
   SupabaseSyncRemoteApi({required this.schoolId})
@@ -1121,6 +1125,38 @@ class SyncService {
               updatedAt: Value(DateTime.now()),
             ));
         break;
+      case 'teachers':
+        await (db.update(db.teachers)
+              ..where((t) => t.localId.equals(localId)))
+            .write(TeachersCompanion(
+              serverId: Value(serverId),
+              updatedAt: Value(DateTime.now()),
+            ));
+        break;
+      case 'schools':
+        await (db.update(db.schools)
+              ..where((t) => t.localId.equals(localId)))
+            .write(SchoolsCompanion(
+              serverId: Value(serverId),
+              updatedAt: Value(DateTime.now()),
+            ));
+        break;
+      case 'progress_logs':
+        await (db.update(db.progressLogs)
+              ..where((t) => t.id.equals(localId)))
+            .write(ProgressLogsCompanion(
+              serverId: Value(serverId),
+              updatedAt: Value(DateTime.now()),
+            ));
+        break;
+      case 'subjects':
+        await (db.update(db.subjects)
+              ..where((t) => t.id.equals(localId)))
+            .write(SubjectsCompanion(
+              serverId: Value(serverId),
+              updatedAt: Value(DateTime.now()),
+            ));
+        break;
       // Extend with other tables as needed.
       default:
         break;
@@ -1510,18 +1546,20 @@ class SyncService {
     switch (tableName) {
       case 'schools':
         return 0;
-      case 'subjects':
+      case 'teachers':
         return 1;
-      case 'lessons':
+      case 'subjects':
         return 2;
-      case 'exams':
+      case 'lessons':
         return 3;
-      case 'progress_logs':
+      case 'exams':
         return 4;
-      case 'scheme_of_work':
+      case 'progress_logs':
         return 5;
-      case 'vault_items':
+      case 'scheme_of_work':
         return 6;
+      case 'vault_items':
+        return 7;
       default:
         return 99;
     }
