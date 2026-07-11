@@ -7,6 +7,7 @@ import 'package:classai/core/constants/prompt_templates.dart';
 import 'package:classai/core/services/ai_service.dart';
 import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/widgets/app_toast.dart';
+import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
 import 'package:flutter/material.dart';
@@ -155,6 +156,18 @@ class _FullTermExamScreenState extends ConsumerState<FullTermExamScreen> {
     final hasQuestions = _topics.any((t) => t.questionCount > 0);
     if (!hasQuestions) {
       showErrorToast(context: context, message: 'Assign at least one question to a topic.');
+      return;
+    }
+
+    // Tier gate: check school tier against allowed tiers for exam generation
+    final authTier = ref.read(authProvider).currentSchool?.subscriptionTier.toLowerCase() ?? '';
+    final config = ref.read(configServiceProvider);
+    final allowedTiers = config.examGenerationAllowedTiers;
+    if (!allowedTiers.contains(authTier)) {
+      showErrorToast(
+        context: context,
+        message: 'Contact your school admin to upgrade.',
+      );
       return;
     }
 

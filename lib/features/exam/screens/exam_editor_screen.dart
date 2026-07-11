@@ -613,8 +613,10 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     }
 
     final authTier =
-        ref.read(authProvider).currentSchool?.subscriptionTier ?? _subscriptionTier;
-    if (authTier == 'free') {
+        ref.read(authProvider).currentSchool?.subscriptionTier.toLowerCase() ?? _subscriptionTier;
+    final config = ref.read(configServiceProvider);
+    final allowedTiers = config.examGenerationAllowedTiers;
+    if (!allowedTiers.contains(authTier)) {
       await _showUpgradeRequiredDialog();
       return;
     }
@@ -3031,7 +3033,7 @@ class _PreviewPanel extends StatelessWidget {
 
   String _buildUnlockLabel() {
     if (!isOnline) return 'Unlock Offline';
-    if (subscriptionTier == 'elite') return 'Unlock \u2014 Unlimited previews';
+    if (subscriptionTier.toLowerCase() == 'elite') return 'Unlock \u2014 Unlimited previews';
     if (remainingDailyPreviews > 0) {
       return 'Unlock \u2014 $remainingDailyPreviews previews left';
     }

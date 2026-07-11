@@ -255,6 +255,10 @@ Widget _buildComparisonTable(
       textCell(plan.lessonStorage, backgroundColor: bgColor),
       // AI diagrams
       iconCell(plan.aiDiagrams, backgroundColor: bgColor),
+      // Exam generation
+      iconCell(plan.examGeneration, backgroundColor: bgColor),
+      // Bulk PDF export
+      iconCell(plan.bulkPdfExport, backgroundColor: bgColor),
     ];
 
     // Action row: Choose Plan button for paid plans, "Unavailable" for free
@@ -384,6 +388,14 @@ Widget _buildComparisonTable(
               fontWeight: FontWeight.w600,
               color: cs.onSurface,
             )),
+            labelCell('Exam generation', style: textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: cs.onSurface,
+            )),
+            labelCell('Bulk PDF export', style: textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: cs.onSurface,
+            )),
             labelCell('', style: null), // empty cell for action row alignment
           ],
         ),
@@ -416,6 +428,9 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
   final prices = config.subscriptionPrices;
   final previewLimits = config.dailyPreviewLimits;
   final pdfLimits = config.pdfExportLimits;
+  final examGenTiers = config.examGenerationAllowedTiers;
+  final bulkPdfTiers = config.bulkPdfExportAllowedTiers;
+  final aiDiagramsTiers = config.aiDiagramsAllowedTiers;
 
   const fallbackTeacherSeats = <String, dynamic>{
     'free': 5, 'basic': 10, 'standard': 20, 'elite': 100,
@@ -442,7 +457,9 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
       watermark: true,
       teacherSeats: _tierLimitText(teacherSeatLimits['free'], fallback: 5),
       lessonStorage: _tierLimitText(lessonStorageLimits['free'], fallback: 10),
-      aiDiagrams: false,
+      aiDiagrams: aiDiagramsTiers.contains('free'),
+      examGeneration: examGenTiers.contains('free'),
+      bulkPdfExport: bulkPdfTiers.contains('free'),
     ),
     _TierComparisonRow(
       tier: 'basic',
@@ -454,7 +471,9 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
       watermark: false,
       teacherSeats: _tierLimitText(teacherSeatLimits['basic'], fallback: 10),
       lessonStorage: _tierLimitText(lessonStorageLimits['basic'], fallback: 20),
-      aiDiagrams: false,
+      aiDiagrams: aiDiagramsTiers.contains('basic'),
+      examGeneration: examGenTiers.contains('basic'),
+      bulkPdfExport: bulkPdfTiers.contains('basic'),
     ),
     _TierComparisonRow(
       tier: 'standard',
@@ -466,7 +485,9 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
       watermark: false,
       teacherSeats: _tierLimitText(teacherSeatLimits['standard'], fallback: 20),
       lessonStorage: _tierLimitText(lessonStorageLimits['standard'], fallback: 50),
-      aiDiagrams: false,
+      aiDiagrams: aiDiagramsTiers.contains('standard'),
+      examGeneration: examGenTiers.contains('standard'),
+      bulkPdfExport: bulkPdfTiers.contains('standard'),
     ),
     _TierComparisonRow(
       tier: 'elite',
@@ -478,7 +499,9 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
       watermark: false,
       teacherSeats: _tierLimitText(teacherSeatLimits['elite'], fallback: 100),
       lessonStorage: _tierLimitText(lessonStorageLimits['elite'], fallback: -1),
-      aiDiagrams: true,
+      aiDiagrams: aiDiagramsTiers.contains('elite'),
+      examGeneration: examGenTiers.contains('elite'),
+      bulkPdfExport: bulkPdfTiers.contains('elite'),
     ),
   ];
 }
@@ -1200,6 +1223,8 @@ class _TierComparisonRow {
   final String teacherSeats;
   final String lessonStorage;
   final bool aiDiagrams;
+  final bool examGeneration;
+  final bool bulkPdfExport;
 
   String get dailyPreviews => previewLimit;
 
@@ -1214,5 +1239,7 @@ class _TierComparisonRow {
     required this.teacherSeats,
     required this.lessonStorage,
     required this.aiDiagrams,
+    required this.examGeneration,
+    required this.bulkPdfExport,
   });
 }

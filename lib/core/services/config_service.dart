@@ -88,6 +88,25 @@ class ConfigService {
     }
   }
 
+  /// Parses a JSON list from the cached string value for [key].
+  /// All string elements are lowercased for consistent tier comparison.
+  /// Returns an empty list on failure.
+  List<String> getJsonList(String key) {
+    final raw = _cache[key];
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final decoded = json.decode(raw);
+      if (decoded is List) {
+        return decoded
+            .map((e) => e.toString().toLowerCase())
+            .toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Typed getters for known config keys
   // ---------------------------------------------------------------------------
@@ -109,6 +128,25 @@ class ConfigService {
   /// Lesson/exam storage limits per tier: { "free": 10, "basic": 20, "standard": 50, "elite": -1 }
   Map<String, dynamic> get lessonStorageLimits =>
       getJsonMap('lesson_storage_limits');
+
+  /// Allowed tiers for AI diagrams feature: e.g. ["elite"]
+  List<String> get aiDiagramsAllowedTiers =>
+      getJsonList('ai_diagrams_allowed_tiers');
+
+  /// Allowed tiers for exam generation feature: e.g. ["basic", "standard", "elite"]
+  List<String> get examGenerationAllowedTiers =>
+      getJsonList('exam_generation_allowed_tiers');
+
+  /// Allowed tiers for bulk PDF export feature: e.g. ["standard", "elite"]
+  List<String> get bulkPdfExportAllowedTiers =>
+      getJsonList('bulk_pdf_export_allowed_tiers');
+
+  /// Allowed tiers for sync health tab: e.g. ["elite"]
+  List<String> get syncHealthAllowedTiers {
+    final tiers = getJsonList('sync_health_allowed_tiers');
+    if (tiers.isEmpty) return ['elite'];
+    return tiers;
+  }
 
   bool get featureVaultPublishing =>
       getBool('feature_vault_publishing', defaultValue: true);

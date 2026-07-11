@@ -550,7 +550,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     }
 
     final authTier =
-        ref.read(authProvider).currentSchool?.subscriptionTier ?? _subscriptionTier;
+        (ref.read(authProvider).currentSchool?.subscriptionTier ?? _subscriptionTier).toLowerCase();
     if (authTier == 'free') {
       await _showUpgradeRequiredDialog();
       return;
@@ -644,7 +644,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
 
       // ── Generate diagrams (Elite only) ──────────────────────────
       List<Map<String, dynamic>> generatedDiagrams = [];
-      if (_includeDiagrams && _subscriptionTier == 'elite') {
+      if (_includeDiagrams && _subscriptionTier.toLowerCase() == 'elite') {
         final diagramsRaw = parsedRaw['diagrams'] as List<dynamic>?;
         if (diagramsRaw != null && diagramsRaw.isNotEmpty) {
           final requests = diagramsRaw
@@ -713,7 +713,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   }
 
   Future<void> _handleRegenerateDiagram(int diagramIndex) async {
-    final currentTier = ref.read(authProvider).currentSchool?.subscriptionTier ?? _subscriptionTier;
+    final currentTier = (ref.read(authProvider).currentSchool?.subscriptionTier ?? _subscriptionTier).toLowerCase();
     if (currentTier != 'elite') {
       if (mounted) {
         showErrorToast(context: context, message: 'Diagram generation requires Elite subscription');
@@ -2416,7 +2416,7 @@ class _ConfigColumn extends StatelessWidget {
                 onChanged: onAssessmentFormatChanged,
               ),
               // ── Include Diagrams (Elite only) ────────────────
-              if (subscriptionTier == 'elite') ...[
+              if (subscriptionTier.toLowerCase() == 'elite') ...[
                 const SizedBox(height: 8),
                 CheckboxListTile(
                   dense: true,
@@ -3330,7 +3330,7 @@ class _PreviewColumn extends StatelessWidget {
 
   String _buildUnlockLabel() {
     if (!isOnline) return 'Unlock Offline';
-    if (subscriptionTier == 'elite') return 'Unlock \u2014 Unlimited previews';
+    if (subscriptionTier.toLowerCase() == 'elite') return 'Unlock \u2014 Unlimited previews';
     if (remainingDailyPreviews > 0) {
       return 'Unlock \u2014 $remainingDailyPreviews previews left';
     }

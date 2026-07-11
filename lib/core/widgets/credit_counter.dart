@@ -269,7 +269,7 @@ class _CreditDetailsDialog extends StatelessWidget {
               Flexible(
                 child: Chip(
                   label: Text(
-                    schoolTier == 'free'
+                    schoolTier.toLowerCase() == 'free'
                         ? 'Free Plan'
                         : '${schoolTier[0].toUpperCase()}${schoolTier.substring(1)} Plan',
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(

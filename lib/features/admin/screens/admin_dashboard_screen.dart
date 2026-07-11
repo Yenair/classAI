@@ -134,7 +134,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     if (isWide)
                       _buildTopAppBar(cs, textTheme, authData, themeMode),
 
-                    if (authData.currentSchool?.subscriptionTier == 'free')
+                    if (authData.currentSchool?.subscriptionTier.toLowerCase() == 'free')
                       _FreePlanBanner(
                         cs: cs,
                         theme: Theme.of(context),
@@ -2590,7 +2590,7 @@ class _PendingTeachersTabState extends ConsumerState<_PendingTeachersTab> {
 // Sync Health Tab
 // ---------------------------------------------------------------------------
 
-class _SyncHealthTab extends StatelessWidget {
+class _SyncHealthTab extends ConsumerWidget {
   final List<TeacherAdminData> teachers;
   final AdminDashboardData dashboardData;
   final bool isWide;
@@ -2602,9 +2602,19 @@ class _SyncHealthTab extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final authData = ref.read(authProvider);
+    final config = ref.read(configServiceProvider);
+    final schoolTier =
+        authData.currentSchool?.subscriptionTier.toLowerCase() ?? 'free';
+    final allowedTiers = config.syncHealthAllowedTiers;
+
+    // Fail closed: show placeholder for non-allowed tiers
+    if (!allowedTiers.contains(schoolTier)) {
+      return _buildUpgradePlaceholder(context, cs, textTheme, ref);
+    }
 
     if (teachers.isEmpty) {
       return const Center(child: Text('No teacher data available.'));
@@ -2630,6 +2640,112 @@ class _SyncHealthTab extends StatelessWidget {
               redCount, grayCount, syncPercent, totalTeachers)
           : _buildNarrowLayout(context, cs, textTheme, greenCount, yellowCount,
               redCount, grayCount, syncPercent, totalTeachers),
+    );
+  }
+
+  Widget _buildUpgradePlaceholder(
+    BuildContext context,
+    ColorScheme cs,
+    TextTheme textTheme,
+    WidgetRef ref,
+  ) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.sync_lock_rounded,
+                    size: 48, color: cs.primary.withValues(alpha: 0.7)),
+                const SizedBox(height: 16),
+                Text(
+                  'Sync Health',
+                  style: textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Upgrade to Elite to access real-time sync monitoring, '
+                  'teacher device tracking, and conflict detection.',
+                  textAlign: TextAlign.center,
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // Benefit list
+                _buildBenefitItem(
+                  Icons.sync_rounded,
+                  'Real-time staff sync status',
+                  cs,
+                  textTheme,
+                ),
+                const SizedBox(height: 10),
+                _buildBenefitItem(
+                  Icons.devices_rounded,
+                  'Multi-device tracking per teacher',
+                  cs,
+                  textTheme,
+                ),
+                const SizedBox(height: 10),
+                _buildBenefitItem(
+                  Icons.warning_amber_rounded,
+                  'Conflict & warning detection',
+                  cs,
+                  textTheme,
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: FilledButton.icon(
+                    onPressed: () => context.push('/payment'),
+                    icon: const Icon(Icons.workspace_premium_rounded),
+                    label: const Text('Upgrade to Elite'),
+                    style: FilledButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBenefitItem(
+    IconData icon,
+    String text,
+    ColorScheme cs,
+    TextTheme textTheme,
+  ) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: cs.primary),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Text(
+            text,
+            style: textTheme.bodyMedium,
+          ),
+        ),
+      ],
     );
   }
 

@@ -53,7 +53,7 @@ class PdfService {
     }
 
     // Watermark required if tier is Free, OR if subscription expired
-    final tier = school.subscriptionTier;
+    final tier = school.subscriptionTier.toLowerCase();
     final expired = school.expiryDate != null &&
         school.expiryDate!.isBefore(DateTime.now());
     _cachedWatermarkRequired = tier == 'free' || expired;

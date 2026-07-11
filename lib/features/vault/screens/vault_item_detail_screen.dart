@@ -371,7 +371,8 @@ class _TierBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final (Color bgColor, Color fgColor, String label) = switch (tier) {
+    final normalizedTier = tier.toLowerCase();
+    final (Color bgColor, Color fgColor, String label) = switch (normalizedTier) {
       'free' => (cs.surfaceContainerHighest, cs.onSurfaceVariant, 'Free'),
       'basic' => (cs.primaryContainer, cs.onPrimaryContainer, 'Basic'),
       'standard' => (
