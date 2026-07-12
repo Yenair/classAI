@@ -31,19 +31,25 @@ serve(async (req) => {
     const authHeader = req.headers.get("Authorization") ?? "";
     const token = authHeader.replace(/^Bearer\s+/i, "").trim();
     let jwtClaims: Record<string, unknown> | null = null;
+    let presentedJwt = false;
 
-    if (token && JWT_SECRET) {
-      try {
-        jwtClaims = await validateTokenVersion(
-          token,
-          Deno.env.get("SUPABASE_URL")!,
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-          JWT_SECRET,
-        );
-      } catch {
-        // Invalid/expired JWT — still allow the unauthenticated fallback
-        // with rate limiting below.
-        jwtClaims = null;
+    if (token) {
+      presentedJwt = true;
+      if (JWT_SECRET) {
+        try {
+          jwtClaims = await validateTokenVersion(
+            token,
+            Deno.env.get("SUPABASE_URL")!,
+            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+            JWT_SECRET,
+          );
+        } catch {
+          // A token was presented but it's invalid/expired — reject outright.
+          return new Response(
+            JSON.stringify({ error: "Invalid or expired authentication token", code: "invalid_jwt" }),
+            { status: 401, headers: { "Content-Type": "application/json" } }
+          );
+        }
       }
     }
 
@@ -80,6 +86,12 @@ serve(async (req) => {
           { status: 403, headers: { "Content-Type": "application/json" } }
         );
       }
+    } else if (presentedJwt) {
+      // Token was presented but JWT_SECRET is not configured — misconfiguration.
+      return new Response(
+        JSON.stringify({ error: "Server misconfiguration: JWT_SECRET not set" }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
     }
 
     // ── Rate limiting (cooldown) ──────────────────────────────────────────
