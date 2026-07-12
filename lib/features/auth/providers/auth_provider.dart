@@ -272,8 +272,34 @@ class AuthNotifier extends Notifier<AuthStateData> {
     return false;
   }
 
+  /// Error codes returned by the server that indicate the current session
+  /// has been invalidated (token version mismatch, expired JWT, teacher deleted).
+  static const _sessionMismatchCodes = <String>{
+    'token_version_mismatch',
+    'invalid_jwt',
+    'teacher_not_found',
+  };
+
+  /// Checks whether [error] indicates a server-side session invalidation
+  /// (e.g. token_version_mismatch) that should force a logout.
+  ///
+  /// Prefers the structured `code` field from `FunctionException.details`
+  /// over brittle string matching on error messages.
   bool _isSessionMismatchError(Object error) {
-    bool matchesText(String text) {
+    // ── Helper: extract the server "code" from a FunctionException ────────
+    String? _extractCode(supabase_pkg.FunctionException ex) {
+      final details = ex.details;
+      if (details is Map<String, dynamic>) {
+        final code = details['code'];
+        if (code is String && code.isNotEmpty) return code;
+      }
+      return null;
+    }
+
+    // ── Helper: fallback text-based check for known session mismatch
+    //    keywords. This catches edge cases where the error is not wrapped
+    //    in a FunctionException (e.g. raw DioException on the client side).
+    bool _matchesText(String text) {
       final normalized = text.toLowerCase();
       return normalized.contains('token_version_mismatch') ||
           normalized.contains('token version mismatch') ||
@@ -282,44 +308,41 @@ class AuthNotifier extends Notifier<AuthStateData> {
           normalized.contains('unauthorized');
     }
 
+    // ── Check AuthException (wraps server errors from login/signup) ───────
     if (error is AuthException) {
-      if (error.code != AuthErrorCode.invalidCredentials) {
-        return false;
-      }
-      if (matchesText(error.message)) {
-        return true;
-      }
+      // Only proceed if the code suggests a session/credentials issue.
+      if (error.code != AuthErrorCode.invalidCredentials) return false;
+
       final original = error.originalError;
       if (original is supabase_pkg.FunctionException) {
-        // Only check the details content for session-related keywords.
-        // Do NOT blindly treat every 401 as session mismatch — the login
-        // edge function also returns 401 for invalid credentials, and that
-        // must surface as an error message, not a force-logout.
-        final details = original.details;
-        if (details is Map<String, dynamic>) {
-          return matchesText(details.toString());
-        }
-        if (details is String) {
-          return matchesText(details);
+        final serverCode = _extractCode(original);
+        if (serverCode != null) {
+          return _sessionMismatchCodes.contains(serverCode);
         }
       }
-      return false;
+
+      // Fallback: check the message text.
+      return _matchesText(error.message);
     }
 
+    // ── Raw FunctionException (sync calls etc.) ───────────────────────────
     if (error is supabase_pkg.FunctionException) {
-      // Do NOT blindly treat every 401 as session mismatch — the login
-      // edge function also returns 401 for invalid credentials.
+      final serverCode = _extractCode(error);
+      if (serverCode != null) {
+        return _sessionMismatchCodes.contains(serverCode);
+      }
       final details = error.details;
       if (details is Map<String, dynamic>) {
-        return matchesText(details.toString());
+        return _matchesText(details.toString());
       }
       if (details is String) {
-        return matchesText(details);
+        return _matchesText(details);
       }
       return false;
     }
 
-    return matchesText(error.toString());
+    // ── Fallback: check error.toString() for keywords ─────────────────────
+    return _matchesText(error.toString());
   }
 
   Future<bool> _logoutIfSessionMismatch(Object error) async {

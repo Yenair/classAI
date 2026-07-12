@@ -30,8 +30,9 @@ serve(async (req) => {
       );
     }
 
+    let jwtClaims: Record<string, unknown>;
     try {
-      await validateTokenVersion(
+      jwtClaims = await validateTokenVersion(
         classaiJwt,
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -42,6 +43,35 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error, code }),
         { status, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // ── 1b. Check email_verified ───────────────────────────────────────────
+    const { data: teacherRec, error: teacherRecError } = await supabase
+      .from("teachers")
+      .select("id, email_verified")
+      .eq("id", jwtClaims.teacher_id as string)
+      .maybeSingle();
+
+    if (teacherRecError || !teacherRec) {
+      return new Response(
+        JSON.stringify({ error: "Teacher record not found", code: "teacher_not_found" }),
+        { status: 404, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!teacherRec.email_verified) {
+      return new Response(
+        JSON.stringify({
+          error: "Email not verified. Please verify your email before syncing.",
+          code: "email_not_verified",
+        }),
+        { status: 403, headers: { "Content-Type": "application/json" } }
       );
     }
 
@@ -81,11 +111,6 @@ serve(async (req) => {
         );
       }
     }
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
 
     // Query realtime_events for events after sinceEventId, ordered by id ASC
     const { data, error } = await supabase

@@ -1,9 +1,29 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import bcrypt from "npm:bcryptjs";
+import { create, getNumericDate } from "https://deno.land/x/djwt@v2.8/mod.ts";
+
+/** Convert a plain string secret into a CryptoKey for HS256 JWT signing. */
+function getHmacKey(secret: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+}
 
 serve(async (req) => {
   try {
+    const JWT_SECRET = Deno.env.get("JWT_SECRET");
+    if (!JWT_SECRET) {
+      return new Response(
+        JSON.stringify({ error: "Server misconfiguration: JWT_SECRET not set" }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
     let { email, recoveryCode, newPassword } = await req.json();
     email = email.toLowerCase();
 
@@ -119,14 +139,32 @@ serve(async (req) => {
     const t = updatedTeacher;
     const school = t?.schools as Record<string, unknown> | undefined;
 
+    // ── Sign JWT so the client can proceed without re-login ────────────────
+    const cryptoKey = await getHmacKey(JWT_SECRET);
+    const tokenVersion = (t.token_version as number) ?? 1;
+    const jwt = await create(
+      { alg: "HS256", typ: "JWT" },
+      {
+        sub: t.id,
+        teacher_id: t.id,
+        school_id: t.school_id,
+        is_admin: t.role === "admin",
+        token_version: tokenVersion,
+        exp: getNumericDate(60 * 60 * 24), // 24 hours
+      },
+      cryptoKey
+    );
+
     return new Response(
       JSON.stringify({
+        jwt,
         teacher: {
           id: t.id,
           email: t.email,
           name: t.teacher_name,
           role: t.role,
           school_id: t.school_id,
+          email_verified: t.email_verified ?? false,
         },
         school: {
           id: school?.id,
@@ -134,6 +172,7 @@ serve(async (req) => {
           subscription_tier: school?.subscription_tier,
         },
         wrapped_school_key: school?.school_master_key_wrapped ?? null,
+        email_verified: t.email_verified ?? false,
       }),
       { headers: { "Content-Type": "application/json" } }
     );

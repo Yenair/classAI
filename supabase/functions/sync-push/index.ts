@@ -582,6 +582,35 @@ serve(async (req) => {
       );
     }
 
+    // ── 1b. Check email_verified ───────────────────────────────────────────
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    const { data: teacherRec, error: teacherRecError } = await supabase
+      .from("teachers")
+      .select("id, email_verified")
+      .eq("id", jwtClaims.teacher_id as string)
+      .maybeSingle();
+
+    if (teacherRecError || !teacherRec) {
+      return new Response(
+        JSON.stringify({ error: "Teacher record not found", code: "teacher_not_found" }),
+        { status: 404, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!teacherRec.email_verified) {
+      return new Response(
+        JSON.stringify({
+          error: "Email not verified. Please verify your email before syncing.",
+          code: "email_not_verified",
+        }),
+        { status: 403, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
     // ── 2. Process sync-push request ───────────────────────────────────────
     const { changes } = await req.json();
 
@@ -592,10 +621,8 @@ serve(async (req) => {
       );
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    const isAdmin = jwtClaims.is_admin === true;
+    const adminTables = new Set(["teachers", "schools", "subjects", "audit_logs", "payment_events"]);
 
     let processed = 0;
     const results: Record<string, unknown>[] = [];
@@ -614,6 +641,24 @@ serve(async (req) => {
       }
 
       const op = (operation as string).toUpperCase();
+
+      // ══════════════════════════════════════════════════════════════════
+      // Fix 9: Service-role authorization guard
+      // ══════════════════════════════════════════════════════════════════
+      // Only admins may push changes to admin-level tables.
+      if (adminTables.has(table) && !isAdmin) {
+        console.warn(
+          `sync-push: non-admin teacher ${jwtClaims.teacher_id} attempted ${op} on admin table "${table}"`,
+        );
+        results.push({
+          local_id: 0,
+          server_id: null,
+          status: "error",
+          retryable: false,
+          error: "Admin access required for this table",
+        });
+        continue;
+      }
 
       // DIAG: Log the raw rowData keys BEFORE decompression
       console.log(`[SYNC-PUSH-DIAG] Entry ${idx}: table=${table}, op=${op}, rawKeys=${Object.keys(rowData as Record<string, unknown>).join(",")}`);

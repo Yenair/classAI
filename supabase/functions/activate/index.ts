@@ -1,8 +1,27 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import bcrypt from "npm:bcryptjs";
+import { create, getNumericDate } from "https://deno.land/x/djwt@v2.8/mod.ts";
+
+/** Convert a plain string secret into a CryptoKey for HS256 JWT signing. */
+function getHmacKey(secret: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+}
 
 serve(async (req) => {
+  const JWT_SECRET = Deno.env.get("JWT_SECRET");
+  if (!JWT_SECRET) {
+    return new Response(
+      JSON.stringify({ error: "Server misconfiguration: JWT_SECRET not set" }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
+  }
   try {
     const {
       activationCode,
@@ -191,7 +210,7 @@ serve(async (req) => {
       .update({ used_at: new Date().toISOString() })
       .eq("id", pending.id);
 
-    // ── 6. Register device ─────────────────────────────────────────────────
+    // ── 6. Register device and set current_device_id ────────────────────────
     if (deviceId) {
       await supabase.from("teacher_devices").upsert({
         teacher_id: teacherRecord.id,
@@ -199,17 +218,40 @@ serve(async (req) => {
         last_active: new Date().toISOString(),
         is_active: true,
       });
+      // Initialize current_device_id on the teacher record (F17 gap fix)
+      await supabase
+        .from("teachers")
+        .update({ current_device_id: deviceId })
+        .eq("id", teacherRecord.id);
     }
 
-    // ── 7. Return AuthResult-compatible payload ────────────────────────────
+    // ── 7. Sign JWT for the newly created teacher ──────────────────────────
+    const cryptoKey = await getHmacKey(JWT_SECRET);
+    const tokenVersion = (teacherRecord.token_version as number) ?? 1;
+    const jwt = await create(
+      { alg: "HS256", typ: "JWT" },
+      {
+        sub: teacherRecord.id,
+        teacher_id: teacherRecord.id,
+        school_id: teacherRecord.school_id,
+        is_admin: teacherRecord.role === "admin",
+        token_version: tokenVersion,
+        exp: getNumericDate(60 * 60 * 24), // 24 hours
+      },
+      cryptoKey
+    );
+
+    // ── 8. Return AuthResult-compatible payload with jwt ──────────────────
     return new Response(
       JSON.stringify({
+        jwt,
         teacher: {
           id: teacherRecord.id,
           email: teacherRecord.email,
           name: teacherRecord.teacher_name,
           role: teacherRecord.role,
           school_id: teacherRecord.school_id,
+          email_verified: false,
         },
         school: {
           id: schoolRecord.id,
@@ -220,6 +262,7 @@ serve(async (req) => {
         password_hash_version: 1,
         offline_credits: 3,
         last_credit_refill_server_time: new Date().toISOString(),
+        email_verified: false,
       }),
       { headers: { "Content-Type": "application/json" } }
     );

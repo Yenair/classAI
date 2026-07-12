@@ -135,14 +135,6 @@ Future<void> _seedBase(
   );
 }
 
-/// Extract the local_id from a push batch, handling compressed key maps.
-int _extractLocalId(SyncPushBatch batch) {
-  return (batch.record['local_id'] ??
-          batch.record['lid'] ??
-          batch.record['localId'] ??
-          0)
-      as int;
-}
 
 /// Seed three sync queue entries for topological order test.
 Future<void> _seedTopologicalQueue(AppDatabase db) async {

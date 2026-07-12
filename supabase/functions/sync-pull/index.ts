@@ -21,8 +21,9 @@ serve(async (req) => {
       );
     }
 
+    let jwtClaims: Record<string, unknown>;
     try {
-      await validateTokenVersion(
+      jwtClaims = await validateTokenVersion(
         classaiJwt,
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -36,6 +37,35 @@ serve(async (req) => {
       );
     }
 
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // ── 1b. Check email_verified ───────────────────────────────────────────
+    const { data: teacherRec, error: teacherRecError } = await supabase
+      .from("teachers")
+      .select("id, email_verified")
+      .eq("id", jwtClaims.teacher_id as string)
+      .maybeSingle();
+
+    if (teacherRecError || !teacherRec) {
+      return new Response(
+        JSON.stringify({ error: "Teacher record not found", code: "teacher_not_found" }),
+        { status: 404, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!teacherRec.email_verified) {
+      return new Response(
+        JSON.stringify({
+          error: "Email not verified. Please verify your email before syncing.",
+          code: "email_not_verified",
+        }),
+        { status: 403, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
     // ── 2. Process sync-pull request ───────────────────────────────────────
     const { lastSyncTimestamp, tables, school_id } = await req.json();
 
@@ -45,11 +75,6 @@ serve(async (req) => {
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
 
     const PAGE_SIZE = 50;
     const changes: { table: string; row: Record<string, unknown> }[] = [];

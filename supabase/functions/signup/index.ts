@@ -211,6 +211,13 @@ serve(async (req) => {
 
     // ── Generate JWT ──────────────────────────────────────────────────────
     const cryptoKey = await getHmacKey(JWT_SECRET);
+    const tokenVersion: number = (teacher.token_version as number) ?? 1;
+    if ((teacher.token_version as number) === null || (teacher.token_version as number) === undefined) {
+      console.warn(
+        "[signup] teacher.token_version was null/undefined; defaulting to 1 for teacher",
+        teacher.id
+      );
+    }
     const jwt = await create(
       { alg: "HS256", typ: "JWT" },
       {
@@ -218,6 +225,7 @@ serve(async (req) => {
         teacher_id: teacher.id,
         school_id: teacher.school_id,
         is_admin: true,
+        token_version: tokenVersion,
         exp: getNumericDate(60 * 60 * 24), // 24 hours
       },
       cryptoKey

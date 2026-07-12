@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
@@ -184,10 +183,6 @@ class SupabaseAuthService implements AuthService {
     // Uses the custom JWT auth Edge Function, not Supabase Auth's
     // built-in provider. Passwords are validated server-side with bcrypt+pepper.
     final client = supabase_pkg.Supabase.instance.client;
-    final url = '${AppConstants.supabaseUrl}/functions/v1/login';
-    debugPrint('[DEBUG] login() — Full Edge Function URL: $url');
-    debugPrint(
-        '[DEBUG] login() — Request body: email=$email, device_id=$deviceId');
     try {
       final response = await client.functions.invoke(
         'login',
@@ -198,14 +193,8 @@ class SupabaseAuthService implements AuthService {
         },
       );
 
-      // Debug: print response status and data
-      debugPrint('[DEBUG] login() — Response status: ${response.status}');
-      debugPrint('[DEBUG] login() — Response data: ${response.data}');
-
       final data = response.data as Map<String, dynamic>?;
       if (data == null || data['error'] != null) {
-        debugPrint(
-            '[DEBUG] login() — Error in response data: ${data?['error']}');
         throw AuthException(
           code: AuthErrorCode.networkError,
           message: (data?['error'] as String?) ??
@@ -223,9 +212,6 @@ class SupabaseAuthService implements AuthService {
     } on AuthException {
       rethrow;
     } on supabase_pkg.FunctionException catch (e) {
-      debugPrint(
-          '[DEBUG] login() — FunctionException caught: status=${e.status}, details=${e.details}');
-
       // Try to parse the response body and extract the error field
       final serverError = _extractErrorFromResponse(e.details);
 
@@ -245,9 +231,6 @@ class SupabaseAuthService implements AuthService {
         originalError: e,
       );
     } catch (e) {
-      debugPrint('[DEBUG] login() — RAW EXCEPTION TYPE: ${e.runtimeType}');
-      debugPrint('[DEBUG] login() — RAW EXCEPTION MESSAGE: $e');
-      debugPrint('[DEBUG] login() — EXCEPTION CAUGHT: ${e.runtimeType}: $e');
       // Detect connectivity-related exceptions and return a user-friendly message
       if (_isConnectivityException(e)) {
         throw AuthException(
@@ -552,10 +535,6 @@ class SupabaseAuthService implements AuthService {
     adminEmail = adminEmail.toLowerCase();
 
     final client = supabase_pkg.Supabase.instance.client;
-    final url = '${AppConstants.supabaseUrl}/functions/v1/signup';
-    debugPrint('[DEBUG] signup() — Full Edge Function URL: $url');
-    debugPrint(
-        '[DEBUG] signup() — Request body: school_name=$schoolName, admin_email=$adminEmail');
     try {
       final response = await client.functions.invoke(
         'signup',
@@ -567,13 +546,9 @@ class SupabaseAuthService implements AuthService {
         },
       );
 
-      debugPrint('[DEBUG] signup() — Response status: ${response.status}');
-      debugPrint('[DEBUG] signup() — Response data: ${response.data}');
-
       final data = response.data as Map<String, dynamic>;
       final errorResponse = data['error'] as String?;
       if (errorResponse != null) {
-        debugPrint('[DEBUG] signup() — Error in response data: $errorResponse');
         throw AuthException(
           code: AuthErrorCode.validationError,
           message: errorResponse,
@@ -590,8 +565,6 @@ class SupabaseAuthService implements AuthService {
     } on AuthException {
       rethrow;
     } on supabase_pkg.FunctionException catch (e) {
-      debugPrint(
-          '[DEBUG] signup() — FunctionException caught: status=${e.status}, details=${e.details}');
       final serverError =
           (e.details is Map && (e.details as Map)['error'] != null)
               ? (e.details as Map)['error'] as String
@@ -602,9 +575,6 @@ class SupabaseAuthService implements AuthService {
         originalError: e,
       );
     } catch (e) {
-      debugPrint('[DEBUG] signup() — RAW EXCEPTION TYPE: ${e.runtimeType}');
-      debugPrint('[DEBUG] signup() — RAW EXCEPTION MESSAGE: $e');
-      debugPrint('[DEBUG] signup() — EXCEPTION CAUGHT: ${e.runtimeType}: $e');
       // Only network-level errors reach here
       await Sentry.captureException(e);
       // Detect connectivity-related exceptions and return a user-friendly message

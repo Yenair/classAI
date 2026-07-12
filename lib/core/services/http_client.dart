@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import 'package:classai/core/constants/app_constants.dart';
 
@@ -54,7 +55,19 @@ Dio createApiClient({
       client.badCertificateCallback =
           (X509Certificate cert, String host, int port) {
         // Pass-through when pinning is not yet configured
-        if (allowedFingerprints.isEmpty) return true;
+        if (allowedFingerprints.isEmpty) {
+          if (kReleaseMode) {
+            // ignore: avoid_print
+            print(
+              'WARNING: Certificate pinning is DISABLED because '
+              'allowedFingerprints is empty. '
+              'This is a SECURITY RISK in production. '
+              'Run the openssl command from the comment at the top of this file '
+              'to obtain fingerprints and add them to the list.'
+            );
+          }
+          return true;
+        }
 
         // Hash the PEM representation of the server certificate and compare
         // against the allowed fingerprint list.
