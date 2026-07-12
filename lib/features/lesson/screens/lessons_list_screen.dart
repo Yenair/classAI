@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:drift/drift.dart' hide Column;
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/core/widgets/conflict_banner.dart';
 import 'package:classai/core/widgets/credit_counter.dart';
 import 'package:classai/core/widgets/sync_indicator.dart';
@@ -15,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
 
 /// Provider that fetches all lessons from the database.
 final lessonsListProvider = FutureProvider<List<Lesson>>((ref) async {
@@ -729,6 +732,49 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
     );
   }
 
+  /// Parse diagram URLs from lesson.content and attempt to delete each one
+  /// via the `delete-diagram` Edge Function as a best-effort optimization.
+  ///
+  /// This runs BEFORE the local soft-delete so the lesson content is intact.
+  /// Failure is logged but never blocks lesson deletion — section 2's
+  /// sync-push cleanup is the authoritative path.
+  Future<void> _cleanupDiagramsIfOnline(Lesson lesson) async {
+    try {
+      if (!await PlatformHelper.isOnline()) return;
+
+      final contentRaw = lesson.content;
+      if (contentRaw.isEmpty) return;
+
+      final parsed = json.decode(contentRaw) as Map<String, dynamic>?;
+      if (parsed == null) return;
+      final diagrams = parsed['diagrams'] as List<dynamic>?;
+      if (diagrams == null || diagrams.isEmpty) return;
+
+      final jwt = ref.read(authServiceProvider).currentJwt;
+      if (jwt == null || jwt.isEmpty) return;
+
+      final client = supabase_pkg.Supabase.instance.client;
+
+      for (final entry in diagrams) {
+        if (entry is! Map<String, dynamic>) continue;
+        final url = entry['imageUrl'] as String?;
+        if (url == null || url.isEmpty) continue;
+
+        try {
+          await client.functions.invoke(
+            'delete-diagram',
+            headers: {'Authorization': 'Bearer $jwt'},
+            body: {'url': url},
+          );
+        } catch (_) {
+          // Best-effort only — sync-push will clean up via section 2.
+        }
+      }
+    } catch (_) {
+      // Entire cleanup is best-effort; never block deletion.
+    }
+  }
+
   Future<void> _confirmDeleteLesson(Lesson lesson) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -754,6 +800,9 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
 
     if (confirmed == true && mounted) {
       try {
+        // Best-effort diagram cleanup (online optimization only)
+        await _cleanupDiagramsIfOnline(lesson);
+
         final db = ref.read(databaseProvider);
         await db.lessonsDao.deleteLesson(lesson.id);
         await db.syncQueueDao.insertEntry(

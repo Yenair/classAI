@@ -1,5 +1,4 @@
 // lib/features/payment/screens/payment_screen.dart
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -621,12 +620,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       final pendingPayments = await db.paymentEventsDao.getUnconfirmed();
       if (pendingPayments.isEmpty || !mounted) return;
 
-      final dio = Dio(BaseOptions(
-        baseUrl: '',
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 30),
-      ));
-      final paymentService = PaymentService(db, dio);
+      final paymentService = PaymentService(db);
       final schoolId = school.serverId ?? school.localId.toString();
 
       for (final payment in pendingPayments) {
@@ -676,12 +670,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
     try {
       final db = ref.read(databaseProvider);
-      final dio = Dio(BaseOptions(
-        baseUrl: '',
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 30),
-      ));
-      final paymentService = PaymentService(db, dio);
+      final paymentService = PaymentService(db);
 
       final initResult = await paymentService.initializePayment(
         email: teacher.email,

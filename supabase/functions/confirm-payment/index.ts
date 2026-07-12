@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { validateTokenVersion } from "../_shared/validate_token.ts";
 
 const PAYSTACK_BASE = "https://api.paystack.co";
 const ALLOWED_TIERS = new Set(["basic", "standard", "elite"]);
@@ -72,16 +73,59 @@ serve(async (req) => {
       return jsonResponse({ error: "Method not allowed" }, 405);
     }
 
-    const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
-    if (!paystackSecretKey) {
-      return jsonResponse({ error: "Paystack secret key not configured" }, 500);
+    // ── 1. Extract and verify JWT ──────────────────────────────────
+    const authHeader = req.headers.get("authorization") ?? "";
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    if (!token) {
+      return jsonResponse({ error: "Missing Authorization header" }, 401);
     }
 
-    const { reference, plan, school_id, email } = await req.json();
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const jwtSecret = Deno.env.get("JWT_SECRET");
 
-    if (!reference || !plan || !school_id) {
+    if (!supabaseUrl || !serviceRoleKey || !jwtSecret) {
+      return jsonResponse({ error: "Server misconfiguration" }, 500);
+    }
+
+    let claims: Record<string, unknown>;
+    try {
+      claims = await validateTokenVersion(token, supabaseUrl, serviceRoleKey, jwtSecret);
+    } catch (err) {
+      const e = err as { error: string; code: string; status: number };
+      return jsonResponse({ error: e.error, code: e.code }, e.status ?? 401);
+    }
+
+    const teacherId = claims.teacher_id as string;
+    const jwtSchoolId = claims.school_id as string;
+    if (!teacherId || !jwtSchoolId) {
+      return jsonResponse({ error: "Invalid token: missing teacher_id or school_id" }, 401);
+    }
+
+    // ── 2. Verify admin role ───────────────────────────────────────
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+    const { data: teacher, error: teacherError } = await supabase
+      .from("teachers")
+      .select("role, school_id")
+      .eq("id", teacherId)
+      .maybeSingle();
+
+    if (teacherError || !teacher) {
+      return jsonResponse({ error: "Teacher not found" }, 404);
+    }
+
+    if (teacher.role !== "admin") {
+      return jsonResponse({ error: "Admin access required" }, 403);
+    }
+
+    // ── 3. Parse body — only reference and plan from body ──────────
+    const body = await req.json().catch(() => ({}));
+    const { reference, plan } = body;
+
+    if (!reference || !plan) {
       return jsonResponse(
-        { error: "Missing required fields: reference, plan, school_id" },
+        { error: "Missing required fields: reference, plan" },
         400,
       );
     }
@@ -92,6 +136,42 @@ serve(async (req) => {
         { error: "Invalid subscription tier. Use basic, standard, or elite." },
         400,
       );
+    }
+
+    // ── 4. IDEMPOTENCY CHECK: has this reference been finalized? ───
+    const { data: existingCode } = await supabase
+      .from("activation_codes")
+      .select("code, tier, duration_days, school_id, used")
+      .eq("reference", reference)
+      .maybeSingle();
+
+    if (existingCode) {
+      // If the existing row has a different school_id, reject
+      if (existingCode.school_id !== jwtSchoolId) {
+        return jsonResponse({ error: "Reference belongs to a different school" }, 403);
+      }
+
+      // Already processed — return existing result
+      const existingTier = existingCode.tier ?? tier;
+      // Calculate original expiry from duration_days
+      const now = new Date();
+      const expiryDate = new Date(
+        now.getTime() + (existingCode.duration_days ?? DEFAULT_DURATION_DAYS) * 24 * 60 * 60 * 1000,
+      );
+
+      return jsonResponse({
+        success: true,
+        already_processed: true,
+        activation_code: existingCode.code,
+        subscription_tier: existingTier,
+        expiry_date: expiryDate.toISOString(),
+      });
+    }
+
+    // ── 5. Paystack server-side verification ───────────────────────
+    const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
+    if (!paystackSecretKey) {
+      return jsonResponse({ error: "Paystack secret key not configured" }, 500);
     }
 
     const verifyResponse = await fetch(
@@ -106,9 +186,7 @@ serve(async (req) => {
 
     if (!verifyResponse.ok) {
       return jsonResponse(
-        {
-          error: `Paystack verification failed: ${verifyResponse.statusText}`,
-        },
+        { error: `Paystack verification failed: ${verifyResponse.statusText}` },
         502,
       );
     }
@@ -117,43 +195,12 @@ serve(async (req) => {
     const txStatus = verifyData?.data?.status;
     if (txStatus !== "success") {
       return jsonResponse(
-        {
-          error: `Payment not successful. Status: ${txStatus ?? "unknown"}`,
-        },
+        { error: `Payment not successful. Status: ${txStatus ?? "unknown"}` },
         402,
       );
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-
-    const { data: school, error: schoolError } = await supabase
-      .from("schools")
-      .select("id, school_name")
-      .eq("id", school_id)
-      .maybeSingle();
-
-    if (schoolError || !school) {
-      return jsonResponse({ error: "School not found" }, 404);
-    }
-
-    const { data: adminTeacher } = await supabase
-      .from("teachers")
-      .select("email")
-      .eq("school_id", school_id)
-      .eq("role", "admin")
-      .maybeSingle();
-
-    const adminEmail = typeof adminTeacher?.email === "string"
-      ? adminTeacher.email.toLowerCase()
-      : null;
-    const activationEmail =
-      typeof email === "string" && email.trim().length > 0
-        ? email.trim().toLowerCase()
-        : adminEmail;
-
+    // ── 6. MARK-FIRST: insert activation code with used: true immediately ──
     const now = new Date();
     const expiryDate = new Date(
       now.getTime() + DEFAULT_DURATION_DAYS * 24 * 60 * 60 * 1000,
@@ -169,10 +216,12 @@ serve(async (req) => {
         .from("activation_codes")
         .insert({
           code: activationCode,
-          school_id,
+          school_id: jwtSchoolId,
           tier,
           duration_days: DEFAULT_DURATION_DAYS,
-          used: false,
+          reference,
+          used: true,  // immediately marked used
+          redeemed_at: now.toISOString(),
         })
         .select("code, duration_days")
         .single();
@@ -198,6 +247,7 @@ serve(async (req) => {
       );
     }
 
+    // ── 7. Update school record ────────────────────────────────────
     const { error: updateError } = await supabase
       .from("schools")
       .update({
@@ -206,37 +256,38 @@ serve(async (req) => {
         activation_code: activationRow.code,
         updated_at: now.toISOString(),
       })
-      .eq("id", school_id);
+      .eq("id", jwtSchoolId);
 
     if (updateError) {
+      // Rollback: delete the just-inserted activation code
+      await supabase
+        .from("activation_codes")
+        .delete()
+        .eq("code", activationRow.code);
+
       return jsonResponse(
         { error: `Failed to update school: ${updateError.message}` },
         500,
       );
     }
 
-    const { error: markUsedError } = await supabase
-      .from("activation_codes")
-      .update({
-        used: true,
-        redeemed_at: now.toISOString(),
-      })
-      .eq("code", activationRow.code)
-      .eq("used", false);
+    // ── 8. Send activation email (best-effort) ─────────────────────
+    // Fetch admin email for notification
+    const { data: adminTeacher } = await supabase
+      .from("teachers")
+      .select("email")
+      .eq("school_id", jwtSchoolId)
+      .eq("role", "admin")
+      .maybeSingle();
 
-    if (markUsedError) {
-      return jsonResponse(
-        {
-          error: `Failed to finalize activation code: ${markUsedError.message}`,
-        },
-        500,
-      );
-    }
+    const adminEmail = typeof adminTeacher?.email === "string"
+      ? adminTeacher.email.toLowerCase()
+      : null;
 
-    if (activationEmail) {
+    if (adminEmail) {
       try {
         await sendActivationCodeEmail(
-          activationEmail,
+          adminEmail,
           activationRow.code,
           tier,
           expiryDate,
@@ -251,9 +302,6 @@ serve(async (req) => {
       activation_code: activationRow.code,
       subscription_tier: tier,
       expiry_date: expiryDate.toISOString(),
-      code: activationRow.code,
-      tier,
-      expiry: expiryDate.toISOString(),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

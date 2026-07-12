@@ -1,10 +1,7 @@
 // lib/core/services/payment_service.dart
-import 'package:dio/dio.dart';
-import 'package:uuid/uuid.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
 import 'package:drift/drift.dart';
 import '../database/database.dart';
-import '../constants/paystack_keys.dart';
 
 /// Result returned by [PaymentService.initializePayment].
 class PaymentInitResult {
@@ -29,35 +26,18 @@ class PaymentConfirmation {
 
 class PaymentService {
   final AppDatabase _db;
-  final Dio _dio;
-  final _uuid = const Uuid();
 
-  /// Paystack base URL.
-  static const String _baseUrl = 'https://api.paystack.co';
+  PaymentService(this._db);
 
-  /// Paystack secret key loaded from [paystack_keys.dart].
-  static const String _secretKey = paystackSecretKey;
-
-  PaymentService(this._db, this._dio);
-
-  // ---------------------------------------------------------------------------
-  // Headers
-  // ---------------------------------------------------------------------------
-
-  Options _getOptions() {
-    return Options(
-      headers: {
-        'Authorization': 'Bearer $_secretKey',
-        'Content-Type': 'application/json',
-      },
-    );
-  }
+  /// The Supabase client for invoking Edge Functions.
+  supabase_pkg.SupabaseClient get _client =>
+      supabase_pkg.Supabase.instance.client;
 
   // ---------------------------------------------------------------------------
   // Initialize payment
   // ---------------------------------------------------------------------------
 
-  /// Initialize a Paystack payment.
+  /// Initialize a Paystack payment via the [init-payment] Edge Function.
   /// Returns a [PaymentInitResult] with the authorization URL and transaction reference.
   Future<PaymentInitResult> initializePayment({
     required String email,
@@ -65,8 +45,19 @@ class PaymentService {
     required String plan,     // 'basic', 'standard', 'elite'
     required String schoolId,
   }) async {
-    final reference = _uuid.v4();
-    final amountKobo = amountNaira * 100; // Paystack expects amount in kobo
+    final response = await _client.functions.invoke(
+      'init-payment',
+      body: {
+        'email': email,
+        'amount': amountNaira,
+        'plan': plan,
+        'school_id': schoolId,
+      },
+    );
+
+    final data = response.data as Map<String, dynamic>;
+
+    final reference = data['reference'] as String;
 
     // Persist the pending transaction locally before opening checkout.
     await _db.paymentEventsDao.insert(
@@ -77,20 +68,8 @@ class PaymentService {
       createdAt: DateTime.now(),
     );
 
-    final response = await _dio.post(
-      '$_baseUrl/transaction/initialize',
-      data: {
-        'email': email,
-        'amount': amountKobo,
-        'reference': reference,
-        'currency': 'NGN',
-        'callback_url': 'classai://payment/complete',
-      },
-      options: _getOptions(),
-    );
-
     return PaymentInitResult(
-      checkoutUrl: response.data['data']['authorization_url'],
+      checkoutUrl: data['authorization_url'] as String,
       reference: reference,
     );
   }
@@ -99,15 +78,17 @@ class PaymentService {
   // Verify payment
   // ---------------------------------------------------------------------------
 
-  /// Verify a payment with Paystack.
+  /// Verify a payment via the [verify-payment] Edge Function.
   Future<bool> verifyPayment(String reference) async {
-    final response = await _dio.get(
-      '$_baseUrl/transaction/verify/$reference',
-      options: _getOptions(),
+    final response = await _client.functions.invoke(
+      'verify-payment',
+      body: {
+        'reference': reference,
+      },
     );
 
-    final data = response.data['data'] as Map<String, dynamic>?;
-    final status = data?['status'] as String?;
+    final data = response.data as Map<String, dynamic>;
+    final status = data['status'] as String?;
 
     if (status == 'success') {
       await _db.paymentEventsDao.markConfirmed(reference);
@@ -125,9 +106,9 @@ class PaymentService {
     }
   }
 
-  /// Confirm a successful payment by calling the confirm-payment Edge Function.
+  /// Confirm a successful payment by calling the [confirm-payment] Edge Function.
   ///
-  /// The Edge Function verifies the transaction with Monnify server-to-server,
+  /// The Edge Function verifies the transaction server-to-server with Paystack,
   /// generates an activation code, and updates the school's subscription tier
   /// and expiry date in Supabase.
   ///
@@ -138,8 +119,7 @@ class PaymentService {
     required String plan,
     required String schoolId,
   }) async {
-    final client = supabase_pkg.Supabase.instance.client;
-    final response = await client.functions.invoke(
+    final response = await _client.functions.invoke(
       'confirm-payment',
       body: {
         'reference': reference,

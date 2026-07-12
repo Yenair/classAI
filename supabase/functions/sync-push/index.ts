@@ -415,10 +415,136 @@ if (table === "payment_events") {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// security_config handler
+// Diagram cleanup helpers
 // ═══════════════════════════════════════════════════════════════
-if (table === "security_config") {
-  delete rowData["local_id"];
+
+/**
+ * Extract the Storage object path from a Supabase Storage public URL.
+ * e.g. "https://<project>.supabase.co/storage/v1/object/public/diagrams/abc.png"
+ *      -> "abc.png"
+ */
+function extractStoragePath(publicUrl: string, bucketName: string): string | null {
+  try {
+    const marker = `/object/public/${bucketName}/`;
+    const idx = publicUrl.indexOf(marker);
+    if (idx === -1) return null;
+    return publicUrl.substring(idx + marker.length);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse diagram URL(s) from a lesson's content JSON and delete them from
+ * the diagrams Storage bucket. This runs BEFORE the soft-delete so the
+ * lesson's content is still readable.
+ *
+ * This is intentionally defensive: any parse/format issue is logged and
+ * skipped rather than failing the entire sync-push operation.
+ */
+async function cleanupLessonDiagrams(
+  supabase: ReturnType<typeof createClient>,
+  lessonServerId: string,
+  localId: number | string,
+): Promise<void> {
+  try {
+    // Fetch the lesson content while it's still intact (before soft-delete)
+    const { data: lesson, error: fetchError } = await supabase
+      .from("lessons")
+      .select("content")
+      .eq("id", lessonServerId)
+      .maybeSingle();
+
+    if (fetchError || !lesson) {
+      console.warn(
+        `[cleanupLessonDiagrams] Failed to fetch lesson ${lessonServerId} (local_id=${localId}): ${fetchError?.message ?? "not found"}`,
+      );
+      return;
+    }
+
+    const contentRaw = lesson.content as string;
+    if (!contentRaw || contentRaw.trim() === "") {
+      return; // No content to parse
+    }
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(contentRaw) as Record<string, unknown>;
+    } catch {
+      // Content may be encrypted or not valid JSON — skip diagram cleanup
+      console.log(
+        `[cleanupLessonDiagrams] Lesson ${lessonServerId} content is not valid JSON (likely encrypted), skipping diagram cleanup`,
+      );
+      return;
+    }
+
+    const diagrams = parsed["diagrams"];
+    if (diagrams === undefined || diagrams === null) {
+      return; // No diagrams field
+    }
+
+    if (!Array.isArray(diagrams)) {
+      console.warn(
+        `[cleanupLessonDiagrams] Lesson ${lessonServerId}: "diagrams" field is not an array (type=${typeof diagrams}), skipping`,
+      );
+      return;
+    }
+
+    const BUCKET_NAME = "diagrams";
+    const pathsToDelete: string[] = [];
+
+    for (let i = 0; i < diagrams.length; i++) {
+      const entry = diagrams[i];
+      if (!entry || typeof entry !== "object") {
+        console.warn(
+          `[cleanupLessonDiagrams] Lesson ${lessonServerId}: diagram entry ${i} is malformed (not an object), skipping`,
+        );
+        continue;
+      }
+
+      const imageUrl = (entry as Record<string, unknown>)["imageUrl"] as string | undefined;
+      if (!imageUrl || typeof imageUrl !== "string" || imageUrl.trim() === "") {
+        continue; // No URL in this entry
+      }
+
+      const path = extractStoragePath(imageUrl, BUCKET_NAME);
+      if (!path) {
+        console.warn(
+          `[cleanupLessonDiagrams] Lesson ${lessonServerId}: could not extract storage path from URL "${imageUrl.substring(0, 80)}...", skipping`,
+        );
+        continue;
+      }
+
+      pathsToDelete.push(path);
+    }
+
+    if (pathsToDelete.length === 0) {
+      return;
+    }
+
+    // Delete all found diagram objects. This is idempotent — if the object
+    // was already deleted (e.g. via section 3's client-side call), the
+    // Storage remove call simply no-ops on an already-missing object.
+    const { error: deleteError } = await supabase
+      .storage
+      .from(BUCKET_NAME)
+      .remove(pathsToDelete);
+
+    if (deleteError) {
+      console.warn(
+        `[cleanupLessonDiagrams] Failed to delete ${pathsToDelete.length} diagram(s) for lesson ${lessonServerId}: ${deleteError.message}`,
+      );
+    } else {
+      console.log(
+        `[cleanupLessonDiagrams] Deleted ${pathsToDelete.length} diagram(s) for lesson ${lessonServerId}`,
+      );
+    }
+  } catch (err) {
+    // Never let diagram cleanup fail the sync-push operation
+    console.warn(
+      `[cleanupLessonDiagrams] Unexpected error cleaning up diagrams for lesson ${lessonServerId} (local_id=${localId}): ${err instanceof Error ? err.message : err}`,
+    );
+  }
 }
 
 serve(async (req) => {
@@ -440,8 +566,9 @@ serve(async (req) => {
       );
     }
 
+    let jwtClaims: Record<string, unknown>;
     try {
-      await validateTokenVersion(
+      jwtClaims = await validateTokenVersion(
         classaiJwt,
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -568,6 +695,12 @@ serve(async (req) => {
             results.push({ local_id: localId, server_id: null, status: "error", retryable: true });
             continue;
           }
+
+          // ── Diagram cleanup: fetch lesson content before soft-delete ────
+          if (table === "lessons") {
+            await cleanupLessonDiagrams(supabase, serverId as string, localId);
+          }
+
           const { error } = await supabase
             .from(table)
             .update({ is_deleted: true })

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { validateTokenVersion } from "../_shared/validate_token.ts";
 
 const CODE_PATTERN = /^CLA-[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/i;
 
@@ -16,22 +17,60 @@ serve(async (req) => {
       return jsonResponse({ error: "Method not allowed" }, 405);
     }
 
-    const body = await req.json();
+    // ── 1. Extract and verify JWT ──────────────────────────────────
+    const authHeader = req.headers.get("authorization") ?? "";
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    if (!token) {
+      return jsonResponse({ error: "Missing Authorization header" }, 401);
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const jwtSecret = Deno.env.get("JWT_SECRET");
+
+    if (!supabaseUrl || !serviceRoleKey || !jwtSecret) {
+      return jsonResponse({ error: "Server misconfiguration" }, 500);
+    }
+
+    let claims: Record<string, unknown>;
+    try {
+      claims = await validateTokenVersion(token, supabaseUrl, serviceRoleKey, jwtSecret);
+    } catch (err) {
+      const e = err as { error: string; code: string; status: number };
+      return jsonResponse({ error: e.error, code: e.code }, e.status ?? 401);
+    }
+
+    const teacherId = claims.teacher_id as string;
+    const jwtSchoolId = claims.school_id as string;
+    if (!teacherId || !jwtSchoolId) {
+      return jsonResponse({ error: "Invalid token: missing teacher_id or school_id" }, 401);
+    }
+
+    // ── 2. Verify admin role ───────────────────────────────────────
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+    const { data: teacher, error: teacherError } = await supabase
+      .from("teachers")
+      .select("role")
+      .eq("id", teacherId)
+      .maybeSingle();
+
+    if (teacherError || !teacher) {
+      return jsonResponse({ error: "Teacher not found" }, 404);
+    }
+
+    if (teacher.role !== "admin") {
+      return jsonResponse({ error: "Admin access required" }, 403);
+    }
+
+    // ── 3. Parse body — only accept code from body ─────────────────
+    const body = await req.json().catch(() => ({}));
     const activationCodeInput =
       body.code ?? body.activation_code ?? body.activationCode;
-    const emailInput = body.email;
-    const schoolNameInput = body.school_name;
 
-    if (
-      !activationCodeInput || typeof activationCodeInput !== "string" ||
-      !emailInput || typeof emailInput !== "string" ||
-      !schoolNameInput || typeof schoolNameInput !== "string"
-    ) {
+    if (!activationCodeInput || typeof activationCodeInput !== "string") {
       return jsonResponse(
-        {
-          error:
-            "Missing required fields: code, email, school_name",
-        },
+        { error: "Missing required field: code" },
         400,
       );
     }
@@ -44,15 +83,9 @@ serve(async (req) => {
       );
     }
 
-    const normalizedEmail = emailInput.trim().toLowerCase();
-    const normalizedSchoolName = schoolNameInput.trim();
     const now = new Date();
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-
+    // ── 4. Fetch the activation code (only unused) ─────────────────
     const { data: activationRow, error: activationError } = await supabase
       .from("activation_codes")
       .select("code, school_id, tier, duration_days")
@@ -67,48 +100,40 @@ serve(async (req) => {
       );
     }
 
-    const { data: school, error: schoolError } = await supabase
-      .from("schools")
-      .select("id, school_name")
-      .eq("id", activationRow.school_id)
-      .maybeSingle();
-
-    if (
-      schoolError || !school ||
-      school.school_name.trim().toLowerCase() !== normalizedSchoolName.toLowerCase()
-    ) {
+    // ── 5. Verify school_id matches the caller's school ────────────
+    if (activationRow.school_id !== jwtSchoolId) {
       return jsonResponse(
-        { error: "This activation code does not match the provided school." },
+        { error: "This activation code does not belong to your school." },
         403,
       );
     }
 
-    const { data: adminTeacher, error: adminError } = await supabase
-      .from("teachers")
-      .select("id, school_id, email, role")
-      .eq("email", normalizedEmail)
-      .eq("role", "admin")
-      .maybeSingle();
-
-    if (adminError || !adminTeacher) {
-      return jsonResponse(
-        { error: "Admin account not found for the provided email." },
-        404,
-      );
-    }
-
-    if (adminTeacher.school_id !== activationRow.school_id) {
-      return jsonResponse(
-        { error: "This admin does not belong to the activation code school." },
-        403,
-      );
-    }
-
+    // ── 6. MARK-FIRST: mark code used, then update school ──────────
     const durationDays = activationRow.duration_days ?? 365;
     const expiryDate = new Date(
       now.getTime() + durationDays * 24 * 60 * 60 * 1000,
     );
 
+    // Mark code as used FIRST (conditional on used=false for concurrency safety)
+    const { data: markResult, error: markUsedError } = await supabase
+      .from("activation_codes")
+      .update({
+        used: true,
+        redeemed_at: now.toISOString(),
+      })
+      .eq("code", activationRow.code)
+      .eq("used", false)
+      .select("code")
+      .maybeSingle();
+
+    if (markUsedError || !markResult) {
+      return jsonResponse(
+        { error: "Activation code was already redeemed by another request." },
+        409,
+      );
+    }
+
+    // Then update the school record
     const { error: updateSchoolError } = await supabase
       .from("schools")
       .update({
@@ -120,26 +145,17 @@ serve(async (req) => {
       .eq("id", activationRow.school_id);
 
     if (updateSchoolError) {
+      // Rollback: revert the code marking
+      await supabase
+        .from("activation_codes")
+        .update({
+          used: false,
+          redeemed_at: null,
+        })
+        .eq("code", activationRow.code);
+
       return jsonResponse(
         { error: `Failed to update school: ${updateSchoolError.message}` },
-        500,
-      );
-    }
-
-    const { error: markUsedError } = await supabase
-      .from("activation_codes")
-      .update({
-        used: true,
-        redeemed_at: now.toISOString(),
-      })
-      .eq("code", activationRow.code)
-      .eq("used", false);
-
-    if (markUsedError) {
-      return jsonResponse(
-        {
-          error: `Failed to finalize activation code: ${markUsedError.message}`,
-        },
         500,
       );
     }
@@ -149,9 +165,6 @@ serve(async (req) => {
       subscription_tier: activationRow.tier,
       expiry_date: expiryDate.toISOString(),
       activation_code: activationRow.code,
-      tier: activationRow.tier,
-      expiry: expiryDate.toISOString(),
-      code: activationRow.code,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

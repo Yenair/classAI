@@ -2,7 +2,6 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dio/dio.dart';
 import 'package:go_router/go_router.dart';
 import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/core/theme/app_theme.dart';
@@ -101,12 +100,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       final teacher = authData.currentTeacher;
       if (school == null || teacher == null) return;
 
-      final dio = Dio(BaseOptions(
-        baseUrl: '',
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 30),
-      ));
-      final paymentService = PaymentService(db, dio);
+      final paymentService = PaymentService(db);
       final schoolId = school.serverId ?? school.localId.toString();
 
       for (final payment in pendingPayments) {

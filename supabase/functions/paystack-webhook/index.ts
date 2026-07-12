@@ -94,6 +94,7 @@ serve(async (req) => {
       return jsonResponse({ error: "Paystack secret key not configured" }, 500);
     }
 
+    // ── Verify Paystack signature ──────────────────────────────────
     const bodyText = await req.text();
     const signature = req.headers.get("x-paystack-signature") ?? "";
     if (!signature) {
@@ -108,10 +109,12 @@ serve(async (req) => {
     const payload = JSON.parse(bodyText) as {
       event?: string;
       data?: {
+        reference?: string;
         metadata?: {
           plan?: string;
           school_id?: string;
           email?: string;
+          source?: string;
         };
       };
     };
@@ -120,7 +123,9 @@ serve(async (req) => {
       return jsonResponse({ success: true });
     }
 
+    // ── Extract metadata and reference ────────────────────────────
     const metadata = payload.data?.metadata ?? {};
+    const reference = payload.data?.reference ?? "";
     const tier = normalizeTier(metadata.plan);
     const schoolId = typeof metadata.school_id === "string"
       ? metadata.school_id.trim()
@@ -136,10 +141,32 @@ serve(async (req) => {
       );
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    if (!reference) {
+      return jsonResponse(
+        { error: "Missing transaction reference in Paystack payload" },
+        400,
+      );
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !serviceRoleKey) {
+      return jsonResponse({ error: "Server misconfiguration" }, 500);
+    }
+
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+    // ── IDEMPOTENCY CHECK: has this reference been finalized? ─────
+    const { data: existingCode } = await supabase
+      .from("activation_codes")
+      .select("code")
+      .eq("reference", reference)
+      .maybeSingle();
+
+    if (existingCode) {
+      // Already processed by another path (e.g., confirm-payment) — safe no-op
+      return jsonResponse({ success: true, already_processed: true });
+    }
 
     const { data: school, error: schoolError } = await supabase
       .from("schools")
@@ -156,6 +183,7 @@ serve(async (req) => {
       now.getTime() + DEFAULT_DURATION_DAYS * 24 * 60 * 60 * 1000,
     );
 
+    // ── Generate and insert activation code (with reference, used: true) ──
     let activationCode = "";
     let inserted = false;
     let activationRow: { code: string } | null = null;
@@ -169,7 +197,9 @@ serve(async (req) => {
           school_id: schoolId,
           tier,
           duration_days: DEFAULT_DURATION_DAYS,
-          used: false,
+          reference,
+          used: true,
+          redeemed_at: now.toISOString(),
         })
         .select("code")
         .single();
@@ -195,6 +225,31 @@ serve(async (req) => {
       );
     }
 
+    // ── Update school record ──────────────────────────────────────
+    const { error: updateError } = await supabase
+      .from("schools")
+      .update({
+        subscription_tier: tier,
+        expiry_date: expiryDate.toISOString(),
+        activation_code: activationRow.code,
+        updated_at: now.toISOString(),
+      })
+      .eq("id", schoolId);
+
+    if (updateError) {
+      // Rollback: delete the just-inserted activation code
+      await supabase
+        .from("activation_codes")
+        .delete()
+        .eq("code", activationRow.code);
+
+      return jsonResponse(
+        { error: `Failed to update school: ${updateError.message}` },
+        500,
+      );
+    }
+
+    // ── Send activation email (best-effort) ───────────────────────
     try {
       await sendActivationCodeEmail(email, activationRow.code, tier, expiryDate);
     } catch {
@@ -203,12 +258,6 @@ serve(async (req) => {
 
     return jsonResponse({
       success: true,
-      activation_code: activationRow.code,
-      subscription_tier: tier,
-      expiry_date: expiryDate.toISOString(),
-      code: activationRow.code,
-      tier,
-      expiry: expiryDate.toISOString(),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
