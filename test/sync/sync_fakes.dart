@@ -82,6 +82,23 @@ class FakeSyncRecordStore implements SyncRecordStore {
     syncedRecords.putIfAbsent(tableName, () => {});
     syncedRecords[tableName]![localId] = Map<String, dynamic>.from(snapshot);
     seedLocalRecord(tableName, localId, snapshot);
+    // Always UPSERT into the versionHashes DB table (delete existing + insert).
+    final snapshotJson = jsonEncode(snapshot);
+    final hash = sha256.convert(utf8.encode(snapshotJson)).toString();
+    await (db.delete(db.versionHashes)
+          ..where((t) =>
+              t.table.equals(tableName) &
+              t.recordLocalId.equals(localId)))
+        .go();
+    await db.into(db.versionHashes).insert(
+      VersionHashesCompanion.insert(
+        table: tableName,
+        recordLocalId: localId,
+        hash: hash,
+        snapshotJson: Value(snapshotJson),
+        setAt: DateTime.now(),
+      ),
+    );
   }
 
   @override
@@ -215,7 +232,11 @@ class FakeSyncRemoteApi implements SyncRemoteApi {
   }
 
   int _localIdFromBatch(SyncPushBatch batch) {
-    final value = batch.record['local_id'] ?? batch.record['localId'] ?? batch.record['id'];
+    // After PayloadCompressor compression, 'local_id' becomes 'lid'.
+    final value = batch.record['local_id'] ??
+        batch.record['lid'] ??
+        batch.record['localId'] ??
+        batch.record['id'];
     if (value is int) return value;
     if (value is String) return int.tryParse(value) ?? 0;
     return 0;

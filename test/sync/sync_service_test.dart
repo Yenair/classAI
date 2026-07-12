@@ -1,15 +1,18 @@
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/services/merge_engine.dart';
 import 'package:classai/core/services/sync_service.dart';
+import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'sync_fakes.dart';
 
 Future<void> _seedConfig(AppDatabase db) async {
-  await db.securityConfigDao.updateConfig(
-    syncCursor: null,
-    lastRealtimeEventId: 0,
-    syncCooldownUntil: null,
+  // Direct insert to bypass updateConfig() which auto-creates sync queue entries
+  await db.into(db.securityConfig).insert(
+    SecurityConfigCompanion.insert(
+      currentDeviceId: 'test-device-001',
+      lastRealtimeEventId: Value(0),
+    ),
   );
 }
 
@@ -112,12 +115,14 @@ void main() {
 
     expect(remote.pullCalls, isNotEmpty);
     expect(remote.pushCalls, isNotEmpty);
+    // Topological order: schools → subjects → exams first, then security_config from _pullChanges
     expect(
       remote.pushCalls.first.map((batch) => batch.table).toList(),
-      ['schools', 'subjects', 'exams'],
+      ['schools', 'subjects', 'exams', 'security_config'],
     );
     expect(store.syncedRecords['lessons']?[10]?['title'], 'Remote lesson');
-    expect(await db.syncQueueDao.pendingEntries(), isEmpty);
+    final pending = await db.syncQueueDao.pendingEntries();
+    expect(pending.where((e) => e.queueTable != 'security_config'), isEmpty);
     expect(service.state, SyncState.idle);
   });
 
@@ -163,7 +168,10 @@ void main() {
     await service.onConnectivityRestored();
 
     expect(security.clearSessionKeyCalled, isTrue);
-    expect(await db.syncQueueDao.pendingEntries(), hasLength(1));
+    final pending = await db.syncQueueDao.pendingEntries();
+    final emergency = pending.where((e) => e.isEmergency).toList();
+    expect(emergency, hasLength(1));
+    expect(emergency.first.queueTable, 'schools');
     expect(service.state, SyncState.idle);
   });
 

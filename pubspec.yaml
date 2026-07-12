@@ -55,6 +55,7 @@ dependencies:
   go_router: ^17.2.3
   app_links: ^6.3.2
   package_info_plus: ^10.1.0
+  share_plus: ^13.2.0
 
   # Monitoring
   sentry_flutter: ^8.14.2

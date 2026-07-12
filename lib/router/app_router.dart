@@ -51,15 +51,20 @@ final appRouter = GoRouter(
   initialLocation: '/',
   debugLogDiagnostics: false,
   redirect: (context, state) {
-    // Read role from the auth provider.
-    // Only redirect when the GoRouter is mounted (i.e. user is authenticated).
+    // Read auth state from the provider.
     final container = ProviderScope.containerOf(context, listen: false);
     final authData = container.read(authProvider);
-    final role = authData.currentTeacher?.role;
     final location = state.uri.path;
 
-    // If role is null (shouldn't happen in authenticated state), allow navigation.
-    if (role == null) return null;
+    // ── Guest redirect ──────────────────────────────────────────────
+    // If there is no teacher identity, the user is a guest and must be
+    // redirected to the login screen.  The only exception is the /login
+    // route itself, so the login screen remains reachable.
+    if (authData.currentTeacher == null && location != '/login') {
+      return '/login';
+    }
+
+    final role = authData.currentTeacher?.role;
 
     final isTeacherRoute = location == '/' ||
         location == '/lessons' ||

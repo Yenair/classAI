@@ -31,6 +31,8 @@ final databaseProvider = Provider<AppDatabase>((ref) {
 });
 
 void main() async {
+  //TODO: Update Paystack live key in Supabase secrets before launch!
+  
   WidgetsFlutterBinding.ensureInitialized();
 
   FlutterError.onError = (FlutterErrorDetails details) {

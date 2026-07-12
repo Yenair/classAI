@@ -636,7 +636,7 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                 const _AnnouncementBanner(),
 
                 // ── Free Plan Banner ──────────────────────────────
-                if (authData.currentSchool?.subscriptionTier.toLowerCase() == 'free')
+                if ((authData.currentSchool?.subscriptionTier ?? 'free').toLowerCase() == 'free')
                   _FreePlanBanner(
                     cs: cs,
                     theme: theme,
@@ -2199,7 +2199,7 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
           const _AnnouncementBanner(),
 
           // ── Free Plan Banner ──────────────────────────────
-          if (authData.currentSchool?.subscriptionTier.toLowerCase() == 'free')
+          if ((authData.currentSchool?.subscriptionTier ?? 'free').toLowerCase() == 'free')
             _FreePlanBanner(
               cs: cs,
               theme: theme,

@@ -135,7 +135,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     if (isWide)
                       _buildTopAppBar(cs, textTheme, authData, themeMode),
 
-                    if (authData.currentSchool?.subscriptionTier.toLowerCase() == 'free')
+                    if ((authData.currentSchool?.subscriptionTier ?? 'free').toLowerCase() == 'free')
                       _FreePlanBanner(
                         cs: cs,
                         theme: Theme.of(context),

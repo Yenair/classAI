@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io';
 
 import 'package:drift/drift.dart' hide Column;
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/providers/pdf_service_provider.dart';
+import 'package:classai/core/services/pdf_service.dart';
 import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/core/widgets/conflict_banner.dart';
 import 'package:classai/core/widgets/credit_counter.dart';
@@ -16,6 +18,8 @@ import 'package:classai/main.dart' show databaseProvider;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
 
@@ -688,6 +692,7 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
                                   onTap: () => context.push('/lessons/${lesson.id}'),
                                   onEdit: () => context.push('/lessons/${lesson.id}'),
                                   onDelete: () => _confirmDeleteLesson(lesson),
+                                  onExport: () => _exportLesson(lesson),
                                 ),
                               );
                             },
@@ -828,6 +833,30 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
         }
       }
     }
+  }
+
+  Future<void> _exportLesson(Lesson lesson) async {
+    final db = ref.read(databaseProvider);
+    final authState = ref.read(authProvider);
+    final school = authState.currentSchool ?? await db.schoolsDao.get();
+    if (school == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('School data not available')),
+        );
+      }
+      return;
+    }
+    final teacherId = authState.currentTeacher?.serverId;
+    final teacherEmail = authState.currentTeacher?.email;
+    await exportLessonPdf(
+      context,
+      ref,
+      lesson,
+      school,
+      teacherId,
+      teacherEmail,
+    );
   }
 }
 
@@ -1024,12 +1053,104 @@ class _StatusFilterItem {
   final IconData icon;
 }
 
+/// Shared helper: export a lesson as PDF and invoke the system share sheet.
+/// Can be called from any widget that has access to [Lesson], [School],
+/// and teacher info.
+///
+/// Handles daily limit enforcement and upgrade prompts consistently.
+Future<void> exportLessonPdf(
+  BuildContext context,
+  WidgetRef ref,
+  Lesson lesson,
+  School school,
+  String? teacherId,
+  String? teacherEmail,
+) async {
+  final pdfService = ref.read(pdfServiceProvider);
+  try {
+    final pdfBytes = await pdfService.generateLessonPdf(
+      lesson,
+      school,
+      teacherId: teacherId,
+      teacherEmail: teacherEmail,
+    );
+
+    // Write to temp file for sharing
+    final dir = await getTemporaryDirectory();
+    final safeName = lesson.topic.replaceAll(RegExp(r'[^\w\s-]'), '').trim();
+    final file = File(
+      '${dir.path}/${safeName}_${DateTime.now().millisecondsSinceEpoch}.pdf',
+    );
+    await file.writeAsBytes(pdfBytes);
+
+    // Share via system share sheet
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path)],
+        text: 'Lesson: ${lesson.topic}',
+      ),
+    );
+    // User cancellation is normal; no error SnackBar needed.
+  } on PdfExportException catch (e) {
+    // ── Unified daily limit handling ──
+    if (e.remainingCount != null && e.remainingCount! <= 0) {
+      // Remaining count is 0 (or negative for already-over-limit)
+      if (context.mounted) {
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: true,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Daily Export Limit Reached'),
+            content: const Text(
+              'You have reached your daily PDF export limit. '
+              'Upgrade to Elite for unlimited exports.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  // Navigate to payment or show upgrade request
+                  context.push('/payment');
+                },
+                child: const Text('Upgrade'),
+              ),
+            ],
+          ),
+        );
+      }
+    } else {
+      // Export succeeded within quota — informational notice only
+      if (context.mounted && e.remainingCount != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'PDF exported. ${e.remainingCount} export(s) remaining today.',
+            ),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to export PDF: $e')),
+      );
+    }
+  }
+}
+
 class _LessonCard extends StatelessWidget {
   final Lesson lesson;
   final String classLevelLabel;
   final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback? onExport;
 
   const _LessonCard({
     required this.lesson,
@@ -1037,6 +1158,7 @@ class _LessonCard extends StatelessWidget {
     required this.onTap,
     required this.onEdit,
     required this.onDelete,
+    this.onExport,
   });
 
   @override
@@ -1143,6 +1265,15 @@ class _LessonCard extends StatelessWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (onExport != null)
+                      IconButton(
+                        icon: Icon(Icons.picture_as_pdf_rounded, size: 20, color: cs.tertiary),
+                        onPressed: onExport,
+                        tooltip: 'Export PDF',
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                      ),
                     IconButton(
                       icon: Icon(Icons.edit_rounded, size: 20, color: cs.primary),
                       onPressed: onEdit,

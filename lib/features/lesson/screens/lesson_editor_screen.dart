@@ -68,6 +68,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   final _reviewController = TextEditingController();
   bool _isUnlocked = false;
   bool _isOnline = true;
+  bool _isExporting = false;
   bool _editorSidebarOpen = true;
   int _creditBalance = 0;
   int _remainingDailyPreviews = 10;
@@ -1163,6 +1164,52 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     }
   }
 
+  Future<void> _handleExportPdf() async {
+    if (_lessonId == null) {
+      if (mounted) {
+        showErrorToast(context: context, message: 'Save the lesson before exporting.');
+      }
+      return;
+    }
+
+    setState(() => _isExporting = true);
+    try {
+      final db = ref.read(databaseProvider);
+      final authState = ref.read(authProvider);
+      final school =
+          authState.currentSchool ?? await db.schoolsDao.get();
+      if (school == null) {
+        if (mounted) {
+          showErrorToast(context: context, message: 'School data not available.');
+        }
+        return;
+      }
+
+      // Load the saved lesson from the database
+      final lesson = await db.lessonsDao.getById(_lessonId!);
+      if (lesson == null) {
+        if (mounted) {
+          showErrorToast(context: context, message: 'Lesson not found in database.');
+        }
+        return;
+      }
+
+      final teacherId = authState.currentTeacher?.serverId;
+      final teacherEmail = authState.currentTeacher?.email;
+
+      await exportLessonPdf(
+        context,
+        ref,
+        lesson,
+        school,
+        teacherId,
+        teacherEmail,
+      );
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
   void _onSchemeOfWorkSelected(SchemeOfWorkData? scheme) {
     if (scheme == null) {
       setState(() {
@@ -1550,6 +1597,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                               lessonStatus: _lessonStatus,
                                               onMarkCompleted: _isUnlocked ? _handleMarkCompleted : null,
                                               onToggleComplete: _isUnlocked ? _handleToggleComplete : null,
+                                              onExportPdf: _hasGenerated ? _handleExportPdf : null,
+                                              isExporting: _isExporting,
                                             ),
                                           ),
                                         ],
@@ -1658,6 +1707,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                             onRegenerate: _isUnlocked ? _handleRegenerate : null,
                                             lessonStatus: _lessonStatus,
                                             onMarkCompleted: _isUnlocked ? _handleMarkCompleted : null,
+                                            onExportPdf: _hasGenerated ? _handleExportPdf : null,
+                                            isExporting: _isExporting,
                                           ),
                                         ],
                                       ),
@@ -2531,6 +2582,8 @@ class _PreviewColumn extends StatelessWidget {
   final VoidCallback? onRegenerate;
   final String lessonStatus;
   final VoidCallback? onToggleComplete;
+  final VoidCallback? onExportPdf;
+  final bool isExporting;
 
   const _PreviewColumn({
     super.key,
@@ -2565,6 +2618,8 @@ class _PreviewColumn extends StatelessWidget {
     this.onRegenerate,
     this.lessonStatus = 'draft',
     this.onToggleComplete,
+    this.onExportPdf,
+    this.isExporting = false,
   });
 
   @override
@@ -3060,6 +3115,35 @@ class _PreviewColumn extends StatelessWidget {
                     ),
                     child: const Text('Discard'),
                   ),
+                  if (onExportPdf != null) ...[
+                    const SizedBox(width: 12),
+                    OutlinedButton.icon(
+                      onPressed: isExporting ? null : onExportPdf,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: cs.tertiary,
+                        side: BorderSide(color: cs.tertiary.withValues(alpha: 0.5)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusXl),
+                        ),
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 20),
+                        minimumSize:
+                            const Size(120, AppTheme.touchTarget),
+                      ),
+                      icon: isExporting
+                          ? SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: cs.tertiary,
+                              ),
+                            )
+                          : const Icon(Icons.picture_as_pdf_rounded, size: 20),
+                      label: Text(isExporting ? 'Exporting...' : 'Export PDF'),
+                    ),
+                  ],
                   if (onToggleComplete != null) ...[
                     const SizedBox(width: 12),
                     FilledButton.tonalIcon(
