@@ -300,14 +300,22 @@ serve(async (req) => {
     }
 
     // ── Send activation email (best-effort) ───────────────────────
+    let emailWarning = false;
     try {
       await sendActivationCodeEmail(email, activationRow.code, tier, expiryDate);
-    } catch {
-      // Email delivery is best-effort; keep the webhook acknowledgement successful.
+    } catch (emailErr) {
+      console.error(
+        "[paystack-webhook] activation email failed to send to",
+        email,
+        ":",
+        emailErr instanceof Error ? emailErr.message : String(emailErr),
+      );
+      emailWarning = true;
     }
 
     return jsonResponse({
       success: true,
+      ...(emailWarning ? { warning: "Payment successful, but activation email could not be sent. Please contact support." } : {}),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

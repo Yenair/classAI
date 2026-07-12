@@ -538,6 +538,14 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   late ValueNotifier<String> _selectedTierNotifier;
   List<_TierComparisonRow> _tiers = [];
 
+  // ── Polling state tracking (M1) ────────────────────────────────────
+  bool _isPolling = false;
+  bool _hasPollTimedOut = false;
+  String? _lastReference;
+  String? _lastPlan;
+  String? _lastSchoolId;
+  PaymentService? _lastPaymentService;
+
   @override
   void initState() {
     super.initState();
@@ -699,6 +707,14 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
       final reference = initResult.reference;
       if (!context.mounted) return;
+
+      // Store polling context for potential retry
+      _lastPaymentService = paymentService;
+      _lastReference = reference;
+      _lastPlan = plan;
+      _lastSchoolId = schoolId;
+      _hasPollTimedOut = false;
+
       await _pollForPayment(
         context,
         ref,
@@ -726,7 +742,18 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     String plan,
     String schoolId,
   ) async {
-    if (!context.mounted) return;
+    // Guard against concurrent polling loops
+    if (_isPolling) return;
+    _isPolling = true;
+    _hasPollTimedOut = false;
+    if (mounted) setState(() {});
+
+    if (!context.mounted) {
+      _isPolling = false;
+      if (mounted) setState(() {});
+      return;
+    }
+
     showInfoToast(
       context: context,
       message: 'Waiting for payment confirmation...',
@@ -735,7 +762,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     for (int i = 0; i < 10; i++) {
       final confirmed = await paymentService.verifyPayment(reference);
       if (confirmed) {
-        if (!context.mounted) return;
+        if (!context.mounted) {
+          _isPolling = false;
+          if (mounted) setState(() {});
+          return;
+        }
+        _isPolling = false;
+        if (mounted) setState(() {});
         await _confirmAndShowCode(
           context,
           ref,
@@ -752,11 +785,38 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       }
     }
 
-    if (!context.mounted) return;
+    if (!context.mounted) {
+      _isPolling = false;
+      if (mounted) setState(() {});
+      return;
+    }
+
+    _isPolling = false;
+    _hasPollTimedOut = true;
+    if (mounted) setState(() {});
     showErrorToast(
       context: context,
       message:
           'Payment confirmation timed out. Your payment may still have processed. Please check your email for a receipt.',
+    );
+  }
+
+  /// Retry polling after a timeout — called by the "Check Payment Status" button.
+  /// Guards against an already-in-flight poll and reuses the stored polling context.
+  Future<void> _retryPoll() async {
+    if (_isPolling) return;
+    if (_lastPaymentService == null ||
+        _lastReference == null ||
+        _lastPlan == null ||
+        _lastSchoolId == null) return;
+
+    await _pollForPayment(
+      context,
+      ref,
+      _lastPaymentService!,
+      _lastReference!,
+      _lastPlan!,
+      _lastSchoolId!,
     );
   }
 
@@ -964,6 +1024,32 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                         const Padding(
                           padding: EdgeInsets.only(top: 16),
                           child: Center(child: CircularProgressIndicator()),
+                        ),
+                      if (_hasPollTimedOut)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 16),
+                          child: Column(
+                            children: [
+                              Text(
+                                'Your payment may still have processed. Please check your email for a receipt.',
+                                textAlign: TextAlign.center,
+                                style: textTheme.bodyMedium?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              OutlinedButton.icon(
+                                onPressed: _retryPoll,
+                                icon: const Icon(Icons.refresh_rounded, size: 20),
+                                label: const Text('Check Payment Status'),
+                                style: OutlinedButton.styleFrom(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                     ],
                   ),

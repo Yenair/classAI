@@ -317,8 +317,22 @@ serve(async (req) => {
           tier,
           expiryDate,
         );
-      } catch {
-        // Email delivery is best-effort; the payment and activation already succeeded.
+      } catch (emailErr) {
+        console.error(
+          "[confirm-payment] activation email failed to send to",
+          adminEmail,
+          ":",
+          emailErr instanceof Error ? emailErr.message : String(emailErr),
+        );
+
+        // Payment succeeded — include a warning but keep the 200 status
+        return jsonResponse({
+          success: true,
+          activation_code: activationRow.code,
+          subscription_tier: tier,
+          expiry_date: expiryDate.toISOString(),
+          warning: "Payment successful, but activation email could not be sent. Please contact support.",
+        });
       }
     }
 

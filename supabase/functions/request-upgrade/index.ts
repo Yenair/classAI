@@ -181,8 +181,7 @@ serve(async (req) => {
       );
       return jsonResponse({
         success: true,
-        no_admin: true,
-        message: "Request recorded, but no admin email found for notification",
+        warning: "Upgrade request recorded, but notification email may not have been delivered.",
       });
     }
 
@@ -209,8 +208,7 @@ serve(async (req) => {
       );
       return jsonResponse({
         success: true,
-        email_skipped: true,
-        message: "Request recorded, but email notification skipped (Gmail not configured)",
+        warning: "Upgrade request recorded, but notification email may not have been delivered.",
       });
     }
 
@@ -241,6 +239,7 @@ serve(async (req) => {
     const emailSubject = "ClassAI – A Teacher Requested an Upgrade";
 
     let sentCount = 0;
+    let emailFailed = false;
     for (const adminEmail of adminEmails) {
       try {
         await transporter.sendMail({
@@ -261,6 +260,7 @@ serve(async (req) => {
           ":",
           emailErr,
         );
+        emailFailed = true;
       }
     }
 
@@ -274,8 +274,7 @@ serve(async (req) => {
 
     return jsonResponse({
       success: true,
-      already_requested: false,
-      message: "Upgrade request sent to school admin",
+      ...(emailFailed ? { warning: "Upgrade request recorded, but notification email may not have been delivered." } : {}),
     });
   } catch (err) {
     console.error("[request-upgrade] unexpected error:", err);

@@ -1,6 +1,5 @@
 // lib/core/services/payment_service.dart
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
-import 'package:drift/drift.dart';
 import '../database/database.dart';
 
 /// Result returned by [PaymentService.initializePayment].
@@ -139,17 +138,48 @@ class PaymentService {
     final expiryDateStr = data['expiry_date'] as String;
     final expiryDate = DateTime.parse(expiryDateStr);
 
-    // Update the local school record with the new data
-    await _db.into(_db.schools).insert(
-      SchoolsCompanion.insert(
-        serverId: Value(schoolId),
-        schoolName: '', // placeholder; will be filled by sync
-        shortCode: '',
-        subscriptionTier: Value(subscriptionTier),
-        expiryDate: Value(expiryDate),
-        activationCode: Value(activationCode),
-      ),
-      mode: InsertMode.insertOrReplace,
+    // ── M3: Fetch authoritative school record from Supabase ─────────────────
+    // The schoolId comes from the authenticated school's server UUID
+    // (sourced from JWT claims / auth provider, not from the confirm-payment
+    // response). This reduces — but does not eliminate — the blank-name window:
+    // a fallback path still exists for network or timeout failures.
+    String schoolName = '';
+    String shortCode = '';
+    String activeCurriculum = 'nerdc';
+    int totalSeats = 5;
+
+    try {
+      final schoolData = await _client
+          .from('schools')
+          .select('*')
+          .eq('id', schoolId)
+          .single()
+          .timeout(const Duration(seconds: 5));
+      schoolName = schoolData['school_name'] as String? ?? schoolName;
+      shortCode = schoolData['short_code'] as String? ?? shortCode;
+      activeCurriculum =
+          schoolData['active_curriculum'] as String? ?? activeCurriculum;
+      totalSeats = schoolData['total_seats'] as int? ?? totalSeats;
+    } catch (fetchError) {
+      // School-fetch query failed or timed out. Fall back gracefully with
+      // the best available data (tier and expiry from confirm-payment).
+      // The school name/ shortCode will be blank only as a last resort.
+      // This is logged for debugging.
+      // ignore: avoid_print
+      print('[payment_service] failed to fetch school after payment: $fetchError');
+    }
+
+    // Use the canonical upsert DAO which preserves existing fields
+    // and correctly handles the insert-vs-update path.
+    await _db.schoolsDao.upsertByServerId(
+      serverId: schoolId,
+      schoolName: schoolName,
+      shortCode: shortCode,
+      subscriptionTier: subscriptionTier,
+      activeCurriculum: activeCurriculum,
+      totalSeats: totalSeats,
+      expiryDate: expiryDate,
+      activationCode: activationCode,
     );
 
     return PaymentConfirmation(

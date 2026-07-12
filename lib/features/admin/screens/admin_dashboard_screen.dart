@@ -1242,14 +1242,12 @@ Future<void> _handleSubmit() async {
 
     if (response.data != null && response.data is Map) {
       final data = response.data as Map<String, dynamic>;
-      final tier = data['subscription_tier'] as String? ??
-          data['tier'] as String? ??
-          'standard';
-      final expiryStr =
-          data['expiry_date'] as String? ?? data['expiry'] as String?;
+      final tier =
+          data['subscription_tier'] as String? ?? 'standard';
+      final expiryStr = data['expiry_date'] as String?;
       final expiry = expiryStr != null ? DateTime.tryParse(expiryStr) : null;
       final activationCode =
-          data['activation_code'] as String? ?? data['code'] as String? ?? code;
+          data['activation_code'] as String? ?? code;
 
       await ref.read(databaseProvider).schoolsDao.updateSubscriptionFields(
             serverId: serverId,
@@ -1265,13 +1263,10 @@ Future<void> _handleSubmit() async {
     Navigator.of(context).pop();
     final responseData = response.data;
     final tier = responseData is Map<String, dynamic>
-        ? responseData['subscription_tier'] as String? ??
-            responseData['tier'] as String? ??
-            'standard'
+        ? responseData['subscription_tier'] as String? ?? 'standard'
         : 'standard';
     final expiryStr = responseData is Map<String, dynamic>
-        ? responseData['expiry_date'] as String? ??
-            responseData['expiry'] as String?
+        ? responseData['expiry_date'] as String?
         : null;
     final expiry = expiryStr != null ? DateTime.tryParse(expiryStr) : null;
     showInfoToast(
