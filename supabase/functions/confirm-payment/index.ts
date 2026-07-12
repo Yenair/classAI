@@ -241,6 +241,31 @@ serve(async (req) => {
     }
 
     if (!inserted || !activationRow) {
+      // ── RACE HANDLER: insert may have failed because another concurrent
+      //    request inserted a row with the same `reference` between our
+      //    idempotency check and our insert (Postgres unique constraint).
+      const { data: raceRow } = await supabase
+        .from("activation_codes")
+        .select("code, tier, duration_days, school_id, used")
+        .eq("reference", reference)
+        .maybeSingle();
+
+      if (raceRow) {
+        // The concurrent request won the race — return the same
+        // already_processed response as the idempotency check path.
+        const raceTier = raceRow.tier ?? tier;
+        const raceExpiry = new Date(
+          Date.now() + (raceRow.duration_days ?? DEFAULT_DURATION_DAYS) * 24 * 60 * 60 * 1000,
+        );
+        return jsonResponse({
+          success: true,
+          already_processed: true,
+          activation_code: raceRow.code,
+          subscription_tier: raceTier,
+          expiry_date: raceExpiry.toISOString(),
+        });
+      }
+
       return jsonResponse(
         { error: "Failed to generate a unique activation code" },
         500,

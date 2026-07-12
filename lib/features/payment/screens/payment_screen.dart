@@ -624,23 +624,32 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       final schoolId = school.serverId ?? school.localId.toString();
 
       for (final payment in pendingPayments) {
-        final confirmed = await paymentService.verifyPayment(
-          payment.transactionReference,
-        );
-        if (!confirmed || !mounted) {
+        if (!mounted) break; // exit early if screen was disposed
+        try {
+          final confirmed = await paymentService.verifyPayment(
+            payment.transactionReference,
+          );
+          if (!confirmed) {
+            continue; // not yet confirmed by Paystack, try the next one
+          }
+          if (!mounted) break;
+          await _confirmAndShowCode(
+            context,
+            ref,
+            paymentService,
+            payment.transactionReference,
+            payment.plan,
+            schoolId,
+          );
+          // Continue processing remaining rows — do NOT break
+        } catch (_) {
+          // Individual row failed; move to the next without aborting
           continue;
         }
-        await _confirmAndShowCode(
-          context,
-          ref,
-          paymentService,
-          payment.transactionReference,
-          payment.plan,
-          schoolId,
-        );
-        break;
       }
-    } catch (_) {}
+    } catch (_) {
+      // Top-level error from db read or setup; nothing to recover
+    }
   }
 
   Future<void> _initializePayment(

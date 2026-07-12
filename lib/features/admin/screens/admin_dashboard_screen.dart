@@ -1,5 +1,6 @@
 // lib/features/admin/screens/admin_dashboard_screen.dart
 import 'dart:async';
+import 'dart:convert';
 
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
@@ -1281,14 +1282,45 @@ Future<void> _handleSubmit() async {
   } catch (e) {
     if (!mounted) return;
     String message = 'Failed to redeem code. Please try again.';
-    final errorStr = e.toString();
-    if (errorStr.contains('already used activation code')) {
-      message = 'Invalid or already used activation code.';
-    } else if (errorStr.contains('400') || errorStr.contains('Invalid code')) {
-      message = 'Invalid activation code format.';
-    } else if (errorStr.contains('404') || errorStr.contains('not found')) {
-      message = 'Activation code not found.';
+
+    // Use structured error from FunctionException.details if available,
+    // matching the pattern already used elsewhere in this project
+    // (e.g. auth_service.dart _extractErrorFromResponse).
+    if (e is FunctionException) {
+      try {
+        final details = e.details;
+        String? serverError;
+        if (details is Map) {
+          serverError = details['error'] as String?;
+        } else if (details is String) {
+          final parsed = Map<String, dynamic>.from(
+            jsonDecode(details) as Map<String, dynamic>,
+          );
+          serverError = parsed['error'] as String?;
+        }
+
+        if (serverError != null) {
+          if (serverError.contains('already used') ||
+              serverError.contains('already redeemed')) {
+            message = 'Invalid or already used activation code.';
+          } else if (serverError.contains('Invalid activation code format')) {
+            message = 'Invalid activation code format.';
+          } else if (serverError.contains('not found')) {
+            message = 'Activation code not found.';
+          } else if (serverError.contains('does not belong to your school')) {
+            message = 'This code was issued to a different school.';
+          } else if (serverError.contains('Admin access required')) {
+            message = 'Only admins can redeem activation codes.';
+          } else {
+            // Known error but no specific mapping — use the server text
+            message = serverError;
+          }
+        }
+      } catch (_) {
+        // Parsing failed — fall through to generic message
+      }
     }
+
     setState(() {
       _isSubmitting = false;
       _errorMessage = message;

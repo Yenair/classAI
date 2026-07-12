@@ -119,7 +119,42 @@ serve(async (req) => {
       };
     };
 
-    if (payload.event !== "charge.success") {
+    const eventType = payload.event ?? "unknown";
+    const eventReference = payload.data?.reference ?? "unknown";
+    const now = new Date();
+
+    // ── Log every webhook event ────────────────────────────────────
+    console.log(
+      `[paystack-webhook] event=${eventType} reference=${eventReference} timestamp=${now.toISOString()}`,
+    );
+
+    if (eventType !== "charge.success") {
+      // ── Check for charge.failed after a prior charge.success ────
+      if (eventType === "charge.failed" && eventReference !== "unknown") {
+        try {
+          const supabase = createClient(
+            Deno.env.get("SUPABASE_URL") ?? "",
+            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+          );
+          const { data: priorCode } = await supabase
+            .from("activation_codes")
+            .select("used")
+            .eq("reference", eventReference)
+            .maybeSingle();
+
+          if (priorCode && priorCode.used === true) {
+            console.warn(
+              `[paystack-webhook] WARNING: charge.failed for reference=${eventReference} which previously succeeded and was finalized. Possible reversal/chargeback.`,
+            );
+          }
+        } catch (logErr) {
+          console.error(
+            `[paystack-webhook] error checking prior charge.success for reference=${eventReference}:`,
+            logErr,
+          );
+        }
+      }
+
       return jsonResponse({ success: true });
     }
 
@@ -219,6 +254,21 @@ serve(async (req) => {
     }
 
     if (!inserted || !activationRow) {
+      // ── RACE HANDLER: insert may have failed because another concurrent
+      //    request inserted a row with the same `reference` between our
+      //    idempotency check and our insert (Postgres unique constraint).
+      const { data: raceRow } = await supabase
+        .from("activation_codes")
+        .select("code")
+        .eq("reference", reference)
+        .maybeSingle();
+
+      if (raceRow) {
+        // The concurrent request won the race — safe no-op, same as
+        // the idempotency check path at the top of this handler.
+        return jsonResponse({ success: true, already_processed: true });
+      }
+
       return jsonResponse(
         { error: "Failed to generate a unique activation code" },
         500,

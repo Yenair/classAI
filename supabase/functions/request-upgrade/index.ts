@@ -92,13 +92,25 @@ serve(async (req) => {
     // ── 4. Look up the teacher ────────────────────────────────────────
     const { data: teacher, error: teacherError } = await supabase
       .from("teachers")
-      .select("id, email, teacher_name, school_id")
+      .select("id, email, teacher_name, school_id, role")
       .eq("id", teacherId)
       .single();
 
     if (teacherError || !teacher) {
       console.error("[request-upgrade] teacher lookup error:", teacherError);
       return jsonResponse({ error: "Teacher not found" }, 404);
+    }
+
+    // ── 4a. Role check: admins must use the payment screen directly ──
+    if (teacher.role === "admin") {
+      console.warn(
+        "[request-upgrade] admin attempted to use upgrade request flow, teacherId:",
+        teacherId,
+      );
+      return jsonResponse(
+        { error: "Admins should use the payment screen directly, not the upgrade request flow." },
+        403,
+      );
     }
 
     const teacherName = teacher.teacher_name as string;
