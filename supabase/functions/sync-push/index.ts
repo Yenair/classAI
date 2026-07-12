@@ -290,128 +290,128 @@ async function resolveForeignKeys(
       }
     }
   }
-}
 
-// ═══════════════════════════════════════════════════════════════
-// scheme_of_work handler
-// ═══════════════════════════════════════════════════════════════
-if (table === "scheme_of_work") {
-  // Resolve teacher_server_id → teacher_id (UUID)
-  if (rowData["teacher_server_id"] && !rowData["teacher_id"]) {
-    rowData["teacher_id"] = rowData["teacher_server_id"];
-  }
-  // Resolve school_server_id → school_id (UUID)
-  if (rowData["school_server_id"] && !rowData["school_id"]) {
-    rowData["school_id"] = rowData["school_server_id"];
-  }
-  // Resolve subject_id — the client may send it as a local integer or a UUID string.
-  // If it looks like a UUID, use it directly; otherwise skip (server has its own FKs).
-  if (rowData["subject_id"]) {
-    const subId = rowData["subject_id"] as string;
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(subId)) {
-      // It's a local integer ID — we can't resolve it server-side.
-      delete rowData["subject_id"];
+  // ═══════════════════════════════════════════════════════════════
+  // scheme_of_work handler
+  // ═══════════════════════════════════════════════════════════════
+  if (table === "scheme_of_work") {
+    // Resolve teacher_server_id → teacher_id (UUID)
+    if (rowData["teacher_server_id"] && !rowData["teacher_id"]) {
+      rowData["teacher_id"] = rowData["teacher_server_id"];
     }
-  }
-  // Apply defaults
-  for (const [col, defaultVal] of Object.entries(SCHEME_OF_WORK_DEFAULTS)) {
-    if (rowData[col] === undefined || rowData[col] === null) {
-      rowData[col] = defaultVal;
+    // Resolve school_server_id → school_id (UUID)
+    if (rowData["school_server_id"] && !rowData["school_id"]) {
+      rowData["school_id"] = rowData["school_server_id"];
     }
-  }
-  // Remove local-only fields
-  delete rowData["teacher_server_id"];
-  delete rowData["school_server_id"];
-  delete rowData["local_id"];
-}
-
-// ═══════════════════════════════════════════════════════════════
-// vault_items handler
-// ═══════════════════════════════════════════════════════════════
-if (table === "vault_items") {
-  // Resolve teacher_server_id → teacher_id (UUID)
-  if (rowData["teacher_server_id"] && !rowData["teacher_id"]) {
-    rowData["teacher_id"] = rowData["teacher_server_id"];
-  }
-  // Resolve school_server_id → school_id (UUID)
-  if (rowData["school_server_id"] && !rowData["school_id"]) {
-    rowData["school_id"] = rowData["school_server_id"];
-  }
-  // Map subject text name → subject_id if needed
-  if (rowData["subject"] && !rowData["subject_id"]) {
-    const subjectName = rowData["subject"] as string;
-    const { data: subject } = await supabase
-      .from("subjects")
-      .select("id")
-      .eq("subject_name", subjectName)
-      .maybeSingle();
-    if (subject?.id) {
-      rowData["subject_id"] = subject.id;
+    // Resolve subject_id — the client may send it as a local integer or a UUID string.
+    // If it looks like a UUID, use it directly; otherwise skip (server has its own FKs).
+    if (rowData["subject_id"]) {
+      const subId = rowData["subject_id"] as string;
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(subId)) {
+        // It's a local integer ID — we can't resolve it server-side.
+        delete rowData["subject_id"];
+      }
     }
-  }
-  // Map author_name → author_name (already correct field)
-  // Apply defaults
-  for (const [col, defaultVal] of Object.entries(VAULT_ITEMS_DEFAULTS)) {
-    if (rowData[col] === undefined || rowData[col] === null) {
-      rowData[col] = defaultVal;
+    // Apply defaults
+    for (const [col, defaultVal] of Object.entries(SCHEME_OF_WORK_DEFAULTS)) {
+      if (rowData[col] === undefined || rowData[col] === null) {
+        rowData[col] = defaultVal;
+      }
     }
+    // Remove local-only fields
+    delete rowData["teacher_server_id"];
+    delete rowData["school_server_id"];
+    delete rowData["local_id"];
   }
-  // Remove local-only fields
-  delete rowData["teacher_server_id"];
-  delete rowData["school_server_id"];
-  delete rowData["local_id"];
-  delete rowData["encrypted"];
-}
 
-// ═══════════════════════════════════════════════════════════════
-// teachers handler
-// ═══════════════════════════════════════════════════════════════
-if (table === "teachers") {
-  // school_server_id → school_id (UUID FK)
-  if (rowData["school_server_id"] && !rowData["school_id"]) {
-    rowData["school_id"] = rowData["school_server_id"];
+  // ═══════════════════════════════════════════════════════════════
+  // vault_items handler
+  // ═══════════════════════════════════════════════════════════════
+  if (table === "vault_items") {
+    // Resolve teacher_server_id → teacher_id (UUID)
+    if (rowData["teacher_server_id"] && !rowData["teacher_id"]) {
+      rowData["teacher_id"] = rowData["teacher_server_id"];
+    }
+    // Resolve school_server_id → school_id (UUID)
+    if (rowData["school_server_id"] && !rowData["school_id"]) {
+      rowData["school_id"] = rowData["school_server_id"];
+    }
+    // Map subject text name → subject_id if needed
+    if (rowData["subject"] && !rowData["subject_id"]) {
+      const subjectName = rowData["subject"] as string;
+      const { data: subject } = await supabase
+        .from("subjects")
+        .select("id")
+        .eq("subject_name", subjectName)
+        .maybeSingle();
+      if (subject?.id) {
+        rowData["subject_id"] = subject.id;
+      }
+    }
+    // Map author_name → author_name (already correct field)
+    // Apply defaults
+    for (const [col, defaultVal] of Object.entries(VAULT_ITEMS_DEFAULTS)) {
+      if (rowData[col] === undefined || rowData[col] === null) {
+        rowData[col] = defaultVal;
+      }
+    }
+    // Remove local-only fields
+    delete rowData["teacher_server_id"];
+    delete rowData["school_server_id"];
+    delete rowData["local_id"];
+    delete rowData["encrypted"];
   }
-  delete rowData["school_server_id"];
-  delete rowData["local_id"];
-}
 
-// ═══════════════════════════════════════════════════════════════
-// schools handler
-// ═══════════════════════════════════════════════════════════════
-if (table === "schools") {
-  delete rowData["local_id"];
-}
-
-// ═══════════════════════════════════════════════════════════════
-// subjects handler
-// ═══════════════════════════════════════════════════════════════
-if (table === "subjects") {
-  // Map name → subject_name for the server column
-  if (rowData["name"] && !rowData["subject_name"]) {
-    rowData["subject_name"] = rowData["name"];
+  // ═══════════════════════════════════════════════════════════════
+  // teachers handler
+  // ═══════════════════════════════════════════════════════════════
+  if (table === "teachers") {
+    // school_server_id → school_id (UUID FK)
+    if (rowData["school_server_id"] && !rowData["school_id"]) {
+      rowData["school_id"] = rowData["school_server_id"];
+    }
+    delete rowData["school_server_id"];
+    delete rowData["local_id"];
   }
-  delete rowData["name"];
-  delete rowData["local_id"];
-}
 
-// ═══════════════════════════════════════════════════════════════
-// audit_logs handler
-// ═══════════════════════════════════════════════════════════════
-if (table === "audit_logs") {
-  // teacher_id and school_id are already UUIDs — use them directly
-  delete rowData["local_id"];
-}
-
-// ═══════════════════════════════════════════════════════════════
-// payment_events handler
-// ═══════════════════════════════════════════════════════════════
-if (table === "payment_events") {
-  // Resolve school_server_id → school_id
-  if (rowData["school_server_id"] && !rowData["school_id"]) {
-    rowData["school_id"] = rowData["school_server_id"];
+  // ═══════════════════════════════════════════════════════════════
+  // schools handler
+  // ═══════════════════════════════════════════════════════════════
+  if (table === "schools") {
+    delete rowData["local_id"];
   }
-  delete rowData["school_server_id"];
-  delete rowData["local_id"];
+
+  // ═══════════════════════════════════════════════════════════════
+  // subjects handler
+  // ═══════════════════════════════════════════════════════════════
+  if (table === "subjects") {
+    // Map name → subject_name for the server column
+    if (rowData["name"] && !rowData["subject_name"]) {
+      rowData["subject_name"] = rowData["name"];
+    }
+    delete rowData["name"];
+    delete rowData["local_id"];
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // audit_logs handler
+  // ═══════════════════════════════════════════════════════════════
+  if (table === "audit_logs") {
+    // teacher_id and school_id are already UUIDs — use them directly
+    delete rowData["local_id"];
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // payment_events handler
+  // ═══════════════════════════════════════════════════════════════
+  if (table === "payment_events") {
+    // Resolve school_server_id → school_id
+    if (rowData["school_server_id"] && !rowData["school_id"]) {
+      rowData["school_id"] = rowData["school_server_id"];
+    }
+    delete rowData["school_server_id"];
+    delete rowData["local_id"];
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -622,7 +622,51 @@ serve(async (req) => {
     }
 
     const isAdmin = jwtClaims.is_admin === true;
-    const adminTables = new Set(["teachers", "schools", "subjects", "audit_logs", "payment_events"]);
+
+    // ══════════════════════════════════════════════════════════════════
+    // Fix 9a: Explicit allowlist — reject tables not in this set
+    // ══════════════════════════════════════════════════════════════════
+    // Without this, a (possibly malicious) client could send ANY table
+    // name from the `table` field in the change payload, and sync-push
+    // would attempt to write to it.  This allowlist closes that door.
+    // It includes every table the legitimate Dart client ever enqueues
+    // via syncQueueDao.insertEntry() — plus the `credit_spend` sentinel
+    // which is handled separately via SPEND_CREDITS (a no-op).
+    const SYNCABLE_TABLES = new Set([
+      "lessons", "exams", "progress_logs",
+      "subjects", "teachers", "schools",
+      "scheme_of_work", "vault_items",
+      "audit_logs", "payment_events",
+      "security_config", "credit_spend",
+    ]);
+
+    // ══════════════════════════════════════════════════════════════════
+    // Fix 9b: Admin-table guard — only admins may push to these tables
+    // ══════════════════════════════════════════════════════════════════
+    // These tables contain school-level or system-wide data that no
+    // non-admin teacher should ever be able to modify:
+    //   teachers       — other teachers' records, role, is_active
+    //   schools        — subscription_tier, total_seats, expiry_date,
+    //                    activation_code, admin_recovery_email
+    //   subjects       — school-wide subject catalogue
+    //   audit_logs     — audit trail of admin actions
+    //   payment_events — payment/transaction records
+    //   app_config     — system-wide config (pricing, limits, feature flags)
+    //   pending_activations — activation codes for onboarding
+    //   activation_codes    — payment activation codes with reference
+    //   admin_recovery_otps — admin password-recovery OTPs
+    //   verification_codes  — email verification OTPs
+    //   recovery_codes      — password-reset recovery codes
+    const adminTables = new Set([
+      "teachers", "schools", "subjects",
+      "audit_logs", "payment_events",
+      "app_config",
+      "pending_activations",
+      "activation_codes",
+      "admin_recovery_otps",
+      "verification_codes",
+      "recovery_codes",
+    ]);
 
     let processed = 0;
     const results: Record<string, unknown>[] = [];
@@ -643,7 +687,29 @@ serve(async (req) => {
       const op = (operation as string).toUpperCase();
 
       // ══════════════════════════════════════════════════════════════════
-      // Fix 9: Service-role authorization guard
+      // Fix 9a: Explicit table allowlist
+      // ══════════════════════════════════════════════════════════════════
+      // Reject any table name that the legitimate client never sends.
+      // This prevents a crafted or malicious request from writing to
+      // arbitrary database tables even if the adminTables guard would
+      // otherwise pass (e.g. a table added in the future that is not
+      // flagged admin-level but should never be written from the client).
+      if (!SYNCABLE_TABLES.has(table)) {
+        console.warn(
+          `sync-push: rejected change to unknown/non-syncable table "${table}" (op=${op})`,
+        );
+        results.push({
+          local_id: 0,
+          server_id: null,
+          status: "error",
+          retryable: false,
+          error: `Table "${table}" is not syncable via this endpoint`,
+        });
+        continue;
+      }
+
+      // ══════════════════════════════════════════════════════════════════
+      // Fix 9b: Service-role authorization guard
       // ══════════════════════════════════════════════════════════════════
       // Only admins may push changes to admin-level tables.
       if (adminTables.has(table) && !isAdmin) {
