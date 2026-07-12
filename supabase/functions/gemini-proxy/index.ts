@@ -1,13 +1,38 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { validateTokenVersion } from "../_shared/validate_token.ts";
 
 serve(async (req) => {
   try {
-    // ── Auth check ──────────────────────────────────────────────────────────
+    // ── Auth check: validate custom JWT ─────────────────────────────────
     const authHeader = req.headers.get("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return new Response(
         JSON.stringify({ error: "Unauthorized: missing JWT" }),
         { status: 401, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const jwtSecret = Deno.env.get("JWT_SECRET");
+    if (!jwtSecret) {
+      return new Response(
+        JSON.stringify({ error: "Server misconfiguration: JWT_SECRET not set" }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    try {
+      await validateTokenVersion(
+        token,
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        jwtSecret,
+      );
+    } catch (err) {
+      const { error, code, status } = err as { error: string; code: string; status: number };
+      return new Response(
+        JSON.stringify({ error, code }),
+        { status, headers: { "Content-Type": "application/json" } }
       );
     }
 

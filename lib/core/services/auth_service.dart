@@ -4,7 +4,6 @@ import 'package:dio/dio.dart';
 import 'package:http/http.dart' as http;
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
-import 'package:classai/core/constants/app_constants.dart';
 import 'package:classai/core/database/database.dart';
 
 /// Result of a login, activation, signup or password recovery operation.

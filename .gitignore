@@ -49,6 +49,7 @@ lib/core/constants/paystack_keys.dart
 
 # Supabase keys (never commit)
 lib/core/constants/supabase_keys.dart
+/sweep_test.py
 
 # Supabase temporary files
 supabase/.temp/
