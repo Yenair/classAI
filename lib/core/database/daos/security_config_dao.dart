@@ -135,21 +135,14 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
       ),
     );
 
-    // Queue security_config update for sync
-    try {
-      await db.syncQueueDao.insertEntry(
-        queueTable: 'security_config',
-        recordLocalId: 1,
-        operation: 'UPDATE',
-        payload: {
-          'offline_credits': offlineCredits,
-          'daily_preview_count': dailyPreviewCount,
-          'daily_preview_date': dailyPreviewDate,
-        },
-      );
-    } catch (_) {
-      // Non-critical — security_config sync shouldn't block the operation
-    }
+    // security_config is a per-device local table with no server-side
+    // counterpart.  The data it holds (offline credits, daily preview
+    // counters, deviceId, etc.) is never pushed to the server.
+    // Inserting a sync-queue entry here would produce an UPDATE against
+    // the `security_config` PostgREST endpoint, which returns 404
+    // because the relation does not exist on the server — causing stuck
+    // entries that retry forever.  Therefore, we skip sync entirely for
+    // this table.
   }
 
   Future<void> updateOfflineCredits(int newValue) async {

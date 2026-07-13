@@ -624,13 +624,14 @@ class DriftSyncRecordStore implements SyncRecordStore {
 
   Future<Map<String, dynamic>?> _loadSnapshot(
       String tableName, int localId) async {
-    final row = await (db.select(db.versionHashes)
+    final rows = await (db.select(db.versionHashes)
           ..where((t) =>
               t.table.equals(tableName) & t.recordLocalId.equals(localId))
           ..orderBy([
             (t) => OrderingTerm(expression: t.setAt, mode: OrderingMode.desc),
           ]))
-        .getSingleOrNull();
+        .get();
+    final row = rows.isEmpty ? null : rows.first;
     return _decodeSnapshot(row?.snapshotJson);
   }
 
@@ -1065,23 +1066,34 @@ class SyncService {
         continue;
       }
 
-      debugPrint('[PUSH-RESULT] Entry ${entry.id} not successful — marking attempt');
+      debugPrint('[PUSH-RESULT] Entry ${entry.id} not successful — '
+          'retryable=${result.retryable}, attempts=${entry.attempts}');
       await store.markQueueAttempt(entry.id);
 
-      if (result.retryable && entry.attempts < 5) {
-        debugPrint('[PUSH-RESULT] Entry ${entry.id} is retryable (attempt ${entry.attempts}/5), entering backoff');
-        _setState(SyncState.backoff);
+      if (!result.retryable) {
+        // ── Non-retryable: server indicated this entry will NEVER succeed
+        // (e.g. admin-table push from a non-admin user, or a non-syncable
+        // table). Remove it immediately to prevent queue buildup.
+        debugPrint(
+          '[PUSH-RESULT] Removing non-retryable queue entry '
+          '(id=${entry.id}, table=${entry.queueTable}, '
+          'operation=${entry.operation})',
+        );
+        await store.removeQueueEntry(entry.id);
       } else if (entry.attempts >= 5) {
         // ── Stuck item cleanup ──────────────────────────────────
-        // Items that have exhausted retries (attempts >= 5) or are
-        // non-retryable would remain in the queue forever, causing
-        // "stuck pending" displays. Remove them with a diagnostic log.
+        // Items that have exhausted retries remain in the queue forever,
+        // causing "stuck pending" displays. Remove them with a diagnostic log.
         debugPrint(
           '[PUSH-RESULT] Removing stuck queue entry '
           '(id=${entry.id}, table=${entry.queueTable}, '
           'operation=${entry.operation}, attempts=${entry.attempts})',
         );
         await store.removeQueueEntry(entry.id);
+      } else {
+        debugPrint('[PUSH-RESULT] Entry ${entry.id} is retryable '
+            '(attempt ${entry.attempts}/5), entering backoff');
+        _setState(SyncState.backoff);
       }
     }
   }
@@ -1490,13 +1502,14 @@ class SyncService {
   }
 
   Future<String?> _loadBaseHash(String tableName, int localId) async {
-    final row = await (db.select(db.versionHashes)
+    final rows = await (db.select(db.versionHashes)
           ..where((t) =>
               t.table.equals(tableName) & t.recordLocalId.equals(localId))
           ..orderBy([
             (t) => OrderingTerm(expression: t.setAt, mode: OrderingMode.desc),
           ]))
-        .getSingleOrNull();
+        .get();
+    final row = rows.isEmpty ? null : rows.first;
     return row?.hash;
   }
 

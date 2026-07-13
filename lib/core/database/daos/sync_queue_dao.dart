@@ -43,8 +43,14 @@ class SyncQueueDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<void> incrementAttempts(int id, {DateTime? lastAttemptAt}) async {
-    final current = await (select(syncQueue)..where((t) => t.id.equals(id)))
-        .getSingle();
+    final rows = await (select(syncQueue)..where((t) => t.id.equals(id)))
+        .get();
+    if (rows.isEmpty) {
+      // Entry was already removed (e.g. by another code path after success),
+      // so there's nothing to increment. Silently ignore.
+      return;
+    }
+    final current = rows.first;
     await (update(syncQueue)..where((t) => t.id.equals(id))).write(
       SyncQueueCompanion(
         attempts: Value(current.attempts + 1),
