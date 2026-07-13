@@ -464,6 +464,7 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
         darkTheme: AppTheme.dark(),
+        themeMode: ref.watch(themeProvider),
         home: const LoginScreen(),
       );
     }

@@ -141,6 +141,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
   static const int maxOfflineAttempts = 3;
   static const _sessionCheckInterval = Duration(seconds: 30);
   bool _isResending = false;
+  bool _isLoggingIn = false;
   Timer? _sessionTimer;
 
   @override
@@ -303,9 +304,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
       final normalized = text.toLowerCase();
       return normalized.contains('token_version_mismatch') ||
           normalized.contains('token version mismatch') ||
-          normalized.contains('session expired') ||
-          normalized.contains('401 unauthorized') ||
-          normalized.contains('unauthorized');
+          normalized.contains('session expired');
     }
 
     // ── Check AuthException (wraps server errors from login/signup) ───────
@@ -560,6 +559,23 @@ class AuthNotifier extends Notifier<AuthStateData> {
     required String password,
     required String deviceId,
   }) async {
+    // ── Concurrent-login guard ──────────────────────────────────────────
+    // Prevent duplicate loginOnline() calls that can occur when the widget
+    // tree swaps (MaterialApp ↔ MaterialApp.router) during the email
+    // verification flow, creating a second LoginScreen that triggers a
+    // redundant login. Each login bumps token_version server-side, which
+    // invalidates the JWT used by the ongoing verification session and
+    // causes the 30-second session timer to detect a false mismatch.
+    if (_isLoggingIn ||
+        state.state == AuthState.emailVerificationRequired ||
+        state.state == AuthState.checkingLocalAuth) {
+      debugPrint(
+        '[AuthNotifier.loginOnline] ⚠️ concurrent login blocked '
+        '(_isLoggingIn=$_isLoggingIn, state=${state.state})',
+      );
+      return;
+    }
+    _isLoggingIn = true;
     state = state.copyWith(
       state: AuthState.onlineLoginRequired,
       clearError: true,
@@ -663,6 +679,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
         errorMessage:
             'An unexpected error occurred. Please try again. (${e.runtimeType}: $e)',
       );
+    } finally {
+      _isLoggingIn = false;
     }
   }
 
@@ -1167,6 +1185,17 @@ class AuthNotifier extends Notifier<AuthStateData> {
           clearPendingDeviceId: true,
         );
         _startSessionTimer();
+
+        // Navigate GoRouter to the correct route — otherwise the tree swap
+        // leaves GoRouter stuck at /login (its initial location) with no
+        // navigation trigger.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final ctx = navigatorKey.currentContext;
+          if (ctx != null) {
+            final isAdmin = state.currentTeacher?.role == 'admin';
+            GoRouter.of(ctx).go(isAdmin ? '/admin' : '/');
+          }
+        });
       } else {
         final error = data['error'] as String? ?? 'Verification failed.';
         state = state.copyWith(errorMessage: error, clearError: false);
