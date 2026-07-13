@@ -31,7 +31,8 @@ final databaseProvider = Provider<AppDatabase>((ref) {
 });
 
 void main() async {
-  //TODO: Update Paystack live key in Supabase secrets before launch!
+  //TODO: Update Paystack live key 
+  //in C:\Users\Yene\classai\supabase\functions\init-payment\index.ts or Supabase secrets before launch!
   
   WidgetsFlutterBinding.ensureInitialized();
 

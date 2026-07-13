@@ -59,7 +59,7 @@ final appRouter = GoRouter(
     // ── Guest redirect ──────────────────────────────────────────────
     // If there is no teacher identity, the user is a guest and must be
     // redirected to the login screen.  The only exception is the /login
-    // route itself, so the login screen remains reachable.
+    // route itself, so the login screen remains accessible.
     if (authData.currentTeacher == null && location != '/login') {
       return '/login';
     }

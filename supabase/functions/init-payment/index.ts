@@ -4,6 +4,20 @@ import { validateTokenVersion } from "../_shared/validate_token.ts";
 
 const PAYSTACK_BASE = "https://api.paystack.co";
 
+// TODO: Before going live, replace these test plan codes with production
+// Paystack plan codes (generated from the Paystack live dashboard).
+// Currently using Paystack test-mode plan codes:
+
+//   basic:    PLN_98ax4ita4c3i87x
+//   standard: PLN_ocrkm20c1oabtz0
+//   elite:    PLN_htwuhwfhjjg62wz
+
+const PLAN_CODES: Record<string, string> = {
+  basic: "PLN_yongpg4zg23uszz",
+  standard: "PLN_kvlfbes9ahpn3zd",
+  elite: "PLN_ry6ze753lvuyr5i",
+};
+
 function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -77,16 +91,25 @@ serve(async (req) => {
 
     // ── 4. Parse body ──────────────────────────────────────────────
     const body = await req.json().catch(() => ({}));
-    const { email, amount, plan, school_id } = body;
+    const { email, amount, plan: planName, school_id } = body;
 
-    if (!email || !amount || !plan || !school_id) {
+    if (!email || !amount || !planName || !school_id) {
       return jsonResponse(
         { error: "Missing required fields: email, amount, plan, school_id" },
         400,
       );
     }
 
-    // ── 5. Verify school_id matches the caller's school ────────────
+    // ── 5. Resolve plan name to Paystack plan code ────────────────
+    const planCode = PLAN_CODES[planName.toLowerCase()];
+    if (!planCode) {
+      return jsonResponse(
+        { error: `Unknown plan: ${planName}. Allowed: basic, standard, elite` },
+        400,
+      );
+    }
+
+    // ── 5b. Verify school_id matches the caller's school ──────────
     if (teacher.school_id !== school_id) {
       return jsonResponse({ error: "Forbidden: school mismatch" }, 403);
     }
@@ -108,12 +131,12 @@ serve(async (req) => {
       body: JSON.stringify({
         email,
         amount: amountKobo,
-        plan,
+        plan: planCode,
         currency: "NGN",
         callback_url: "classai://payment/complete",
         metadata: {
           school_id,
-          plan,
+          plan: planName,
           source: "classai-init",
         },
       }),
