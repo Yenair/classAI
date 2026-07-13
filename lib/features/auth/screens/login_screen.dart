@@ -12,6 +12,7 @@ import 'package:classai/features/auth/screens/forgot_password_dialog.dart';
 import 'package:classai/features/auth/screens/admin_recovery_screen.dart';
 import 'package:classai/features/auth/screens/teacher_recovery_dialog.dart';
 import 'package:classai/features/auth/screens/email_verification_dialog.dart';
+import 'package:classai/features/settings/providers/theme_provider.dart';
 
 /// Login screen redesigned to match the Google Stitch design HTML.
 ///
@@ -232,34 +233,49 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
             // ── Right Side: Login Container ─────────────────────────
             Expanded(
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.all(
-                    isTablet
-                        ? AppTheme.spacingMarginTablet
-                        : AppTheme.spacingMarginMobile,
-                  ),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 400),
-                    child: _LoginCard(
-                      formKey: _formKey,
-                      emailController: _emailController,
-                      passwordController: _passwordController,
-                      obscurePassword: _obscurePassword,
-                      isLoggingIn: _isLoggingIn,
-                      authData: authData,
-                      cs: cs,
-                      theme: theme,
-                      onToggleObscure: () =>
-                          setState(() => _obscurePassword = !_obscurePassword),
-                      onLogin: _handleLogin,
-                      onForgotPassword: _showForgotPasswordFlow,
-                      onActivate: _showCreateAccountFlow,
-                      onDismissError: () =>
-                          ref.read(authProvider.notifier).clearError(),
+              child: Stack(
+                children: [
+                  Center(
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.all(
+                        isTablet
+                            ? AppTheme.spacingMarginTablet
+                            : AppTheme.spacingMarginMobile,
+                      ),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 400),
+                        child: _LoginCard(
+                          formKey: _formKey,
+                          emailController: _emailController,
+                          passwordController: _passwordController,
+                          obscurePassword: _obscurePassword,
+                          isLoggingIn: _isLoggingIn,
+                          authData: authData,
+                          cs: cs,
+                          theme: theme,
+                          onToggleObscure: () =>
+                              setState(() => _obscurePassword = !_obscurePassword),
+                          onLogin: _handleLogin,
+                          onForgotPassword: _showForgotPasswordFlow,
+                          onActivate: _showCreateAccountFlow,
+                          onDismissError: () =>
+                              ref.read(authProvider.notifier).clearError(),
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  // ── Theme toggle eye icon ──────────────────────────
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: IconButton(
+                      icon: const Icon(Icons.visibility_outlined),
+                      onPressed: () =>
+                          ref.read(themeProvider.notifier).toggleTheme(),
+                      tooltip: 'Switch theme',
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
