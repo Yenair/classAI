@@ -637,7 +637,7 @@ serve(async (req) => {
       "subjects", "teachers", "schools",
       "scheme_of_work", "vault_items",
       "audit_logs", "payment_events",
-      "security_config", "credit_spend",
+      "credit_spend",
     ]);
 
     // ══════════════════════════════════════════════════════════════════

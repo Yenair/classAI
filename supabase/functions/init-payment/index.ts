@@ -43,9 +43,10 @@ serve(async (req) => {
   }
 
   try {
-    // ── 1. Extract JWT ──────────────────────────────────────────────
-    const authHeader = req.headers.get("authorization") ?? "";
-    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    // ── 1. Extract JWT from x-classai-jwt header ───────────────────
+    // Using x-classai-jwt to bypass the Supabase gateway's Authorization
+    // header validation (verify_jwt = false is not always honoured).
+    const token = (req.headers.get("x-classai-jwt") ?? "").trim();
     if (!token) {
       return jsonResponse({ error: "Missing Authorization header" }, 401);
     }

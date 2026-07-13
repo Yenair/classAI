@@ -129,6 +129,19 @@ class FakeSyncRecordStore implements SyncRecordStore {
   }
 
   @override
+  Future<void> markQueueTerminalFailure(
+    int queueId, {
+    String? lastError,
+    DateTime? failedAt,
+  }) {
+    return db.syncQueueDao.markTerminalFailure(
+      queueId,
+      lastError: lastError,
+      failedAt: failedAt,
+    );
+  }
+
+  @override
   Future<void> removeQueueEntry(int queueId) {
     return db.syncQueueDao.deleteById(queueId);
   }

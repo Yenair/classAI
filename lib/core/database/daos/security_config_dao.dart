@@ -224,19 +224,6 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
       ),
     );
 
-    // Queue security_config update after generation count change
-    try {
-      await db.syncQueueDao.insertEntry(
-        queueTable: 'security_config',
-        recordLocalId: 1,
-        operation: 'UPDATE',
-        payload: {
-          'daily_generations': newCount + 1,
-          'daily_generation_date': newDate,
-        },
-      );
-    } catch (_) {}
-
     return true;
   }
 
@@ -274,19 +261,6 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
       ),
     );
 
-    // Queue security_config update after preview count change
-    try {
-      await db.syncQueueDao.insertEntry(
-        queueTable: 'security_config',
-        recordLocalId: 1,
-        operation: 'UPDATE',
-        payload: {
-          'daily_preview_count': newCount + 1,
-          'daily_preview_date': newDate,
-        },
-      );
-    } catch (_) {}
-
     return true;
   }
 
@@ -322,19 +296,6 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
         dailyPdfExportDate: Value(newDate),
       ),
     );
-
-    // Queue security_config update after PDF export count change
-    try {
-      await db.syncQueueDao.insertEntry(
-        queueTable: 'security_config',
-        recordLocalId: 1,
-        operation: 'UPDATE',
-        payload: {
-          'daily_pdf_exports': newCount + 1,
-          'daily_pdf_export_date': newDate,
-        },
-      );
-    } catch (_) {}
 
     return true;
   }

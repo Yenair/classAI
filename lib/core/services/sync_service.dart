@@ -126,12 +126,14 @@ class SyncPushResult {
   final String status;
   final String? serverId;
   final bool retryable;
+  final String? errorMessage;
 
   const SyncPushResult({
     required this.localId,
     required this.status,
     required this.serverId,
     required this.retryable,
+    this.errorMessage,
   });
 
   factory SyncPushResult.fromJson(Map<String, dynamic> json) {
@@ -145,6 +147,9 @@ class SyncPushResult {
       status: status != null && status.isNotEmpty ? status : 'error',
       serverId: json['server_id']?.toString(),
       retryable: json['retryable'] as bool? ?? false,
+      errorMessage: json['error']?.toString() ??
+          json['error_message']?.toString() ??
+          json['message']?.toString(),
     );
   }
 }
@@ -248,7 +253,6 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
     'scheme_of_work',
     'teachers',
     'schools',
-    'security_config',
     'audit_logs',
     'payment_events',
   ];
@@ -316,6 +320,7 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
     required List<SyncPushBatch> batches,
     required String deviceId,
   }) async {
+    String? errorMessage;
     try {
       final headers = <String, String>{};
       if (_jwt != null && _jwt!.isNotEmpty) {
@@ -354,6 +359,12 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
       debugPrint('[PUSH-ERROR] FunctionException caught in pushChanges()');
       debugPrint('[PUSH-ERROR] Status: ${e.status}');
       debugPrint('[PUSH-ERROR] Details: ${e.details}');
+      final details = e.details;
+      errorMessage = details is Map
+          ? (details['error']?.toString() ??
+              details['message']?.toString() ??
+              details['detail']?.toString())
+          : null;
       if (e.status == 401) {
         final code = (e.details is Map)
             ? (e.details as Map)['code'] as String?
@@ -388,6 +399,7 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
           status: 'error',
           serverId: null,
           retryable: true,
+          errorMessage: errorMessage,
         );
       }).toList(),
     );
@@ -498,6 +510,12 @@ abstract class SyncRecordStore {
 
   Future<void> markQueueAttempt(int queueId, {DateTime? attemptedAt});
 
+  Future<void> markQueueTerminalFailure(
+    int queueId, {
+    String? lastError,
+    DateTime? failedAt,
+  });
+
   Future<void> removeQueueEntry(int queueId);
 
   Future<SecurityConfigData> loadSecurityConfig();
@@ -592,6 +610,19 @@ class DriftSyncRecordStore implements SyncRecordStore {
     return db.syncQueueDao.incrementAttempts(
       queueId,
       lastAttemptAt: attemptedAt,
+    );
+  }
+
+  @override
+  Future<void> markQueueTerminalFailure(
+    int queueId, {
+    String? lastError,
+    DateTime? failedAt,
+  }) {
+    return db.syncQueueDao.markTerminalFailure(
+      queueId,
+      lastError: lastError,
+      failedAt: failedAt,
     );
   }
 
@@ -1069,30 +1100,39 @@ class SyncService {
       debugPrint('[PUSH-RESULT] Entry ${entry.id} not successful — '
           'retryable=${result.retryable}, attempts=${entry.attempts}');
       await store.markQueueAttempt(entry.id);
+      final nextAttempts = entry.attempts + 1;
+      final failureMessage = result.errorMessage ??
+          'Sync push failed for ${entry.queueTable} ${entry.operation}';
 
       if (!result.retryable) {
         // ── Non-retryable: server indicated this entry will NEVER succeed
         // (e.g. admin-table push from a non-admin user, or a non-syncable
-        // table). Remove it immediately to prevent queue buildup.
+        // table). Preserve it as terminal so the failure stays visible.
         debugPrint(
-          '[PUSH-RESULT] Removing non-retryable queue entry '
+          '[PUSH-RESULT] Marking non-retryable queue entry terminal '
           '(id=${entry.id}, table=${entry.queueTable}, '
           'operation=${entry.operation})',
         );
-        await store.removeQueueEntry(entry.id);
-      } else if (entry.attempts >= 5) {
-        // ── Stuck item cleanup ──────────────────────────────────
-        // Items that have exhausted retries remain in the queue forever,
-        // causing "stuck pending" displays. Remove them with a diagnostic log.
-        debugPrint(
-          '[PUSH-RESULT] Removing stuck queue entry '
-          '(id=${entry.id}, table=${entry.queueTable}, '
-          'operation=${entry.operation}, attempts=${entry.attempts})',
+        await store.markQueueTerminalFailure(
+          entry.id,
+          lastError: failureMessage,
         );
-        await store.removeQueueEntry(entry.id);
+      } else if (nextAttempts >= 5) {
+        // ── Stuck item cleanup ──────────────────────────────────
+        // Retain exhausted retries as terminal rows so the failure remains
+        // visible instead of disappearing silently.
+        debugPrint(
+          '[PUSH-RESULT] Marking stuck queue entry terminal '
+          '(id=${entry.id}, table=${entry.queueTable}, '
+          'operation=${entry.operation}, attempts=$nextAttempts)',
+        );
+        await store.markQueueTerminalFailure(
+          entry.id,
+          lastError: failureMessage,
+        );
       } else {
         debugPrint('[PUSH-RESULT] Entry ${entry.id} is retryable '
-            '(attempt ${entry.attempts}/5), entering backoff');
+            '(attempt $nextAttempts/5), entering backoff');
         _setState(SyncState.backoff);
       }
     }

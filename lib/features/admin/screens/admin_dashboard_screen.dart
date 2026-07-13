@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide AuthException;
 import 'package:classai/features/admin/providers/admin_provider.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
+import 'package:classai/core/database/database.dart';
 import 'package:classai/core/services/auth_service.dart';
 import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/providers/config_provider.dart';
@@ -2663,9 +2664,9 @@ class _SyncHealthTab extends ConsumerWidget {
           : null,
       padding: const EdgeInsets.only(bottom: 80),
       child: isWide
-          ? _buildWideLayout(context, cs, textTheme, greenCount, yellowCount,
+          ? _buildWideLayout(context, ref, cs, textTheme, greenCount, yellowCount,
               redCount, grayCount, syncPercent, totalTeachers)
-          : _buildNarrowLayout(context, cs, textTheme, greenCount, yellowCount,
+          : _buildNarrowLayout(context, ref, cs, textTheme, greenCount, yellowCount,
               redCount, grayCount, syncPercent, totalTeachers),
     );
   }
@@ -2779,6 +2780,7 @@ class _SyncHealthTab extends ConsumerWidget {
   // Wide: two-column bento layout matching Stitch
   Widget _buildWideLayout(
     BuildContext context,
+    WidgetRef ref,
     ColorScheme cs,
     TextTheme textTheme,
     int greenCount,
@@ -2794,6 +2796,8 @@ class _SyncHealthTab extends ConsumerWidget {
         _buildSummaryCard(cs, textTheme, greenCount, yellowCount, redCount,
             grayCount, syncPercent, totalTeachers,
             isWide: true),
+        const SizedBox(height: 16),
+        _buildTerminalFailuresPanel(context, ref, cs, textTheme),
         // Per-teacher sync details (same as narrow layout)
         const SizedBox(height: 16),
         ...teachers.map((teacher) => _buildTeacherSyncCard(
@@ -2809,6 +2813,7 @@ class _SyncHealthTab extends ConsumerWidget {
   // Narrow: stacked layout
   Widget _buildNarrowLayout(
     BuildContext context,
+    WidgetRef ref,
     ColorScheme cs,
     TextTheme textTheme,
     int greenCount,
@@ -2824,6 +2829,8 @@ class _SyncHealthTab extends ConsumerWidget {
         _buildSummaryCard(cs, textTheme, greenCount, yellowCount, redCount,
             grayCount, syncPercent, totalTeachers,
             isWide: false),
+        const SizedBox(height: 16),
+        _buildTerminalFailuresPanel(context, ref, cs, textTheme),
 
         // Per-teacher sync details
         const SizedBox(height: 16),
@@ -2950,6 +2957,156 @@ class _SyncHealthTab extends ConsumerWidget {
             style: textTheme.bodySmall?.copyWith(
               color: cs.onSurfaceVariant,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTerminalFailuresPanel(
+    BuildContext context,
+    WidgetRef ref,
+    ColorScheme cs,
+    TextTheme textTheme,
+  ) {
+    return FutureBuilder<List<SyncQueueData>>(
+      future: ref.read(databaseProvider).syncQueueDao.terminalEntries(
+            limit: 12,
+          ),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.2),
+              ),
+            ),
+            child: const Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final failures = snapshot.data ?? const [];
+        if (failures.isEmpty) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.2),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.verified_rounded, color: cs.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'No terminal sync failures recorded.',
+                    style: textTheme.bodyMedium,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: cs.outlineVariant.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.report_gmailerrorred_rounded,
+                      color: cs.error, size: 22),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Terminal sync failures',
+                    style: textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ...failures.map(
+                (entry) => _buildTerminalFailureCard(
+                  context,
+                  cs,
+                  textTheme,
+                  entry,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTerminalFailureCard(
+    BuildContext context,
+    ColorScheme cs,
+    TextTheme textTheme,
+    SyncQueueData entry,
+  ) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: cs.error.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${entry.queueTable} ${entry.operation} · local ${entry.recordLocalId}',
+                  style: textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Text(
+                '${entry.attempts} tries',
+                style: textTheme.labelMedium?.copyWith(
+                  color: cs.error,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Failed at ${entry.failedAt != null ? _formatTime(entry.failedAt!) : "unknown time"}',
+            style: textTheme.bodySmall?.copyWith(
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            entry.lastError ?? 'No error detail was recorded.',
+            style: textTheme.bodyMedium,
           ),
         ],
       ),

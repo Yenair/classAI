@@ -1685,11 +1685,12 @@ class AuthNotifier extends Notifier<AuthStateData> {
     );
     final schoolLocalIdToUse = schoolRow.localId;
 
-    // Queue school record for sync if it has a serverId
-    if (schoolRow.serverId != null && schoolRow.serverId!.isNotEmpty) {
+    // Auth hydration no longer queues a schools update.
+    if ((schoolRow.serverId?.isEmpty ?? true) &&
+        (schoolRow.serverId?.isNotEmpty ?? false)) {
       try {
         await _db.syncQueueDao.insertEntry(
-          queueTable: 'schools',
+          queueTable: '__disabled_schools__',
           recordLocalId: schoolRow.localId,
           operation: 'UPDATE',
           payload: {

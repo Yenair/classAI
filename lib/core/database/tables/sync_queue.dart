@@ -9,6 +9,9 @@ class SyncQueue extends Table {
   TextColumn get payload => text()(); // JSON
   IntColumn get attempts => integer().withDefault(const Constant(0))();
   BoolColumn get isEmergency => boolean().withDefault(const Constant(false))();
+  BoolColumn get isTerminal => boolean().withDefault(const Constant(false))();
+  TextColumn get lastError => text().nullable()();
+  DateTimeColumn get failedAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastAttemptAt => dateTime().nullable()();
 

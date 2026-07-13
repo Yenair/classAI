@@ -29,9 +29,10 @@ serve(async (req) => {
   }
 
   try {
-    // ── 1. Extract JWT ──────────────────────────────────────────────
-    const authHeader = req.headers.get("authorization") ?? "";
-    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    // ── 1. Extract JWT from x-classai-jwt header ───────────────────
+    // Using x-classai-jwt to bypass the Supabase gateway's Authorization
+    // header validation (verify_jwt = false is not always honoured).
+    const token = (req.headers.get("x-classai-jwt") ?? "").trim();
     if (!token) {
       return jsonResponse({ error: "Missing Authorization header" }, 401);
     }
@@ -100,21 +101,51 @@ serve(async (req) => {
       },
     );
 
+    let paystackError: { message?: string; code?: string } | null = null;
+    let paystackResult: Record<string, unknown> | null = null;
+
     if (!response.ok) {
+      const errorBody = await response.text();
+      try {
+        const parsed = JSON.parse(errorBody);
+        paystackError = {
+          message: (parsed.message as string) ?? response.statusText,
+          code: (parsed.code as string) ?? undefined,
+        };
+      } catch {
+        paystackError = { message: response.statusText };
+      }
+
+      // Translate Paystack error codes into appropriate HTTP statuses:
+      //   - transaction_not_found / 400 → client sent a bad reference (400)
+      //   - Any other 4xx → client error (400)
+      //   - 5xx → upstream Paystack failure (502)
+      if (response.status === 400 || response.status === 404 ||
+          paystackError.code === "transaction_not_found") {
+        return jsonResponse(
+          {
+            error: paystackError.message ?? "Transaction reference not found",
+            code: "transaction_not_found",
+          },
+          400,
+        );
+      }
+
+      // Connectivity / upstream failure
       return jsonResponse(
-        { error: `Paystack verification failed: ${response.statusText}` },
+        { error: `Paystack verification failed: ${paystackError.message ?? response.statusText}` },
         502,
       );
     }
 
-    const result = await response.json();
+    paystackResult = await response.json() as Record<string, unknown>;
 
     // ── 7. Return only client-safe fields ──────────────────────────
     return jsonResponse({
-      status: result.data?.status ?? "unknown",
-      reference: result.data?.reference ?? reference,
-      amount: result.data?.amount ?? 0,
-      paid_at: result.data?.paid_at ?? null,
+      status: (paystackResult.data as Record<string, unknown>)?.status as string ?? "unknown",
+      reference: (paystackResult.data as Record<string, unknown>)?.reference as string ?? reference,
+      amount: (paystackResult.data as Record<string, unknown>)?.amount as number ?? 0,
+      paid_at: (paystackResult.data as Record<string, unknown>)?.paid_at as string | null ?? null,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

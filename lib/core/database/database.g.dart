@@ -8412,6 +8412,28 @@ class $SyncQueueTable extends SyncQueue
       defaultConstraints: GeneratedColumn.constraintIsAlways(
           'CHECK ("is_emergency" IN (0, 1))'),
       defaultValue: const Constant(false));
+  static const VerificationMeta _isTerminalMeta =
+      const VerificationMeta('isTerminal');
+  @override
+  late final GeneratedColumn<bool> isTerminal = GeneratedColumn<bool>(
+      'is_terminal', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("is_terminal" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _lastErrorMeta =
+      const VerificationMeta('lastError');
+  @override
+  late final GeneratedColumn<String> lastError = GeneratedColumn<String>(
+      'last_error', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _failedAtMeta =
+      const VerificationMeta('failedAt');
+  @override
+  late final GeneratedColumn<DateTime> failedAt = GeneratedColumn<DateTime>(
+      'failed_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -8435,6 +8457,9 @@ class $SyncQueueTable extends SyncQueue
         payload,
         attempts,
         isEmergency,
+        isTerminal,
+        lastError,
+        failedAt,
         createdAt,
         lastAttemptAt
       ];
@@ -8489,6 +8514,20 @@ class $SyncQueueTable extends SyncQueue
           isEmergency.isAcceptableOrUnknown(
               data['is_emergency']!, _isEmergencyMeta));
     }
+    if (data.containsKey('is_terminal')) {
+      context.handle(
+          _isTerminalMeta,
+          isTerminal.isAcceptableOrUnknown(
+              data['is_terminal']!, _isTerminalMeta));
+    }
+    if (data.containsKey('last_error')) {
+      context.handle(_lastErrorMeta,
+          lastError.isAcceptableOrUnknown(data['last_error']!, _lastErrorMeta));
+    }
+    if (data.containsKey('failed_at')) {
+      context.handle(_failedAtMeta,
+          failedAt.isAcceptableOrUnknown(data['failed_at']!, _failedAtMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -8522,6 +8561,12 @@ class $SyncQueueTable extends SyncQueue
           .read(DriftSqlType.int, data['${effectivePrefix}attempts'])!,
       isEmergency: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_emergency'])!,
+      isTerminal: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_terminal'])!,
+      lastError: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}last_error']),
+      failedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}failed_at']),
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       lastAttemptAt: attachedDatabase.typeMapping.read(
@@ -8543,6 +8588,9 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
   final String payload;
   final int attempts;
   final bool isEmergency;
+  final bool isTerminal;
+  final String? lastError;
+  final DateTime? failedAt;
   final DateTime createdAt;
   final DateTime? lastAttemptAt;
   const SyncQueueData(
@@ -8553,6 +8601,9 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
       required this.payload,
       required this.attempts,
       required this.isEmergency,
+      required this.isTerminal,
+      this.lastError,
+      this.failedAt,
       required this.createdAt,
       this.lastAttemptAt});
   @override
@@ -8565,6 +8616,13 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
     map['payload'] = Variable<String>(payload);
     map['attempts'] = Variable<int>(attempts);
     map['is_emergency'] = Variable<bool>(isEmergency);
+    map['is_terminal'] = Variable<bool>(isTerminal);
+    if (!nullToAbsent || lastError != null) {
+      map['last_error'] = Variable<String>(lastError);
+    }
+    if (!nullToAbsent || failedAt != null) {
+      map['failed_at'] = Variable<DateTime>(failedAt);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || lastAttemptAt != null) {
       map['last_attempt_at'] = Variable<DateTime>(lastAttemptAt);
@@ -8581,6 +8639,13 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
       payload: Value(payload),
       attempts: Value(attempts),
       isEmergency: Value(isEmergency),
+      isTerminal: Value(isTerminal),
+      lastError: lastError == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastError),
+      failedAt: failedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(failedAt),
       createdAt: Value(createdAt),
       lastAttemptAt: lastAttemptAt == null && nullToAbsent
           ? const Value.absent()
@@ -8599,6 +8664,9 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
       payload: serializer.fromJson<String>(json['payload']),
       attempts: serializer.fromJson<int>(json['attempts']),
       isEmergency: serializer.fromJson<bool>(json['isEmergency']),
+      isTerminal: serializer.fromJson<bool>(json['isTerminal']),
+      lastError: serializer.fromJson<String?>(json['lastError']),
+      failedAt: serializer.fromJson<DateTime?>(json['failedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastAttemptAt: serializer.fromJson<DateTime?>(json['lastAttemptAt']),
     );
@@ -8614,6 +8682,9 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
       'payload': serializer.toJson<String>(payload),
       'attempts': serializer.toJson<int>(attempts),
       'isEmergency': serializer.toJson<bool>(isEmergency),
+      'isTerminal': serializer.toJson<bool>(isTerminal),
+      'lastError': serializer.toJson<String?>(lastError),
+      'failedAt': serializer.toJson<DateTime?>(failedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastAttemptAt': serializer.toJson<DateTime?>(lastAttemptAt),
     };
@@ -8627,6 +8698,9 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
           String? payload,
           int? attempts,
           bool? isEmergency,
+          bool? isTerminal,
+          Value<String?> lastError = const Value.absent(),
+          Value<DateTime?> failedAt = const Value.absent(),
           DateTime? createdAt,
           Value<DateTime?> lastAttemptAt = const Value.absent()}) =>
       SyncQueueData(
@@ -8637,6 +8711,9 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
         payload: payload ?? this.payload,
         attempts: attempts ?? this.attempts,
         isEmergency: isEmergency ?? this.isEmergency,
+        isTerminal: isTerminal ?? this.isTerminal,
+        lastError: lastError.present ? lastError.value : this.lastError,
+        failedAt: failedAt.present ? failedAt.value : this.failedAt,
         createdAt: createdAt ?? this.createdAt,
         lastAttemptAt:
             lastAttemptAt.present ? lastAttemptAt.value : this.lastAttemptAt,
@@ -8654,6 +8731,10 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
       attempts: data.attempts.present ? data.attempts.value : this.attempts,
       isEmergency:
           data.isEmergency.present ? data.isEmergency.value : this.isEmergency,
+      isTerminal:
+          data.isTerminal.present ? data.isTerminal.value : this.isTerminal,
+      lastError: data.lastError.present ? data.lastError.value : this.lastError,
+      failedAt: data.failedAt.present ? data.failedAt.value : this.failedAt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastAttemptAt: data.lastAttemptAt.present
           ? data.lastAttemptAt.value
@@ -8671,6 +8752,9 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
           ..write('payload: $payload, ')
           ..write('attempts: $attempts, ')
           ..write('isEmergency: $isEmergency, ')
+          ..write('isTerminal: $isTerminal, ')
+          ..write('lastError: $lastError, ')
+          ..write('failedAt: $failedAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastAttemptAt: $lastAttemptAt')
           ..write(')'))
@@ -8678,8 +8762,19 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
   }
 
   @override
-  int get hashCode => Object.hash(id, queueTable, recordLocalId, operation,
-      payload, attempts, isEmergency, createdAt, lastAttemptAt);
+  int get hashCode => Object.hash(
+      id,
+      queueTable,
+      recordLocalId,
+      operation,
+      payload,
+      attempts,
+      isEmergency,
+      isTerminal,
+      lastError,
+      failedAt,
+      createdAt,
+      lastAttemptAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -8691,6 +8786,9 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
           other.payload == this.payload &&
           other.attempts == this.attempts &&
           other.isEmergency == this.isEmergency &&
+          other.isTerminal == this.isTerminal &&
+          other.lastError == this.lastError &&
+          other.failedAt == this.failedAt &&
           other.createdAt == this.createdAt &&
           other.lastAttemptAt == this.lastAttemptAt);
 }
@@ -8703,6 +8801,9 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
   final Value<String> payload;
   final Value<int> attempts;
   final Value<bool> isEmergency;
+  final Value<bool> isTerminal;
+  final Value<String?> lastError;
+  final Value<DateTime?> failedAt;
   final Value<DateTime> createdAt;
   final Value<DateTime?> lastAttemptAt;
   const SyncQueueCompanion({
@@ -8713,6 +8814,9 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
     this.payload = const Value.absent(),
     this.attempts = const Value.absent(),
     this.isEmergency = const Value.absent(),
+    this.isTerminal = const Value.absent(),
+    this.lastError = const Value.absent(),
+    this.failedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastAttemptAt = const Value.absent(),
   });
@@ -8724,6 +8828,9 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
     required String payload,
     this.attempts = const Value.absent(),
     this.isEmergency = const Value.absent(),
+    this.isTerminal = const Value.absent(),
+    this.lastError = const Value.absent(),
+    this.failedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastAttemptAt = const Value.absent(),
   })  : queueTable = Value(queueTable),
@@ -8738,6 +8845,9 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
     Expression<String>? payload,
     Expression<int>? attempts,
     Expression<bool>? isEmergency,
+    Expression<bool>? isTerminal,
+    Expression<String>? lastError,
+    Expression<DateTime>? failedAt,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastAttemptAt,
   }) {
@@ -8749,6 +8859,9 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
       if (payload != null) 'payload': payload,
       if (attempts != null) 'attempts': attempts,
       if (isEmergency != null) 'is_emergency': isEmergency,
+      if (isTerminal != null) 'is_terminal': isTerminal,
+      if (lastError != null) 'last_error': lastError,
+      if (failedAt != null) 'failed_at': failedAt,
       if (createdAt != null) 'created_at': createdAt,
       if (lastAttemptAt != null) 'last_attempt_at': lastAttemptAt,
     });
@@ -8762,6 +8875,9 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
       Value<String>? payload,
       Value<int>? attempts,
       Value<bool>? isEmergency,
+      Value<bool>? isTerminal,
+      Value<String?>? lastError,
+      Value<DateTime?>? failedAt,
       Value<DateTime>? createdAt,
       Value<DateTime?>? lastAttemptAt}) {
     return SyncQueueCompanion(
@@ -8772,6 +8888,9 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
       payload: payload ?? this.payload,
       attempts: attempts ?? this.attempts,
       isEmergency: isEmergency ?? this.isEmergency,
+      isTerminal: isTerminal ?? this.isTerminal,
+      lastError: lastError ?? this.lastError,
+      failedAt: failedAt ?? this.failedAt,
       createdAt: createdAt ?? this.createdAt,
       lastAttemptAt: lastAttemptAt ?? this.lastAttemptAt,
     );
@@ -8801,6 +8920,15 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
     if (isEmergency.present) {
       map['is_emergency'] = Variable<bool>(isEmergency.value);
     }
+    if (isTerminal.present) {
+      map['is_terminal'] = Variable<bool>(isTerminal.value);
+    }
+    if (lastError.present) {
+      map['last_error'] = Variable<String>(lastError.value);
+    }
+    if (failedAt.present) {
+      map['failed_at'] = Variable<DateTime>(failedAt.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -8820,6 +8948,9 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
           ..write('payload: $payload, ')
           ..write('attempts: $attempts, ')
           ..write('isEmergency: $isEmergency, ')
+          ..write('isTerminal: $isTerminal, ')
+          ..write('lastError: $lastError, ')
+          ..write('failedAt: $failedAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastAttemptAt: $lastAttemptAt')
           ..write(')'))
@@ -17707,6 +17838,9 @@ typedef $$SyncQueueTableCreateCompanionBuilder = SyncQueueCompanion Function({
   required String payload,
   Value<int> attempts,
   Value<bool> isEmergency,
+  Value<bool> isTerminal,
+  Value<String?> lastError,
+  Value<DateTime?> failedAt,
   Value<DateTime> createdAt,
   Value<DateTime?> lastAttemptAt,
 });
@@ -17718,6 +17852,9 @@ typedef $$SyncQueueTableUpdateCompanionBuilder = SyncQueueCompanion Function({
   Value<String> payload,
   Value<int> attempts,
   Value<bool> isEmergency,
+  Value<bool> isTerminal,
+  Value<String?> lastError,
+  Value<DateTime?> failedAt,
   Value<DateTime> createdAt,
   Value<DateTime?> lastAttemptAt,
 });
@@ -17751,6 +17888,15 @@ class $$SyncQueueTableFilterComposer
 
   ColumnFilters<bool> get isEmergency => $composableBuilder(
       column: $table.isEmergency, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get isTerminal => $composableBuilder(
+      column: $table.isTerminal, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get lastError => $composableBuilder(
+      column: $table.lastError, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get failedAt => $composableBuilder(
+      column: $table.failedAt, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
@@ -17790,6 +17936,15 @@ class $$SyncQueueTableOrderingComposer
   ColumnOrderings<bool> get isEmergency => $composableBuilder(
       column: $table.isEmergency, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<bool> get isTerminal => $composableBuilder(
+      column: $table.isTerminal, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get lastError => $composableBuilder(
+      column: $table.lastError, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get failedAt => $composableBuilder(
+      column: $table.failedAt, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 
@@ -17827,6 +17982,15 @@ class $$SyncQueueTableAnnotationComposer
 
   GeneratedColumn<bool> get isEmergency => $composableBuilder(
       column: $table.isEmergency, builder: (column) => column);
+
+  GeneratedColumn<bool> get isTerminal => $composableBuilder(
+      column: $table.isTerminal, builder: (column) => column);
+
+  GeneratedColumn<String> get lastError =>
+      $composableBuilder(column: $table.lastError, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get failedAt =>
+      $composableBuilder(column: $table.failedAt, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -17868,6 +18032,9 @@ class $$SyncQueueTableTableManager extends RootTableManager<
             Value<String> payload = const Value.absent(),
             Value<int> attempts = const Value.absent(),
             Value<bool> isEmergency = const Value.absent(),
+            Value<bool> isTerminal = const Value.absent(),
+            Value<String?> lastError = const Value.absent(),
+            Value<DateTime?> failedAt = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> lastAttemptAt = const Value.absent(),
           }) =>
@@ -17879,6 +18046,9 @@ class $$SyncQueueTableTableManager extends RootTableManager<
             payload: payload,
             attempts: attempts,
             isEmergency: isEmergency,
+            isTerminal: isTerminal,
+            lastError: lastError,
+            failedAt: failedAt,
             createdAt: createdAt,
             lastAttemptAt: lastAttemptAt,
           ),
@@ -17890,6 +18060,9 @@ class $$SyncQueueTableTableManager extends RootTableManager<
             required String payload,
             Value<int> attempts = const Value.absent(),
             Value<bool> isEmergency = const Value.absent(),
+            Value<bool> isTerminal = const Value.absent(),
+            Value<String?> lastError = const Value.absent(),
+            Value<DateTime?> failedAt = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> lastAttemptAt = const Value.absent(),
           }) =>
@@ -17901,6 +18074,9 @@ class $$SyncQueueTableTableManager extends RootTableManager<
             payload: payload,
             attempts: attempts,
             isEmergency: isEmergency,
+            isTerminal: isTerminal,
+            lastError: lastError,
+            failedAt: failedAt,
             createdAt: createdAt,
             lastAttemptAt: lastAttemptAt,
           ),

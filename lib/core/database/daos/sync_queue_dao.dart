@@ -32,6 +32,7 @@ class SyncQueueDao extends DatabaseAccessor<AppDatabase>
 
   Future<List<SyncQueueData>> pendingEntries() {
     return (select(syncQueue)
+          ..where((t) => t.isTerminal.equals(false))
           ..orderBy([
             (t) => OrderingTerm(
                   expression: t.isEmergency,
@@ -39,6 +40,23 @@ class SyncQueueDao extends DatabaseAccessor<AppDatabase>
                 ),
             (t) => OrderingTerm(expression: t.createdAt),
           ]))
+        .get();
+  }
+
+  Future<List<SyncQueueData>> terminalEntries({int limit = 20}) {
+    return (select(syncQueue)
+          ..where((t) => t.isTerminal.equals(true))
+          ..orderBy([
+            (t) => OrderingTerm(
+                  expression: t.failedAt,
+                  mode: OrderingMode.desc,
+                ),
+            (t) => OrderingTerm(
+                  expression: t.createdAt,
+                  mode: OrderingMode.desc,
+                ),
+          ])
+          ..limit(limit))
         .get();
   }
 
@@ -56,6 +74,27 @@ class SyncQueueDao extends DatabaseAccessor<AppDatabase>
         attempts: Value(current.attempts + 1),
         lastAttemptAt: Value(lastAttemptAt ?? DateTime.now()),
       ),
+      );
+  }
+
+  Future<void> markTerminalFailure(
+    int id, {
+    String? lastError,
+    DateTime? failedAt,
+  }) async {
+    final rows = await (select(syncQueue)..where((t) => t.id.equals(id)))
+        .get();
+    if (rows.isEmpty) {
+      return;
+    }
+    final now = DateTime.now();
+    await (update(syncQueue)..where((t) => t.id.equals(id))).write(
+      SyncQueueCompanion(
+        isTerminal: const Value(true),
+        lastError: Value(lastError),
+        failedAt: Value(failedAt ?? now),
+        lastAttemptAt: Value(now),
+      ),
     );
   }
 
@@ -65,14 +104,18 @@ class SyncQueueDao extends DatabaseAccessor<AppDatabase>
 
   /// Count all pending (un-synced) entries in the queue.
   Future<int> pendingCount() async {
-    final rows = await (select(syncQueue)).get();
+    final rows = await (select(syncQueue)
+          ..where((t) => t.isTerminal.equals(false)))
+        .get();
     return rows.length;
   }
 
   /// Count pending entries for a specific table (e.g. teacher scope).
   Future<int> pendingCountForTable(String tableName) async {
     final rows = await (select(syncQueue)
-          ..where((t) => t.queueTable.equals(tableName)))
+          ..where((t) =>
+              t.queueTable.equals(tableName) &
+              t.isTerminal.equals(false)))
         .get();
     return rows.length;
   }

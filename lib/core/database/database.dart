@@ -96,7 +96,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 21;
 
   static QueryExecutor _openConnection() {
     return LazyDatabase(() async {
@@ -876,19 +876,46 @@ class AppDatabase extends _$AppDatabase {
             if (!examColNames.contains('term')) {
               await customStatement(
                 "ALTER TABLE exams ADD COLUMN term TEXT",
-                );
-              }
-              final sowCols = await customSelect(
-                "SELECT name FROM pragma_table_info('scheme_of_work')",
-              ).get();
-              final sowColNames =
-                  sowCols.map((r) => r.read<String>('name')).toSet();
-              if (!sowColNames.contains('class_level')) {
-                await customStatement(
-                  "ALTER TABLE scheme_of_work ADD COLUMN class_level TEXT NOT NULL DEFAULT ''",
-                );
-              }
+              );
             }
+            final sowCols = await customSelect(
+              "SELECT name FROM pragma_table_info('scheme_of_work')",
+            ).get();
+            final sowColNames =
+                sowCols.map((r) => r.read<String>('name')).toSet();
+            if (!sowColNames.contains('class_level')) {
+              await customStatement(
+                "ALTER TABLE scheme_of_work ADD COLUMN class_level TEXT NOT NULL DEFAULT ''",
+              );
+            }
+          }
+          if (from < 21) {
+            final syncQueueCols = await customSelect(
+              "SELECT name FROM pragma_table_info('sync_queue')",
+            ).get();
+            final syncQueueColNames =
+                syncQueueCols.map((r) => r.read<String>('name')).toSet();
+            if (!syncQueueColNames.contains('is_terminal')) {
+              await customStatement(
+                'ALTER TABLE sync_queue ADD COLUMN is_terminal INTEGER NOT NULL DEFAULT 0',
+              );
+            }
+            if (!syncQueueColNames.contains('last_error')) {
+              await customStatement(
+                'ALTER TABLE sync_queue ADD COLUMN last_error TEXT',
+              );
+            }
+            if (!syncQueueColNames.contains('failed_at')) {
+              await customStatement(
+                'ALTER TABLE sync_queue ADD COLUMN failed_at TEXT',
+              );
+            }
+
+            // security_config should no longer be sync-pushed from the client.
+            await customStatement(
+              "DELETE FROM sync_queue WHERE queue_table = 'security_config'",
+            );
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys=ON');
