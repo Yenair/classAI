@@ -13,14 +13,28 @@ class PlatformHelper {
 
   /// Returns `true` if the device has network connectivity.
   ///
-  /// Uses [connectivity_plus] to confirm there is a transport available.
-  /// This is a simple transport-level check with no side effects.
-  /// For a stricter check that also probes DNS, use [isReliablyOnline].
+  /// First tries [connectivity_plus] for a transport-level check.  If that
+  /// returns [ConnectivityResult.none] or throws (a known issue on some
+  /// Android versions — PlatformException(0, NetworkManager::StartListen)),
+  /// falls back to a DNS lookup of `example.com` as a reliable probe.
+  ///
+  /// For an even stricter check, use [isReliablyOnline].
   static Future<bool> isOnline() async {
     final connectivity = Connectivity();
     try {
       final results = await connectivity.checkConnectivity();
-      return results.any((r) => r != ConnectivityResult.none);
+      if (results.any((r) => r != ConnectivityResult.none)) {
+        return true;
+      }
+    } catch (_) {
+      // connectivity_plus failed — fall through to DNS check below.
+    }
+
+    // Fallback: DNS lookup to confirm actual connectivity.
+    try {
+      final lookup = await InternetAddress.lookup('example.com');
+      return lookup.isNotEmpty &&
+          lookup.any((address) => address.rawAddress.isNotEmpty);
     } catch (_) {
       return false;
     }
