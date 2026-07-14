@@ -1006,8 +1006,15 @@ class SyncService {
     final batches = <SyncPushBatch>[];
     final config = await store.loadSecurityConfig();
 
+    debugPrint('[PUSH-QUEUE] Pending sync entries: ${sorted.length}');
+
     for (final entry in sorted) {
       final payload = _decodePayload(entry.payload);
+      debugPrint('[PUSH-QUEUE] Entry ${entry.id}: '
+          'table=${entry.queueTable}, '
+          'operation=${entry.operation}, '
+          'localId=${entry.recordLocalId}, '
+          'attempts=${entry.attempts}');
       // Inject local_id so the server can echo it back in the results
       // array, enabling the client to match responses to entries.
       payload['local_id'] = entry.recordLocalId;

@@ -1,6 +1,7 @@
 // lib/core/services/payment_service.dart
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
 import '../database/database.dart';
+import 'auth_service.dart';
 
 /// Result returned by [PaymentService.initializePayment].
 class PaymentInitResult {
@@ -32,6 +33,14 @@ class PaymentService {
   supabase_pkg.SupabaseClient get _client =>
       supabase_pkg.Supabase.instance.client;
 
+  String _requireAdminJwt(String action) {
+    final jwt = SupabaseAuthService().currentJwt;
+    if (jwt == null || jwt.isEmpty) {
+      throw Exception('Admin not authenticated - cannot $action payment');
+    }
+    return jwt;
+  }
+
   // ---------------------------------------------------------------------------
   // Initialize payment
   // ---------------------------------------------------------------------------
@@ -44,8 +53,12 @@ class PaymentService {
     required String plan,     // 'basic', 'standard', 'elite'
     required String schoolId,
   }) async {
+    final jwt = _requireAdminJwt('initialize');
     final response = await _client.functions.invoke(
       'init-payment',
+      headers: {
+        'Authorization': 'Bearer $jwt',
+      },
       body: {
         'email': email,
         'amount': amountNaira,
@@ -79,8 +92,12 @@ class PaymentService {
 
   /// Verify a payment via the [verify-payment] Edge Function.
   Future<bool> verifyPayment(String reference) async {
+    final jwt = _requireAdminJwt('verify');
     final response = await _client.functions.invoke(
       'verify-payment',
+      headers: {
+        'Authorization': 'Bearer $jwt',
+      },
       body: {
         'reference': reference,
       },
