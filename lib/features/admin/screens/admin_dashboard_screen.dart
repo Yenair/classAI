@@ -86,6 +86,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           if (mounted) {
             ref.read(adminDashboardProvider.notifier).refresh();
           }
+          // Refresh in-memory school state so any tier/school-name change
+          // from the sync pull is visible immediately (no re-login required).
+          ref.read(authProvider.notifier).refreshSchoolFromDb();
         });
       });
     });

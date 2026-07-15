@@ -182,6 +182,9 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
       await refresh();
       await ref.read(creditStateProvider.notifier).refresh();
       await ref.read(configServiceProvider).refresh();
+      // Refresh in-memory school state so any tier/school-name change
+      // from the sync pull is visible immediately (no re-login required).
+      await ref.read(authProvider.notifier).refreshSchoolFromDb();
     } on SessionMismatchException {
       // Session was invalidated by a login on another device — force logout
       await ref.read(authProvider.notifier).manualLogout();
@@ -261,6 +264,9 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
     await refresh();
     await ref.read(creditStateProvider.notifier).refresh();
     await ref.read(configServiceProvider).refresh();
+    // Refresh in-memory school state so any tier/school-name change
+    // from the sync pull is visible immediately (no re-login required).
+    await ref.read(authProvider.notifier).refreshSchoolFromDb();
   }
 
   /// Refresh sync status from the database and service.

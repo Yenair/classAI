@@ -1352,6 +1352,14 @@ class SyncService {
       await _upsertTeacherFromSync(result.merged);
     }
 
+    // For the schools table, also upsert the merged data into the
+    // actual Drift schools table so the admin dashboard and any other
+    // screen reading the local school record (subscriptionTier, etc.)
+    // reflect the latest values without requiring a re-login.
+    if (change.table == 'schools') {
+      await _upsertSchoolFromSync(result.merged);
+    }
+
     _setState(SyncState.merging);
   }
 
@@ -1493,6 +1501,71 @@ class SyncService {
       ));
       debugPrint('[sync] _upsertTeacherFromSync: INSERTED teacher $serverId');
     }
+  }
+
+  /// Upserts a school row from synced remote data into the local Drift
+  /// [schools] table via [SchoolsDao.upsertByServerId]. The [merged] map uses
+  /// snake_case keys from Supabase.
+  ///
+  /// This mirrors the pattern used by [_upsertTeacherFromSync] so that remote
+  /// changes to the schools table (e.g. subscription_tier updates applied
+  /// directly in Supabase) are written into the local Drift table immediately,
+  /// not just into synced_records.
+  Future<void> _upsertSchoolFromSync(Map<String, dynamic> merged) async {
+    final serverId = merged['server_id'] as String? ??
+        merged['id'] as String?;
+    if (serverId == null || serverId.isEmpty) {
+      debugPrint('[sync] _upsertSchoolFromSync skipped: no serverId in $merged');
+      return;
+    }
+
+    // Map snake_case remote keys to the parameters expected by upsertByServerId.
+    String? strVal(String key) => merged[key] as String?;
+
+    final schoolName = strVal('school_name') ?? '';
+    final shortCode = strVal('short_code') ?? '';
+    final subscriptionTier = strVal('subscription_tier') ?? 'free';
+    final activeCurriculum = strVal('active_curriculum') ?? 'nerdc';
+    final activeCurriculumVersion = strVal('active_curriculum_version');
+    final totalSeats = _readInt(merged, 'total_seats') ?? 5;
+    final schoolMasterKeyWrapped = strVal('school_master_key_wrapped') ??
+        strVal('school_key_wrapped');
+    final adminRecoveryEmail = strVal('admin_recovery_email');
+    final adminRecoveryEmailVerified =
+        merged['admin_recovery_email_verified'] == true ||
+        merged['admin_recovery_email_verified'] == 'true';
+
+    // Parse optional DateTime fields (matching the pattern used by dateVal
+    // in _upsertTeacherFromSync).
+    DateTime? expiryDate;
+    final rawExpiry = merged['expiry_date'];
+    if (rawExpiry is DateTime) {
+      expiryDate = rawExpiry;
+    } else if (rawExpiry is String) {
+      expiryDate = DateTime.tryParse(rawExpiry);
+    }
+
+    final activationCode = strVal('activation_code');
+
+    await db.schoolsDao.upsertByServerId(
+      serverId: serverId,
+      schoolName: schoolName,
+      shortCode: shortCode,
+      subscriptionTier: subscriptionTier,
+      activeCurriculum: activeCurriculum,
+      activeCurriculumVersion: activeCurriculumVersion,
+      totalSeats: totalSeats,
+      schoolMasterKeyWrapped: schoolMasterKeyWrapped,
+      adminRecoveryEmail: adminRecoveryEmail,
+      adminRecoveryEmailVerified: adminRecoveryEmailVerified,
+      expiryDate: expiryDate,
+      activationCode: activationCode,
+    );
+
+    debugPrint(
+      '[sync] _upsertSchoolFromSync: upserted school $serverId '
+      '(tier=$subscriptionTier)',
+    );
   }
 
   /// Removes duplicate teacher rows that share the same non-null [serverId],
