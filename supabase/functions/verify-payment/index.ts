@@ -29,10 +29,11 @@ serve(async (req) => {
   }
 
   try {
-    // ── 1. Extract JWT from x-classai-jwt header ───────────────────
-    // Using x-classai-jwt to bypass the Supabase gateway's Authorization
-    // header validation (verify_jwt = false is not always honoured).
-    const token = (req.headers.get("x-classai-jwt") ?? "").trim();
+    const authorization = req.headers.get("Authorization") ?? "";
+    const token = authorization.startsWith("Bearer ")
+      ? authorization.slice("Bearer ".length).trim()
+      : "";
+
     if (!token) {
       return jsonResponse({ error: "Missing Authorization header" }, 401);
     }
@@ -45,7 +46,6 @@ serve(async (req) => {
       return jsonResponse({ error: "Server misconfiguration" }, 500);
     }
 
-    // ── 2. Validate JWT ────────────────────────────────────────────
     let claims: Record<string, unknown>;
     try {
       claims = await validateTokenVersion(token, supabaseUrl, serviceRoleKey, jwtSecret);
@@ -59,12 +59,11 @@ serve(async (req) => {
       return jsonResponse({ error: "Invalid token: no teacher_id" }, 401);
     }
 
-    // ── 3. Fetch caller's role & school_id ─────────────────────────
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     const { data: teacher, error: teacherError } = await supabase
       .from("teachers")
-      .select("role, school_id")
+      .select("role")
       .eq("id", teacherId)
       .maybeSingle();
 
@@ -76,7 +75,6 @@ serve(async (req) => {
       return jsonResponse({ error: "Admin access required" }, 403);
     }
 
-    // ── 4. Parse body ──────────────────────────────────────────────
     const body = await req.json().catch(() => ({}));
     const { reference } = body;
 
@@ -84,13 +82,11 @@ serve(async (req) => {
       return jsonResponse({ error: "Missing required field: reference" }, 400);
     }
 
-    // ── 5. Retrieve Paystack secret key ────────────────────────────
     const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
     if (!paystackSecretKey) {
       return jsonResponse({ error: "Paystack secret key not configured" }, 500);
     }
 
-    // ── 6. Call Paystack verify ────────────────────────────────────
     const response = await fetch(
       `${PAYSTACK_BASE}/transaction/verify/${encodeURIComponent(reference)}`,
       {
@@ -116,10 +112,6 @@ serve(async (req) => {
         paystackError = { message: response.statusText };
       }
 
-      // Translate Paystack error codes into appropriate HTTP statuses:
-      //   - transaction_not_found / 400 → client sent a bad reference (400)
-      //   - Any other 4xx → client error (400)
-      //   - 5xx → upstream Paystack failure (502)
       if (response.status === 400 || response.status === 404 ||
           paystackError.code === "transaction_not_found") {
         return jsonResponse(
@@ -131,7 +123,6 @@ serve(async (req) => {
         );
       }
 
-      // Connectivity / upstream failure
       return jsonResponse(
         { error: `Paystack verification failed: ${paystackError.message ?? response.statusText}` },
         502,
@@ -140,7 +131,6 @@ serve(async (req) => {
 
     paystackResult = await response.json() as Record<string, unknown>;
 
-    // ── 7. Return only client-safe fields ──────────────────────────
     return jsonResponse({
       status: (paystackResult.data as Record<string, unknown>)?.status as string ?? "unknown",
       reference: (paystackResult.data as Record<string, unknown>)?.reference as string ?? reference,

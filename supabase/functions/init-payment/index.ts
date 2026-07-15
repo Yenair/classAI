@@ -7,7 +7,7 @@ const PAYSTACK_BASE = "https://api.paystack.co";
 // TODO: Before going live, replace these test plan codes with production
 // Paystack plan codes (generated from the Paystack live dashboard).
 // Currently using Paystack test-mode plan codes:
-
+//
 //   basic:    PLN_98ax4ita4c3i87x
 //   standard: PLN_ocrkm20c1oabtz0
 //   elite:    PLN_htwuhwfhjjg62wz
@@ -43,10 +43,11 @@ serve(async (req) => {
   }
 
   try {
-    // ── 1. Extract JWT from x-classai-jwt header ───────────────────
-    // Using x-classai-jwt to bypass the Supabase gateway's Authorization
-    // header validation (verify_jwt = false is not always honoured).
-    const token = (req.headers.get("x-classai-jwt") ?? "").trim();
+    const authorization = req.headers.get("Authorization") ?? "";
+    const token = authorization.startsWith("Bearer ")
+      ? authorization.slice("Bearer ".length).trim()
+      : "";
+
     if (!token) {
       return jsonResponse({ error: "Missing Authorization header" }, 401);
     }
@@ -59,7 +60,6 @@ serve(async (req) => {
       return jsonResponse({ error: "Server misconfiguration" }, 500);
     }
 
-    // ── 2. Validate JWT ────────────────────────────────────────────
     let claims: Record<string, unknown>;
     try {
       claims = await validateTokenVersion(token, supabaseUrl, serviceRoleKey, jwtSecret);
@@ -73,7 +73,11 @@ serve(async (req) => {
       return jsonResponse({ error: "Invalid token: no teacher_id" }, 401);
     }
 
-    // ── 3. Fetch caller's role & school_id ─────────────────────────
+    const schoolId = claims.school_id as string | undefined;
+    if (!schoolId) {
+      return jsonResponse({ error: "Invalid token: no school_id" }, 401);
+    }
+
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     const { data: teacher, error: teacherError } = await supabase
@@ -90,18 +94,20 @@ serve(async (req) => {
       return jsonResponse({ error: "Admin access required" }, 403);
     }
 
-    // ── 4. Parse body ──────────────────────────────────────────────
-    const body = await req.json().catch(() => ({}));
-    const { email, amount, plan: planName, school_id } = body;
+    if (teacher.school_id !== schoolId) {
+      return jsonResponse({ error: "Forbidden: school mismatch" }, 403);
+    }
 
-    if (!email || !amount || !planName || !school_id) {
+    const body = await req.json().catch(() => ({}));
+    const { email, amount, plan: planName } = body;
+
+    if (!email || !amount || !planName) {
       return jsonResponse(
-        { error: "Missing required fields: email, amount, plan, school_id" },
+        { error: "Missing required fields: email, amount, plan" },
         400,
       );
     }
 
-    // ── 5. Resolve plan name to Paystack plan code ────────────────
     const planCode = PLAN_CODES[planName.toLowerCase()];
     if (!planCode) {
       return jsonResponse(
@@ -110,18 +116,11 @@ serve(async (req) => {
       );
     }
 
-    // ── 5b. Verify school_id matches the caller's school ──────────
-    if (teacher.school_id !== school_id) {
-      return jsonResponse({ error: "Forbidden: school mismatch" }, 403);
-    }
-
-    // ── 6. Retrieve Paystack secret key ────────────────────────────
     const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
     if (!paystackSecretKey) {
       return jsonResponse({ error: "Paystack secret key not configured" }, 500);
     }
 
-    // ── 7. Call Paystack initialize ────────────────────────────────
     const amountKobo = Math.round(Number(amount) * 100);
     const response = await fetch(`${PAYSTACK_BASE}/transaction/initialize`, {
       method: "POST",
@@ -136,7 +135,7 @@ serve(async (req) => {
         currency: "NGN",
         callback_url: "classai://payment/complete",
         metadata: {
-          school_id,
+          school_id: schoolId,
           plan: planName,
           source: "classai-init",
         },
@@ -153,7 +152,6 @@ serve(async (req) => {
 
     const result = await response.json();
 
-    // ── 8. Return only client-safe fields ──────────────────────────
     return jsonResponse({
       status: result.status,
       reference: result.data?.reference ?? "",
