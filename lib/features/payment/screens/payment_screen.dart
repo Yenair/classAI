@@ -829,7 +829,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     String schoolId,
   ) async {
     try {
-      await paymentService.confirmPayment(
+      final confirmation = await paymentService.confirmPayment(
         reference: reference,
         plan: plan,
         schoolId: schoolId,
@@ -844,8 +844,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         _displayPlanName(plan),
       );
 
-      if (context.mounted && Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
+      if (context.mounted) {
+        GoRouter.of(context).pop();
       }
     } catch (e) {
       if (!context.mounted) return;
