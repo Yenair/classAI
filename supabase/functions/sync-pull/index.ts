@@ -138,12 +138,25 @@ serve(async (req) => {
       if (!school_id) {
         console.warn("sync-pull: no school_id provided, skipping teacher metadata queries");
       } else {
-        // All teacher IDs that are not soft-deleted (scoped to school)
-        const { data: teacherData } = await supabase
+        // All active teacher IDs for this school (teachers table has no is_deleted column)
+        const { data: teacherData, error: teacherError } = await supabase
           .from("teachers")
           .select("id")
-          .eq("school_id", school_id)
-          .or("is_deleted.is.null,is_deleted.eq.false");
+          .eq("school_id", school_id);
+
+        if (teacherError) {
+          console.error("[sync-pull] error fetching active teacher IDs:", teacherError.message);
+          return new Response(
+            JSON.stringify({
+              error: "Failed to fetch active teacher IDs",
+              changes,
+              next_cursor: nextCursor,
+              active_teacher_ids: [],
+              pending_teachers: [],
+            }),
+            { headers: { "Content-Type": "application/json" } }
+          );
+        }
 
         if (teacherData && teacherData.length > 0) {
           activeTeacherIds = teacherData.map((t: Record<string, unknown>) => t.id as string);
