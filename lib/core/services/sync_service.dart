@@ -882,7 +882,10 @@ class SyncService {
     // (they won't appear in the incremental pull since no change event is
     // generated for hard deletes).
     if (activeTeacherIds != null) {
-      await _reconcileTeacherRoster(activeTeacherIds);
+      await _reconcileTeacherRoster(
+        activeTeacherIds,
+        schoolId: effectiveSchoolId,
+      );
     }
 
     // Issue 3: Upsert any pending (force_password_reset=true) teachers that
@@ -953,7 +956,15 @@ class SyncService {
   /// hard-deleted from Supabase SQL — the incremental sync-pull never returns
   /// a "delete" event for hard deletes, so we reconcile by comparing the
   /// full server roster against our local copy.
-  Future<void> _reconcileTeacherRoster(Set<String> activeServerIds) async {
+  ///
+  /// [schoolId] must be the school that was just pulled (i.e.
+  /// [effectiveSchoolId] from [_pullChanges]), NOT the member variable
+  /// [schoolId], to avoid deleting teachers when an admin-override school
+  /// was pulled.
+  Future<void> _reconcileTeacherRoster(
+    Set<String> activeServerIds, {
+    required String schoolId,
+  }) async {
     final localTeachers = await (db.select(db.teachers)
           ..where((t) => t.schoolServerId.equals(schoolId)))
         .get();

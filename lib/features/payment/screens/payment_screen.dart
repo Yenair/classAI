@@ -95,331 +95,263 @@ String _displayPlanName(String plan) {
   return plan[0].toUpperCase() + plan.substring(1).toLowerCase();
 }
 
+const Map<String, int> _tierRanks = <String, int>{
+  'free': 0,
+  'basic': 1,
+  'standard': 2,
+  'elite': 3,
+};
 
-Widget _buildComparisonTable(
-  ColorScheme cs,
-  TextTheme textTheme,
-  List<_TierComparisonRow> tiers,
-  {
-  required String selectedTier,
-  required ValueChanged<String> onSelectTier,
-  required ValueChanged<String> onChoosePlan,
-  double availableWidth = 0,
-}
-) {
-  // Determine column widths responsively
-  const double labelColumnWidth = 140;
-  const int totalPlanColumns = 4;
-  final double planColumnWidth;
+int _tierRank(String tier) => _tierRanks[tier.toLowerCase()] ?? -1;
 
-  if (availableWidth > 0) {
-    final double remaining = availableWidth - labelColumnWidth;
-    planColumnWidth = (remaining / totalPlanColumns).clamp(160, 260);
-  } else {
-    planColumnWidth = 200;
-  }
+Widget _buildPlanActionButton({
+  required ColorScheme cs,
+  required TextTheme textTheme,
+  required String tier,
+  required String currentTier,
+  required int currentTierRank,
+  required VoidCallback? onPressed,
+  required double width,
+  required String enabledLabel,
+}) {
+  final planRank = _tierRank(tier);
+  final bool isCurrentTier = tier.toLowerCase() == currentTier.toLowerCase();
+  final bool isFreeTier = tier.toLowerCase() == 'free';
+  final bool isEnabled = !isFreeTier && planRank > currentTierRank;
+  final String label = isCurrentTier && !isFreeTier
+      ? "You're on the ${_displayPlanName(tier)} Plan"
+      : 'Unavailable';
 
-  final List<_BuildColumnContext> colContexts = [
-    _BuildColumnContext(
-      plan: tiers[0],
-      headerColor: cs.primaryContainer.withValues(alpha: 0.35),
-      isSelected: selectedTier == tiers[0].tier,
-      isClickable: tiers[0].tier != 'free',
-    ),
-    _BuildColumnContext(
-      plan: tiers[1],
-      headerColor: cs.tertiaryContainer.withValues(alpha: 0.35),
-      isSelected: selectedTier == tiers[1].tier,
-      isClickable: tiers[1].tier != 'free',
-    ),
-    _BuildColumnContext(
-      plan: tiers[2],
-      headerColor: cs.secondaryContainer.withValues(alpha: 0.35),
-      isSelected: selectedTier == tiers[2].tier,
-      isClickable: tiers[2].tier != 'free',
-    ),
-    _BuildColumnContext(
-      plan: tiers[3],
-      headerColor: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-      isSelected: selectedTier == tiers[3].tier,
-      isClickable: tiers[3].tier != 'free',
-    ),
-  ];
-
-  // --- Cell building helpers ---
-
-  Widget labelCell(
-    String text, {
-    TextStyle? style,
-    Color? backgroundColor,
-  }) {
-    return Container(
-      width: labelColumnWidth,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-      alignment: Alignment.centerLeft,
-      decoration: BoxDecoration(
-        color: backgroundColor ?? cs.surfaceContainerLow,
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.2)),
-      ),
-      child: Text(
-        text,
-        style: style,
-      ),
-    );
-  }
-
-  Widget iconCell(bool included, {Color? backgroundColor}) {
-    return Container(
-      width: planColumnWidth,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: backgroundColor ?? cs.surface,
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.2)),
-      ),
-      child: Icon(
-        included ? Icons.check_rounded : Icons.remove_rounded,
-        size: 18,
-        color: included ? cs.primary : cs.onSurfaceVariant,
-      ),
-    );
-  }
-
-  Widget textCell(String text, {Color? backgroundColor, TextStyle? style}) {
-    return Container(
-      width: planColumnWidth,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: backgroundColor ?? cs.surface,
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.2)),
-      ),
-      child: Text(
-        text,
-        style: style ?? textTheme.bodyMedium,
-        textAlign: TextAlign.center,
-      ),
-    );
-  }
-
-  // Build one whole column for a plan
-  Widget _buildPlanColumn(_BuildColumnContext ctx) {
-    final plan = ctx.plan;
-    final bgColor = ctx.isSelected
-        ? cs.primary.withValues(alpha: 0.12)
-        : (ctx.isClickable ? ctx.headerColor : null);
-    final borderColor = ctx.isSelected
-        ? cs.primary
-        : cs.outlineVariant.withValues(alpha: 0.2);
-
-    final List<Widget> cells = [
-      // Header: plan name
-      Container(
-        width: planColumnWidth,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: bgColor,
-          border: Border.all(color: borderColor),
-        ),
-        child: Text(
-          plan.name,
-          style: textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: ctx.isSelected ? cs.primary : cs.onSurface,
-          ),
-          textAlign: TextAlign.center,
+  return SizedBox(
+    width: width,
+    height: 40,
+    child: FilledButton(
+      onPressed: isEnabled ? onPressed : null,
+      style: FilledButton.styleFrom(
+        backgroundColor: isEnabled ? cs.primary : cs.surfaceContainerHighest,
+        foregroundColor: isEnabled ? cs.onPrimary : cs.onSurfaceVariant,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
         ),
       ),
-      // Price row
-      textCell(
-        plan.price,
-        backgroundColor: bgColor,
-        style: textTheme.bodyMedium?.copyWith(
-          fontWeight: FontWeight.w600,
-          color: ctx.isSelected ? cs.primary : cs.onSurface,
-        ),
-      ),
-      // Daily previews
-      textCell(plan.dailyPreviews, backgroundColor: bgColor),
-      // PDF exports
-      textCell(plan.pdfExports, backgroundColor: bgColor),
-      // Vault publishing
-      iconCell(plan.vaultPublishing, backgroundColor: bgColor),
-      // Watermark
-      iconCell(plan.watermark, backgroundColor: bgColor),
-      // Teacher seats
-      textCell(plan.teacherSeats, backgroundColor: bgColor),
-      // Lesson storage
-      textCell(plan.lessonStorage, backgroundColor: bgColor),
-      // AI diagrams
-      iconCell(plan.aiDiagrams, backgroundColor: bgColor),
-      // Exam generation
-      iconCell(plan.examGeneration, backgroundColor: bgColor),
-      // Bulk PDF export
-      iconCell(plan.bulkPdfExport, backgroundColor: bgColor),
-    ];
-
-    // Action row: Choose Plan button for paid plans, "Unavailable" for free
-    if (!ctx.isClickable) {
-      cells.add(
-        Container(
-          width: planColumnWidth,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: cs.surfaceContainerLow,
-            border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.2)),
-          ),
-          child: Text(
-            'Unavailable',
-            style: textTheme.labelMedium?.copyWith(
-              color: cs.onSurfaceVariant,
-            ),
-          ),
-        ),
-      );
-    } else {
-      cells.add(
-        Container(
-          width: planColumnWidth,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: bgColor,
-            border: Border.all(color: borderColor),
-          ),
-          child: SizedBox(
-            width: planColumnWidth - 16,
-            height: 40,
-            child: FilledButton(
-              onPressed: () => onChoosePlan(plan.tier),
-              style: FilledButton.styleFrom(
-                backgroundColor: cs.primary,
-                foregroundColor: cs.onPrimary,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
-                ),
-              ),
-              child: Text(
-                'Choose Plan',
-                style: textTheme.labelMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
+      child: isEnabled
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.lock_rounded,
+                  size: 20,
                   color: cs.onPrimary,
                 ),
+                const SizedBox(width: 8),
+                Text(
+                  enabledLabel,
+                  style: textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: cs.onPrimary,
+                  ),
+                ),
+              ],
+            )
+          : Text(
+              label,
+              textAlign: TextAlign.center,
+              style: textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w500,
+                color: cs.onSurfaceVariant,
               ),
             ),
-          ),
-        ),
-      );
-    }
-
-    final column = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: cells,
-    );
-
-    final Widget sizedColumn = SizedBox(
-      width: planColumnWidth,
-      child: column,
-    );
-
-    // Paid columns are entirely tappable; Free is static
-    // Use GestureDetector instead of InkWell to avoid hit-test/layout race
-    // that causes "RenderBox was not laid out" / "hasSize" errors.
-    if (ctx.isClickable) {
-      return GestureDetector(
-        onTap: () => onSelectTier(plan.tier),
-        child: sizedColumn,
-      );
-    }
-
-    return sizedColumn;
-  }
-
-  // Build the full table as a Row (label column + 4 plan columns)
-  return Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      // Feature labels column — wrapped in SizedBox so CrossAxisAlignment.stretch
-      // never receives infinite width from the horizontal scroll view
-      SizedBox(
-        width: labelColumnWidth,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            labelCell('Plan', style: textTheme.labelLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: cs.onSurfaceVariant,
-            )),
-            labelCell('Price per year', style: textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: cs.onSurface,
-            )),
-            labelCell('Daily previews', style: textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: cs.onSurface,
-            )),
-            labelCell('PDF exports', style: textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: cs.onSurface,
-            )),
-            labelCell('Vault publishing', style: textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: cs.onSurface,
-            )),
-            labelCell('Watermark', style: textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: cs.onSurface,
-            )),
-            labelCell('Teacher seats', style: textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: cs.onSurface,
-            )),
-            labelCell('Lesson storage', style: textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: cs.onSurface,
-            )),
-            labelCell('AI diagrams', style: textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: cs.onSurface,
-            )),
-            labelCell('Exam generation', style: textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: cs.onSurface,
-            )),
-            labelCell('Bulk PDF export', style: textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: cs.onSurface,
-            )),
-            labelCell('', style: null), // empty cell for action row alignment
-          ],
-        ),
-      ),
-      // Plan columns
-      _buildPlanColumn(colContexts[0]),
-      _buildPlanColumn(colContexts[1]),
-      _buildPlanColumn(colContexts[2]),
-      _buildPlanColumn(colContexts[3]),
-    ],
+    ),
   );
 }
 
-class _BuildColumnContext {
-  final _TierComparisonRow plan;
-  final Color headerColor;
-  final bool isSelected;
-  final bool isClickable;
+Widget _buildPlanCardsGrid({
+  required ColorScheme cs,
+  required TextTheme textTheme,
+  required List<_TierComparisonRow> tiers,
+  required String selectedTier,
+  required String currentTier,
+  required int currentTierRank,
+  required double maxWidth,
+  required ValueChanged<String> onSelectTier,
+  required ValueChanged<String> onChoosePlan,
+}) {
+  // Responsive column count based on available width
+  final int crossAxisCount;
+  if (maxWidth < 600) {
+    crossAxisCount = 1;
+  } else if (maxWidth < 960) {
+    crossAxisCount = 2;
+  } else {
+    crossAxisCount = 3;
+  }
 
-  const _BuildColumnContext({
-    required this.plan,
-    required this.headerColor,
-    required this.isSelected,
-    required this.isClickable,
-  });
+  const double spacing = 16;
+  final double totalHorizontalSpacing = spacing * (crossAxisCount - 1);
+  final double cardWidth = (maxWidth - totalHorizontalSpacing) / crossAxisCount;
+
+  // Build rows manually to avoid GridView aspect-ratio issues with variable-height cards
+  final List<Widget> rows = [];
+  for (int i = 0; i < tiers.length; i += crossAxisCount) {
+    final int end =
+        (i + crossAxisCount > tiers.length) ? tiers.length : i + crossAxisCount;
+    final List<Widget> cardsInRow = <Widget>[];
+    for (int j = i; j < end; j++) {
+      cardsInRow.add(
+        SizedBox(
+          width: cardWidth,
+          child: _buildPlanCard(
+            cs: cs,
+            textTheme: textTheme,
+            plan: tiers[j],
+            isSelected: selectedTier == tiers[j].tier,
+            currentTier: currentTier,
+            currentTierRank: currentTierRank,
+            onSelectTier: () => onSelectTier(tiers[j].tier),
+            onChoosePlan: tiers[j].tier == 'free'
+                ? null
+                : () => onChoosePlan(tiers[j].tier),
+          ),
+        ),
+      );
+    }
+    // Pad last row with empty spacers so all rows have the same height layout
+    while (cardsInRow.length < crossAxisCount) {
+      cardsInRow.add(SizedBox(width: cardWidth));
+    }
+    rows.add(
+      Padding(
+        padding: EdgeInsets.only(bottom: spacing),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: cardsInRow,
+        ),
+      ),
+    );
+  }
+
+  return Column(children: rows);
+}
+
+Widget _buildPlanCard({
+  required ColorScheme cs,
+  required TextTheme textTheme,
+  required _TierComparisonRow plan,
+  required bool isSelected,
+  required String currentTier,
+  required int currentTierRank,
+  required VoidCallback onSelectTier,
+  required VoidCallback? onChoosePlan,
+}) {
+  final Color? cardBg = isSelected ? cs.primary.withValues(alpha: 0.08) : null;
+  final Color borderColor =
+      isSelected ? cs.primary : cs.outlineVariant.withValues(alpha: 0.3);
+
+  // Builds a single feature row: icon + label + value
+  Widget _featureRow(String label, dynamic value) {
+    final bool isBool = value is bool;
+    final Widget leading = Icon(
+      isBool
+          ? (value ? Icons.check_rounded : Icons.remove_rounded)
+          : Icons.check_rounded,
+      size: 18,
+      color: isBool
+          ? (value ? cs.primary : cs.onSurfaceVariant)
+          : cs.primary,
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          leading,
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: textTheme.bodySmall?.copyWith(
+                color: cs.onSurfaceVariant,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 4),
+          if (!isBool)
+            Text(
+              '$value',
+              style: textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: cs.onSurface,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  return Container(
+    decoration: BoxDecoration(
+      color: cardBg ?? cs.surface,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: borderColor),
+    ),
+    child: Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onSelectTier,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Plan name header
+              Text(
+                plan.name,
+                style: textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: isSelected ? cs.primary : cs.onSurface,
+                ),
+              ),
+              const SizedBox(height: 4),
+              // Price
+              Text(
+                plan.price,
+                style: textTheme.bodyLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface,
+                ),
+              ),
+              const Divider(height: 24),
+              // Feature rows
+              _featureRow('Daily previews', plan.dailyPreviews),
+              _featureRow('PDF exports', plan.pdfExports),
+              _featureRow('Vault publishing', plan.vaultPublishing),
+              _featureRow('Watermark', plan.watermark),
+              _featureRow('Teacher seats', plan.teacherSeats),
+              _featureRow('Lesson storage', plan.lessonStorage),
+              _featureRow('AI diagrams', plan.aiDiagrams),
+              _featureRow('Exam generation', plan.examGeneration),
+              _featureRow('Bulk PDF export', plan.bulkPdfExport),
+              const Divider(height: 24),
+              // Action button
+              _buildPlanActionButton(
+                cs: cs,
+                textTheme: textTheme,
+                tier: plan.tier,
+                currentTier: currentTier,
+                currentTierRank: currentTierRank,
+                onPressed: onChoosePlan,
+                width: double.infinity,
+                enabledLabel: 'Choose Plan',
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
@@ -829,7 +761,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     String schoolId,
   ) async {
     try {
-      final confirmation = await paymentService.confirmPayment(
+      await paymentService.confirmPayment(
         reference: reference,
         plan: plan,
         schoolId: schoolId,
@@ -860,6 +792,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
+    final authData = ref.watch(authProvider);
+    final currentTier = (authData.currentSchool?.subscriptionTier ?? 'free')
+        .toLowerCase();
+    final currentTierRank = _tierRank(currentTier);
 
     if (_tiers.isEmpty) {
       // Rebuild tiers if not yet initialized
@@ -874,7 +810,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
     final screenSize = MediaQuery.sizeOf(context);
     final screenWidth = screenSize.width;
-    final bool isWide = screenWidth >= 1100;
+    final double horizontalPadding = 24.0 + 24.0;
+    final double gridAvailableWidth = screenWidth - horizontalPadding;
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -886,12 +823,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           icon: Icon(Icons.close, color: cs.onSurface),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
-        title: Text(
-          'Compare Plans',
-          style: textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
-        ),
+        title: const Text(''),
         centerTitle: false,
       ),
       body: _tiers.isEmpty
@@ -948,78 +880,36 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                         ],
                       ),
                       const SizedBox(height: 20),
-                      // Comparison table + order summary
-                      if (isWide)
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              flex: 8,
-                              child: SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: _buildComparisonTable(
-                                  cs,
-                                  textTheme,
-                                  _tiers,
-                                  selectedTier: selectedTier,
-                                  onSelectTier: (tier) =>
-                                      _selectedTierNotifier.value = tier,
-                                  onChoosePlan: (tier) {
-                                    _selectedPlanTier = tier;
-                                    _selectedTierNotifier.value = tier;
-                                    setState(() {});
-                                  },
-                                  availableWidth: (screenWidth -
-                                          48 // padding
-                                          - 32 // gap
-                                      ) *
-                                      (8 / 12),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 32),
-                            Expanded(
-                              flex: 4,
-                              child: _buildOrderSummary(
-                                context,
-                                cs,
-                                textTheme,
-                                _planDefFromTierRow(selectedTierRow),
-                              ),
-                            ),
-                          ],
-                        )
-                      else
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: _buildComparisonTable(
-                                cs,
-                                textTheme,
-                                _tiers,
-                                selectedTier: selectedTier,
-                                onSelectTier: (tier) =>
-                                    _selectedTierNotifier.value = tier,
-                                onChoosePlan: (tier) {
-                                  _selectedPlanTier = tier;
-                                  _selectedTierNotifier.value = tier;
-                                  setState(() {});
-                                },
-                                availableWidth:
-                                    screenWidth - 48, // 24 left + 24 right
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            _buildOrderSummary(
-                              context,
-                              cs,
-                              textTheme,
-                              _planDefFromTierRow(selectedTierRow),
-                            ),
-                          ],
+                      // Plan cards grid — responsive column count via maxWidth
+                      _buildPlanCardsGrid(
+                        cs: cs,
+                        textTheme: textTheme,
+                        tiers: _tiers,
+                        selectedTier: selectedTier,
+                        currentTier: currentTier,
+                        currentTierRank: currentTierRank,
+                        maxWidth: gridAvailableWidth,
+                        onSelectTier: (tier) =>
+                            _selectedTierNotifier.value = tier,
+                        onChoosePlan: (tier) {
+                          _selectedPlanTier = tier;
+                          _selectedTierNotifier.value = tier;
+                          setState(() {});
+                        },
+                      ),
+                      const SizedBox(height: 20),
+                      // Order summary
+                      SizedBox(
+                        width: gridAvailableWidth.clamp(0, 500),
+                        child: _buildOrderSummary(
+                          context,
+                          cs,
+                          textTheme,
+                          currentTier,
+                          currentTierRank,
+                          _planDefFromTierRow(selectedTierRow),
                         ),
+                      ),
                       if (_isProcessing)
                         const Padding(
                           padding: EdgeInsets.only(top: 16),
@@ -1063,6 +953,8 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     BuildContext context,
     ColorScheme cs,
     TextTheme textTheme,
+    String currentTier,
+    int currentTierRank,
     _PlanDef plan,
   ) {
     return Container(
@@ -1221,42 +1113,22 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: FilledButton(
-              onPressed: _isProcessing
-                  ? null
-                  : () => _initializePayment(
-                        context,
-                        ref,
-                        plan.tier,
-                        plan.amountNaira,
-                      ),
-              style: FilledButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.lock_rounded,
-                    size: 20,
-                    color: cs.onPrimary,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Proceed to Checkout',
-                    style: textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: cs.onPrimary,
+          _buildPlanActionButton(
+            cs: cs,
+            textTheme: textTheme,
+            tier: plan.tier,
+            currentTier: currentTier,
+            currentTierRank: currentTierRank,
+            onPressed: _isProcessing
+                ? null
+                : () => _initializePayment(
+                      context,
+                      ref,
+                      plan.tier,
+                      plan.amountNaira,
                     ),
-                  ),
-                ],
-              ),
-            ),
+            width: double.infinity,
+            enabledLabel: 'Proceed to Checkout',
           ),
           const SizedBox(height: 16),
           Row(

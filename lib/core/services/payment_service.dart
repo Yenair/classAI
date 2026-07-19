@@ -137,6 +137,9 @@ class PaymentService {
   }) async {
     final response = await _client.functions.invoke(
       'confirm-payment',
+      headers: {
+        'x-classai-jwt': _requireAdminJwt('confirm'),
+      },
       body: {
         'reference': reference,
         'plan': plan,

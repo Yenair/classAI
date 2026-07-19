@@ -1026,7 +1026,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
     try {
       final client = supabase_pkg.Supabase.instance.client;
-      await client.functions
+      final response = await client.functions
           .invoke(
             'send-verification-code',
             body: {'email': adminEmail, 'mode': 'signup'},
@@ -1605,9 +1605,9 @@ class AuthNotifier extends Notifier<AuthStateData> {
   /// react immediately without requiring an app restart.
   Future<void> refreshSchoolFromDb() async {
     try {
-      final school = await _db.schoolsDao.get();
-      if (school != null) {
-        state = state.copyWith(currentSchool: school);
+      final activeSchool = await _db.schoolsDao.get();
+      if (activeSchool != null) {
+        state = state.copyWith(currentSchool: activeSchool);
       }
     } catch (_) {
       // Silently ignore – the next sync cycle will pick up any changes.
