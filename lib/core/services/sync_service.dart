@@ -807,6 +807,7 @@ class SyncService {
     // Collect reconciliation metadata across all pages (Issues 1 & 3)
     Set<String>? activeTeacherIds;
     List<SyncChange>? pendingTeachers;
+    int totalTeacherChanges = 0;
 
     while (true) {
       final page = await remoteApi.pullChanges(
@@ -846,6 +847,9 @@ class SyncService {
         );
       }
 
+      // Track teacher changes to detect contradictory empty activeTeacherIds
+      totalTeacherChanges += teacherChanges.length;
+
       for (final change in page.changes) {
         await _mergeRemoteChange(change);
       }
@@ -882,10 +886,24 @@ class SyncService {
     // (they won't appear in the incremental pull since no change event is
     // generated for hard deletes).
     if (activeTeacherIds != null) {
-      await _reconcileTeacherRoster(
-        activeTeacherIds,
-        schoolId: effectiveSchoolId,
-      );
+      // Guard: An empty activeTeacherIds alongside real teacher changes in the
+      // same pull is contradictory — the server is telling us "nobody is active"
+      // while also sending us teacher records. This means the server-side
+      // active_teacher_ids query failed or returned empty erroneously. Do NOT
+      // trust an empty roster in this case; skip reconciliation and log.
+      if (activeTeacherIds.isEmpty && totalTeacherChanges > 0) {
+        debugPrint(
+          '[SYNC] WARNING: activeTeacherIds is empty but $totalTeacherChanges '
+          'teacher change(s) were processed in this pull. This is contradictory '
+          '— skipping _reconcileTeacherRoster to avoid wrongly marking active '
+          'teachers as deleted.',
+        );
+      } else {
+        await _reconcileTeacherRoster(
+          activeTeacherIds,
+          schoolId: effectiveSchoolId,
+        );
+      }
     }
 
     // Issue 3: Upsert any pending (force_password_reset=true) teachers that
@@ -924,7 +942,12 @@ class SyncService {
       final serverTime = DateTime.tryParse(timeStr);
       if (serverTime == null) return;
 
-      final school = await db.schoolsDao.get();
+      // Use the configured schoolId passed into SyncService at construction,
+      // not schoolsDao.get() which may return the wrong school when multiple
+      // school records exist locally (no serverId filter, just limit(1)).
+      final school = schoolId.isNotEmpty
+          ? await db.schoolsDao.getByServerId(schoolId)
+          : await db.schoolsDao.get();
       if (school == null) return;
       final expiry = school.expiryDate;
       if (expiry == null) return;
@@ -973,13 +996,26 @@ class SyncService {
       if (teacher.forcePasswordReset) continue;
       if (teacher.serverId != null &&
           !activeServerIds.contains(teacher.serverId)) {
-        await (db.delete(db.teachers)
-              ..where((t) => t.localId.equals(teacher.localId)))
-            .go();
-        debugPrint(
-          '[sync] _reconcileTeacherRoster: DELETED teacher '
-          '${teacher.serverId} (not in server roster)',
-        );
+        try {
+          await (db.update(db.teachers)
+                ..where((t) => t.localId.equals(teacher.localId)))
+              .write(const TeachersCompanion(
+                isDeleted: Value(true),
+              ));
+          debugPrint(
+            '[sync] _reconcileTeacherRoster: SOFT-DELETED teacher '
+            '${teacher.serverId} (not in server roster)',
+          );
+        } catch (e, st) {
+          debugPrint(
+            '[sync] _reconcileTeacherRoster: failed to soft-delete teacher '
+            '${teacher.serverId}: $e',
+          );
+          await Sentry.captureException(
+            e,
+            stackTrace: st,
+          );
+        }
       }
     }
   }
