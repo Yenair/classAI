@@ -1354,60 +1354,73 @@ class SyncService {
   }
 
   Future<void> _mergeRemoteChange(SyncChange change) async {
-    // Decompress the pulled change if it was compressed for 2G/3G optimization.
+    // Decompress early so localId is available for error logging.
     final decompressed = PayloadCompressor.decompress(change.row);
     final remote = _normalizeRecord(decompressed);
     final localId = _readInt(remote, 'localId') ??
         _readInt(remote, 'local_id') ??
         _readInt(remote, 'id') ??
         0;
-    final local =
-        await store.loadLocalRecord(change.table, localId) ?? const {};
-    final baseHash = await _loadBaseHash(change.table, localId);
-    final result = await _threeWayMerge(local, remote, baseHash, change.table);
+    try {
+      final local =
+          await store.loadLocalRecord(change.table, localId) ?? const {};
+      final baseHash = await _loadBaseHash(change.table, localId);
+      final result =
+          await _threeWayMerge(local, remote, baseHash, change.table);
 
-    if (baseHash == null) {
-      _setState(SyncState.savingConflicts);
-      await store.saveConflict(
-        recordType: change.table,
-        recordLocalId: localId,
-        conflictingFields: local.keys.toList(),
-        resolution: MergeResolution.remote.name,
-        notified: false,
+      if (baseHash == null) {
+        _setState(SyncState.savingConflicts);
+        await store.saveConflict(
+          recordType: change.table,
+          recordLocalId: localId,
+          conflictingFields: local.keys.toList(),
+          resolution: MergeResolution.remote.name,
+          notified: false,
+        );
+      } else if (result.conflictingFields.isNotEmpty) {
+        _setState(SyncState.savingConflicts);
+        await store.saveConflict(
+          recordType: change.table,
+          recordLocalId: localId,
+          conflictingFields: result.conflictingFields,
+          resolution: result.resolution.name,
+          notified: false,
+        );
+      }
+
+      await store.saveSyncedRecord(
+        tableName: change.table,
+        localId: localId,
+        snapshot: result.merged,
       );
-    } else if (result.conflictingFields.isNotEmpty) {
-      _setState(SyncState.savingConflicts);
-      await store.saveConflict(
-        recordType: change.table,
-        recordLocalId: localId,
-        conflictingFields: result.conflictingFields,
-        resolution: result.resolution.name,
-        notified: false,
+
+      // For the teachers table, also upsert the merged data into the
+      // actual Drift teachers table so the admin dashboard can query it
+      // locally (e.g. getPendingTeachers, getBySchool).
+      if (change.table == 'teachers') {
+        await _upsertTeacherFromSync(result.merged);
+      }
+
+      // For the schools table, also upsert the merged data into the
+      // actual Drift schools table so the admin dashboard and any other
+      // screen reading the local school record (subscriptionTier, etc.)
+      // reflect the latest values without requiring a re-login.
+      if (change.table == 'schools') {
+        await _upsertSchoolFromSync(result.merged);
+      }
+
+      _setState(SyncState.merging);
+    } catch (e, st) {
+      debugPrint(
+        '[SYNC] ERROR merging record: table=${change.table}, '
+        'localId=$localId, error=$e',
       );
+      await Sentry.captureException(
+        e,
+        stackTrace: st,
+      );
+      // One record is skipped; the rest of the pull cycle continues.
     }
-
-    await store.saveSyncedRecord(
-      tableName: change.table,
-      localId: localId,
-      snapshot: result.merged,
-    );
-
-    // For the teachers table, also upsert the merged data into the
-    // actual Drift teachers table so the admin dashboard can query it
-    // locally (e.g. getPendingTeachers, getBySchool).
-    if (change.table == 'teachers') {
-      await _upsertTeacherFromSync(result.merged);
-    }
-
-    // For the schools table, also upsert the merged data into the
-    // actual Drift schools table so the admin dashboard and any other
-    // screen reading the local school record (subscriptionTier, etc.)
-    // reflect the latest values without requiring a re-login.
-    if (change.table == 'schools') {
-      await _upsertSchoolFromSync(result.merged);
-    }
-
-    _setState(SyncState.merging);
   }
 
   /// Upserts a teacher row from synced remote data into the local Drift
@@ -1455,7 +1468,11 @@ class SyncService {
     final updatedAt = dateVal('updated_at') ?? DateTime.now();
     final lastModifiedBy = strVal('last_modified_by');
 
-    // Resolve schoolLocalId from schoolServerId
+    // Resolve schoolLocalId from schoolServerId.
+    // If the remote teacher has no schoolServerId, or the school isn't yet
+    // synced locally, we leave schoolLocalId absent rather than guessing —
+    // a silent wrong-school assignment caused the same bug class earlier with
+    // schoolsDao.get().
     int? resolvedSchoolLocalId;
     if (schoolServerId != null) {
       final schoolRow = await (db.select(db.schools)
@@ -1464,8 +1481,11 @@ class SyncService {
       resolvedSchoolLocalId = schoolRow?.localId;
     }
     if (resolvedSchoolLocalId == null || resolvedSchoolLocalId == 0) {
-      final anySchool = await (db.select(db.schools)).getSingleOrNull();
-      resolvedSchoolLocalId = anySchool?.localId;
+      debugPrint(
+        '[sync] _upsertTeacherFromSync: no local school found for '
+        'schoolServerId=$schoolServerId (teacher $serverId). '
+        'schoolLocalId left absent; will resolve on next pull.',
+      );
     }
 
     debugPrint(
