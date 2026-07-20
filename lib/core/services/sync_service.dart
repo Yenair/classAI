@@ -1025,14 +1025,8 @@ class SyncService {
     Map<String, dynamic> remote,
     String? baseHash,
     String tableName,
+    int localId,
   ) async {
-    final localId = _readInt(local, 'localId') ??
-        _readInt(local, 'local_id') ??
-        _readInt(local, 'id') ??
-        _readInt(remote, 'localId') ??
-        _readInt(remote, 'local_id') ??
-        _readInt(remote, 'id') ??
-        0;
     final base = await store.loadBaseRecordByHash(tableName, localId, baseHash);
     return mergeEngine.merge(
       local: local,
@@ -1357,16 +1351,113 @@ class SyncService {
     // Decompress early so localId is available for error logging.
     final decompressed = PayloadCompressor.decompress(change.row);
     final remote = _normalizeRecord(decompressed);
-    final localId = _readInt(remote, 'localId') ??
-        _readInt(remote, 'local_id') ??
-        _readInt(remote, 'id') ??
-        0;
-    try {
-      final local =
+    int localId;
+    String? baseHash;
+    Map<String, dynamic> local;
+
+    // ── Branch by table: derive a real Drift localId ─────────────────
+    // Tables that have a server-side local_id (lessons, exams) can use
+    // the existing _readInt chain from the remote payload.
+    // Tables without a server-side local_id (teachers, schools) must
+    // resolve the localId by looking up the existing Drift row via
+    // serverId (READ ONLY — no write until after three-way merge).
+    if (change.table == 'teachers') {
+      final serverId = remote['server_id'] as String? ??
+          remote['id'] as String?;
+      if (serverId == null || serverId.isEmpty) {
+        debugPrint(
+          '[SYNC] _mergeRemoteChange: skipping teacher — no serverId',
+        );
+        return;
+      }
+
+      // Read-only lookup: find existing teacher by serverId.
+      final existing = await (db.select(db.teachers)
+            ..where((t) => t.serverId.equals(serverId)))
+          .get();
+
+      if (existing.isEmpty) {
+        // NEW teacher — upsert remote directly, write to versionHashes,
+        // skip three-way merge (MergeEngine returns remote as-is when
+        // there is no base record).
+        final newLocalId = await _upsertTeacherFromSync(remote);
+        if (newLocalId == null) {
+          debugPrint(
+            '[SYNC] _mergeRemoteChange: skipping new teacher '
+            '(school not yet synced) — will retry on next pull',
+          );
+          return;
+        }
+        await store.saveSyncedRecord(
+          tableName: 'teachers',
+          localId: newLocalId,
+          snapshot: remote,
+        );
+        _setState(SyncState.merging);
+        return;
+      }
+
+      // EXISTING teacher — use real localId for versionHashes ops.
+      localId = existing.first.localId;
+      local =
           await store.loadLocalRecord(change.table, localId) ?? const {};
-      final baseHash = await _loadBaseHash(change.table, localId);
+      baseHash = await _loadBaseHash(change.table, localId);
+    } else if (change.table == 'schools') {
+      final serverId = remote['server_id'] as String? ??
+          remote['id'] as String?;
+      if (serverId == null || serverId.isEmpty) {
+        debugPrint(
+          '[SYNC] _mergeRemoteChange: skipping school — no serverId',
+        );
+        return;
+      }
+
+      // Read-only lookup: find existing school by serverId.
+      final existing = await (db.select(db.schools)
+            ..where((s) => s.serverId.equals(serverId)))
+          .get();
+
+      if (existing.isEmpty) {
+        // NEW school — upsert remote directly, write to versionHashes,
+        // skip three-way merge (MergeEngine returns remote as-is when
+        // there is no base record).
+        final newLocalId = await _upsertSchoolFromSync(remote);
+        if (newLocalId == null) {
+          debugPrint(
+            '[SYNC] _mergeRemoteChange: skipping new school — '
+            'could not resolve serverId',
+          );
+          return;
+        }
+        await store.saveSyncedRecord(
+          tableName: 'schools',
+          localId: newLocalId,
+          snapshot: remote,
+        );
+        _setState(SyncState.merging);
+        return;
+      }
+
+      // EXISTING school — use real localId for versionHashes ops.
+      localId = existing.first.localId;
+      local =
+          await store.loadLocalRecord(change.table, localId) ?? const {};
+      baseHash = await _loadBaseHash(change.table, localId);
+    } else {
+      // For all other tables (lessons, exams, subjects, etc.) the
+      // remote payload contains a real local_id — use the existing chain.
+      localId = _readInt(remote, 'localId') ??
+          _readInt(remote, 'local_id') ??
+          _readInt(remote, 'id') ??
+          0;
+      local =
+          await store.loadLocalRecord(change.table, localId) ?? const {};
+      baseHash = await _loadBaseHash(change.table, localId);
+    }
+
+    try {
       final result =
-          await _threeWayMerge(local, remote, baseHash, change.table);
+          await _threeWayMerge(local, remote, baseHash, change.table, localId);
 
       if (baseHash == null) {
         _setState(SyncState.savingConflicts);
@@ -1394,18 +1485,15 @@ class SyncService {
         snapshot: result.merged,
       );
 
-      // For the teachers table, also upsert the merged data into the
-      // actual Drift teachers table so the admin dashboard can query it
-      // locally (e.g. getPendingTeachers, getBySchool).
+      // Write the three-way-merged result back to the data table.
+      // For teachers and schools, result.merged may differ from raw
+      // remote after conflict resolution; this call ensures the data
+      // table reflects the merge output, not the raw remote payload.
+      // For all other tables, versionHashes is the single source of
+      // truth and no data-table upsert is needed.
       if (change.table == 'teachers') {
         await _upsertTeacherFromSync(result.merged);
-      }
-
-      // For the schools table, also upsert the merged data into the
-      // actual Drift schools table so the admin dashboard and any other
-      // screen reading the local school record (subscriptionTier, etc.)
-      // reflect the latest values without requiring a re-login.
-      if (change.table == 'schools') {
+      } else if (change.table == 'schools') {
         await _upsertSchoolFromSync(result.merged);
       }
 
@@ -1425,12 +1513,16 @@ class SyncService {
 
   /// Upserts a teacher row from synced remote data into the local Drift
   /// [teachers] table. The [merged] map uses snake_case keys from Supabase.
-  Future<void> _upsertTeacherFromSync(Map<String, dynamic> merged) async {
+  ///
+  /// Returns the Drift [localId] of the upserted row, or `null` if the
+  /// upsert was skipped (e.g. no serverId, or the teacher's school hasn't
+  /// been synced yet).
+  Future<int?> _upsertTeacherFromSync(Map<String, dynamic> merged) async {
     final serverId = merged['server_id'] as String? ??
         merged['id'] as String?;
     if (serverId == null || serverId.isEmpty) {
       debugPrint('[sync] _upsertTeacherFromSync skipped: no serverId in $merged');
-      return;
+      return null;
     }
 
     // Look up existing teacher by serverId
@@ -1532,6 +1624,7 @@ class SyncService {
         updateCounter: Value(existingTeacher.updateCounter + 1),
       ));
       debugPrint('[sync] _upsertTeacherFromSync: UPDATED teacher $serverId');
+      return existingTeacher.localId;
     } else {
       // Insert new teacher record.
       // If resolvedSchoolLocalId is null (school not yet synced locally),
@@ -1550,10 +1643,10 @@ class SyncService {
             'serverId=$serverId, schoolServerId=$schoolServerId',
           ),
         );
-        return;
+        return null;
       }
 
-      await (db.into(db.teachers).insert(
+      final newLocalId = await (db.into(db.teachers).insert(
         TeachersCompanion.insert(
           serverId: Value(serverId),
           email: email,
@@ -1585,6 +1678,7 @@ class SyncService {
         ),
       ));
       debugPrint('[sync] _upsertTeacherFromSync: INSERTED teacher $serverId');
+      return newLocalId;
     }
   }
 
@@ -1596,12 +1690,15 @@ class SyncService {
   /// changes to the schools table (e.g. subscription_tier updates applied
   /// directly in Supabase) are written into the local Drift table immediately,
   /// not just into synced_records.
-  Future<void> _upsertSchoolFromSync(Map<String, dynamic> merged) async {
+  ///
+  /// Returns the Drift [localId] of the upserted row, or `null` if the
+  /// upsert was skipped (e.g. no serverId).
+  Future<int?> _upsertSchoolFromSync(Map<String, dynamic> merged) async {
     final serverId = merged['server_id'] as String? ??
         merged['id'] as String?;
     if (serverId == null || serverId.isEmpty) {
       debugPrint('[sync] _upsertSchoolFromSync skipped: no serverId in $merged');
-      return;
+      return null;
     }
 
     // Map snake_case remote keys to the parameters expected by upsertByServerId.
@@ -1632,7 +1729,7 @@ class SyncService {
 
     final activationCode = strVal('activation_code');
 
-    await db.schoolsDao.upsertByServerId(
+    final school = await db.schoolsDao.upsertByServerId(
       serverId: serverId,
       schoolName: schoolName,
       shortCode: shortCode,
@@ -1651,6 +1748,8 @@ class SyncService {
       '[sync] _upsertSchoolFromSync: upserted school $serverId '
       '(tier=$subscriptionTier)',
     );
+
+    return school.localId;
   }
 
   /// Removes duplicate teacher rows that share the same non-null [serverId],
