@@ -139,20 +139,42 @@ class AdminDashboardNotifier extends Notifier<AdminDashboardData> {
       // school may not be the first one — causing teachers to be stored under
       // the wrong schoolLocalId.
       final schoolServerId = authState.currentSchool?.serverId;
-      int schoolLocalId;
+      int? schoolLocalId;
+      School? resolvedSchool;
+
       if (schoolServerId != null) {
-        final schoolByServerId = await (_db.select(_db.schools)
+        resolvedSchool = await (_db.select(_db.schools)
               ..where((s) => s.serverId.equals(schoolServerId)))
             .getSingleOrNull();
-        schoolLocalId = schoolByServerId?.localId ?? 0;
-        if (schoolByServerId == null) {
-          debugPrint('[admin] WARNING: school with serverId=$schoolServerId '
-              'not found in local DB; using fallback');
+        if (resolvedSchool == null) {
+          debugPrint(
+            '[admin] WARNING: school with serverId=$schoolServerId '
+            'not found in local DB. Admin dashboard data unavailable until '
+            'the school record is synced.',
+          );
+          state = AdminDashboardData(
+            errorMessage: 'School record not yet synced. '
+                'Pull to sync school data, then refresh.',
+          );
+          return;
         }
+        schoolLocalId = resolvedSchool.localId;
       } else {
-        final school = await _db.schoolsDao.get();
-        schoolLocalId = school?.localId ?? 0;
+        resolvedSchool = await _db.schoolsDao.get();
+        if (resolvedSchool == null) {
+          debugPrint(
+            '[admin] WARNING: no school found in local DB. '
+            'Admin dashboard data unavailable.',
+          );
+          state = AdminDashboardData(
+            errorMessage: 'No school record found locally. '
+                'Please log in again or sync school data.',
+          );
+          return;
+        }
+        schoolLocalId = resolvedSchool.localId;
       }
+
       await _db.reconcileLegacyTeachers();
       final teachers = await _db.teachersDao.getBySchool(schoolLocalId);
       debugPrint(

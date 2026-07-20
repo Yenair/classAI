@@ -1533,15 +1533,33 @@ class SyncService {
       ));
       debugPrint('[sync] _upsertTeacherFromSync: UPDATED teacher $serverId');
     } else {
-      // Insert new teacher record
+      // Insert new teacher record.
+      // If resolvedSchoolLocalId is null (school not yet synced locally),
+      // skip the INSERT entirely rather than writing an invalid FK of 0,
+      // which would throw a foreign-key constraint violation. The teacher
+      // will be picked up on the next pull cycle once the school arrives.
+      if (resolvedSchoolLocalId == null || resolvedSchoolLocalId == 0) {
+        debugPrint(
+          '[sync] _upsertTeacherFromSync: SKIP INSERT teacher $serverId — '
+          'schoolServerId=$schoolServerId not yet synced locally. '
+          'Will retry on next pull.',
+        );
+        await Sentry.captureException(
+          Exception(
+            'Deferred teacher INSERT (school not synced): '
+            'serverId=$serverId, schoolServerId=$schoolServerId',
+          ),
+        );
+        return;
+      }
+
       await (db.into(db.teachers).insert(
         TeachersCompanion.insert(
           serverId: Value(serverId),
           email: email,
           teacherName: teacherName,
           role: Value(role),
-          schoolLocalId:
-              resolvedSchoolLocalId ?? 0,
+          schoolLocalId: resolvedSchoolLocalId,
           schoolServerId: schoolServerId != null
               ? Value(schoolServerId)
               : const Value.absent(),
