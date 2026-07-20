@@ -1398,6 +1398,15 @@ class SyncService {
       }
 
       // EXISTING teacher — use real localId for versionHashes ops.
+      // Pick the lowest localId if duplicates exist (defensive — mirrors
+      // the _deduplicateTeachers strategy of keeping the oldest row).
+      if (existing.length > 1) {
+        debugPrint(
+          '[SYNC] _mergeRemoteChange: ${existing.length} local rows for '
+          'teacher serverId=$serverId — using lowest localId',
+        );
+        existing.sort((a, b) => a.localId.compareTo(b.localId));
+      }
       localId = existing.first.localId;
       local =
           await store.loadLocalRecord(change.table, localId) ?? const {};
@@ -1439,6 +1448,14 @@ class SyncService {
       }
 
       // EXISTING school — use real localId for versionHashes ops.
+      // Pick the lowest localId if duplicates exist (defensive).
+      if (existing.length > 1) {
+        debugPrint(
+          '[SYNC] _mergeRemoteChange: ${existing.length} local rows for '
+          'school serverId=$serverId — using lowest localId',
+        );
+        existing.sort((a, b) => a.localId.compareTo(b.localId));
+      }
       localId = existing.first.localId;
       local =
           await store.loadLocalRecord(change.table, localId) ?? const {};
