@@ -426,7 +426,10 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       // Resolve server IDs for draft creation
       final teacher = await db.teachersDao.getById(_teacherId!);
       final teacherServerId = teacher?.serverId;
-      final school = await db.schoolsDao.get();
+      // _schoolId is the correct localId resolved in _loadAuthInfo via
+      // serverId lookup — avoid schoolsDao.get() which uses limit(1) with
+      // no serverId filter and may return the wrong school.
+      final school = await db.schoolsDao.getByLocalId(_schoolId!);
       final schoolServerId = school?.serverId;
       final termLabel = _normalizeTermLabelForDraft(_term);
 
@@ -522,7 +525,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
               (l.weekNumber ?? l.week) == weekNumber &&
               l.status == 'draft');
           if (!lessonExists) {
-            await db.lessonsDao.insertLesson(
+            final lessonId = await db.lessonsDao.insertLesson(
               LessonsCompanion.insert(
                 subject: _subject,
                 classLevel: _classLevel,
@@ -550,6 +553,36 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
                 term: Value(termLabel),
               ),
             );
+            final lessonContent = jsonEncode({
+              'objectives': [],
+              'vocabulary': [],
+              'materials': [],
+              'presentation': [],
+              'assessment': '',
+              'homework': '',
+            });
+            await db.syncQueueDao.insertEntry(
+              queueTable: 'lessons',
+              recordLocalId: lessonId,
+              operation: 'INSERT',
+              payload: {
+                'subject': _subject,
+                'classLevel': _classLevel,
+                'week': weekNumber,
+                'topic': topicText,
+                'difficulty': 'medium',
+                'bloomsVerbs': '',
+                'curriculum': 'NERDC',
+                'teacher_server_id': teacherServerId,
+                'school_server_id': schoolServerId,
+                'content': lessonContent,
+                'content_hash': lessonContent.hashCode.toString(),
+                'is_unlocked': false,
+                'scheme_of_work_id': _weekRecordIds[weekNumber].toString(),
+                'week_number': weekNumber,
+                'term': termLabel,
+              },
+            );
           }
 
           // Auto-create draft exam if not already existing
@@ -562,7 +595,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
               (e.term ?? '') == termLabel &&
               e.weekNumber == weekNumber);
           if (!examExists) {
-            await db.examsDao.insertExam(
+            final examId = await db.examsDao.insertExam(
               ExamsCompanion.insert(
                 subject: _subject,
                 classLevel: _classLevel,
@@ -583,6 +616,30 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
                 weekNumber: Value(weekNumber),
                 term: Value(termLabel),
               ),
+            );
+            final examContent = jsonEncode({
+              'mcqs': [],
+              'theory': [],
+              'subjective': [],
+            });
+            await db.syncQueueDao.insertEntry(
+              queueTable: 'exams',
+              recordLocalId: examId,
+              operation: 'INSERT',
+              payload: {
+                'subject': _subject,
+                'classLevel': _classLevel,
+                'topic': topicText,
+                'difficulty': 'medium',
+                'curriculum': 'NERDC',
+                'teacher_server_id': teacherServerId,
+                'school_server_id': schoolServerId,
+                'content': examContent,
+                'is_unlocked': false,
+                'scheme_of_work_id': _weekRecordIds[weekNumber].toString(),
+                'week_number': weekNumber,
+                'term': termLabel,
+              },
             );
           }
         }
@@ -609,7 +666,9 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       final db = ref.read(databaseProvider);
       final teacher = await db.teachersDao.getById(_teacherId!);
       final teacherServerId = teacher?.serverId;
-      final school = await db.schoolsDao.get();
+      // _schoolId is the correct localId resolved in _loadAuthInfo — use
+      // getByLocalId (not get()) to avoid returning the wrong school row.
+      final school = await db.schoolsDao.getByLocalId(_schoolId!);
       final schoolServerId = school?.serverId;
       final subject = await db.subjectsDao.getById(_subjectId!);
       final subjectServerId = subject?.serverId;
@@ -674,7 +733,9 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       if (schemeWeek != null) {
         final teacher = await db.teachersDao.getById(schemeWeek.teacherId);
         final teacherServerId = teacher?.serverId;
-        final school = await db.schoolsDao.get();
+        // _schoolId is the correct localId resolved in _loadAuthInfo — use
+        // getByLocalId (not get()) to avoid returning the wrong school row.
+        final school = await db.schoolsDao.getByLocalId(_schoolId!);
         final schoolServerId = school?.serverId;
         final termLabel = _normalizeTermLabelForDraft(schemeWeek.term);
         final classLevel = schemeWeek.classLevel;
@@ -724,7 +785,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
               (l.weekNumber ?? l.week) == weekNumber &&
               l.status == 'draft');
           if (!lessonExists) {
-            await db.lessonsDao.insertLesson(
+            final lessonId = await db.lessonsDao.insertLesson(
               LessonsCompanion.insert(
                 subject: subjectName,
                 classLevel: classLevel,
@@ -752,6 +813,36 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
                 term: Value(termLabel),
               ),
             );
+            final lessonContent = jsonEncode({
+              'objectives': [],
+              'vocabulary': [],
+              'materials': [],
+              'presentation': [],
+              'assessment': '',
+              'homework': '',
+            });
+            await db.syncQueueDao.insertEntry(
+              queueTable: 'lessons',
+              recordLocalId: lessonId,
+              operation: 'INSERT',
+              payload: {
+                'subject': subjectName,
+                'classLevel': classLevel,
+                'week': weekNumber,
+                'topic': topic,
+                'difficulty': 'medium',
+                'bloomsVerbs': '',
+                'curriculum': 'NERDC',
+                'teacher_server_id': teacherServerId,
+                'school_server_id': schoolServerId,
+                'content': lessonContent,
+                'content_hash': lessonContent.hashCode.toString(),
+                'is_unlocked': false,
+                'scheme_of_work_id': schemeWeekId.toString(),
+                'week_number': weekNumber,
+                'term': termLabel,
+              },
+            );
           }
 
           // Check for and create draft exam
@@ -764,7 +855,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
               (e.term ?? '') == termLabel &&
               e.weekNumber == weekNumber);
           if (!examExists) {
-            await db.examsDao.insertExam(
+            final examId = await db.examsDao.insertExam(
               ExamsCompanion.insert(
                 subject: subjectName,
                 classLevel: classLevel,
@@ -785,6 +876,30 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
                 weekNumber: Value(weekNumber),
                 term: Value(termLabel),
               ),
+            );
+            final examContent = jsonEncode({
+              'mcqs': [],
+              'theory': [],
+              'subjective': [],
+            });
+            await db.syncQueueDao.insertEntry(
+              queueTable: 'exams',
+              recordLocalId: examId,
+              operation: 'INSERT',
+              payload: {
+                'subject': subjectName,
+                'classLevel': classLevel,
+                'topic': topic,
+                'difficulty': 'medium',
+                'curriculum': 'NERDC',
+                'teacher_server_id': teacherServerId,
+                'school_server_id': schoolServerId,
+                'content': examContent,
+                'is_unlocked': false,
+                'scheme_of_work_id': schemeWeekId.toString(),
+                'week_number': weekNumber,
+                'term': termLabel,
+              },
             );
           }
         }
