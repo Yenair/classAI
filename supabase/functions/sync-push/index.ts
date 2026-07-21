@@ -165,7 +165,7 @@ async function resolveForeignKeys(
   supabase: ReturnType<typeof createClient>,
   table: string,
   rowData: Record<string, unknown>,
-): Promise<void> {
+): Promise<string | null> {
   if (table === "lessons" || table === "exams") {
     // ── 1. School: school_server_id IS schools.id (UUID) ──────────────
     if (rowData["school_server_id"] && !rowData["school_id"]) {
@@ -205,10 +205,13 @@ async function resolveForeignKeys(
       } else {
         console.warn(
           `resolveForeignKeys: no subject found for name="${subjectName}" ` +
-          `school="${schoolId}" class="${classLevel}"`
+          `school="${schoolId}" class="${classLevel}" — skipping entry`
         );
-        // Use placeholder to avoid NOT NULL violation
-        rowData["subject_id"] = "00000000-0000-0000-0000-000000000000";
+        // Cannot resolve FK — signal caller to skip this entry.
+        // The caller will produce a "skipped" result with retryable: false
+        // so the sync_queue entry is not retried pointlessly.
+        delete rowData["subject"];
+        return `Foreign key could not be resolved for ${table}: no subject found for name="${subjectName}", school="${schoolId}", class="${classLevel}"`;
       }
 
       // Remove the text `subject` field since the server uses `subject_id`
@@ -412,6 +415,9 @@ async function resolveForeignKeys(
     delete rowData["school_server_id"];
     delete rowData["local_id"];
   }
+
+  // No skip needed
+  return null;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -747,7 +753,18 @@ serve(async (req) => {
           // ════════════════════════════════════════════════════════════
           // FIX: Resolve FK text references to UUIDs and apply defaults
           // ════════════════════════════════════════════════════════════
-          await resolveForeignKeys(supabase, table, insertData);
+          const skipReason = await resolveForeignKeys(supabase, table, insertData);
+          if (skipReason) {
+            console.warn(`sync-push: SKIP INSERT on "${table}" (local_id=${localId}): ${skipReason}`);
+            results.push({
+              local_id: localId,
+              server_id: null,
+              status: "skipped",
+              retryable: false,
+              error: skipReason,
+            });
+            continue;
+          }
 
           console.log(`[SYNC-PUSH-DIAG] INSERT data after resolveForeignKeys: ${JSON.stringify(insertData)}`);
 
@@ -780,7 +797,18 @@ serve(async (req) => {
             continue;
           }
           const { local_id: _lid, localId: _lid2, server_id: _sid, serverId: _sid2, id: _id, school_server_id: _ssid, teacher_server_id: _tsid, ...updateData } = fullRowData;
-          await resolveForeignKeys(supabase, table, updateData);
+          const updateSkipReason = await resolveForeignKeys(supabase, table, updateData);
+          if (updateSkipReason) {
+            console.warn(`sync-push: SKIP UPDATE on "${table}" (local_id=${localId}): ${updateSkipReason}`);
+            results.push({
+              local_id: localId,
+              server_id: serverId as string,
+              status: "skipped",
+              retryable: false,
+              error: updateSkipReason,
+            });
+            continue;
+          }
           const { error } = await supabase
             .from(table)
             .update(updateData)
