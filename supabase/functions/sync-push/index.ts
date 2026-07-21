@@ -165,12 +165,19 @@ async function resolveForeignKeys(
   supabase: ReturnType<typeof createClient>,
   table: string,
   rowData: Record<string, unknown>,
+  jwtClaims: Record<string, unknown>,
 ): Promise<string | null> {
   if (table === "lessons" || table === "exams") {
-    // ── 1. School: school_server_id IS schools.id (UUID) ──────────────
-    if (rowData["school_server_id"] && !rowData["school_id"]) {
-      rowData["school_id"] = rowData["school_server_id"];
+    // ── 1. School: Override from JWT — never trust client-supplied values ─
+    const jwtSchoolId = jwtClaims["school_id"] as string | undefined;
+    if (!jwtSchoolId) {
+      console.warn(
+        `resolveForeignKeys: jwtClaims.school_id is missing/falsy for ${table} — skipping entry`
+      );
+      return `Foreign key could not be resolved for ${table}: jwtClaims.school_id is missing`;
     }
+    rowData["school_id"] = jwtSchoolId;
+    rowData["school_server_id"] = jwtSchoolId;
 
     // ── 2. Teacher: teacher_server_id IS teachers.id (UUID) ────────────
     if (rowData["teacher_server_id"] && !rowData["teacher_id"]) {
@@ -753,7 +760,7 @@ serve(async (req) => {
           // ════════════════════════════════════════════════════════════
           // FIX: Resolve FK text references to UUIDs and apply defaults
           // ════════════════════════════════════════════════════════════
-          const skipReason = await resolveForeignKeys(supabase, table, insertData);
+          const skipReason = await resolveForeignKeys(supabase, table, insertData, jwtClaims);
           if (skipReason) {
             console.warn(`sync-push: SKIP INSERT on "${table}" (local_id=${localId}): ${skipReason}`);
             results.push({
@@ -797,7 +804,7 @@ serve(async (req) => {
             continue;
           }
           const { local_id: _lid, localId: _lid2, server_id: _sid, serverId: _sid2, id: _id, school_server_id: _ssid, teacher_server_id: _tsid, ...updateData } = fullRowData;
-          const updateSkipReason = await resolveForeignKeys(supabase, table, updateData);
+          const updateSkipReason = await resolveForeignKeys(supabase, table, updateData, jwtClaims);
           if (updateSkipReason) {
             console.warn(`sync-push: SKIP UPDATE on "${table}" (local_id=${localId}): ${updateSkipReason}`);
             results.push({
