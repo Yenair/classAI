@@ -86,9 +86,30 @@ serve(async (req) => {
         .order("updated_at", { ascending: true })
         .limit(PAGE_SIZE);
 
-      // Scope teacher records to the admin's school
-      if (table === 'teachers' && school_id) {
-        query = query.eq("school_id", school_id);
+      // ── School-id scoping ──────────────────────────────────────────
+      // Every syncable table that has a school_id FK must be scoped to
+      // the requesting school so one school cannot see another's data.
+      //
+      // Tables below have been verified (via migration analysis and/or
+      // sync-push resolveForeignKeys) to possess a school_id (uuid FK)
+      // column on the Supabase side.
+      if (school_id) {
+        const scopedTables = new Set([
+          "teachers",
+          "lessons",
+          "exams",
+          "subjects",
+          "scheme_of_work",
+          "vault_items",
+          "progress_logs",
+          "payment_events",
+          "schools",
+        ]);
+        if (scopedTables.has(table)) {
+          // For 'schools', the row's PK (id) IS the requesting school_id
+          const column = table === "schools" ? "id" : "school_id";
+          query = query.eq(column, school_id);
+        }
       }
 
       if (lastSyncTimestamp) {

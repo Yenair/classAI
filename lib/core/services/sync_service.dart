@@ -253,7 +253,6 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
     'scheme_of_work',
     'teachers',
     'schools',
-    'audit_logs',
     'payment_events',
   ];
 

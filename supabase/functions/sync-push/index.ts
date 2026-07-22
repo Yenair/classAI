@@ -77,7 +77,7 @@ const KEY_MAP: Record<string, string> = {
   credit_cost: "credit_cost",
   needs_approval: "needs_approval",
   thumbnail_url: "thumbnail_url",
-  // audit_logs / payment_events fields
+  // payment_events fields
   transaction_reference: "transaction_reference",
   confirmed_by_webhook: "confirmed_by_webhook",
   // subjects
@@ -420,14 +420,6 @@ async function resolveForeignKeys(
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // audit_logs handler
-  // ═══════════════════════════════════════════════════════════════
-  if (table === "audit_logs") {
-    // teacher_id and school_id are already UUIDs — use them directly
-    delete rowData["local_id"];
-  }
-
-  // ═══════════════════════════════════════════════════════════════
   // payment_events handler
   // ═══════════════════════════════════════════════════════════════
   if (table === "payment_events") {
@@ -665,7 +657,7 @@ serve(async (req) => {
       "lessons", "exams", "progress_logs",
       "subjects", "teachers", "schools",
       "scheme_of_work", "vault_items",
-      "audit_logs", "payment_events",
+      "payment_events",
       "credit_spend",
     ]);
 
@@ -678,7 +670,6 @@ serve(async (req) => {
     //   schools        — subscription_tier, total_seats, expiry_date,
     //                    activation_code, admin_recovery_email
     //   subjects       — school-wide subject catalogue
-    //   audit_logs     — audit trail of admin actions
     //   payment_events — payment/transaction records
     //   app_config     — system-wide config (pricing, limits, feature flags)
     //   pending_activations — activation codes for onboarding
@@ -688,7 +679,7 @@ serve(async (req) => {
     //   recovery_codes      — password-reset recovery codes
     const adminTables = new Set([
       "teachers", "schools", "subjects",
-      "audit_logs", "payment_events",
+      "payment_events",
       "app_config",
       "pending_activations",
       "activation_codes",
