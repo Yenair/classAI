@@ -111,6 +111,9 @@ function getValue(rowData: Record<string, unknown>, ...keys: string[]): unknown 
  * references by resolveForeignKeys().
  */
 const LESSON_DEFAULTS: Record<string, unknown> = {
+  topic: "",
+  difficulty: "medium",
+  blooms_verbs: "",
   title: "",
   credits_spent: 0,
   objectives: "",
@@ -122,6 +125,7 @@ const LESSON_DEFAULTS: Record<string, unknown> = {
 };
 
 const EXAM_DEFAULTS: Record<string, unknown> = {
+  difficulty: "medium",
   title: "",
   credits_spent: 0,
   questions: "",
@@ -231,6 +235,18 @@ async function resolveForeignKeys(
       if (rowData[col] === undefined || rowData[col] === null) {
         rowData[col] = defaultVal;
       }
+    }
+
+    // ── 4a. Skip if week_number is missing (not sent by client) ────
+    // week_number is planned to matter for future features (course/lesson
+    // ordering in upcoming app updates). A silent fallback that looks like
+    // a real value (e.g. "Week 0") would be actively misleading later.
+    // Treat this the same as the subject-not-found skip pattern above.
+    if (rowData["week_number"] === undefined || rowData["week_number"] === null) {
+      console.warn(
+        `resolveForeignKeys: week_number is missing for ${table} — skipping entry`
+      );
+      return `Foreign key could not be resolved for ${table}: week_number is missing from payload`;
     }
 
     // ── 5. Derive `title` from `topic` if not already set ──────────
