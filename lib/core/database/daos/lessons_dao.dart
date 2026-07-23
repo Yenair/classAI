@@ -18,6 +18,15 @@ class LessonsDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
+  /// Get all **non‑deleted** lessons for a specific teacher, ordered by week.
+  Future<List<Lesson>> getAllForTeacher(String teacherServerId) {
+    return (select(lessons)
+          ..where((t) => t.teacherServerId.equals(teacherServerId))
+          ..where((t) => t.isDeleted.equals(false))
+          ..orderBy([(t) => OrderingTerm(expression: t.week, mode: OrderingMode.asc)]))
+        .get();
+  }
+
   /// Get the most recent **non‑deleted** lessons, ordered by createdAt descending, limited to [limit].
   Future<List<Lesson>> getRecentLessons({int limit = 5}) {
     return (select(lessons)

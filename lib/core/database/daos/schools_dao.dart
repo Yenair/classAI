@@ -10,9 +10,29 @@ class SchoolsDao extends DatabaseAccessor<AppDatabase> with _$SchoolsDaoMixin {
   SchoolsDao(AppDatabase db) : super(db);
 
   /// Get the school record.
+  ///
+  /// Returns the first non-deleted school without filtering by [serverId].
+  /// Prefer [getByServerId] when the authenticated account's school
+  /// [serverId] is known — this method relies on insertion order and may
+  /// return the wrong school when multiple school rows exist locally.
   Future<School?> get() async {
     final results = await (select(schools)
           ..where((t) => t.isDeleted.equals(false))
+          ..limit(1))
+        .get();
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  /// Get the non-deleted school row matching [serverId].
+  ///
+  /// This is the correct way to look up the authenticated account's school
+  /// — unlike [get] which uses `limit(1)` with no serverId criteria, this
+  /// method returns the row whose [serverId] matches the caller's known
+  /// authenticated school serverId.
+  Future<School?> getByServerId(String serverId) async {
+    final results = await (select(schools)
+          ..where((t) =>
+              t.serverId.equals(serverId) & t.isDeleted.equals(false))
           ..limit(1))
         .get();
     return results.isNotEmpty ? results.first : null;

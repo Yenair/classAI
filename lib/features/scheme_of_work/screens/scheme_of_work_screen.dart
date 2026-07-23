@@ -420,6 +420,14 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       }
       if (subjectId == null) {
         subjectId = await db.subjectsDao.insert(name: _subject);
+        await db.syncQueueDao.insertEntry(
+          queueTable: 'subjects',
+          recordLocalId: subjectId,
+          operation: 'INSERT',
+          payload: {
+            'name': _subject,
+          },
+        );
       }
       _subjectId = subjectId;
 

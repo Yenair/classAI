@@ -42,14 +42,25 @@ class SyncStatusData {
 
 /// Provider that lazily constructs a [SyncService] instance.
 ///
-/// Loads the school's server ID from the database to configure both the
-/// [SyncService] and its [SupabaseSyncRemoteApi].
+/// Loads the school's server ID from the auth provider (which holds the
+/// authenticated account's school) to configure both the [SyncService] and
+/// its [SupabaseSyncRemoteApi]. Falls back to [schoolsDao.get] only when
+/// the auth provider has no currentSchool yet (early boot).
 final syncServiceProvider = FutureProvider<SyncService>((ref) async {
   final db = ref.watch(databaseProvider);
   final securityService = ref.watch(securityServiceProvider);
+  final authState = ref.watch(authProvider);
 
-  final school = await db.schoolsDao.get();
-  final schoolId = school?.serverId ?? '';
+  // Prefer the authenticated school's serverId from auth state. Only fall
+  // back to schoolsDao.get() (which just returns the first non-deleted row)
+  // when auth state hasn't been loaded yet.
+  String schoolId;
+  if (authState.currentSchool?.serverId != null) {
+    schoolId = authState.currentSchool!.serverId!;
+  } else {
+    final school = await db.schoolsDao.get();
+    schoolId = school?.serverId ?? '';
+  }
 
   return SyncService(
     db: db,

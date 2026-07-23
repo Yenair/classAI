@@ -23,10 +23,13 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
 
-/// Provider that fetches all lessons from the database.
+/// Provider that fetches all lessons for the current teacher from the database.
 final lessonsListProvider = FutureProvider<List<Lesson>>((ref) async {
   final db = ref.read(databaseProvider);
-  return db.lessonsDao.getAll();
+  final authData = ref.watch(authProvider);
+  final teacherId = authData.currentTeacher?.serverId;
+  if (teacherId == null) return [];
+  return db.lessonsDao.getAllForTeacher(teacherId);
 });
 
 /// Displays a list of lessons from the local database.

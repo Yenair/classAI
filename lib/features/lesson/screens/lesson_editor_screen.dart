@@ -1091,7 +1091,11 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     try {
       final db = ref.read(databaseProvider);
       await db.lessonsDao.updateStatus(_lessonId!, newStatus);
-      final school = await db.schoolsDao.get();
+      // _schoolId is guaranteed non-null by the guard above, and holds the
+      // authenticated account's school serverId — use it to look up the
+      // correct school row (not schoolsDao.get(), which uses limit(1) with no
+      // serverId filter and may return the wrong school).
+      final school = await db.schoolsDao.getByServerId(_schoolId!);
       // Resolve teacher's localId from the String serverId
       final teacher = await db.teachersDao.findByServerId(_teacherId!);
       final teacherLocalId = teacher?.localId ?? 0;
@@ -1130,7 +1134,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     try {
       final db = ref.read(databaseProvider);
       await db.lessonsDao.updateStatus(_lessonId!, 'completed');
-      final school = await db.schoolsDao.get();
+      // _schoolId is guaranteed non-null by the guard, holds the serverId.
+      final school = await db.schoolsDao.getByServerId(_schoolId!);
       final teacher = await db.teachersDao.findByServerId(_teacherId!);
       final teacherLocalId = teacher?.localId ?? 0;
       final logId = await db.progressLogsDao.insert(

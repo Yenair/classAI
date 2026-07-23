@@ -1,0 +1,75 @@
+======================================================================
+E2E TEST: sync-push school_id derivation fix
+======================================================================
+
+--- STEP 1: Login ---
+  teacher_id : 4e569a31-99d1-44a6-8bcc-4efbf0d67a71
+  school_id  : 9ae4dd4d-436b-4aad-8827-81c53920c4dd
+  is_admin   : True
+
+--- STEP 2: Push lesson with WRONG school_server_id ---
+  Real school_id (JWT)      : 9ae4dd4d-436b-4aad-8827-81c53920c4dd
+  Wrong school_server_id     : 96e9cd2c-b07f-4830-acf4-ad1d78a26c94
+  Payload rowData keys: ['local_id', 'server_id', 'school_server_id', 'teacher_server_id', 'topic', 'title', 'content', 'difficulty', 'curriculum', 'week', 'term', 'class_level', 'status', 'is_unlocked', 'update_counter', 'created_at', 'updated_at']
+
+  Sending to sync-push...
+  status: 200
+  response: {
+  "success": true,
+  "processed": 0,
+  "results": [
+    {
+      "local_id": 502983,
+      "server_id": null,
+      "status": "error",
+      "retryable": true
+    }
+  ]
+}
+
+  Result: status=error, server_id=None
+
+  --- Attempt 2: Explicit null fields + more defaults ---
+  status: 200
+  response: {
+  "success": true,
+  "processed": 0,
+  "results": [
+    {
+      "local_id": 502984,
+      "server_id": null,
+      "status": "error",
+      "retryable": true
+    }
+  ]
+}
+
+  --- Attempt 3: Send subject: empty string (should skip lookup) ---
+  status: 200
+  response: {
+  "success": true,
+  "processed": 0,
+  "results": [
+    {
+      "local_id": 502985,
+      "server_id": null,
+      "status": "error",
+      "retryable": true
+    }
+  ]
+}
+
+--- STEP 3: Query stored lesson ---
+  By local_id (502983): status=200, rows=0
+  Recent lessons: status=200, rows=0
+
+--- STEP 4: VERDICT ---
+  [FAIL] Could not create lesson (sync-push returned error on all attempts)
+  [INFO] Check the sync-push logs for the actual DB error.
+
+--- STEP 5: CLEANUP ---
+  DELETE local_id=502983: status=204
+
+======================================================================
+TEST FAILED
+======================================================================

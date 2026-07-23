@@ -1709,10 +1709,16 @@ class _CountData {
   });
 }
 
-/// Provider that fetches the total count of lessons, drafts, and completed.
+/// Provider that fetches the total count of lessons, drafts, and completed
+/// for the current teacher.
 final lessonCountProvider = FutureProvider<_CountData>((ref) async {
   final db = ref.read(databaseProvider);
-  final lessons = await db.lessonsDao.getAll();
+  final authData = ref.watch(authProvider);
+  final teacherId = authData.currentTeacher?.serverId;
+  if (teacherId == null) {
+    return const _CountData(total: 0, draftCount: 0, secondaryCount: 0);
+  }
+  final lessons = await db.lessonsDao.getAllForTeacher(teacherId);
   final draftCount = lessons.where((l) => l.status == 'draft').length;
   final completedCount = lessons.where((l) => l.status == 'completed').length;
   return _CountData(
@@ -1737,7 +1743,10 @@ final examCountProvider = FutureProvider<_CountData>((ref) async {
 
 final todayLessonCountProvider = FutureProvider<int>((ref) async {
   final db = ref.read(databaseProvider);
-  final lessons = await db.lessonsDao.getAll();
+  final authData = ref.watch(authProvider);
+  final teacherId = authData.currentTeacher?.serverId;
+  if (teacherId == null) return 0;
+  final lessons = await db.lessonsDao.getAllForTeacher(teacherId);
   final today = DateTime.now();
   return lessons
       .where((lesson) =>

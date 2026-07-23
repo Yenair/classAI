@@ -4,7 +4,8 @@ import 'package:classai/core/database/database.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/scheme_of_work/screens/scheme_of_work_screen.dart';
 import 'package:classai/main.dart' show databaseProvider;
-import 'package:drift/drift.dart' hide isNotNull;
+import 'package:drift/drift.dart';
+import 'package:matcher/matcher.dart' as matcher;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,6 +31,16 @@ class TestFixture {
   final Teacher teacher;
   final int subjectId;
   final int schemeWeekId;
+}
+
+class TeacherFixture {
+  TeacherFixture({
+    required this.school,
+    required this.teacher,
+  });
+
+  final School school;
+  final Teacher teacher;
 }
 
 Future<TestFixture> _seedTeacherSchemeFixture(
@@ -94,6 +105,46 @@ Future<TestFixture> _seedTeacherSchemeFixture(
   );
 }
 
+Future<TeacherFixture> _seedTeacherFixture(
+  AppDatabase db, {
+  required String teacherRole,
+}) async {
+  final schoolId = await db.into(db.schools).insert(
+        SchoolsCompanion.insert(
+          serverId: const Value('00000000-0000-0000-0000-000000000111'),
+          schoolName: 'Test School',
+          shortCode: 'TS111',
+          subscriptionTier: const Value('free'),
+        ),
+      );
+
+  final teacherId = await db.into(db.teachers).insert(
+        TeachersCompanion.insert(
+          serverId: const Value('00000000-0000-0000-0000-000000000211'),
+          email: 'teacher@testschool.local',
+          teacherName: 'Test Teacher',
+          role: Value(teacherRole),
+          schoolLocalId: schoolId,
+          schoolServerId: const Value('00000000-0000-0000-0000-000000000111'),
+          isActive: const Value(true),
+          forcePasswordReset: const Value(false),
+          passwordHashVersion: const Value(1),
+          themeMode: const Value('system'),
+        ),
+      );
+
+  final school = await db.schoolsDao.getByLocalId(schoolId);
+  final teacher = await db.teachersDao.getById(teacherId);
+  if (school == null || teacher == null) {
+    throw StateError('Failed to seed teacher fixture');
+  }
+
+  return TeacherFixture(
+    school: school,
+    teacher: teacher,
+  );
+}
+
 Map<String, dynamic> _decodePayload(String payload) {
   final decoded = jsonDecode(payload);
   if (decoded is Map<String, dynamic>) return decoded;
@@ -112,6 +163,27 @@ Future<SyncQueueData?> _queueRow(
         ]))
       .get();
   return rows.isEmpty ? null : rows.first;
+}
+
+Future<int> _autoCreateSchemeSubject(
+  AppDatabase db,
+  String subjectName,
+) async {
+  final subjectRow = await db.subjectsDao.getByName(subjectName);
+  if (subjectRow != null) {
+    return subjectRow.id;
+  }
+
+  final subjectId = await db.subjectsDao.insert(name: subjectName);
+  await db.syncQueueDao.insertEntry(
+    queueTable: 'subjects',
+    recordLocalId: subjectId,
+    operation: 'INSERT',
+    payload: {
+      'name': subjectName,
+    },
+  );
+  return subjectId;
 }
 
 Future<void> _pumpSchemeScreen(
@@ -145,7 +217,7 @@ Future<void> _expectLessonQueueEntry(
   required int schemeWeekId,
 }) async {
   final queueRow = await _queueRow(db, queueTable: 'lessons');
-  expect(queueRow, isNotNull, reason: 'Expected a lessons sync_queue row');
+  expect(queueRow, matcher.isNotNull, reason: 'Expected a lessons sync_queue row');
   final row = queueRow!;
 
   final payload = _decodePayload(row.payload);
@@ -153,13 +225,13 @@ Future<void> _expectLessonQueueEntry(
   expect(payload['scheme_of_work_id'], schemeWeekId.toString());
   expect(payload['week_number'], 1);
   expect(payload['term'], '1st Term');
-  expect(payload['teacher_server_id'], isNotNull);
-  expect(payload['school_server_id'], isNotNull);
+  expect(payload['teacher_server_id'], matcher.isNotNull);
+  expect(payload['school_server_id'], matcher.isNotNull);
   expect(payload['content'], isA<String>());
   expect((payload['content'] as String).isNotEmpty, isTrue);
 
   final insertedLesson = await db.lessonsDao.getById(row.recordLocalId);
-  expect(insertedLesson, isNotNull, reason: 'Inserted lesson should exist');
+  expect(insertedLesson, matcher.isNotNull, reason: 'Inserted lesson should exist');
   expect(insertedLesson!.schemeOfWorkId, schemeWeekId.toString());
   expect(insertedLesson.weekNumber, 1);
   expect(insertedLesson.term, '1st Term');
@@ -170,7 +242,7 @@ Future<void> _expectExamQueueEntry(
   required int schemeWeekId,
 }) async {
   final queueRow = await _queueRow(db, queueTable: 'exams');
-  expect(queueRow, isNotNull, reason: 'Expected an exams sync_queue row');
+  expect(queueRow, matcher.isNotNull, reason: 'Expected an exams sync_queue row');
   final row = queueRow!;
 
   final payload = _decodePayload(row.payload);
@@ -178,13 +250,13 @@ Future<void> _expectExamQueueEntry(
   expect(payload['scheme_of_work_id'], schemeWeekId.toString());
   expect(payload['week_number'], 1);
   expect(payload['term'], '1st Term');
-  expect(payload['teacher_server_id'], isNotNull);
-  expect(payload['school_server_id'], isNotNull);
+  expect(payload['teacher_server_id'], matcher.isNotNull);
+  expect(payload['school_server_id'], matcher.isNotNull);
   expect(payload['content'], isA<String>());
   expect((payload['content'] as String).isNotEmpty, isTrue);
 
   final insertedExam = await db.examsDao.getById(row.recordLocalId);
-  expect(insertedExam, isNotNull, reason: 'Inserted exam should exist');
+  expect(insertedExam, matcher.isNotNull, reason: 'Inserted exam should exist');
   expect(insertedExam!.schemeOfWorkId, schemeWeekId.toString());
   expect(insertedExam.weekNumber, 1);
   expect(insertedExam.term, '1st Term');
@@ -205,6 +277,28 @@ void main() {
   });
 
   group('SchemeOfWorkScreen auto-creation sync queue verification', () {
+    test('auto-created subject inserts a subjects sync_queue row', () async {
+      final fixture = await _seedTeacherFixture(db, teacherRole: 'teacher');
+      expect(await db.subjectsDao.getByName('Mathematics'), matcher.isNull);
+
+      final subjectId = await _autoCreateSchemeSubject(db, 'Mathematics');
+
+      final queueRow = await _queueRow(db, queueTable: 'subjects');
+      expect(queueRow, matcher.isNotNull, reason: 'Expected a subjects sync_queue row');
+      final row = queueRow!;
+      final payload = _decodePayload(row.payload);
+
+      expect(subjectId, greaterThan(0));
+      expect(row.recordLocalId, subjectId);
+      expect(payload['name'], 'Mathematics');
+
+      final insertedSubject = await db.subjectsDao.getById(subjectId);
+      expect(insertedSubject, matcher.isNotNull);
+      expect(insertedSubject!.name, 'Mathematics');
+      expect(fixture.school.schoolName, 'Test School');
+      expect(fixture.teacher.teacherName, 'Test Teacher');
+    });
+
     testWidgets(
       '_saveScheme() draft-lesson path enqueues a lessons sync_queue row',
       (tester) async {

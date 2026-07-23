@@ -1605,7 +1605,14 @@ class AuthNotifier extends Notifier<AuthStateData> {
   /// react immediately without requiring an app restart.
   Future<void> refreshSchoolFromDb() async {
     try {
-      final activeSchool = await _db.schoolsDao.get();
+      // Use the known serverId from the current state if available, so we
+      // re-fetch the *same* school row rather than whatever row happens to
+      // be first in the schools table (the bug that schoolsDao.get()
+      // exhibits when multiple school records exist locally).
+      final knownServerId = state.currentSchool?.serverId;
+      final activeSchool = knownServerId != null
+          ? await _db.schoolsDao.getByServerId(knownServerId)
+          : await _db.schoolsDao.get();
       if (activeSchool != null) {
         state = state.copyWith(currentSchool: activeSchool);
       }

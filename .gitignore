@@ -1,6 +1,7 @@
 # Miscellaneous
 *.class
 *.log
+*.py
 *.pyc
 *.swp
 .DS_Store
@@ -49,7 +50,14 @@ lib/core/constants/paystack_keys.dart
 
 # Supabase keys (never commit)
 lib/core/constants/supabase_keys.dart
+/query_remote.mjs
 /sweep_test.py
+/sync_push_school_idtest.py
+/sync_push_mising_subject_skip_test.py
+/extract_sync_queue.py
+/push_75_orphans.py
+/push_75_entries.py
+/push_first3_last3_raw.py
 
 # Supabase temporary files
 supabase/.temp/

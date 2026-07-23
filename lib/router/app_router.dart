@@ -25,6 +25,16 @@ import 'package:classai/features/settings/screens/settings_screen.dart';
 import 'package:classai/features/credit/screens/insufficient_credit_screen.dart';
 import 'package:classai/features/scheme_of_work/screens/scheme_of_work_screen.dart';
 
+/// Counter-based notifier that triggers GoRouter's redirect guard to
+/// re-evaluate whenever auth state changes (login, logout, role change, etc.).
+/// Without this the redirect callback only fires on explicit navigation
+/// actions, so logout never redirects to the login screen until an unrelated
+/// button tap.
+///
+/// Wire it up in [ClassAiRouterApp.build] via a `ref.listen` on [authProvider]
+/// that increments this counter.
+final goRouterRefreshNotifier = ValueNotifier<int>(0);
+
 /// GoRouter configuration for the ClassAI app.
 ///
 /// Routes:
@@ -50,6 +60,7 @@ final appRouter = GoRouter(
   navigatorKey: navigatorKey,
   initialLocation: '/',
   debugLogDiagnostics: false,
+  refreshListenable: goRouterRefreshNotifier,
   redirect: (context, state) {
     // Read auth state from the provider.
     final container = ProviderScope.containerOf(context, listen: false);

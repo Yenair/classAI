@@ -405,6 +405,15 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
   @override
   Widget build(BuildContext context) {
     final authData = ref.watch(authProvider);
+
+    // Re-evaluate GoRouter's redirect guard whenever auth state changes
+    // (login, logout, role change, guest transition, etc.).  Without this
+    // the redirect callback only fires on explicit navigation actions, so
+    // logout never redirects to the login screen until an unrelated tap.
+    ref.listen<AuthStateData>(authProvider, (_, __) {
+      goRouterRefreshNotifier.value++;
+    });
+
     // ── Loading state ──────────────────────────────────────────────────
     // Still checking for stored credentials or performing offline login.
     if (authData.state == AuthState.uninitialized ||
