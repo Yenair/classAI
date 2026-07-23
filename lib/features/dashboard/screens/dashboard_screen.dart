@@ -1728,10 +1728,16 @@ final lessonCountProvider = FutureProvider<_CountData>((ref) async {
   );
 });
 
-/// Provider that fetches the total count of exams, drafts, and unlocked.
+/// Provider that fetches the total count of exams, drafts, and unlocked
+/// for the current teacher.
 final examCountProvider = FutureProvider<_CountData>((ref) async {
   final db = ref.read(databaseProvider);
-  final exams = await db.examsDao.getAll();
+  final authData = ref.watch(authProvider);
+  final teacherId = authData.currentTeacher?.serverId;
+  if (teacherId == null) {
+    return const _CountData(total: 0, draftCount: 0, secondaryCount: 0);
+  }
+  final exams = await db.examsDao.getAllForTeacher(teacherId);
   final draftCount = exams.where((e) => !e.isUnlocked).length;
   final unlockedCount = exams.where((e) => e.isUnlocked).length;
   return _CountData(

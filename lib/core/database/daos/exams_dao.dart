@@ -18,6 +18,15 @@ class ExamsDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
+  /// Get all non-deleted exams for a specific teacher, ordered by created date descending.
+  Future<List<Exam>> getAllForTeacher(String teacherServerId) {
+    return (select(exams)
+          ..where((t) => t.teacherServerId.equals(teacherServerId))
+          ..where((t) => t.isDeleted.equals(false))
+          ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)]))
+        .get();
+  }
+
   /// Get an exam by ID.
   Future<Exam?> getById(int id) async {
     final results = await (select(exams)..where((t) => t.id.equals(id))).get();

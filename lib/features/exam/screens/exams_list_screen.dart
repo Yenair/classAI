@@ -16,10 +16,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Provider that fetches all exams from the database.
+/// Provider that fetches all exams for the current teacher from the database.
 final examsListProvider = FutureProvider<List<Exam>>((ref) async {
   final db = ref.read(databaseProvider);
-  return db.examsDao.getAll();
+  final authData = ref.watch(authProvider);
+  final teacherId = authData.currentTeacher?.serverId;
+  if (teacherId == null) return [];
+  return db.examsDao.getAllForTeacher(teacherId);
 });
 
 /// Displays a list of exams from the local database.
