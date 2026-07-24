@@ -126,4 +126,14 @@ class LessonsDao extends DatabaseAccessor<AppDatabase>
       ),
     );
   }
+
+  /// Hard-delete only confirmed-synced rows for a given teacher.
+  /// Used during logout to scope-clean the outgoing teacher's data
+  /// while leaving unsynced (pending) rows intact (Option b).
+  Future<void> deleteSyncedRowsByTeacher(String teacherServerId) {
+    return (delete(lessons)
+          ..where((t) => t.teacherServerId.equals(teacherServerId))
+          ..where((t) => t.serverId.isNotNull()))
+        .go();
+  }
 }

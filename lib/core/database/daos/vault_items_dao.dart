@@ -148,4 +148,14 @@ class VaultItemsDao extends DatabaseAccessor<AppDatabase>
       ),
     );
   }
+
+  /// Hard-delete only confirmed-synced rows authored by a given teacher.
+  /// Used during logout to scope-clean the outgoing teacher's data
+  /// while leaving unsynced (pending) rows intact (Option b).
+  Future<void> deleteSyncedRowsByAuthor(String authorTeacherId) {
+    return (delete(vaultItems)
+          ..where((t) => t.authorTeacherId.equals(authorTeacherId))
+          ..where((t) => t.serverId.isNotNull()))
+        .go();
+  }
 }

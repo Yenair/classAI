@@ -91,4 +91,15 @@ class SchemeOfWorkDao extends DatabaseAccessor<AppDatabase>
       ),
     );
   }
+
+  /// Hard-delete only confirmed-synced rows for a given teacher.
+  /// Used during logout to scope-clean the outgoing teacher's data
+  /// while leaving unsynced (pending) rows intact (Option b).
+  /// [teacherLocalId] is the integer FK into Teachers.localId.
+  Future<void> deleteSyncedRowsByTeacher(int teacherLocalId) {
+    return (delete(schemeOfWork)
+          ..where((t) => t.teacherId.equals(teacherLocalId))
+          ..where((t) => t.serverId.isNotNull()))
+        .go();
+  }
 }

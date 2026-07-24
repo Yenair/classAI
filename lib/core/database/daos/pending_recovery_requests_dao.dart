@@ -79,4 +79,12 @@ class PendingRecoveryRequestsDao extends DatabaseAccessor<AppDatabase>
       ),
     );
   }
+
+  /// Hard-delete all pending recovery requests for a given teacher.
+  /// Used during logout to clean re-downloadable recovery data.
+  Future<void> deleteByTeacher(int teacherLocalId) {
+    return (delete(pendingRecoveryRequests)
+          ..where((t) => t.teacherLocalId.equals(teacherLocalId)))
+        .go();
+  }
 }

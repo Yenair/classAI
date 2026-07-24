@@ -6,6 +6,7 @@ import 'package:local_auth/local_auth.dart';
 class SecurityService {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final LocalAuthentication _localAuth = LocalAuthentication();
+  static const _lastLoggedInTeacherKey = 'last_logged_in_teacher';
 
   /// Store password hash in platform secure storage (biometric-protected)
   Future<void> storePasswordHash(String hash) async {
@@ -70,6 +71,26 @@ class SecurityService {
   /// Clear stored JWT from secure storage
   Future<void> clearJwt() async {
     await _secureStorage.delete(key: 'auth_token');
+  }
+
+  /// Store the identifier of the teacher who last completed a successful
+  /// login on this device.
+  Future<void> storeLastLoggedInTeacherIdentifier(String identifier) async {
+    await _secureStorage.write(
+      key: _lastLoggedInTeacherKey,
+      value: identifier,
+    );
+  }
+
+  /// Read the identifier of the teacher who last completed a successful
+  /// login on this device.
+  Future<String?> getLastLoggedInTeacherIdentifier() async {
+    return await _secureStorage.read(key: _lastLoggedInTeacherKey);
+  }
+
+  /// Clear the cached last-login teacher marker from secure storage.
+  Future<void> clearLastLoggedInTeacherIdentifier() async {
+    await _secureStorage.delete(key: _lastLoggedInTeacherKey);
   }
 
   /// Clear all sensitive data from secure storage

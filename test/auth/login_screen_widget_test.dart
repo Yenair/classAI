@@ -119,6 +119,10 @@ void main() {
 
     // Default mock behaviour: no stored hash (offline login not available)
     when(() => mockSecurity.getPasswordHash()).thenAnswer((_) async => null);
+    when(() => mockSecurity.getLastLoggedInTeacherIdentifier())
+        .thenAnswer((_) async => null);
+    when(() => mockSecurity.storeLastLoggedInTeacherIdentifier(any()))
+        .thenAnswer((_) async {});
   });
 
   tearDown(() async {

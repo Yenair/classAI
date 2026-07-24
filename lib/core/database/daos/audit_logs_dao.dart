@@ -67,4 +67,12 @@ class AuditLogsDao extends DatabaseAccessor<AppDatabase>
           ]))
         .get();
   }
+
+  /// Hard-delete audit logs for a given teacher (server ID string).
+  /// Used during logout to clean re-downloadable audit data.
+  Future<void> deleteByTeacher(String teacherId) {
+    return (delete(auditLogs)
+          ..where((a) => a.teacherId.equals(teacherId)))
+        .go();
+  }
 }

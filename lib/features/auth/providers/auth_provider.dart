@@ -372,15 +372,44 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
     // --- Offline-first: skip network calls when there is no connectivity ---
     if (!await PlatformHelper.isOnline()) {
-      final cachedAuth = await _loadLocalCredentialCache();
+      String? cachedPassword;
+      try {
+        cachedPassword = await _securityService.getPasswordHash();
+      } catch (e) {
+        if (await _logoutIfSessionMismatch(e)) {
+          return;
+        }
+        state = state.copyWith(
+          state: AuthState.onlineLoginRequired,
+          clearTeacher: true,
+          clearSchool: true,
+          errorMessage:
+              'Saved offline account data could not be read. Please connect to the internet and sign in again.',
+        );
+        return;
+      }
+      if (cachedPassword == null || cachedPassword.isEmpty) {
+        state = state.copyWith(
+          state: AuthState.authenticated,
+          clearTeacher: true,
+          clearSchool: true,
+          clearError: true,
+        );
+        return;
+      }
+
+      final cachedAuth = await _loadLocalCredentialCache(
+        cachedPassword: cachedPassword,
+      );
       if (cachedAuth != null) {
+        await _persistLastLoggedInTeacher(cachedAuth.teacher);
         state = state.copyWith(
           state: AuthState.authenticated,
           currentTeacher: cachedAuth.teacher,
           currentSchool: cachedAuth.school,
           clearError: true,
         );
-        _applyThemeFromTeacher(
+        await _applyThemeFromTeacher(
           AuthResult(
             teacher: cachedAuth.teacher,
             school: cachedAuth.school,
@@ -397,12 +426,14 @@ class AuthNotifier extends Notifier<AuthStateData> {
         return;
       }
 
-      // No cached credentials — show guest dashboard with a Login button.
+      // Offline credentials exist, but the cached teacher identity no longer
+      // resolves to a local row. Fail clearly instead of guessing.
       state = state.copyWith(
-        state: AuthState.authenticated,
+        state: AuthState.onlineLoginRequired,
         clearTeacher: true,
         clearSchool: true,
-        clearError: true,
+        errorMessage:
+            'Saved offline account data is missing for the last signed-in teacher. Please connect to the internet and sign in again.',
       );
       return;
     }
@@ -420,7 +451,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
           // Session is valid — save to local DB and transition to authenticated
           await _saveAuthResultToLocalDb(result);
-          _applyThemeFromTeacher(result);
+          await _applyThemeFromTeacher(result);
+          await _persistLastLoggedInTeacher(result.teacher);
           state = state.copyWith(
             state: AuthState.authenticated,
             currentTeacher: result.teacher,
@@ -459,15 +491,19 @@ class AuthNotifier extends Notifier<AuthStateData> {
       // Secure storage read failed — fall through to local cache.
     }
 
-    final cachedAuth = await _loadLocalCredentialCache();
+    final cachedPassword = await _readCachedPasswordHash();
+    final cachedAuth = await _loadLocalCredentialCache(
+      cachedPassword: cachedPassword,
+    );
     if (cachedAuth != null) {
+      await _persistLastLoggedInTeacher(cachedAuth.teacher);
       state = state.copyWith(
         state: AuthState.authenticated,
         currentTeacher: cachedAuth.teacher,
         currentSchool: cachedAuth.school,
         clearError: true,
       );
-      _applyThemeFromTeacher(
+      await _applyThemeFromTeacher(
         AuthResult(
           teacher: cachedAuth.teacher,
           school: cachedAuth.school,
@@ -484,6 +520,17 @@ class AuthNotifier extends Notifier<AuthStateData> {
       return;
     }
 
+    if (cachedPassword != null && cachedPassword.isNotEmpty) {
+      state = state.copyWith(
+        state: AuthState.onlineLoginRequired,
+        clearTeacher: true,
+        clearSchool: true,
+        errorMessage:
+            'Saved offline account data is missing for the last signed-in teacher. Please connect to the internet and sign in again.',
+      );
+      return;
+    }
+
     // No valid stored session or local cache — show guest dashboard.
     state = state.copyWith(
       state: AuthState.authenticated,
@@ -496,7 +543,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
   /// Attempt offline login using stored password hash.
   /// Returns true if login succeeded.
   Future<bool> attemptOfflineLogin(String password) async {
-    final cachedPassword = await _securityService.getPasswordHash();
+    final cachedPassword = await _readCachedPasswordHash();
     if (cachedPassword == null || cachedPassword.isEmpty) {
       state = state.copyWith(
         state: AuthState.onlineLoginRequired,
@@ -516,17 +563,20 @@ class AuthNotifier extends Notifier<AuthStateData> {
       return false;
     }
 
-    final cachedAuth = await _loadLocalCredentialCache();
+    final cachedAuth = await _loadLocalCredentialCache(
+      cachedPassword: cachedPassword,
+    );
     if (cachedAuth == null) {
       state = state.copyWith(
         state: AuthState.onlineLoginRequired,
         errorMessage:
-            'Offline data is not ready yet. Connect to the internet once to finish setup.',
+            'Saved offline account data is missing for the last signed-in teacher. Connect to the internet and sign in again.',
         offlineLoginAttempts: 0,
       );
       return false;
     }
 
+    await _persistLastLoggedInTeacher(cachedAuth.teacher);
     state = state.copyWith(
       state: AuthState.authenticated,
       currentTeacher: cachedAuth.teacher,
@@ -534,7 +584,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
       offlineLoginAttempts: 0,
       clearError: true,
     );
-    _applyThemeFromTeacher(
+    await _applyThemeFromTeacher(
       AuthResult(
         teacher: cachedAuth.teacher,
         school: cachedAuth.school,
@@ -595,7 +645,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
       // Update local database with server state
       await _saveAuthResultToLocalDb(result);
-      _applyThemeFromTeacher(result);
+      await _applyThemeFromTeacher(result);
 
       if (result.forcePasswordReset == true) {
         // Server flagged this account for forced password reset.
@@ -631,6 +681,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
         offlineLoginAttempts: 0,
         clearPendingDeviceId: true,
       );
+      await _persistLastLoggedInTeacher(result.teacher);
       _startSessionTimer();
       // Check subscription expiry using server time (fire-and-forget)
       unawaited(_checkSubscriptionExpiry());
@@ -716,13 +767,14 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
       await _securityService.storePasswordHash(password);
       await _saveAuthResultToLocalDb(result);
-      _applyThemeFromTeacher(result);
+      await _applyThemeFromTeacher(result);
 
       state = state.copyWith(
         state: AuthState.authenticated,
         currentTeacher: result.teacher,
         currentSchool: result.school,
       );
+      await _persistLastLoggedInTeacher(result.teacher);
       _startSessionTimer();
       // Check min app version (fire-and-forget, shows update dialog if outdated)
       unawaited(_checkMinAppVersion());
@@ -746,16 +798,87 @@ class AuthNotifier extends Notifier<AuthStateData> {
   }
 
   /// Perform a manual logout (clean).
-  /// Transitions to a guest/authenticated state so the dashboard (with Login
-  /// button) is shown instead of the login screen.
+  /// Transitions to the login screen after cleanup.
   Future<void> manualLogout() async {
     await _performLogout(
-        isForced: false, targetState: AuthState.authenticated);
+        isForced: false, targetState: AuthState.onlineLoginRequired);
   }
 
   /// Perform a forced logout (triggers emergency save).
   Future<void> forceLogout() async {
     await _performLogout(isForced: true);
+  }
+
+  /// Scope-delete the outgoing teacher's local data from Drift tables.
+  ///
+  /// *Category A tables (lessons, exams, vault_items, scheme_of_work):*
+  ///   Hard-delete only confirmed-synced rows (WHERE serverId IS NOT NULL),
+  ///   leaving unsynced (pending) rows untouched — **Option (b)**.
+  ///
+  /// *Re-downloadable tables (teacher_devices, teacher_subjects, audit_logs,
+  ///  recovery_codes, pending_recovery_requests):*
+  ///   Hard-delete unconditionally; they will be re-fetched on next login.
+  ///
+  /// *Tables explicitly skipped:*
+  ///   - `progress_logs` — no serverId column, low-value data
+  ///   - `teachers` — must remain for re-auth; the current row is kept
+  ///   - `sync_queue` — no teacher-scoping column; pending ops remain safe
+  ///   - `payment_events` — billing records must be preserved
+  Future<void> _clearTeacherLocalData() async {
+    final teacher = state.currentTeacher;
+    if (teacher == null) {
+      return; // nothing to clean
+    }
+
+    final serverId = teacher.serverId;
+    final localId = teacher.localId;
+
+    // serverId is nullable; if missing there is nothing to scope-clean
+    if (serverId == null) {
+      return;
+    }
+
+    // ── Category A: confirmed-synced only ────────────────────────────
+    try {
+      await _db.lessonsDao.deleteSyncedRowsByTeacher(serverId);
+    } catch (_) {}
+
+    try {
+      await _db.examsDao.deleteSyncedRowsByTeacher(serverId);
+    } catch (_) {}
+
+    try {
+      await _db.vaultItemsDao.deleteSyncedRowsByAuthor(serverId);
+    } catch (_) {}
+
+    try {
+      await _db.schemeOfWorkDao.deleteSyncedRowsByTeacher(localId);
+    } catch (_) {}
+
+    // ── Re-downloadable tables (always delete) ───────────────────────
+    try {
+      await _db.teacherDevicesDao.deleteAllByTeacher(localId);
+    } catch (_) {}
+
+    try {
+      await _db.teacherSubjectsDao.deleteAllForTeacher(localId);
+    } catch (_) {}
+
+    try {
+      await _db.auditLogsDao.deleteByTeacher(serverId);
+    } catch (_) {}
+
+    try {
+      await _db.pendingRecoveryRequestsDao.deleteByTeacher(localId);
+    } catch (_) {}
+
+    // RecoveryCodes has no dedicated DAO; use raw SQL.
+    try {
+      await _db.customUpdate(
+        'DELETE FROM recovery_codes WHERE teacher_local_id = ?',
+        variables: [Variable<int>(localId)],
+      );
+    } catch (_) {}
   }
 
   Future<void> _performLogout(
@@ -786,6 +909,11 @@ class AuthNotifier extends Notifier<AuthStateData> {
     }
 
     await _securityService.clearAll();
+
+    // Scope-delete the outgoing teacher's local data *after* clearing
+    // secure storage but *before* resetting state (so currentTeacher is
+    // still available).
+    await _clearTeacherLocalData();
 
     _stopSessionTimer();
     state = AuthStateData(state: targetState);
@@ -843,13 +971,14 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
       await _securityService.storePasswordHash(newPassword);
       await _saveAuthResultToLocalDb(result);
-      _applyThemeFromTeacher(result);
+      await _applyThemeFromTeacher(result);
 
       state = state.copyWith(
         state: AuthState.authenticated,
         currentTeacher: result.teacher,
         currentSchool: result.school,
       );
+      await _persistLastLoggedInTeacher(result.teacher);
       _startSessionTimer();
     } on AuthException catch (e) {
       if (await _logoutIfSessionMismatch(e)) {
@@ -906,13 +1035,14 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
       await _securityService.storePasswordHash(newPassword);
       await _saveAuthResultToLocalDb(result);
-      _applyThemeFromTeacher(result);
+      await _applyThemeFromTeacher(result);
 
       state = state.copyWith(
         state: AuthState.authenticated,
         currentTeacher: result.teacher,
         currentSchool: result.school,
       );
+      await _persistLastLoggedInTeacher(result.teacher);
       _startSessionTimer();
     } on AuthException catch (e) {
       if (await _logoutIfSessionMismatch(e)) {
@@ -964,7 +1094,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
       await _securityService.storePasswordHash(adminPassword);
       await _saveAuthResultToLocalDb(result);
-      _applyThemeFromTeacher(result);
+      await _applyThemeFromTeacher(result);
 
       if (!result.emailVerified) {
         state = state.copyWith(
@@ -980,6 +1110,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
         currentTeacher: result.teacher,
         currentSchool: result.school,
       );
+      await _persistLastLoggedInTeacher(result.teacher);
       _startSessionTimer();
       // Check min app version (fire-and-forget, shows update dialog if outdated)
       unawaited(_checkMinAppVersion());
@@ -1184,6 +1315,10 @@ class AuthNotifier extends Notifier<AuthStateData> {
           clearError: true,
           clearPendingDeviceId: true,
         );
+        final currentTeacher = state.currentTeacher;
+        if (currentTeacher != null) {
+          await _persistLastLoggedInTeacher(currentTeacher);
+        }
         _startSessionTimer();
 
         // Navigate GoRouter to the correct route — otherwise the tree swap
@@ -1258,7 +1393,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
       await _securityService.storePasswordHash(adminPassword);
       await _saveAuthResultToLocalDb(result);
-      _applyThemeFromTeacher(result);
+      await _applyThemeFromTeacher(result);
 
       state = state.copyWith(
         state: AuthState.authenticated,
@@ -1268,6 +1403,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
         isSignupFlow: false,
         clearError: true,
       );
+      await _persistLastLoggedInTeacher(result.teacher);
       _startSessionTimer();
 
       // Navigate to admin dashboard
@@ -1504,6 +1640,10 @@ class AuthNotifier extends Notifier<AuthStateData> {
         state: AuthState.authenticated,
         clearError: true,
       );
+      final currentTeacher = state.currentTeacher;
+      if (currentTeacher != null) {
+        await _persistLastLoggedInTeacher(currentTeacher);
+      }
       _startSessionTimer();
     } on AuthException catch (e) {
       if (await _logoutIfSessionMismatch(e)) {
@@ -1628,33 +1768,96 @@ class AuthNotifier extends Notifier<AuthStateData> {
   // -----------------------------------------------------------------------
 
   /// Applies the stored theme mode for the signed-in teacher or admin.
-  void _applyThemeFromTeacher(AuthResult result) {
-    ref.read(themeProvider.notifier).applyTeacherThemeMode(
+  Future<void> _applyThemeFromTeacher(AuthResult result) {
+    return ref.read(themeProvider.notifier).applyTeacherThemeMode(
           result.teacher.themeMode,
         );
   }
 
-  Future<({Teacher teacher, School school})?> _loadLocalCredentialCache() async {
+  Future<void> _persistLastLoggedInTeacher(Teacher teacher) async {
+    final serverId = teacher.serverId;
+    if (serverId != null && serverId.isNotEmpty) {
+      await _securityService.storeLastLoggedInTeacherIdentifier(
+        'server:$serverId',
+      );
+      return;
+    }
+
+    if (teacher.localId > 0) {
+      await _securityService.storeLastLoggedInTeacherIdentifier(
+        'local:${teacher.localId}',
+      );
+    }
+  }
+
+  Future<String?> _readCachedPasswordHash() async {
     try {
-      final cachedPassword = await _securityService.getPasswordHash();
+      return await _securityService.getPasswordHash();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<Teacher?> _resolveTeacherFromLastLoginMarker(String marker) async {
+    final normalized = marker.trim();
+    if (normalized.isEmpty) {
+      return null;
+    }
+
+    if (normalized.startsWith('server:')) {
+      final serverId = normalized.substring('server:'.length);
+      if (serverId.isEmpty) {
+        return null;
+      }
+      return _db.teachersDao.findByServerId(serverId);
+    }
+
+    if (normalized.startsWith('local:')) {
+      final localId = int.tryParse(normalized.substring('local:'.length));
+      if (localId == null) {
+        return null;
+      }
+      return _db.teachersDao.getById(localId);
+    }
+
+    final directServerMatch = await _db.teachersDao.findByServerId(normalized);
+    if (directServerMatch != null) {
+      return directServerMatch;
+    }
+
+    final directLocalId = int.tryParse(normalized);
+    if (directLocalId != null) {
+      return _db.teachersDao.getById(directLocalId);
+    }
+
+    return null;
+  }
+
+  Future<({Teacher teacher, School school})?> _loadLocalCredentialCache({
+    required String? cachedPassword,
+  }) async {
+    try {
       if (cachedPassword == null || cachedPassword.isEmpty) {
         return null;
       }
-
-      final school = await _db.schoolsDao.get();
-      if (school == null) {
+      final lastLoggedInTeacherIdentifier =
+          await _securityService.getLastLoggedInTeacherIdentifier();
+      if (lastLoggedInTeacherIdentifier == null ||
+          lastLoggedInTeacherIdentifier.isEmpty) {
         return null;
       }
 
-      final teachers = await _db.teachersDao.getBySchool(school.localId);
-      if (teachers.isEmpty) {
-        return null;
-      }
-
-      final teacher = teachers.firstWhere(
-        (t) => t.isActive,
-        orElse: () => teachers.first,
+      final teacher = await _resolveTeacherFromLastLoginMarker(
+        lastLoggedInTeacherIdentifier,
       );
+      if (teacher == null || teacher.isDeleted) {
+        return null;
+      }
+
+      final school = await _db.schoolsDao.getByLocalId(teacher.schoolLocalId);
+      if (school == null || school.isDeleted) {
+        return null;
+      }
 
       return (teacher: teacher, school: school);
     } catch (_) {

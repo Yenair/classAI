@@ -65,4 +65,12 @@ class TeacherDevicesDao extends DatabaseAccessor<AppDatabase>
       ),
     );
   }
+
+  /// Hard-delete all device records for a given teacher.
+  /// Used during logout to clean re-downloadable device data.
+  Future<void> deleteAllByTeacher(int teacherLocalId) {
+    return (delete(teacherDevices)
+          ..where((t) => t.teacherId.equals(teacherLocalId)))
+        .go();
+  }
 }

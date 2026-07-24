@@ -78,4 +78,14 @@ class ExamsDao extends DatabaseAccessor<AppDatabase>
         .get();
     return results.isNotEmpty ? results.first : null;
   }
+
+  /// Hard-delete only confirmed-synced rows for a given teacher.
+  /// Used during logout to scope-clean the outgoing teacher's data
+  /// while leaving unsynced (pending) rows intact (Option b).
+  Future<void> deleteSyncedRowsByTeacher(String teacherServerId) {
+    return (delete(exams)
+          ..where((t) => t.teacherServerId.equals(teacherServerId))
+          ..where((t) => t.serverId.isNotNull()))
+        .go();
+  }
 }

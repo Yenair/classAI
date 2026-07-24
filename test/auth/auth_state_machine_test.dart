@@ -102,6 +102,65 @@ Future<void> seedLocalAuthCache(AppDatabase db) async {
       );
 }
 
+Future<void> seedMarkerSelectionCache(AppDatabase db) async {
+  final schoolId = await db.into(db.schools).insert(
+        SchoolsCompanion.insert(
+          serverId: const Value('00000000-0000-0000-0000-000000000020'),
+          schoolName: 'Marker Test School',
+          shortCode: 'MKR',
+          subscriptionTier: const Value('free'),
+          activeCurriculum: const Value('nerdc'),
+          activeCurriculumVersion: const Value('2024'),
+          totalSeats: const Value(5),
+          schoolMasterKeyWrapped: const Value(
+            'bW9ja193cmFwcGVkX21hc3Rlcl9rZXk=',
+          ),
+        ),
+      );
+
+  await db.into(db.teachers).insert(
+        TeachersCompanion.insert(
+          serverId: const Value('00000000-0000-0000-0000-000000000021'),
+          email: 'alpha@test.com',
+          teacherName: 'Alpha Teacher',
+          role: const Value('teacher'),
+          schoolLocalId: schoolId,
+          schoolServerId: const Value(
+            '00000000-0000-0000-0000-000000000020',
+          ),
+          isActive: const Value(true),
+          forcePasswordReset: const Value(false),
+          passwordHashVersion: const Value(1),
+          schoolKeyWrapped: const Value(
+            'bW9ja193cmFwcGVkX3NjaG9vbF9rZXk=',
+          ),
+          lastCreditRefillDate: Value(DateTime.now()),
+          themeMode: const Value('system'),
+        ),
+      );
+
+  await db.into(db.teachers).insert(
+        TeachersCompanion.insert(
+          serverId: const Value('00000000-0000-0000-0000-000000000022'),
+          email: 'zeta@test.com',
+          teacherName: 'Zeta Teacher',
+          role: const Value('teacher'),
+          schoolLocalId: schoolId,
+          schoolServerId: const Value(
+            '00000000-0000-0000-0000-000000000020',
+          ),
+          isActive: const Value(true),
+          forcePasswordReset: const Value(false),
+          passwordHashVersion: const Value(1),
+          schoolKeyWrapped: const Value(
+            'bW9ja193cmFwcGVkX3NjaG9vbF9rZXk=',
+          ),
+          lastCreditRefillDate: Value(DateTime.now()),
+          themeMode: const Value('system'),
+        ),
+      );
+}
+
 void main() {
   SharedPreferences.setMockInitialValues({});
 
@@ -116,6 +175,12 @@ void main() {
     await db.initialize();
     mockAuth = MockAuthService();
     mockSecurity = MockSecurityService();
+
+    when(() => mockSecurity.getPasswordHash()).thenAnswer((_) async => null);
+    when(() => mockSecurity.getLastLoggedInTeacherIdentifier())
+        .thenAnswer((_) async => 'server:00000000-0000-0000-0000-000000000001');
+    when(() => mockSecurity.storeLastLoggedInTeacherIdentifier(any()))
+        .thenAnswer((_) async {});
   });
 
   tearDown(() async {
@@ -139,6 +204,8 @@ void main() {
     test('transitions to authenticated when local cache exists', () async {
       when(() => mockSecurity.getPasswordHash())
           .thenAnswer((_) async => 'stored_hash');
+      when(() => mockSecurity.getLastLoggedInTeacherIdentifier())
+          .thenAnswer((_) async => 'server:00000000-0000-0000-0000-000000000001');
       await seedLocalAuthCache(db);
 
       final container = await createContainer(
@@ -154,6 +221,37 @@ void main() {
       expect(state.currentTeacher, isNotNull);
       expect(state.currentSchool, isNotNull);
       expect(state.errorMessage, isNull);
+      verify(() => mockSecurity.storeLastLoggedInTeacherIdentifier(
+            'server:00000000-0000-0000-0000-000000000001',
+          )).called(1);
+      container.dispose();
+    });
+
+    test('uses the stored teacher marker instead of the first local teacher',
+        () async {
+      when(() => mockSecurity.getPasswordHash())
+          .thenAnswer((_) async => 'stored_hash');
+      when(() => mockSecurity.getLastLoggedInTeacherIdentifier())
+          .thenAnswer((_) async => 'server:00000000-0000-0000-0000-000000000022');
+      await seedMarkerSelectionCache(db);
+
+      final container = await createContainer(
+        db: db,
+        authService: mockAuth,
+        securityService: mockSecurity,
+      );
+
+      await container.read(authProvider.notifier).checkLocalAuth();
+
+      final state = container.read(authProvider);
+      expect(state.state, equals(AuthState.authenticated));
+      expect(state.currentTeacher, isNotNull);
+      expect(state.currentTeacher!.email, equals('zeta@test.com'));
+      expect(state.currentSchool, isNotNull);
+      expect(state.currentSchool!.schoolName, equals('Marker Test School'));
+      verify(() => mockSecurity.storeLastLoggedInTeacherIdentifier(
+            'server:00000000-0000-0000-0000-000000000022',
+          )).called(1);
       container.dispose();
     });
 
@@ -169,7 +267,35 @@ void main() {
       await container.read(authProvider.notifier).checkLocalAuth();
 
       final state = container.read(authProvider);
+      expect(state.state, equals(AuthState.authenticated));
+      expect(state.currentTeacher, isNull);
+      expect(state.currentSchool, isNull);
+    });
+
+    test(
+        'routes to manual login when the stored marker no longer matches a local teacher',
+        () async {
+      when(() => mockSecurity.getPasswordHash())
+          .thenAnswer((_) async => 'stored_hash');
+      when(() => mockSecurity.getLastLoggedInTeacherIdentifier())
+          .thenAnswer((_) async => 'server:00000000-0000-0000-0000-000000009999');
+      await seedLocalAuthCache(db);
+
+      final container = await createContainer(
+        db: db,
+        authService: mockAuth,
+        securityService: mockSecurity,
+      );
+
+      await container.read(authProvider.notifier).checkLocalAuth();
+
+      final state = container.read(authProvider);
       expect(state.state, equals(AuthState.onlineLoginRequired));
+      expect(
+        state.errorMessage,
+        contains('Saved offline account data is missing'),
+      );
+      container.dispose();
     });
 
     test('transitions to onlineLoginRequired when security service throws',
@@ -186,7 +312,9 @@ void main() {
       await container.read(authProvider.notifier).checkLocalAuth();
 
       final state = container.read(authProvider);
-      expect(state.state, equals(AuthState.onlineLoginRequired));
+      expect(state.state, equals(AuthState.authenticated));
+      expect(state.currentTeacher, isNull);
+      expect(state.currentSchool, isNull);
     });
   });
 
@@ -211,6 +339,9 @@ void main() {
               );
       expect(success, isTrue);
       expect(container.read(authProvider).state, equals(AuthState.authenticated));
+      verify(() => mockSecurity.storeLastLoggedInTeacherIdentifier(
+            'server:00000000-0000-0000-0000-000000000001',
+          )).called(2);
       container.dispose();
     });
 
@@ -331,6 +462,9 @@ void main() {
       expect(state.currentTeacher!.email, equals('teacher@test.com'));
       expect(state.currentSchool, isNotNull);
       expect(state.currentSchool!.schoolName, equals('Test School'));
+      verify(() => mockSecurity.storeLastLoggedInTeacherIdentifier(
+            'server:00000000-0000-0000-0000-000000000001',
+          )).called(1);
       container.dispose();
     });
 
