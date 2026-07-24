@@ -135,6 +135,10 @@ const EXAM_DEFAULTS: Record<string, unknown> = {
 
 const SCHEME_OF_WORK_DEFAULTS: Record<string, unknown> = {
   status: "draft",
+  objectives: "",
+  topic: "",
+  is_deleted: false,
+  term: "first",
 };
 
 const VAULT_ITEMS_DEFAULTS: Record<string, unknown> = {
@@ -344,12 +348,9 @@ async function resolveForeignKeys(
     rowData["teacher_server_id"] = jwtTeacherId;
 
     // ── 3. Subject_id: validate UUID format —─────────────────────────
-    // The client may send it as a local integer or a UUID string.
-    // If it looks like a UUID, use it directly; otherwise skip.
     if (rowData["subject_id"]) {
       const subId = rowData["subject_id"] as string;
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(subId)) {
-        // It's a local integer ID — we can't resolve it server-side.
         delete rowData["subject_id"];
       }
     }
@@ -833,7 +834,7 @@ serve(async (req) => {
           if (error) {
             console.warn(`sync-push: INSERT error on "${table}" (local_id=${localId}): ${error.message}`);
             console.warn(`sync-push: INSERT data was: ${JSON.stringify(insertData)}`);
-            results.push({ local_id: localId, server_id: null, status: "error", retryable: true });
+            results.push({ local_id: localId, server_id: null, status: "error", retryable: true, error: error.message });
             continue;
           }
           const generatedId = insertData_?.[0]?.id as string | undefined;
@@ -873,7 +874,7 @@ serve(async (req) => {
             .eq("id", serverId);
           if (error) {
             console.warn(`sync-push: UPDATE error on "${table}" (local_id=${localId}): ${error.message}`);
-            results.push({ local_id: localId, server_id: serverId as string, status: "error", retryable: true });
+            results.push({ local_id: localId, server_id: serverId as string, status: "error", retryable: true, error: error.message });
             continue;
           }
           // DIAG: Log UPDATE details
