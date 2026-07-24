@@ -321,16 +321,31 @@ async function resolveForeignKeys(
   // scheme_of_work handler
   // ═══════════════════════════════════════════════════════════════
   if (table === "scheme_of_work") {
-    // Resolve teacher_server_id → teacher_id (UUID)
-    if (rowData["teacher_server_id"] && !rowData["teacher_id"]) {
-      rowData["teacher_id"] = rowData["teacher_server_id"];
+    // ── 1. School: Override from JWT — never trust client-supplied values ─
+    const jwtSchoolId = jwtClaims["school_id"] as string | undefined;
+    if (!jwtSchoolId) {
+      console.warn(
+        `resolveForeignKeys: jwtClaims.school_id is missing/falsy for scheme_of_work — skipping entry`
+      );
+      return `Foreign key could not be resolved for scheme_of_work: jwtClaims.school_id is missing`;
     }
-    // Resolve school_server_id → school_id (UUID)
-    if (rowData["school_server_id"] && !rowData["school_id"]) {
-      rowData["school_id"] = rowData["school_server_id"];
+    rowData["school_id"] = jwtSchoolId;
+    rowData["school_server_id"] = jwtSchoolId;
+
+    // ── 2. Teacher: Override from JWT — same pattern as school_id ─────
+    const jwtTeacherId = jwtClaims["teacher_id"] as string | undefined;
+    if (!jwtTeacherId) {
+      console.warn(
+        `resolveForeignKeys: jwtClaims.teacher_id is missing/falsy for scheme_of_work — skipping entry`
+      );
+      return `Foreign key could not be resolved for scheme_of_work: jwtClaims.teacher_id is missing`;
     }
-    // Resolve subject_id — the client may send it as a local integer or a UUID string.
-    // If it looks like a UUID, use it directly; otherwise skip (server has its own FKs).
+    rowData["teacher_id"] = jwtTeacherId;
+    rowData["teacher_server_id"] = jwtTeacherId;
+
+    // ── 3. Subject_id: validate UUID format —─────────────────────────
+    // The client may send it as a local integer or a UUID string.
+    // If it looks like a UUID, use it directly; otherwise skip.
     if (rowData["subject_id"]) {
       const subId = rowData["subject_id"] as string;
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(subId)) {
@@ -338,13 +353,15 @@ async function resolveForeignKeys(
         delete rowData["subject_id"];
       }
     }
-    // Apply defaults
+
+    // ── 4. Apply defaults ────────────────────────────────────────────
     for (const [col, defaultVal] of Object.entries(SCHEME_OF_WORK_DEFAULTS)) {
       if (rowData[col] === undefined || rowData[col] === null) {
         rowData[col] = defaultVal;
       }
     }
-    // Remove local-only fields
+
+    // ── 5. Remove local-only fields ──────────────────────────────────
     delete rowData["teacher_server_id"];
     delete rowData["school_server_id"];
     delete rowData["local_id"];
