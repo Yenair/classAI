@@ -354,14 +354,41 @@ async function resolveForeignKeys(
       }
     }
 
-    // ── 4. Apply defaults ────────────────────────────────────────────
+    // ── 4. Admin-gated fields: only admins may set status to
+    //    'approved'/'rejected', or write admin_edited_topic/admin_comment ──
+    const isAdmin = jwtClaims.is_admin === true;
+    const attemptedStatus = rowData["status"] as string | undefined;
+    const adminOnlyFields = ["admin_edited_topic", "admin_comment"];
+
+    if (!isAdmin) {
+      // Check for admin-only status values
+      if (attemptedStatus === "approved" || attemptedStatus === "rejected") {
+        console.warn(
+          `resolveForeignKeys: non-admin teacher ${jwtClaims.teacher_id} ` +
+          `attempted to set status="${attemptedStatus}" on scheme_of_work — skipping`
+        );
+        return `Admin access required: only admins may set scheme_of_work status to "${attemptedStatus}"`;
+      }
+      // Check for admin-only field writes
+      for (const field of adminOnlyFields) {
+        if (rowData[field] !== undefined && rowData[field] !== null) {
+          console.warn(
+            `resolveForeignKeys: non-admin teacher ${jwtClaims.teacher_id} ` +
+            `attempted to write "${field}" on scheme_of_work — skipping`
+          );
+          return `Admin access required: only admins may write "${field}" on scheme_of_work`;
+        }
+      }
+    }
+
+    // ── 5. Apply defaults ────────────────────────────────────────────
     for (const [col, defaultVal] of Object.entries(SCHEME_OF_WORK_DEFAULTS)) {
       if (rowData[col] === undefined || rowData[col] === null) {
         rowData[col] = defaultVal;
       }
     }
 
-    // ── 5. Remove local-only fields ──────────────────────────────────
+    // ── 6. Remove local-only fields ──────────────────────────────────
     delete rowData["teacher_server_id"];
     delete rowData["school_server_id"];
     delete rowData["local_id"];
