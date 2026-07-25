@@ -1945,8 +1945,14 @@ class AuthNotifier extends Notifier<AuthStateData> {
           ),
         );
 
-        // Queue teacher update for sync
-        if (result.teacher.serverId != null) {
+        // Queue teacher update for sync — only admins may push to the
+        // teachers table (server-side admin guard).  Non-admin teachers
+        // would get "Admin access required for this table" with
+        // retryable=false on every attempt, and if the local_id echo
+        // is missing (bug) these entries retry indefinitely, jamming the
+        // sync queue and blocking real work (lessons, exams, etc.).
+        if (result.teacher.serverId != null &&
+            result.teacher.role == 'admin') {
           try {
             await _db.syncQueueDao.insertEntry(
               queueTable: 'teachers',
@@ -1993,8 +1999,13 @@ class AuthNotifier extends Notifier<AuthStateData> {
         .getSingleOrNull()
         .then((t) => t?.localId);
 
-    // Queue teacher insert for sync
-    if (insertedTeacherLocalId != null && result.teacher.serverId != null) {
+    // Queue teacher insert for sync — only admins may push to the
+    // teachers table (server-side admin guard).  Non-admin teachers
+    // would be rejected on every attempt, and if the local_id echo
+    // is missing (bug) these entries retry indefinitely.
+    if (insertedTeacherLocalId != null &&
+        result.teacher.serverId != null &&
+        result.teacher.role == 'admin') {
       try {
         await _db.syncQueueDao.insertEntry(
           queueTable: 'teachers',

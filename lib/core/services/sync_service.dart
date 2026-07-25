@@ -1100,8 +1100,34 @@ class SyncService {
           'Attempts: ${entry.attempts}');
 
       if (result == null) {
-        debugPrint('[PUSH-RESULT] No result returned from server for this entry');
-        await store.markQueueAttempt(entry.id);
+        // ── Defensive: no server result for this entry ──────────────
+        // This can happen when the server rejects an entry BEFORE extracting
+        // the local_id from the payload, e.g. admin-table guard or table-
+        // allowlist check that runs before local_id extraction.  The server
+        // returns local_id=0, which doesn't match any entry's recordLocalId.
+        //
+        // Without this fallback, such entries would only have their attempt
+        // counter incremented and NEVER reach the terminal logic, causing
+        // indefinite retries that jam the queue.
+        final nextAttempts = entry.attempts + 1;
+        debugPrint('[PUSH-RESULT] No result returned from server for this entry'
+            ' (attempt $nextAttempts)');
+
+        if (nextAttempts >= 5) {
+          debugPrint(
+            '[PUSH-RESULT] Marking orphan queue entry terminal '
+            '(id=${entry.id}, table=${entry.queueTable}, '
+            'operation=${entry.operation}, attempts=$nextAttempts)',
+          );
+          await store.markQueueTerminalFailure(
+            entry.id,
+            lastError:
+                'No server result after $nextAttempts attempts — '
+                'likely rejected by admin-table guard with local_id=0',
+          );
+        } else {
+          await store.markQueueAttempt(entry.id);
+        }
         continue;
       }
 

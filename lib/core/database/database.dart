@@ -96,7 +96,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 21;
+  int get schemaVersion => 22;
 
   static QueryExecutor _openConnection() {
     return LazyDatabase(() async {
@@ -914,6 +914,33 @@ class AppDatabase extends _$AppDatabase {
             // security_config should no longer be sync-pushed from the client.
             await customStatement(
               "DELETE FROM sync_queue WHERE queue_table = 'security_config'",
+            );
+          }
+          if (from < 22) {
+            // ── Cleanup: mark terminal any stuck teacher UPDATE entries ──────
+            // These entries were queued by non-admin teachers during auth
+            // hydration.  The server rejects them with "Admin access required
+            // for this table" (retryable=false) at the admin-table guard.
+            // However, because the guard check ran BEFORE local_id extraction,
+            // the server returned local_id=0, which the client couldn't match
+            // to any queue entry — so it only incremented the attempt counter
+            // and never reached either the !retryable terminal path or the
+            // >=5-attempts cap.  Result: indefinite retries jamming the queue.
+            //
+            // Fix deployed in v22:
+            //   1. Server now extracts local_id before the admin-table guard.
+            //   2. Client now has a >=5-attempts cap in the result==null path.
+            //   3. Auth provider now only queues teacher ops for admin users.
+            //
+            // This cleanup clears any entries already stuck.
+            await customStatement(
+              "UPDATE sync_queue SET "
+              "is_terminal = 1, "
+              "last_error = 'Cleared: non-admin teacher UPDATE blocked by design', "
+              "failed_at = datetime('now') "
+              "WHERE queue_table = 'teachers' "
+              "AND operation = 'UPDATE' "
+              "AND is_terminal = 0",
             );
           }
         },

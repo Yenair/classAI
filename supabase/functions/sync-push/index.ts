@@ -442,6 +442,8 @@ async function resolveForeignKeys(
       rowData["school_id"] = rowData["school_server_id"];
     }
     delete rowData["school_server_id"];
+    delete rowData["server_id"];
+    delete rowData["serverId"];
     delete rowData["local_id"];
   }
 
@@ -751,6 +753,29 @@ serve(async (req) => {
 
       const op = (operation as string).toUpperCase();
 
+      // ──────────────────────────────────────────────────────────────────
+      // IMPORTANT: Decompress + extract local_id BEFORE any guard checks,
+      // so that rejected entries still carry the correct local_id back to
+      // the client.  Without this, the client receives local_id=0 and
+      // cannot match the result to its queue entry — causing it to fall
+      // into the "no result returned" path, which only increments the
+      // attempt counter and NEVER marks the entry terminal (neither the
+      // !retryable path nor the >=5-attempts limit is ever reached).
+      // ──────────────────────────────────────────────────────────────────
+
+      // DIAG: Log the raw rowData keys BEFORE decompression
+      console.log(`[SYNC-PUSH-DIAG] Entry ${idx}: table=${table}, op=${op}, rawKeys=${Object.keys(rowData as Record<string, unknown>).join(",")}`);
+
+      // Decompress rowData if it has short keys
+      const fullRowData = decompressRow(rowData as Record<string, unknown>);
+
+      // DIAG: Log decompressed keys to verify KEY_MAP is working
+      console.log(`[SYNC-PUSH-DIAG] Entry ${idx}: decompressedKeys=${Object.keys(fullRowData).join(",")}`);
+
+      // Extract local_id early so we can echo it back even on failure.
+      const localId = (fullRowData["local_id"] as number | string | undefined) ?? 0;
+      console.log(`[SYNC-PUSH-DIAG] Entry ${idx}: localId=${localId}, server_id=${fullRowData["server_id"] ?? "null"}`);
+
       // ══════════════════════════════════════════════════════════════════
       // Fix 9a: Explicit table allowlist
       // ══════════════════════════════════════════════════════════════════
@@ -764,7 +789,7 @@ serve(async (req) => {
           `sync-push: rejected change to unknown/non-syncable table "${table}" (op=${op})`,
         );
         results.push({
-          local_id: 0,
+          local_id: localId,
           server_id: null,
           status: "error",
           retryable: false,
@@ -782,7 +807,7 @@ serve(async (req) => {
           `sync-push: non-admin teacher ${jwtClaims.teacher_id} attempted ${op} on admin table "${table}"`,
         );
         results.push({
-          local_id: 0,
+          local_id: localId,
           server_id: null,
           status: "error",
           retryable: false,
@@ -790,19 +815,6 @@ serve(async (req) => {
         });
         continue;
       }
-
-      // DIAG: Log the raw rowData keys BEFORE decompression
-      console.log(`[SYNC-PUSH-DIAG] Entry ${idx}: table=${table}, op=${op}, rawKeys=${Object.keys(rowData as Record<string, unknown>).join(",")}`);
-
-      // Decompress rowData if it has short keys
-      const fullRowData = decompressRow(rowData as Record<string, unknown>);
-
-      // DIAG: Log decompressed keys to verify KEY_MAP is working
-      console.log(`[SYNC-PUSH-DIAG] Entry ${idx}: decompressedKeys=${Object.keys(fullRowData).join(",")}`);
-
-      // Extract local_id early so we can echo it back even on failure.
-      const localId = (fullRowData["local_id"] as number | string | undefined) ?? 0;
-      console.log(`[SYNC-PUSH-DIAG] Entry ${idx}: localId=${localId}, server_id=${fullRowData["server_id"] ?? "null"}`);
 
       try {
         if (op === "INSERT") {
