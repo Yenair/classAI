@@ -1491,9 +1491,149 @@ class SyncService {
       local =
           await store.loadLocalRecord(change.table, localId) ?? const {};
       baseHash = await _loadBaseHash(change.table, localId);
+    } else if (change.table == 'lessons') {
+      final serverId = remote['server_id'] as String? ??
+          remote['id'] as String?;
+      if (serverId == null || serverId.isEmpty) {
+        debugPrint(
+          '[SYNC] _mergeRemoteChange: skipping lesson — no serverId',
+        );
+        return;
+      }
+
+      // Read-only lookup: find existing lesson by serverId.
+      final existing = await (db.select(db.lessons)
+            ..where((t) => t.serverId.equals(serverId)))
+          .get();
+
+      if (existing.isEmpty) {
+        // NEW lesson — upsert remote directly, write to versionHashes,
+        // skip three-way merge.
+        final newLocalId = await _upsertLessonFromSync(remote);
+        if (newLocalId == null) {
+          debugPrint(
+            '[SYNC] _mergeRemoteChange: skipping new lesson — '
+            'upsert returned null',
+          );
+          return;
+        }
+        await store.saveSyncedRecord(
+          tableName: 'lessons',
+          localId: newLocalId,
+          snapshot: remote,
+        );
+        _setState(SyncState.merging);
+        return;
+      }
+
+      // EXISTING lesson — use real localId for versionHashes ops.
+      if (existing.length > 1) {
+        debugPrint(
+          '[SYNC] _mergeRemoteChange: ${existing.length} local rows for '
+          'lesson serverId=$serverId — using lowest localId',
+        );
+        existing.sort((a, b) => a.id.compareTo(b.id));
+      }
+      localId = existing.first.id;
+      local =
+          await store.loadLocalRecord(change.table, localId) ?? const {};
+      baseHash = await _loadBaseHash(change.table, localId);
+    } else if (change.table == 'exams') {
+      final serverId = remote['server_id'] as String? ??
+          remote['id'] as String?;
+      if (serverId == null || serverId.isEmpty) {
+        debugPrint(
+          '[SYNC] _mergeRemoteChange: skipping exam — no serverId',
+        );
+        return;
+      }
+
+      // Read-only lookup: find existing exam by serverId.
+      final existing = await (db.select(db.exams)
+            ..where((t) => t.serverId.equals(serverId)))
+          .get();
+
+      if (existing.isEmpty) {
+        // NEW exam — upsert remote directly.
+        final newLocalId = await _upsertExamFromSync(remote);
+        if (newLocalId == null) {
+          debugPrint(
+            '[SYNC] _mergeRemoteChange: skipping new exam — '
+            'upsert returned null',
+          );
+          return;
+        }
+        await store.saveSyncedRecord(
+          tableName: 'exams',
+          localId: newLocalId,
+          snapshot: remote,
+        );
+        _setState(SyncState.merging);
+        return;
+      }
+
+      // EXISTING exam — use real localId for versionHashes ops.
+      if (existing.length > 1) {
+        debugPrint(
+          '[SYNC] _mergeRemoteChange: ${existing.length} local rows for '
+          'exam serverId=$serverId — using lowest localId',
+        );
+        existing.sort((a, b) => a.id.compareTo(b.id));
+      }
+      localId = existing.first.id;
+      local =
+          await store.loadLocalRecord(change.table, localId) ?? const {};
+      baseHash = await _loadBaseHash(change.table, localId);
+    } else if (change.table == 'subjects') {
+      final serverId = remote['server_id'] as String? ??
+          remote['id'] as String?;
+      if (serverId == null || serverId.isEmpty) {
+        debugPrint(
+          '[SYNC] _mergeRemoteChange: skipping subject — no serverId',
+        );
+        return;
+      }
+
+      // Read-only lookup: find existing subject by serverId.
+      final existing = await (db.select(db.subjects)
+            ..where((t) => t.serverId.equals(serverId)))
+          .get();
+
+      if (existing.isEmpty) {
+        // NEW subject — upsert remote directly.
+        final newLocalId = await _upsertSubjectFromSync(remote);
+        if (newLocalId == null) {
+          debugPrint(
+            '[SYNC] _mergeRemoteChange: skipping new subject — '
+            'upsert returned null',
+          );
+          return;
+        }
+        await store.saveSyncedRecord(
+          tableName: 'subjects',
+          localId: newLocalId,
+          snapshot: remote,
+        );
+        _setState(SyncState.merging);
+        return;
+      }
+
+      // EXISTING subject — use real localId for versionHashes ops.
+      if (existing.length > 1) {
+        debugPrint(
+          '[SYNC] _mergeRemoteChange: ${existing.length} local rows for '
+          'subject serverId=$serverId — using lowest localId',
+        );
+        existing.sort((a, b) => a.id.compareTo(b.id));
+      }
+      localId = existing.first.id;
+      local =
+          await store.loadLocalRecord(change.table, localId) ?? const {};
+      baseHash = await _loadBaseHash(change.table, localId);
     } else {
-      // For all other tables (lessons, exams, subjects, etc.) the
-      // remote payload contains a real local_id — use the existing chain.
+      // For all remaining tables (scheme_of_work, progress_logs,
+      // vault_items, payment_events) the remote payload may contain
+      // a real local_id — fall back to the existing chain.
       localId = _readInt(remote, 'localId') ??
           _readInt(remote, 'local_id') ??
           _readInt(remote, 'id') ??
@@ -1547,6 +1687,12 @@ class SyncService {
         await _upsertTeacherFromSync(result.merged);
       } else if (change.table == 'schools') {
         await _upsertSchoolFromSync(result.merged);
+      } else if (change.table == 'lessons') {
+        await _upsertLessonFromSync(result.merged);
+      } else if (change.table == 'exams') {
+        await _upsertExamFromSync(result.merged);
+      } else if (change.table == 'subjects') {
+        await _upsertSubjectFromSync(result.merged);
       }
 
       _setState(SyncState.merging);
@@ -1673,6 +1819,9 @@ class SyncService {
         lastModifiedBy: lastModifiedBy != null
             ? Value(lastModifiedBy)
             : const Value.absent(),
+        lastSyncAt: dateVal('last_sync_at') != null
+            ? Value(dateVal('last_sync_at')!)
+            : const Value.absent(),
         updateCounter: Value(existingTeacher.updateCounter + 1),
       ));
       debugPrint('[sync] _upsertTeacherFromSync: UPDATED teacher $serverId');
@@ -1727,6 +1876,7 @@ class SyncService {
           lastModifiedBy: lastModifiedBy != null
               ? Value(lastModifiedBy)
               : const Value.absent(),
+          lastSyncAt: Value(dateVal('last_sync_at')),
         ),
       ));
       debugPrint('[sync] _upsertTeacherFromSync: INSERTED teacher $serverId');
@@ -1802,6 +1952,352 @@ class SyncService {
     );
 
     return school.localId;
+  }
+
+  /// Upserts a lesson row from synced remote data into the local Drift
+  /// [lessons] table. The [merged] map uses snake_case keys from Supabase.
+  ///
+  /// Returns the Drift [localId] of the upserted row, or `null` if the
+  /// upsert was skipped (e.g. no serverId).
+  ///
+  /// Note: [teacherServerId] and [schoolServerId] are text columns with no
+  /// local FK constraint, so no foreign-key resolution is required — unlike
+  /// teachers/schools which have integer [schoolLocalId] FKs.
+  Future<int?> _upsertLessonFromSync(Map<String, dynamic> merged) async {
+    final serverId = merged['server_id'] as String? ??
+        merged['id'] as String?;
+    if (serverId == null || serverId.isEmpty) {
+      debugPrint('[sync] _upsertLessonFromSync skipped: no serverId in $merged');
+      return null;
+    }
+
+    // Look up existing lesson by serverId.
+    final existing = await (db.select(db.lessons)
+          ..where((t) => t.serverId.equals(serverId)))
+        .get();
+
+    // Map snake_case remote fields to Drift column values.
+    String? strVal(String key) => merged[key] as String?;
+    bool boolVal(String key) =>
+        merged[key] == true || merged[key] == 'true';
+    int? intVal(String key) => _readInt(merged, key);
+    DateTime? dateVal(String key) {
+      final raw = merged[key];
+      if (raw == null) return null;
+      if (raw is DateTime) return raw;
+      if (raw is String) return DateTime.tryParse(raw);
+      return null;
+    }
+
+    final subject = strVal('subject') ?? '';
+    final classLevel = strVal('class_level') ?? '';
+    final week = intVal('week') ?? 0;
+    final topic = strVal('topic') ?? '';
+    final difficulty = strVal('difficulty') ?? '';
+    final bloomsVerbs = strVal('blooms_verbs') ?? '';
+    final curriculum = strVal('curriculum') ?? '';
+    final content = strVal('content') ?? '';
+    final contentHash = strVal('content_hash');
+    final schemeOfWorkId = strVal('scheme_of_work_id');
+    final weekNumber = intVal('week_number');
+    final isDeleted = boolVal('is_deleted');
+    final lastModifiedBy = strVal('last_modified_by');
+    final teacherServerId =
+        strVal('teacher_id') ?? strVal('teacher_server_id');
+    final schoolServerId =
+        strVal('school_id') ?? strVal('school_server_id');
+    final isUnlocked = boolVal('is_unlocked');
+    final status = strVal('status') ?? 'draft';
+    final term = strVal('term');
+    final createdAt = dateVal('created_at') ?? DateTime.now();
+    final updatedAt = dateVal('updated_at') ?? DateTime.now();
+    final updateCounter = intVal('update_counter') ?? 0;
+
+    if (existing.isNotEmpty) {
+      // Update existing lesson record.
+      final existingLesson = existing.first;
+      await (db.update(db.lessons)
+            ..where((t) => t.id.equals(existingLesson.id)))
+          .write(LessonsCompanion(
+        serverId: Value(serverId),
+        subject: Value(subject),
+        classLevel: Value(classLevel),
+        week: Value(week),
+        topic: Value(topic),
+        difficulty: Value(difficulty),
+        bloomsVerbs: Value(bloomsVerbs),
+        curriculum: Value(curriculum),
+        content: Value(content),
+        contentHash: contentHash != null
+            ? Value(contentHash)
+            : const Value.absent(),
+        schemeOfWorkId: schemeOfWorkId != null
+            ? Value(schemeOfWorkId)
+            : const Value.absent(),
+        weekNumber: weekNumber != null
+            ? Value(weekNumber)
+            : const Value.absent(),
+        isDeleted: Value(isDeleted),
+        lastModifiedBy: lastModifiedBy != null
+            ? Value(lastModifiedBy)
+            : const Value.absent(),
+        teacherServerId: teacherServerId != null
+            ? Value(teacherServerId)
+            : const Value.absent(),
+        schoolServerId: schoolServerId != null
+            ? Value(schoolServerId)
+            : const Value.absent(),
+        isUnlocked: Value(isUnlocked),
+        status: Value(status),
+        term: term != null ? Value(term) : const Value.absent(),
+        updatedAt: Value(updatedAt),
+        updateCounter: Value(updateCounter),
+      ));
+      debugPrint('[sync] _upsertLessonFromSync: UPDATED lesson $serverId');
+      return existingLesson.id;
+    } else {
+      // Insert new lesson record.
+      final newLocalId = await (db.into(db.lessons).insert(
+        LessonsCompanion.insert(
+          serverId: Value(serverId),
+          subject: subject,
+          classLevel: classLevel,
+          week: week,
+          topic: topic,
+          difficulty: difficulty,
+          bloomsVerbs: bloomsVerbs,
+          curriculum: curriculum,
+          content: content,
+          contentHash: contentHash != null
+              ? Value(contentHash)
+              : const Value.absent(),
+          schemeOfWorkId: schemeOfWorkId != null
+              ? Value(schemeOfWorkId)
+              : const Value.absent(),
+          weekNumber: weekNumber != null
+              ? Value(weekNumber)
+              : const Value.absent(),
+          isDeleted: Value(isDeleted),
+          lastModifiedBy: lastModifiedBy != null
+              ? Value(lastModifiedBy)
+              : const Value.absent(),
+          teacherServerId: teacherServerId != null
+              ? Value(teacherServerId)
+              : const Value.absent(),
+          schoolServerId: schoolServerId != null
+              ? Value(schoolServerId)
+              : const Value.absent(),
+          isUnlocked: Value(isUnlocked),
+          status: Value(status),
+          term: term != null ? Value(term) : const Value.absent(),
+          createdAt: Value(createdAt),
+          updatedAt: Value(updatedAt),
+        ),
+      ));
+      debugPrint('[sync] _upsertLessonFromSync: INSERTED lesson $serverId');
+      return newLocalId;
+    }
+  }
+
+  /// Upserts an exam row from synced remote data into the local Drift
+  /// [exams] table. The [merged] map uses snake_case keys from Supabase.
+  ///
+  /// Returns the Drift [localId] of the upserted row, or `null` if the
+  /// upsert was skipped (e.g. no serverId).
+  ///
+  /// Note: [teacherServerId] and [schoolServerId] are text columns with no
+  /// local FK constraint, so no foreign-key resolution is required.
+  Future<int?> _upsertExamFromSync(Map<String, dynamic> merged) async {
+    final serverId = merged['server_id'] as String? ??
+        merged['id'] as String?;
+    if (serverId == null || serverId.isEmpty) {
+      debugPrint('[sync] _upsertExamFromSync skipped: no serverId in $merged');
+      return null;
+    }
+
+    // Look up existing exam by serverId.
+    final existing = await (db.select(db.exams)
+          ..where((t) => t.serverId.equals(serverId)))
+        .get();
+
+    // Map snake_case remote fields to Drift column values.
+    String? strVal(String key) => merged[key] as String?;
+    bool boolVal(String key) =>
+        merged[key] == true || merged[key] == 'true';
+    int? intVal(String key) => _readInt(merged, key);
+    DateTime? dateVal(String key) {
+      final raw = merged[key];
+      if (raw == null) return null;
+      if (raw is DateTime) return raw;
+      if (raw is String) return DateTime.tryParse(raw);
+      return null;
+    }
+
+    final subject = strVal('subject') ?? '';
+    final classLevel = strVal('class_level') ?? '';
+    final topic = strVal('topic') ?? '';
+    final difficulty = strVal('difficulty') ?? '';
+    final curriculum = strVal('curriculum') ?? '';
+    final content = strVal('content') ?? '';
+    final schemeOfWorkId = strVal('scheme_of_work_id');
+    final weekNumber = intVal('week_number');
+    final isDeleted = boolVal('is_deleted');
+    final lastModifiedBy = strVal('last_modified_by');
+    final teacherServerId =
+        strVal('teacher_id') ?? strVal('teacher_server_id');
+    final schoolServerId =
+        strVal('school_id') ?? strVal('school_server_id');
+    final isUnlocked = boolVal('is_unlocked');
+    final term = strVal('term');
+    final createdAt = dateVal('created_at') ?? DateTime.now();
+    final updatedAt = dateVal('updated_at') ?? DateTime.now();
+    final updateCounter = intVal('update_counter') ?? 0;
+
+    if (existing.isNotEmpty) {
+      // Update existing exam record.
+      final existingExam = existing.first;
+      await (db.update(db.exams)
+            ..where((t) => t.id.equals(existingExam.id)))
+          .write(ExamsCompanion(
+        serverId: Value(serverId),
+        subject: Value(subject),
+        classLevel: Value(classLevel),
+        topic: Value(topic),
+        difficulty: Value(difficulty),
+        curriculum: Value(curriculum),
+        content: Value(content),
+        schemeOfWorkId: schemeOfWorkId != null
+            ? Value(schemeOfWorkId)
+            : const Value.absent(),
+        weekNumber: weekNumber != null
+            ? Value(weekNumber)
+            : const Value.absent(),
+        isDeleted: Value(isDeleted),
+        lastModifiedBy: lastModifiedBy != null
+            ? Value(lastModifiedBy)
+            : const Value.absent(),
+        teacherServerId: teacherServerId != null
+            ? Value(teacherServerId)
+            : const Value.absent(),
+        schoolServerId: schoolServerId != null
+            ? Value(schoolServerId)
+            : const Value.absent(),
+        isUnlocked: Value(isUnlocked),
+        term: term != null ? Value(term) : const Value.absent(),
+        updatedAt: Value(updatedAt),
+        updateCounter: Value(updateCounter),
+      ));
+      debugPrint('[sync] _upsertExamFromSync: UPDATED exam $serverId');
+      return existingExam.id;
+    } else {
+      // Insert new exam record.
+      final newLocalId = await (db.into(db.exams).insert(
+        ExamsCompanion.insert(
+          serverId: Value(serverId),
+          subject: subject,
+          classLevel: classLevel,
+          topic: topic,
+          difficulty: difficulty,
+          curriculum: curriculum,
+          content: content,
+          schemeOfWorkId: schemeOfWorkId != null
+              ? Value(schemeOfWorkId)
+              : const Value.absent(),
+          weekNumber: weekNumber != null
+              ? Value(weekNumber)
+              : const Value.absent(),
+          isDeleted: Value(isDeleted),
+          lastModifiedBy: lastModifiedBy != null
+              ? Value(lastModifiedBy)
+              : const Value.absent(),
+          teacherServerId: teacherServerId != null
+              ? Value(teacherServerId)
+              : const Value.absent(),
+          schoolServerId: schoolServerId != null
+              ? Value(schoolServerId)
+              : const Value.absent(),
+          isUnlocked: Value(isUnlocked),
+          term: term != null ? Value(term) : const Value.absent(),
+          createdAt: Value(createdAt),
+          updatedAt: Value(updatedAt),
+        ),
+      ));
+      debugPrint('[sync] _upsertExamFromSync: INSERTED exam $serverId');
+      return newLocalId;
+    }
+  }
+
+  /// Upserts a subject row from synced remote data into the local Drift
+  /// [subjects] table. The [merged] map uses snake_case keys from Supabase.
+  ///
+  /// Returns the Drift [localId] of the upserted row, or `null` if the
+  /// upsert was skipped (e.g. no serverId).
+  Future<int?> _upsertSubjectFromSync(Map<String, dynamic> merged) async {
+    final serverId = merged['server_id'] as String? ??
+        merged['id'] as String?;
+    if (serverId == null || serverId.isEmpty) {
+      debugPrint('[sync] _upsertSubjectFromSync skipped: no serverId in $merged');
+      return null;
+    }
+
+    // Look up existing subject by serverId.
+    final existing = await (db.select(db.subjects)
+          ..where((t) => t.serverId.equals(serverId)))
+        .get();
+
+    // Map snake_case remote fields to Drift column values.
+    String? strVal(String key) => merged[key] as String?;
+    int? intVal(String key) => _readInt(merged, key);
+    DateTime? dateVal(String key) {
+      final raw = merged[key];
+      if (raw == null) return null;
+      if (raw is DateTime) return raw;
+      if (raw is String) return DateTime.tryParse(raw);
+      return null;
+    }
+
+    final name = strVal('subject_name') ?? strVal('name') ?? '';
+    final alias = strVal('alias');
+    final schoolId = strVal('school_id');
+    final sortOrder = intVal('sort_order') ?? 0;
+    final createdAt = dateVal('created_at') ?? DateTime.now();
+    final updatedAt = dateVal('updated_at') ?? DateTime.now();
+
+    if (existing.isNotEmpty) {
+      // Update existing subject record.
+      final existingSubject = existing.first;
+      await (db.update(db.subjects)
+            ..where((t) => t.id.equals(existingSubject.id)))
+          .write(SubjectsCompanion(
+        serverId: Value(serverId),
+        name: Value(name),
+        alias: alias != null ? Value(alias) : const Value.absent(),
+        schoolId: schoolId != null
+            ? Value(schoolId)
+            : const Value.absent(),
+        sortOrder: Value(sortOrder),
+        updatedAt: Value(updatedAt),
+      ));
+      debugPrint('[sync] _upsertSubjectFromSync: UPDATED subject $serverId');
+      return existingSubject.id;
+    } else {
+      // Insert new subject record.
+      final newLocalId = await (db.into(db.subjects).insert(
+        SubjectsCompanion.insert(
+          serverId: Value(serverId),
+          name: name,
+          alias: alias != null ? Value(alias) : const Value.absent(),
+          schoolId: schoolId != null
+              ? Value(schoolId)
+              : const Value.absent(),
+          sortOrder: Value(sortOrder),
+          createdAt: Value(createdAt),
+          updatedAt: Value(updatedAt),
+        ),
+      ));
+      debugPrint('[sync] _upsertSubjectFromSync: INSERTED subject $serverId');
+      return newLocalId;
+    }
   }
 
   /// Removes duplicate teacher rows that share the same non-null [serverId],
