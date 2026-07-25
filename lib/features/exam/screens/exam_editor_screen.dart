@@ -57,7 +57,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   bool _isUnlocked = false;
   bool _isOnline = true;
   int? _examId;
-  bool _editorSidebarOpen = true;
+  bool _editorSidebarOpen = false;
   int _creditBalance = 3;
   int _remainingDailyPreviews = 10;
   String? _teacherId;

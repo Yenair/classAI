@@ -501,6 +501,8 @@ abstract class SyncRecordStore {
     required String recordType,
     required int recordLocalId,
     required List<String> conflictingFields,
+    required String? localValue,
+    required String? remoteValue,
     required String resolution,
     required bool notified,
   });
@@ -582,6 +584,8 @@ class DriftSyncRecordStore implements SyncRecordStore {
     required String recordType,
     required int recordLocalId,
     required List<String> conflictingFields,
+    required String? localValue,
+    required String? remoteValue,
     required String resolution,
     required bool notified,
   }) async {
@@ -591,6 +595,8 @@ class DriftSyncRecordStore implements SyncRecordStore {
             recordType: recordType,
             recordLocalId: recordLocalId,
             conflictingFields: jsonEncode(conflictingFields),
+            localValue: Value(localValue),
+            remoteValue: Value(remoteValue),
             resolution: Value(resolution),
             notified: Value(notified),
             createdAt: Value(now),
@@ -1481,6 +1487,8 @@ class SyncService {
           recordType: change.table,
           recordLocalId: localId,
           conflictingFields: local.keys.toList(),
+          localValue: jsonEncode(local),
+          remoteValue: jsonEncode(remote),
           resolution: MergeResolution.remote.name,
           notified: false,
         );
@@ -1490,6 +1498,8 @@ class SyncService {
           recordType: change.table,
           recordLocalId: localId,
           conflictingFields: result.conflictingFields,
+          localValue: jsonEncode(local),
+          remoteValue: jsonEncode(remote),
           resolution: result.resolution.name,
           notified: false,
         );

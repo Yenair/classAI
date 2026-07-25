@@ -269,7 +269,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     top: 8,
                     right: 8,
                     child: IconButton(
-                      icon: const Icon(Icons.visibility_outlined),
+                      icon: const Icon(Icons.brightness_6_outlined),
                       onPressed: () =>
                           ref.read(themeProvider.notifier).toggleTheme(),
                       tooltip: 'Switch theme',

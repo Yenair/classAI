@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart' hide isNotNull;
+import 'dart:convert';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/services/merge_engine.dart';
 import 'package:classai/core/services/sync_service.dart';
@@ -96,6 +97,12 @@ void main() {
     expect(conflict['recordType'], 'lessons');
     expect(conflict['recordLocalId'], 10);
     expect(conflict['conflictingFields'], isNotEmpty);
+    expect(conflict['localValue'], isNotNull);
+    expect(conflict['remoteValue'], isNotNull);
+    final localSnapshot = jsonDecode(conflict['localValue'] as String) as Map;
+    final remoteSnapshot = jsonDecode(conflict['remoteValue'] as String) as Map;
+    expect(localSnapshot['title'], 'Local title');
+    expect(remoteSnapshot['title'], 'Remote title');
     expect(conflict['resolution'], MergeResolution.unresolved.name);
   });
 

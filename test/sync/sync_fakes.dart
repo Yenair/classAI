@@ -106,6 +106,8 @@ class FakeSyncRecordStore implements SyncRecordStore {
     required String recordType,
     required int recordLocalId,
     required List<String> conflictingFields,
+    required String? localValue,
+    required String? remoteValue,
     required String resolution,
     required bool notified,
   }) async {
@@ -113,6 +115,8 @@ class FakeSyncRecordStore implements SyncRecordStore {
       'recordType': recordType,
       'recordLocalId': recordLocalId,
       'conflictingFields': conflictingFields,
+      'localValue': localValue,
+      'remoteValue': remoteValue,
       'resolution': resolution,
       'notified': notified,
     });
