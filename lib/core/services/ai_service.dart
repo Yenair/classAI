@@ -6,6 +6,7 @@ import '../database/database.dart';
 import '../utils/sanitization_utils.dart';
 import '../utils/token_counter.dart';
 import '../utils/encryption_utils.dart';
+import 'auth_service.dart';
 
 class AiService {
   final Uint8List? _schoolKey;
@@ -94,9 +95,21 @@ class AiService {
   }
 
   Future<Map<String, dynamic>> _callDeepSeek(String prompt) async {
-    final response = await _supabase.functions.invoke('deepseek-proxy', body: {
-      'prompt': prompt,
-    });
+    // The proxy functions require the custom ClassAI JWT as a Bearer token in
+    // the Authorization header. Read it from the static singleton so we don't
+    // need to thread it through every call site (consistent with PaymentService).
+    final jwt = SupabaseAuthService().currentJwt;
+    final headers = <String, String>{};
+    if (jwt != null && jwt.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $jwt';
+    }
+    final response = await _supabase.functions.invoke(
+      'deepseek-proxy',
+      headers: headers.isNotEmpty ? headers : null,
+      body: {
+        'prompt': prompt,
+      },
+    );
     final data = response.data as Map<String, dynamic>?;
     if (data == null || data['error'] != null) {
       throw AiGenerationException(
@@ -115,9 +128,19 @@ class AiService {
   }
 
   Future<Map<String, dynamic>> _callGemini(String prompt) async {
-    final response = await _supabase.functions.invoke('gemini-proxy', body: {
-      'prompt': prompt,
-    });
+    // Same JWT injection as _callDeepSeek — see note above.
+    final jwt = SupabaseAuthService().currentJwt;
+    final headers = <String, String>{};
+    if (jwt != null && jwt.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $jwt';
+    }
+    final response = await _supabase.functions.invoke(
+      'gemini-proxy',
+      headers: headers.isNotEmpty ? headers : null,
+      body: {
+        'prompt': prompt,
+      },
+    );
     final data = response.data as Map<String, dynamic>?;
     if (data == null || data['error'] != null) {
       throw AiGenerationException(
