@@ -21,6 +21,7 @@ class Teachers extends Table {
   DateTimeColumn get lastCreditRefillDate => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastSyncAt => dateTime().nullable()();
   IntColumn get updateCounter => integer().withDefault(const Constant(0))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   TextColumn get salt =>

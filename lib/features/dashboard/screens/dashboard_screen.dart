@@ -132,6 +132,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       );
     }
 
+    // Android: always use ReaderLayout (bottom-nav-only), never EditorLayout (side nav)
+    if (Platform.isAndroid) {
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) => _onBackPressed(didPop),
+        child: const ReaderLayout(),
+      );
+    }
+
     if (_isEditorMode == null) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
@@ -349,7 +358,6 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                                             ?.copyWith(
                                           color: cs.onSurfaceVariant,
                                         ),
-                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ],
                                   ),

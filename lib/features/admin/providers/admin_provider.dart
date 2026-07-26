@@ -231,7 +231,7 @@ class AdminDashboardNotifier extends Notifier<AdminDashboardData> {
           email: t.email,
           teacherName: t.teacherName,
           role: t.role,
-          lastSyncTime: t.updatedAt,
+          lastSyncTime: t.lastSyncAt,
           isActive: t.isActive,
           deviceCount: deviceCount,
           pendingSyncCount: totalPendingCount,

@@ -96,7 +96,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 22;
+  int get schemaVersion => 23;
 
   static QueryExecutor _openConnection() {
     return LazyDatabase(() async {
@@ -942,6 +942,21 @@ class AppDatabase extends _$AppDatabase {
               "AND operation = 'UPDATE' "
               "AND is_terminal = 0",
             );
+          }
+          if (from < 23) {
+            // Add last_sync_at column to teachers table for admin dashboard
+            // sync status indicator. Populated by sync-pull edge function
+            // on every pull cycle (see sync-pull/index.ts §2b).
+            final teacherCols = await customSelect(
+              "SELECT name FROM pragma_table_info('teachers')",
+            ).get();
+            final teacherColNames =
+                teacherCols.map((r) => r.read<String>('name')).toSet();
+            if (!teacherColNames.contains('last_sync_at')) {
+              await customStatement(
+                'ALTER TABLE teachers ADD COLUMN last_sync_at TEXT NULL',
+              );
+            }
           }
         },
         beforeOpen: (details) async {

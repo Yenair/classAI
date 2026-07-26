@@ -141,7 +141,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // === Desktop Nav Drawer ===
-            if (isWide) _buildNavDrawer(cs, textTheme, authData),
+            if (isWide && !Platform.isAndroid) _buildNavDrawer(cs, textTheme, authData),
 
             // === Main Content ===
             Expanded(
@@ -178,8 +178,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                   ),
 
-                  // === BottomNav (mobile only) ===
-                  if (!isWide) _buildBottomNav(cs, textTheme, authData),
+                  // === BottomNav (mobile only; also on Android — no side nav) ===
+                  if (!isWide || Platform.isAndroid) _buildBottomNav(cs, textTheme, authData),
                 ],
               ),
             ),

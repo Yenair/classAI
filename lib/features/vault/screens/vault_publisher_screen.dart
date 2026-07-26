@@ -1,5 +1,6 @@
 // lib/features/vault/screens/vault_publisher_screen.dart
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -262,8 +263,8 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
       body: SafeArea(
         child: Row(
           children: [
-            // Navigation Drawer (Tablet/Desktop)
-            if (isDesktop)
+            // Navigation Drawer (Tablet/Desktop) — Android uses bottom nav only
+            if (isDesktop && !Platform.isAndroid)
               _NavDrawer(cs: cs, tt: tt),
 
             // Main Content Canvas
@@ -281,8 +282,8 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
                         : _buildForm(cs, tt),
                   ),
 
-                  // BottomNavBar (Mobile)
-                  if (!isDesktop)
+                  // BottomNavBar (Mobile; also on Android — no side nav)
+                  if (!isDesktop || Platform.isAndroid)
                     _BottomNav(cs: cs, tt: tt),
                 ],
               ),

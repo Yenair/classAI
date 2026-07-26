@@ -1786,7 +1786,7 @@ class _NavigationDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < 768) return const SizedBox.shrink();
+        if (constraints.maxWidth < 768 || Platform.isAndroid) return const SizedBox.shrink();
         return AnimatedContainer(
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeInOut,
@@ -3433,7 +3433,7 @@ class _BottomNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth >= 768) return const SizedBox.shrink();
+        if (!Platform.isAndroid && constraints.maxWidth >= 768) return const SizedBox.shrink();
         return Container(
           padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
           decoration: BoxDecoration(

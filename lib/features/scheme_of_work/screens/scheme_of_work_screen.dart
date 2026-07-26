@@ -459,27 +459,29 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
             objectives: objectivesText,
           );
 
-          // Queue UPDATE sync entry
-          final sowRecord = await db.schemeOfWorkDao.getById(existingId);
-          if (sowRecord != null) {
-            await db.syncQueueDao.insertEntry(
-              queueTable: 'scheme_of_work',
-              recordLocalId: existingId,
-              operation: 'UPDATE',
-              payload: {
-                'teacher_server_id': teacherServerId,
-                'school_server_id': schoolServerId,
-                'subject_id': subjectServerId ?? subjectId.toString(),
-                'term': _term,
-                'week_number': weekNumber,
-                'topic': topicText,
-                'objectives': objectivesText,
-                'status': sowRecord.status,
-                'admin_edited_topic': sowRecord.adminEditedTopic,
-                'admin_comment': sowRecord.adminComment,
-                'class_level': _classLevel,
-              },
-            );
+          // Queue UPDATE sync entry (only if subject has a server ID)
+          if (subjectServerId != null) {
+            final sowRecord = await db.schemeOfWorkDao.getById(existingId);
+            if (sowRecord != null) {
+              await db.syncQueueDao.insertEntry(
+                queueTable: 'scheme_of_work',
+                recordLocalId: existingId,
+                operation: 'UPDATE',
+                payload: {
+                  'teacher_server_id': teacherServerId,
+                  'school_server_id': schoolServerId,
+                  'subject_id': subjectServerId,
+                  'term': _term,
+                  'week_number': weekNumber,
+                  'topic': topicText,
+                  'objectives': objectivesText,
+                  'status': sowRecord.status,
+                  'admin_edited_topic': sowRecord.adminEditedTopic,
+                  'admin_comment': sowRecord.adminComment,
+                  'class_level': _classLevel,
+                },
+              );
+            }
           }
         } else {
           // Insert new record
@@ -500,25 +502,27 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
           );
           _weekRecordIds[weekNumber] = newId;
 
-          // Queue INSERT sync entry
-          await db.syncQueueDao.insertEntry(
-            queueTable: 'scheme_of_work',
-            recordLocalId: newId,
-            operation: 'INSERT',
-            payload: {
-              'teacher_server_id': teacherServerId,
-              'school_server_id': schoolServerId,
-              'subject_id': subjectServerId ?? subjectId.toString(),
-              'term': _term,
-              'week_number': weekNumber,
-              'topic': topicText,
-              'objectives': objectivesText,
-              'status': 'draft',
-              'admin_edited_topic': null,
-              'admin_comment': null,
-              'class_level': _classLevel,
-            },
-          );
+          // Queue INSERT sync entry (only if subject has a server ID)
+          if (subjectServerId != null) {
+            await db.syncQueueDao.insertEntry(
+              queueTable: 'scheme_of_work',
+              recordLocalId: newId,
+              operation: 'INSERT',
+              payload: {
+                'teacher_server_id': teacherServerId,
+                'school_server_id': schoolServerId,
+                'subject_id': subjectServerId,
+                'term': _term,
+                'week_number': weekNumber,
+                'topic': topicText,
+                'objectives': objectivesText,
+                'status': 'draft',
+                'admin_edited_topic': null,
+                'admin_comment': null,
+                'class_level': _classLevel,
+              },
+            );
+          }
         }
 
         // Auto-create draft lesson if not already existing
@@ -685,24 +689,26 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
         await db.schemeOfWorkDao.updateStatus(recordId, 'pending');
         final sowRecord = await db.schemeOfWorkDao.getById(recordId);
         if (sowRecord != null) {
-          await db.syncQueueDao.insertEntry(
-            queueTable: 'scheme_of_work',
-            recordLocalId: recordId,
-            operation: 'UPDATE',
-            payload: {
-              'teacher_server_id': teacherServerId,
-              'school_server_id': schoolServerId,
-              'subject_id': subjectServerId ?? _subjectId.toString(),
-              'term': _term,
-              'week_number': sowRecord.weekNumber,
-              'topic': sowRecord.topic,
-              'objectives': sowRecord.objectives,
-              'status': 'pending',
-              'admin_edited_topic': sowRecord.adminEditedTopic,
-              'admin_comment': sowRecord.adminComment,
-              'class_level': _classLevel,
-            },
-          );
+          if (subjectServerId != null) {
+            await db.syncQueueDao.insertEntry(
+              queueTable: 'scheme_of_work',
+              recordLocalId: recordId,
+              operation: 'UPDATE',
+              payload: {
+                'teacher_server_id': teacherServerId,
+                'school_server_id': schoolServerId,
+                'subject_id': subjectServerId,
+                'term': _term,
+                'week_number': sowRecord.weekNumber,
+                'topic': sowRecord.topic,
+                'objectives': sowRecord.objectives,
+                'status': 'pending',
+                'admin_edited_topic': sowRecord.adminEditedTopic,
+                'admin_comment': sowRecord.adminComment,
+                'class_level': _classLevel,
+              },
+            );
+          }
         }
       }
       await _loadSchemeForSelection();
@@ -754,28 +760,33 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
             ? adminEdit
             : schemeWeek.topic;
 
-        // Queue the status change for sync
-        try {
-          await db.syncQueueDao.insertEntry(
-            queueTable: 'scheme_of_work',
-            recordLocalId: schemeWeekId,
-            operation: 'UPDATE',
-            payload: {
-              'status': 'approved',
-              'teacher_server_id': teacherServerId,
-              'school_server_id': schoolServerId,
-              'subject_id': schemeWeek.subjectId,
-              'term': schemeWeek.term,
-              'week_number': schemeWeek.weekNumber,
-              'topic': schemeWeek.topic,
-              'objectives': schemeWeek.objectives,
-              'class_level': schemeWeek.classLevel,
-              'admin_edited_topic': schemeWeek.adminEditedTopic,
-              'admin_comment': schemeWeek.adminComment,
-            },
-          );
-        } catch (_) {
-          // Non-critical — sync failure shouldn't block approval
+        // Resolve subject server ID for sync payload
+        final subjectServerId = subjectRow?.serverId;
+
+        // Queue the status change for sync (only if subject has a server ID)
+        if (subjectServerId != null) {
+          try {
+            await db.syncQueueDao.insertEntry(
+              queueTable: 'scheme_of_work',
+              recordLocalId: schemeWeekId,
+              operation: 'UPDATE',
+              payload: {
+                'status': 'approved',
+                'teacher_server_id': teacherServerId,
+                'school_server_id': schoolServerId,
+                'subject_id': subjectServerId,
+                'term': schemeWeek.term,
+                'week_number': schemeWeek.weekNumber,
+                'topic': schemeWeek.topic,
+                'objectives': schemeWeek.objectives,
+                'class_level': schemeWeek.classLevel,
+                'admin_edited_topic': schemeWeek.adminEditedTopic,
+                'admin_comment': schemeWeek.adminComment,
+              },
+            );
+          } catch (_) {
+            // Non-critical — sync failure shouldn't block approval
+          }
         }
 
         if (teacherServerId != null &&

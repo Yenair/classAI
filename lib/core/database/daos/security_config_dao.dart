@@ -69,14 +69,11 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
         lastPullTimestamp: lastPullTimestamp != null
             ? Value(lastPullTimestamp)
             : const Value.absent(),
-        syncCursor:
-            syncCursor != null ? Value(syncCursor) : const Value.absent(),
+        syncCursor: Value(syncCursor),
         lastSyncAttemptTime: lastSyncAttemptTime != null
             ? Value(lastSyncAttemptTime)
             : const Value.absent(),
-        syncCooldownUntil: syncCooldownUntil != null
-            ? Value(syncCooldownUntil)
-            : const Value.absent(),
+        syncCooldownUntil: Value(syncCooldownUntil),
         lastRealtimeEventId: lastRealtimeEventId != null
             ? Value(lastRealtimeEventId)
             : const Value.absent(),

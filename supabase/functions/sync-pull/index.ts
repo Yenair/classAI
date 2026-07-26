@@ -129,6 +129,26 @@ serve(async (req) => {
       }
     }
 
+      // ── 2b. Update the requesting teacher's last_sync_at ────────────────
+      // Track the last successful pull cycle per-teacher for the admin
+      // dashboard's sync status indicators.  This is a best-effort write:
+      // it MUST NOT abort the pull response on failure.
+      try {
+        const teacherId = jwtClaims.teacher_id as string;
+        if (teacherId) {
+          await supabase
+            .from('teachers')
+            .update({ last_sync_at: new Date().toISOString() })
+            .eq('id', teacherId);
+        }
+      } catch (e) {
+        console.warn(
+          `[sync-pull] failed to update last_sync_at for teacher ` +
+          `${jwtClaims.teacher_id}: ${e instanceof Error ? e.message : e}`
+        );
+        // Non-fatal — the pull response must succeed regardless
+      }
+
     // Sort all changes globally by updated_at for deterministic ordering
     changes.sort((a, b) => {
       const aTime = a.row.updated_at as string | undefined;

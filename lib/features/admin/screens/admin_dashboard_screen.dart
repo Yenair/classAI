@@ -128,8 +128,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // === Desktop Nav Drawer ===
-              if (isWide) _buildNavDrawer(cs, textTheme),
+                // === Desktop Nav Drawer ===
+                if (isWide && !Platform.isAndroid) _buildNavDrawer(cs, textTheme),
 
               // === Main Content Area ===
               Expanded(
@@ -156,8 +156,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                                   dashboardData, authData),
                     ),
 
-                    // === BottomNav (mobile only) ===
-                    if (!isWide) _buildBottomNav(cs, textTheme),
+                    // === BottomNav (mobile only; also on Android — no side nav) ===
+                    if (!isWide || Platform.isAndroid) _buildBottomNav(cs, textTheme),
                   ],
                 ),
               ),
@@ -729,9 +729,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 color: isActive ? cs.onSecondaryContainer : cs.onSurfaceVariant,
               ),
               onPressed: () {
-                if (i == 4) {
+                if (i == 3) {
                   context.push('/scheme-of-work');
-                } else if (i == 5) {
+                } else if (i == 4) {
                   context.push('/settings');
                 } else {
                   setState(() => _selectedTabIndex = i);

@@ -1052,6 +1052,12 @@ class $TeachersTable extends Teachers with TableInfo<$TeachersTable, Teacher> {
       type: DriftSqlType.dateTime,
       requiredDuringInsert: false,
       defaultValue: currentDateAndTime);
+  static const VerificationMeta _lastSyncAtMeta =
+      const VerificationMeta('lastSyncAt');
+  @override
+  late final GeneratedColumn<DateTime> lastSyncAt = GeneratedColumn<DateTime>(
+      'last_sync_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
   static const VerificationMeta _updateCounterMeta =
       const VerificationMeta('updateCounter');
   @override
@@ -1117,6 +1123,7 @@ class $TeachersTable extends Teachers with TableInfo<$TeachersTable, Teacher> {
         lastCreditRefillDate,
         createdAt,
         updatedAt,
+        lastSyncAt,
         updateCounter,
         isDeleted,
         salt,
@@ -1211,6 +1218,12 @@ class $TeachersTable extends Teachers with TableInfo<$TeachersTable, Teacher> {
       context.handle(_updatedAtMeta,
           updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
     }
+    if (data.containsKey('last_sync_at')) {
+      context.handle(
+          _lastSyncAtMeta,
+          lastSyncAt.isAcceptableOrUnknown(
+              data['last_sync_at']!, _lastSyncAtMeta));
+    }
     if (data.containsKey('update_counter')) {
       context.handle(
           _updateCounterMeta,
@@ -1285,6 +1298,8 @@ class $TeachersTable extends Teachers with TableInfo<$TeachersTable, Teacher> {
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      lastSyncAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}last_sync_at']),
       updateCounter: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}update_counter'])!,
       isDeleted: attachedDatabase.typeMapping
@@ -1323,6 +1338,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
   final DateTime? lastCreditRefillDate;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final DateTime? lastSyncAt;
   final int updateCounter;
   final bool isDeleted;
   final String? salt;
@@ -1345,6 +1361,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
       this.lastCreditRefillDate,
       required this.createdAt,
       required this.updatedAt,
+      this.lastSyncAt,
       required this.updateCounter,
       required this.isDeleted,
       this.salt,
@@ -1377,6 +1394,9 @@ class Teacher extends DataClass implements Insertable<Teacher> {
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || lastSyncAt != null) {
+      map['last_sync_at'] = Variable<DateTime>(lastSyncAt);
+    }
     map['update_counter'] = Variable<int>(updateCounter);
     map['is_deleted'] = Variable<bool>(isDeleted);
     if (!nullToAbsent || salt != null) {
@@ -1419,6 +1439,9 @@ class Teacher extends DataClass implements Insertable<Teacher> {
           : Value(lastCreditRefillDate),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
+      lastSyncAt: lastSyncAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSyncAt),
       updateCounter: Value(updateCounter),
       isDeleted: Value(isDeleted),
       salt: salt == null && nullToAbsent ? const Value.absent() : Value(salt),
@@ -1455,6 +1478,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
           serializer.fromJson<DateTime?>(json['lastCreditRefillDate']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      lastSyncAt: serializer.fromJson<DateTime?>(json['lastSyncAt']),
       updateCounter: serializer.fromJson<int>(json['updateCounter']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       salt: serializer.fromJson<String?>(json['salt']),
@@ -1483,6 +1507,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
           serializer.toJson<DateTime?>(lastCreditRefillDate),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'lastSyncAt': serializer.toJson<DateTime?>(lastSyncAt),
       'updateCounter': serializer.toJson<int>(updateCounter),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'salt': serializer.toJson<String?>(salt),
@@ -1508,6 +1533,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
           Value<DateTime?> lastCreditRefillDate = const Value.absent(),
           DateTime? createdAt,
           DateTime? updatedAt,
+          Value<DateTime?> lastSyncAt = const Value.absent(),
           int? updateCounter,
           bool? isDeleted,
           Value<String?> salt = const Value.absent(),
@@ -1535,6 +1561,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
             : this.lastCreditRefillDate,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
+        lastSyncAt: lastSyncAt.present ? lastSyncAt.value : this.lastSyncAt,
         updateCounter: updateCounter ?? this.updateCounter,
         isDeleted: isDeleted ?? this.isDeleted,
         salt: salt.present ? salt.value : this.salt,
@@ -1576,6 +1603,8 @@ class Teacher extends DataClass implements Insertable<Teacher> {
           : this.lastCreditRefillDate,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      lastSyncAt:
+          data.lastSyncAt.present ? data.lastSyncAt.value : this.lastSyncAt,
       updateCounter: data.updateCounter.present
           ? data.updateCounter.value
           : this.updateCounter,
@@ -1611,6 +1640,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
           ..write('lastCreditRefillDate: $lastCreditRefillDate, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('lastSyncAt: $lastSyncAt, ')
           ..write('updateCounter: $updateCounter, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('salt: $salt, ')
@@ -1638,6 +1668,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
         lastCreditRefillDate,
         createdAt,
         updatedAt,
+        lastSyncAt,
         updateCounter,
         isDeleted,
         salt,
@@ -1664,6 +1695,7 @@ class Teacher extends DataClass implements Insertable<Teacher> {
           other.lastCreditRefillDate == this.lastCreditRefillDate &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
+          other.lastSyncAt == this.lastSyncAt &&
           other.updateCounter == this.updateCounter &&
           other.isDeleted == this.isDeleted &&
           other.salt == this.salt &&
@@ -1688,6 +1720,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
   final Value<DateTime?> lastCreditRefillDate;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
+  final Value<DateTime?> lastSyncAt;
   final Value<int> updateCounter;
   final Value<bool> isDeleted;
   final Value<String?> salt;
@@ -1710,6 +1743,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
     this.lastCreditRefillDate = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.lastSyncAt = const Value.absent(),
     this.updateCounter = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.salt = const Value.absent(),
@@ -1733,6 +1767,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
     this.lastCreditRefillDate = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.lastSyncAt = const Value.absent(),
     this.updateCounter = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.salt = const Value.absent(),
@@ -1758,6 +1793,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
     Expression<DateTime>? lastCreditRefillDate,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
+    Expression<DateTime>? lastSyncAt,
     Expression<int>? updateCounter,
     Expression<bool>? isDeleted,
     Expression<String>? salt,
@@ -1784,6 +1820,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
         'last_credit_refill_date': lastCreditRefillDate,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (lastSyncAt != null) 'last_sync_at': lastSyncAt,
       if (updateCounter != null) 'update_counter': updateCounter,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (salt != null) 'salt': salt,
@@ -1809,6 +1846,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
       Value<DateTime?>? lastCreditRefillDate,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
+      Value<DateTime?>? lastSyncAt,
       Value<int>? updateCounter,
       Value<bool>? isDeleted,
       Value<String?>? salt,
@@ -1831,6 +1869,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
       lastCreditRefillDate: lastCreditRefillDate ?? this.lastCreditRefillDate,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      lastSyncAt: lastSyncAt ?? this.lastSyncAt,
       updateCounter: updateCounter ?? this.updateCounter,
       isDeleted: isDeleted ?? this.isDeleted,
       salt: salt ?? this.salt,
@@ -1887,6 +1926,9 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (lastSyncAt.present) {
+      map['last_sync_at'] = Variable<DateTime>(lastSyncAt.value);
+    }
     if (updateCounter.present) {
       map['update_counter'] = Variable<int>(updateCounter.value);
     }
@@ -1928,6 +1970,7 @@ class TeachersCompanion extends UpdateCompanion<Teacher> {
           ..write('lastCreditRefillDate: $lastCreditRefillDate, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('lastSyncAt: $lastSyncAt, ')
           ..write('updateCounter: $updateCounter, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('salt: $salt, ')
@@ -14192,6 +14235,7 @@ typedef $$TeachersTableCreateCompanionBuilder = TeachersCompanion Function({
   Value<DateTime?> lastCreditRefillDate,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
+  Value<DateTime?> lastSyncAt,
   Value<int> updateCounter,
   Value<bool> isDeleted,
   Value<String?> salt,
@@ -14215,6 +14259,7 @@ typedef $$TeachersTableUpdateCompanionBuilder = TeachersCompanion Function({
   Value<DateTime?> lastCreditRefillDate,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
+  Value<DateTime?> lastSyncAt,
   Value<int> updateCounter,
   Value<bool> isDeleted,
   Value<String?> salt,
@@ -14366,6 +14411,9 @@ class $$TeachersTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get lastSyncAt => $composableBuilder(
+      column: $table.lastSyncAt, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<int> get updateCounter => $composableBuilder(
       column: $table.updateCounter, builder: (column) => ColumnFilters(column));
@@ -14550,6 +14598,9 @@ class $$TeachersTableOrderingComposer
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<DateTime> get lastSyncAt => $composableBuilder(
+      column: $table.lastSyncAt, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<int> get updateCounter => $composableBuilder(
       column: $table.updateCounter,
       builder: (column) => ColumnOrderings(column));
@@ -14643,6 +14694,9 @@ class $$TeachersTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastSyncAt => $composableBuilder(
+      column: $table.lastSyncAt, builder: (column) => column);
 
   GeneratedColumn<int> get updateCounter => $composableBuilder(
       column: $table.updateCounter, builder: (column) => column);
@@ -14814,6 +14868,7 @@ class $$TeachersTableTableManager extends RootTableManager<
             Value<DateTime?> lastCreditRefillDate = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> lastSyncAt = const Value.absent(),
             Value<int> updateCounter = const Value.absent(),
             Value<bool> isDeleted = const Value.absent(),
             Value<String?> salt = const Value.absent(),
@@ -14837,6 +14892,7 @@ class $$TeachersTableTableManager extends RootTableManager<
             lastCreditRefillDate: lastCreditRefillDate,
             createdAt: createdAt,
             updatedAt: updatedAt,
+            lastSyncAt: lastSyncAt,
             updateCounter: updateCounter,
             isDeleted: isDeleted,
             salt: salt,
@@ -14860,6 +14916,7 @@ class $$TeachersTableTableManager extends RootTableManager<
             Value<DateTime?> lastCreditRefillDate = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> lastSyncAt = const Value.absent(),
             Value<int> updateCounter = const Value.absent(),
             Value<bool> isDeleted = const Value.absent(),
             Value<String?> salt = const Value.absent(),
@@ -14883,6 +14940,7 @@ class $$TeachersTableTableManager extends RootTableManager<
             lastCreditRefillDate: lastCreditRefillDate,
             createdAt: createdAt,
             updatedAt: updatedAt,
+            lastSyncAt: lastSyncAt,
             updateCounter: updateCounter,
             isDeleted: isDeleted,
             salt: salt,

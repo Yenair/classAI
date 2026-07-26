@@ -261,6 +261,9 @@ class _FullTermExamScreenState extends ConsumerState<FullTermExamScreen> {
           : 'JSS 1';
       final termLabel = _normalizeTermLabel(_topics.first.scheme.term);
 
+      // Derive week_number from the first scheme's week
+      final firstWeekNumber = _topics.first.scheme.weekNumber;
+
       // Save as a draft exam
       final insertCompanion = ExamsCompanion.insert(
         subject: subjectName,
@@ -272,6 +275,7 @@ class _FullTermExamScreenState extends ConsumerState<FullTermExamScreen> {
         teacherServerId: Value(teacher.serverId),
         schoolServerId: Value(school.serverId),
         isUnlocked: const Value(false),
+        weekNumber: Value(firstWeekNumber),
         term: termLabel.isNotEmpty ? Value(termLabel) : const Value.absent(),
       );
 
@@ -290,6 +294,7 @@ class _FullTermExamScreenState extends ConsumerState<FullTermExamScreen> {
           'curriculum': 'NERDC',
           'teacher_server_id': teacher.serverId,
           'school_server_id': school.serverId,
+          'week_number': firstWeekNumber,
           if (termLabel.isNotEmpty) 'term': termLabel,
         },
       );
