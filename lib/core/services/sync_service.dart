@@ -1722,10 +1722,54 @@ class SyncService {
       local =
           await store.loadLocalRecord(change.table, localId) ?? const {};
       baseHash = await _loadBaseHash(change.table, localId);
+    } else if (change.table == 'payment_events') {
+      // payment_events has no serverId column; the unique identifier is
+      // transactionReference. Look up the existing local row by this key.
+      final transactionReference =
+          remote['transaction_reference'] as String?;
+      if (transactionReference == null || transactionReference.isEmpty) {
+        debugPrint(
+          '[SYNC] _mergeRemoteChange: skipping payment_event — '
+          'no transactionReference',
+        );
+        return;
+      }
+
+      // Read-only lookup: find existing payment_event by transactionReference.
+      final existing = await (db.select(db.paymentEvents)
+            ..where((t) =>
+                t.transactionReference.equals(transactionReference)))
+          .get();
+
+      if (existing.isEmpty) {
+        // NEW payment_event — upsert remote directly, write to
+        // versionHashes, skip three-way merge.
+        final newLocalId = await _upsertPaymentEventFromSync(remote);
+        if (newLocalId == null) {
+          debugPrint(
+            '[SYNC] _mergeRemoteChange: skipping new payment_event — '
+            'upsert returned null',
+          );
+          return;
+        }
+        await store.saveSyncedRecord(
+          tableName: 'payment_events',
+          localId: newLocalId,
+          snapshot: remote,
+        );
+        _setState(SyncState.merging);
+        return;
+      }
+
+      // EXISTING payment_event — use real localId for versionHashes ops.
+      localId = existing.first.id;
+      local =
+          await store.loadLocalRecord(change.table, localId) ?? const {};
+      baseHash = await _loadBaseHash(change.table, localId);
     } else {
-      // For all remaining tables (scheme_of_work, progress_logs,
-      // vault_items, payment_events) the remote payload may contain
-      // a real local_id — fall back to the existing chain.
+      // For all remaining tables (progress_logs, vault_items) the
+      // remote payload may contain a real local_id — fall back to the
+      // existing chain.
       localId = _readInt(remote, 'localId') ??
           _readInt(remote, 'local_id') ??
           _readInt(remote, 'id') ??
@@ -1787,6 +1831,8 @@ class SyncService {
         await _upsertSubjectFromSync(result.merged);
       } else if (change.table == 'scheme_of_work') {
         await _upsertSchemeOfWorkFromSync(result.merged);
+      } else if (change.table == 'payment_events') {
+        await _upsertPaymentEventFromSync(result.merged);
       }
 
       _setState(SyncState.merging);
@@ -2711,6 +2757,95 @@ class SyncService {
         return 3;
       default:
         return 99;
+    }
+  }
+
+  /// Upserts a payment_events row from synced remote data into the local
+  /// Drift [paymentEvents] table. The [merged] map uses snake_case keys from
+  /// Supabase.
+  ///
+  /// Unlike tables with a serverId column, payment_events uses
+  /// transactionReference as the unique lookup key — the remote payload has
+  /// no server_id, and the local PK (auto-increment id) differs from the
+  /// server PK (BIGSERIAL).
+  ///
+  /// Returns the Drift [id] of the upserted row, or `null` if the upsert
+  /// was skipped (e.g. no transactionReference).
+  Future<int?> _upsertPaymentEventFromSync(Map<String, dynamic> merged) async {
+    final transactionReference =
+        merged['transaction_reference'] as String?;
+    if (transactionReference == null || transactionReference.isEmpty) {
+      debugPrint(
+        '[sync] _upsertPaymentEventFromSync skipped: '
+        'no transactionReference in $merged',
+      );
+      return null;
+    }
+
+    // Look up existing payment_event by transactionReference.
+    final existing = await (db.select(db.paymentEvents)
+          ..where((t) =>
+              t.transactionReference.equals(transactionReference)))
+        .get();
+
+    // Map snake_case remote fields to Drift column values.
+    String? strVal(String key) => merged[key] as String?;
+    bool boolVal(String key) =>
+        merged[key] == true || merged[key] == 'true';
+    int? intVal(String key) => _readInt(merged, key);
+    DateTime? dateVal(String key) {
+      final raw = merged[key];
+      if (raw == null) return null;
+      if (raw is DateTime) return raw;
+      if (raw is String) return DateTime.tryParse(raw);
+      return null;
+    }
+
+    final confirmedByWebhook = boolVal('confirmed_by_webhook');
+    final amount = intVal('amount') ?? 0;
+    final plan = strVal('plan') ?? '';
+    final createdAt = dateVal('created_at') ?? DateTime.now();
+    final confirmationDate = dateVal('confirmation_date');
+
+    if (existing.isNotEmpty) {
+      // Update existing payment_event record.
+      final existingEvent = existing.first;
+      await (db.update(db.paymentEvents)
+            ..where((t) => t.id.equals(existingEvent.id)))
+          .write(PaymentEventsCompanion(
+        transactionReference: Value(transactionReference),
+        confirmedByWebhook: Value(confirmedByWebhook),
+        amount: Value(amount),
+        plan: Value(plan),
+        createdAt: Value(createdAt),
+        confirmationDate: confirmationDate != null
+            ? Value(confirmationDate)
+            : const Value.absent(),
+      ));
+      debugPrint(
+        '[sync] _upsertPaymentEventFromSync: UPDATED '
+        'payment_event $transactionReference',
+      );
+      return existingEvent.id;
+    } else {
+      // Insert new payment_event in a single atomic SQL write.
+      final newLocalId = await (db.into(db.paymentEvents).insert(
+        PaymentEventsCompanion.insert(
+          transactionReference: transactionReference,
+          confirmedByWebhook: Value(confirmedByWebhook),
+          amount: amount,
+          plan: plan,
+          createdAt: Value(createdAt),
+          confirmationDate: confirmationDate != null
+              ? Value(confirmationDate)
+              : const Value.absent(),
+        ),
+      ));
+      debugPrint(
+        '[sync] _upsertPaymentEventFromSync: INSERTED '
+        'payment_event $transactionReference',
+      );
+      return newLocalId;
     }
   }
 
