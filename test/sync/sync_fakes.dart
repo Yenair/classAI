@@ -151,6 +151,14 @@ class FakeSyncRecordStore implements SyncRecordStore {
   }
 
   @override
+  Future<void> clearVersionHashes() async {
+    // Clear the in-memory baseRecords map to simulate the real behavior
+    baseRecords.clear();
+    // Also clear the actual version_hashes table in the test database
+    await db.delete(db.versionHashes).go();
+  }
+
+  @override
   Future<SecurityConfigData> loadSecurityConfig() {
     return db.securityConfigDao.get();
   }
@@ -162,10 +170,11 @@ class FakeSyncRecordStore implements SyncRecordStore {
     DateTime? lastSyncAttemptTime,
     DateTime? syncCooldownUntil,
     int? lastRealtimeEventId,
+    bool clearCursor = false,
   }) {
     return db.securityConfigDao.updateConfig(
       lastPullTimestamp: lastPullTimestamp,
-      syncCursor: syncCursor,
+      syncCursor: clearCursor ? null : syncCursor,
       lastSyncAttemptTime: lastSyncAttemptTime,
       syncCooldownUntil: syncCooldownUntil,
       lastRealtimeEventId: lastRealtimeEventId,
