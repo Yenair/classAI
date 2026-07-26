@@ -280,6 +280,64 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
     await ref.read(authProvider.notifier).refreshSchoolFromDb();
   }
 
+  /// Triggers a forced full resync.
+  /// Returns true if there were push failures during the resync (unsaved changes
+  /// may be lost when the full pull overwrites local data).
+  Future<bool> forceFullResync() async {
+    // Safety reset: if a previous sync never cleared _isSyncing, force-clear it
+    if (_isSyncing) {
+      _isSyncing = false;
+    }
+    await refresh();
+    final currentState = state;
+    if (!currentState.isOnline) {
+      return false;
+    }
+
+    try {
+      // Immediately show syncing state
+      state = SyncStatusData(
+        status: SyncStatus.syncing,
+        lastSyncTime: currentState.lastSyncTime,
+        pendingPushCount: currentState.pendingPushCount,
+        pendingPullCount: currentState.pendingPullCount,
+        conflictCount: currentState.conflictCount,
+        isOnline: currentState.isOnline,
+      );
+
+      // Resolve SyncService
+      final syncService = await ref.read(syncServiceProvider.future);
+      final jwt = await _setJwtOnRemoteApi(syncService);
+
+      // Run force full resync
+      return await syncService.forceFullResync(jwt: jwt);
+    } on SessionMismatchException {
+      await ref.read(authProvider.notifier).manualLogout();
+      return false;
+    } catch (e, _) {
+      state = SyncStatusData(
+        status: SyncStatus.error,
+        lastSyncTime: currentState.lastSyncTime,
+        pendingPushCount: currentState.pendingPushCount,
+        pendingPullCount: currentState.pendingPullCount,
+        conflictCount: currentState.conflictCount,
+        isOnline: currentState.isOnline,
+      );
+
+      final context = navigatorKey.currentContext;
+      if (context != null && context.mounted) {
+        showErrorToast(context: context, message: 'Resync failed: $e');
+      }
+      return false;
+    } finally {
+      // Refresh display state after sync attempt
+      await refresh();
+      await ref.read(creditStateProvider.notifier).refresh();
+      await ref.read(configServiceProvider).refresh();
+      await ref.read(authProvider.notifier).refreshSchoolFromDb();
+    }
+  }
+
   /// Refresh sync status from the database and service.
   Future<void> refresh() async {
     try {

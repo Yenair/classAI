@@ -816,33 +816,105 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ],
           const SizedBox(height: 16),
 
-          // Sync Now button
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: FilledButton.icon(
-              onPressed: () async {
-                try {
-                  await ref
-                      .read(syncStatusProvider.notifier)
-                      .refresh();
-                  if (context.mounted) {
-                    showInfoToast(
-                        context: context,
-                        message: 'Sync status refreshed');
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    showErrorToast(
-                        context: context,
-                        message:
-                            'Failed to refresh sync status: $e');
-                  }
-                }
-              },
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Check Sync Status'),
-            ),
+          // Sync Actions
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Recovery Actions',
+                style: textTheme.labelMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'If you are missing content or sync seems stuck, use the button below to perform a fresh data pull.',
+                style: textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: FilledButton.icon(
+                  onPressed: () async {
+                    final proceed = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: cs.surface,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        title: const Text('Force Full Resync?'),
+                        content: const Text(
+                          'This will re-download all data from the server. This may take longer than normal. Continue?',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(ctx).pop(false),
+                            child: const Text('Cancel'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.of(ctx).pop(true),
+                            child: const Text('Continue'),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (proceed == true) {
+                      try {
+                        final hasPushFailures = await ref
+                            .read(syncStatusProvider.notifier)
+                            .forceFullResync();
+                        
+                        if (hasPushFailures && context.mounted) {
+                          await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              backgroundColor: cs.surface,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                              title: const Text('Unsaved Changes Not Synced'),
+                              content: const Text(
+                                'Some local changes could not be sent to the server. These changes may be lost when the full resync overwrites local data. Check the sync queue for details.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(ctx).pop(),
+                                  child: const Text('OK'),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        
+                        if (context.mounted) {
+                          showInfoToast(
+                              context: context,
+                              message: 'Full resync completed');
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          showErrorToast(
+                              context: context,
+                              message: 'Failed to initiate resync: $e');
+                        }
+                      }
+                    }
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: cs.secondaryContainer,
+                    foregroundColor: cs.onSecondaryContainer,
+                  ),
+                  icon: const Icon(Icons.sync_problem_rounded),
+                  label: const Text('Force Full Resync'),
+                ),
+              ),
+            ],
           ),
         ],
       ),

@@ -519,6 +519,8 @@ abstract class SyncRecordStore {
 
   Future<void> removeQueueEntry(int queueId);
 
+  Future<void> clearVersionHashes();
+
   Future<SecurityConfigData> loadSecurityConfig();
 
   Future<void> updateSecurityConfig({
@@ -527,6 +529,7 @@ abstract class SyncRecordStore {
     DateTime? lastSyncAttemptTime,
     DateTime? syncCooldownUntil,
     int? lastRealtimeEventId,
+    bool clearCursor = false,
   });
 }
 
@@ -534,6 +537,11 @@ class DriftSyncRecordStore implements SyncRecordStore {
   final AppDatabase db;
 
   DriftSyncRecordStore(this.db);
+
+  @override
+  Future<void> clearVersionHashes() async {
+    await db.delete(db.versionHashes).go();
+  }
 
   @override
   Future<Map<String, dynamic>?> loadLocalRecord(String tableName, int localId) {
@@ -648,10 +656,11 @@ class DriftSyncRecordStore implements SyncRecordStore {
     DateTime? lastSyncAttemptTime,
     DateTime? syncCooldownUntil,
     int? lastRealtimeEventId,
+    bool clearCursor = false,
   }) {
     return db.securityConfigDao.updateConfig(
       lastPullTimestamp: lastPullTimestamp,
-      syncCursor: syncCursor,
+      syncCursor: clearCursor ? null : syncCursor,
       lastSyncAttemptTime: lastSyncAttemptTime,
       syncCooldownUntil: syncCooldownUntil,
       lastRealtimeEventId: lastRealtimeEventId,
@@ -718,6 +727,42 @@ class SyncService {
         mergeEngine = mergeEngine ?? MergeEngine();
 
   SyncState get state => _state;
+
+  /// Performs a full resync by first pushing any pending local changes,
+  /// then clearing the sync cursor and all version hashes.
+  /// This forces the next pull to fetch all records from the server and
+  /// re-merge them locally, effectively recovering from a stuck sync state.
+  ///
+  /// Pending changes are pushed FIRST to ensure local edits are not lost
+  /// when the version_hashes are cleared (which would cause the merge
+  /// to default to "remote wins" with no base for comparison).
+  ///
+  /// Returns true if there are still pending entries after the push phase
+  /// (indicating push failures that may result in data loss during the
+  /// subsequent full pull).
+  Future<bool> forceFullResync({String? jwt}) async {
+    debugPrint('[SYNC] Initiating force full resync...');
+    
+    // 1. Push any pending changes FIRST to preserve local edits
+    if (jwt != null && jwt.isNotEmpty && remoteApi is SupabaseSyncRemoteApi) {
+      (remoteApi as SupabaseSyncRemoteApi).setJwt(jwt);
+    }
+    await _pushChanges();
+    
+    // Check if push left any pending entries (push failures)
+    final pendingAfterPush = await store.loadPendingQueue();
+    final hasPushFailures = pendingAfterPush.isNotEmpty;
+    
+    // 2. Clear version hashes
+    await store.clearVersionHashes();
+    // 3. Clear sync cursor
+    await store.updateSecurityConfig(clearCursor: true);
+    // 4. Trigger a sync cycle
+    await onConnectivityRestored(jwt: jwt);
+    debugPrint('[SYNC] Force full resync completed.');
+    
+    return hasPushFailures;
+  }
 
   Future<void> onConnectivityRestored({String? jwt}) async {
     final config = await store.loadSecurityConfig();
