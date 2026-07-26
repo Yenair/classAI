@@ -1675,6 +1675,53 @@ class SyncService {
       local =
           await store.loadLocalRecord(change.table, localId) ?? const {};
       baseHash = await _loadBaseHash(change.table, localId);
+    } else if (change.table == 'scheme_of_work') {
+      final serverId = remote['server_id'] as String? ??
+          remote['id'] as String?;
+      if (serverId == null || serverId.isEmpty) {
+        debugPrint(
+          '[SYNC] _mergeRemoteChange: skipping scheme_of_work — no serverId',
+        );
+        return;
+      }
+
+      // Read-only lookup: find existing scheme_of_work by serverId.
+      final existing = await (db.select(db.schemeOfWork)
+            ..where((t) => t.serverId.equals(serverId)))
+          .get();
+
+      if (existing.isEmpty) {
+        // NEW scheme_of_work — upsert remote directly, write to
+        // versionHashes, skip three-way merge.
+        final newLocalId = await _upsertSchemeOfWorkFromSync(remote);
+        if (newLocalId == null) {
+          debugPrint(
+            '[SYNC] _mergeRemoteChange: skipping new scheme_of_work — '
+            'upsert returned null (unresolved FK)',
+          );
+          return;
+        }
+        await store.saveSyncedRecord(
+          tableName: 'scheme_of_work',
+          localId: newLocalId,
+          snapshot: remote,
+        );
+        _setState(SyncState.merging);
+        return;
+      }
+
+      // EXISTING scheme_of_work — use real localId for versionHashes ops.
+      if (existing.length > 1) {
+        debugPrint(
+          '[SYNC] _mergeRemoteChange: ${existing.length} local rows for '
+          'scheme_of_work serverId=$serverId — using lowest localId',
+        );
+        existing.sort((a, b) => a.id.compareTo(b.id));
+      }
+      localId = existing.first.id;
+      local =
+          await store.loadLocalRecord(change.table, localId) ?? const {};
+      baseHash = await _loadBaseHash(change.table, localId);
     } else {
       // For all remaining tables (scheme_of_work, progress_logs,
       // vault_items, payment_events) the remote payload may contain
@@ -1738,6 +1785,8 @@ class SyncService {
         await _upsertExamFromSync(result.merged);
       } else if (change.table == 'subjects') {
         await _upsertSubjectFromSync(result.merged);
+      } else if (change.table == 'scheme_of_work') {
+        await _upsertSchemeOfWorkFromSync(result.merged);
       }
 
       _setState(SyncState.merging);
@@ -2341,6 +2390,181 @@ class SyncService {
         ),
       ));
       debugPrint('[sync] _upsertSubjectFromSync: INSERTED subject $serverId');
+      return newLocalId;
+    }
+  }
+
+  /// Upserts a scheme_of_work row from synced remote data into the local
+  /// Drift [schemeOfWork] table. The [merged] map uses snake_case keys from
+  /// Supabase.
+  ///
+  /// Unlike lessons/exams/subjects which have simple text serverId columns
+  /// for their FKs, scheme_of_work has local integer FK columns
+  /// (schoolId, teacherId, subjectId) that reference the local integer PKs
+  /// of the schools, teachers, and subjects tables respectively. The remote
+  /// payload contains server UUIDs for these references, so each must be
+  /// resolved to its local integer ID via a serverId lookup.
+  ///
+  /// Returns the Drift [id] of the upserted row, or `null` if the upsert
+  /// was skipped (e.g. no serverId, or a required FK could not be resolved).
+  Future<int?> _upsertSchemeOfWorkFromSync(Map<String, dynamic> merged) async {
+    final serverId = merged['server_id'] as String? ??
+        merged['id'] as String?;
+    if (serverId == null || serverId.isEmpty) {
+      debugPrint(
+        '[sync] _upsertSchemeOfWorkFromSync skipped: no serverId in $merged',
+      );
+      return null;
+    }
+
+    // Look up existing scheme_of_work by serverId.
+    final existing = await (db.select(db.schemeOfWork)
+          ..where((t) => t.serverId.equals(serverId)))
+        .get();
+
+    // ── Resolve local integer FKs from server UUIDs ────────────────
+    // The remote payload contains UUID strings for school_id, teacher_id,
+    // and subject_id. We must look up the corresponding local integer PKs.
+
+    final schoolServerId = merged['school_id'] as String?;
+    int? resolvedSchoolId;
+    if (schoolServerId != null && schoolServerId.isNotEmpty) {
+      final schoolRows = await (db.select(db.schools)
+            ..where((s) => s.serverId.equals(schoolServerId)))
+          .get();
+      if (schoolRows.isNotEmpty) {
+        resolvedSchoolId = schoolRows.first.localId;
+      }
+    }
+    if (resolvedSchoolId == null) {
+      debugPrint(
+        '[sync] _upsertSchemeOfWorkFromSync: cannot resolve school_id '
+        '($schoolServerId) — skipping scheme_of_work $serverId',
+      );
+      return null;
+    }
+
+    final teacherServerId = merged['teacher_id'] as String?;
+    int? resolvedTeacherId;
+    if (teacherServerId != null && teacherServerId.isNotEmpty) {
+      final teacherRows = await (db.select(db.teachers)
+            ..where((t) => t.serverId.equals(teacherServerId)))
+          .get();
+      if (teacherRows.isNotEmpty) {
+        resolvedTeacherId = teacherRows.first.localId;
+      }
+    }
+    if (resolvedTeacherId == null) {
+      debugPrint(
+        '[sync] _upsertSchemeOfWorkFromSync: cannot resolve teacher_id '
+        '($teacherServerId) — skipping scheme_of_work $serverId',
+      );
+      return null;
+    }
+
+    final subjectServerId = merged['subject_id'] as String?;
+    int? resolvedSubjectId;
+    if (subjectServerId != null && subjectServerId.isNotEmpty) {
+      final subjectRows = await (db.select(db.subjects)
+            ..where((s) => s.serverId.equals(subjectServerId)))
+          .get();
+      if (subjectRows.isNotEmpty) {
+        resolvedSubjectId = subjectRows.first.id;
+      }
+    }
+    if (resolvedSubjectId == null) {
+      debugPrint(
+        '[sync] _upsertSchemeOfWorkFromSync: cannot resolve subject_id '
+        '($subjectServerId) — skipping scheme_of_work $serverId',
+      );
+      return null;
+    }
+
+    // ── Map snake_case remote fields to Drift column values ────────
+    String? strVal(String key) => merged[key] as String?;
+    bool boolVal(String key) =>
+        merged[key] == true || merged[key] == 'true';
+    int? intVal(String key) => _readInt(merged, key);
+    DateTime? dateVal(String key) {
+      final raw = merged[key];
+      if (raw == null) return null;
+      if (raw is DateTime) return raw;
+      if (raw is String) return DateTime.tryParse(raw);
+      return null;
+    }
+
+    final term = strVal('term') ?? '';
+    final weekNumber = intVal('week_number') ?? 1;
+    final topic = strVal('topic') ?? '';
+    final objectives = strVal('objectives') ?? '';
+    final status = strVal('status') ?? 'draft';
+    final adminEditedTopic = strVal('admin_edited_topic');
+    final adminComment = strVal('admin_comment');
+    final updateCounter = intVal('update_counter') ?? 0;
+    final isDeleted = boolVal('is_deleted');
+    final classLevel = strVal('class_level') ?? '';
+    final createdAt = dateVal('created_at') ?? DateTime.now();
+    final updatedAt = dateVal('updated_at') ?? DateTime.now();
+
+    if (existing.isNotEmpty) {
+      // Update existing scheme_of_work record.
+      final existingRow = existing.first;
+      await (db.update(db.schemeOfWork)
+            ..where((t) => t.id.equals(existingRow.id)))
+          .write(SchemeOfWorkCompanion(
+        serverId: Value(serverId),
+        schoolId: Value(resolvedSchoolId),
+        teacherId: Value(resolvedTeacherId),
+        subjectId: Value(resolvedSubjectId),
+        term: Value(term),
+        weekNumber: Value(weekNumber),
+        topic: Value(topic),
+        objectives: Value(objectives),
+        status: Value(status),
+        adminEditedTopic: adminEditedTopic != null
+            ? Value(adminEditedTopic)
+            : const Value.absent(),
+        adminComment: adminComment != null
+            ? Value(adminComment)
+            : const Value.absent(),
+        updateCounter: Value(updateCounter),
+        isDeleted: Value(isDeleted),
+        classLevel: Value(classLevel),
+        updatedAt: Value(updatedAt),
+      ));
+      debugPrint(
+        '[sync] _upsertSchemeOfWorkFromSync: UPDATED scheme_of_work $serverId',
+      );
+      return existingRow.id;
+    } else {
+      // Insert new scheme_of_work record.
+      final newLocalId = await (db.into(db.schemeOfWork).insert(
+        SchemeOfWorkCompanion.insert(
+          serverId: Value(serverId),
+          schoolId: Value(resolvedSchoolId),
+          teacherId: Value(resolvedTeacherId),
+          subjectId: Value(resolvedSubjectId),
+          term: Value(term),
+          weekNumber: Value(weekNumber),
+          topic: Value(topic),
+          objectives: Value(objectives),
+          status: Value(status),
+          adminEditedTopic: adminEditedTopic != null
+              ? Value(adminEditedTopic)
+              : const Value.absent(),
+          adminComment: adminComment != null
+              ? Value(adminComment)
+              : const Value.absent(),
+          updateCounter: Value(updateCounter),
+          isDeleted: Value(isDeleted),
+          classLevel: Value(classLevel),
+          createdAt: Value(createdAt),
+          updatedAt: Value(updatedAt),
+        ),
+      ));
+      debugPrint(
+        '[sync] _upsertSchemeOfWorkFromSync: INSERTED scheme_of_work $serverId',
+      );
       return newLocalId;
     }
   }
