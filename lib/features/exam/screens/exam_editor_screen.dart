@@ -58,6 +58,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   bool _isOnline = true;
   int? _examId;
   bool _editorSidebarOpen = false;
+  bool _sidebarInitialized = false;
   int _creditBalance = 3;
   int _remainingDailyPreviews = 10;
   String? _teacherId;
@@ -160,6 +161,17 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (!_sidebarInitialized) {
+      _sidebarInitialized = true;
+      // Synchronous — renders correctly on the very first frame, no flash
+      _editorSidebarOpen = MediaQuery.of(context).size.shortestSide >= 600;
+      // Async override only triggers setState if SharedPreferences has a saved override
+      PlatformHelper.isEditorMode(context).then((isEditor) {
+        if (mounted && isEditor != _editorSidebarOpen) {
+          setState(() => _editorSidebarOpen = isEditor);
+        }
+      });
+    }
     if (_routeDefaultsApplied || widget.examId != null) {
       return;
     }
@@ -1161,9 +1173,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         schemeOfWorkId: schemeOfWorkIdStr != null
             ? Value(schemeOfWorkIdStr)
             : const Value.absent(),
-        weekNumber: _isFromSchemeOfWork
-            ? Value(_week)
-            : const Value.absent(),
+        weekNumber: Value(_week),
         term: termLabel != null ? Value(termLabel) : const Value.absent(),
         updatedAt: Value(DateTime.now()),
       );
@@ -1214,9 +1224,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
           schemeOfWorkId: schemeOfWorkIdStr != null
               ? Value(schemeOfWorkIdStr)
               : const Value.absent(),
-          weekNumber: _isFromSchemeOfWork
-              ? Value(_week)
-              : const Value.absent(),
+          weekNumber: Value(_week),
           term: termLabel != null ? Value(termLabel) : const Value.absent(),
           createdAt: Value(DateTime.now()),
           isDeleted: const Value(false),
@@ -1243,9 +1251,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       if (schemeOfWorkIdStr != null) {
         payload['scheme_of_work_id'] = schemeOfWorkIdStr;
       }
-      if (_isFromSchemeOfWork) {
-        payload['week_number'] = _week;
-      }
+      payload['week_number'] = _week;
       if (termLabel != null) {
         payload['term'] = termLabel;
       }

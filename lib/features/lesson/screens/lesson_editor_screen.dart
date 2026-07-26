@@ -69,7 +69,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   bool _isUnlocked = false;
   bool _isOnline = true;
   bool _isExporting = false;
-  bool _editorSidebarOpen = true;
+  bool _editorSidebarOpen = false;
+  bool _sidebarInitialized = false;
   int _creditBalance = 0;
   int _remainingDailyPreviews = 10;
   String? _encryptedContent;
@@ -140,6 +141,22 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     super.initState();
     _lessonId = widget.lessonId;
     _checkConnectivity();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_sidebarInitialized) {
+      _sidebarInitialized = true;
+      // Synchronous — renders correctly on the very first frame, no flash
+      _editorSidebarOpen = MediaQuery.of(context).size.shortestSide >= 600;
+      // Async override only triggers setState if SharedPreferences has a saved override
+      PlatformHelper.isEditorMode(context).then((isEditor) {
+        if (mounted && isEditor != _editorSidebarOpen) {
+          setState(() => _editorSidebarOpen = isEditor);
+        }
+      });
+    }
   }
 
   Future<void> _checkConnectivity() async {
@@ -957,9 +974,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         schemeOfWorkId: schemeOfWorkIdStr != null
             ? Value(schemeOfWorkIdStr)
             : const Value.absent(),
-        weekNumber: _isFromSchemeOfWork
-            ? Value(_week)
-            : const Value.absent(),
+        weekNumber: Value(_week),
         term: termLabel != null ? Value(termLabel) : const Value.absent(),
         updatedAt: Value(DateTime.now()),
       );
@@ -998,7 +1013,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
               'content': lessonContent,
               'is_unlocked': _isUnlocked,
               if (schemeOfWorkIdStr != null) 'scheme_of_work_id': schemeOfWorkIdStr,
-              if (_isFromSchemeOfWork) 'week_number': _week,
+              'week_number': _week,
               if (termLabel != null) 'term': termLabel,
             },
           );
@@ -1042,9 +1057,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           schemeOfWorkId: schemeOfWorkIdStr != null
               ? Value(schemeOfWorkIdStr)
               : const Value.absent(),
-          weekNumber: _isFromSchemeOfWork
-              ? Value(_week)
-              : const Value.absent(),
+          weekNumber: Value(_week),
           term: termLabel != null ? Value(termLabel) : const Value.absent(),
         ),
       );
@@ -1069,7 +1082,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           'content_hash': lessonContent.hashCode.toString(),
           'is_unlocked': _isUnlocked,
           if (schemeOfWorkIdStr != null) 'scheme_of_work_id': schemeOfWorkIdStr,
-          if (_isFromSchemeOfWork) 'week_number': _week,
+          'week_number': _week,
           if (termLabel != null) 'term': termLabel,
         },
       );
