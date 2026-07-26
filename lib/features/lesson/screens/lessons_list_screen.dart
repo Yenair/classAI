@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
+
 import 'package:drift/drift.dart' hide Column;
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/providers/pdf_service_provider.dart';
@@ -41,6 +43,36 @@ class LessonsListScreen extends ConsumerStatefulWidget {
 }
 
 class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
+  /// Shows a confirmation dialog when the system back button is pressed on a
+  /// root-level route. If the user confirms, the app is closed.
+  void _showQuitConfirmation(BuildContext ctx) {
+    showDialog<void>(
+      context: ctx,
+      barrierDismissible: true,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        title: const Text('Quit ClassAI?'),
+        content: const Text('Are you sure you want to quit the app?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              SystemNavigator.pop();
+            },
+            child: const Text('Quit'),
+          ),
+        ],
+      ),
+    );
+  }
+
   static const _termFilters = ['All', '1st Term', '2nd Term', '3rd Term'];
   static const _statusFilters = [
     _StatusFilterItem('All', Icons.layers_rounded),
@@ -438,9 +470,13 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && mounted) {
-          WidgetsBinding.instance.addPostFrameCallback(
-            (_) => Navigator.of(context).pop(),
-          );
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            } else {
+              _showQuitConfirmation(context);
+            }
+          });
         }
       },
       child: Scaffold(
