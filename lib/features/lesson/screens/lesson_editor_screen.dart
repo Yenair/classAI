@@ -18,7 +18,10 @@ import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
-import 'package:classai/features/lesson/screens/lessons_list_screen.dart';
+import 'package:classai/features/dashboard/providers/dashboard_data_providers.dart'
+    show lessonsListProvider;
+import 'package:classai/features/lesson/screens/lessons_list_screen.dart'
+    show exportLessonPdf;
 import 'package:classai/core/services/diagram_service.dart'
     show DiagramService, DiagramRequest, DiagramImage;
 import 'package:classai/main.dart' show databaseProvider;
@@ -228,7 +231,10 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       final subjects = await db.subjectsDao.getAll();
       if (mounted) {
         setState(() {
-          _loadedSubjects = subjects.map((s) => s.name).toList();
+          // Deduplicate: subjects table has no unique constraint on name,
+          // so the same name may appear in multiple rows. .toSet() preserves
+          // the sortOrder ordering from the query while removing duplicates.
+          _loadedSubjects = subjects.map((s) => s.name).toSet().toList();
         });
       }
     } catch (_) {

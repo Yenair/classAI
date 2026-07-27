@@ -248,7 +248,10 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       final subjects = await db.subjectsDao.getAll();
       if (mounted) {
         setState(() {
-          _loadedSubjects = subjects.map((s) => s.name).toList();
+          // Deduplicate: subjects table has no unique constraint on name,
+          // so the same name may appear in multiple rows. .toSet() preserves
+          // the sortOrder ordering from the query while removing duplicates.
+          _loadedSubjects = subjects.map((s) => s.name).toSet().toList();
         });
       }
     } catch (_) {
