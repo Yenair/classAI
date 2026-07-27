@@ -839,26 +839,55 @@ serve(async (req) => {
 
           console.log(`[SYNC-PUSH-DIAG] INSERT data after resolveForeignKeys: ${JSON.stringify(insertData)}`);
 
-          const { data: insertData_, error } = await supabase
-            .from(table)
-            .insert(insertData)
-            .select("id");
-          if (error) {
-            console.warn(`sync-push: INSERT error on "${table}" (local_id=${localId}): ${error.message}`);
-            console.warn(`sync-push: INSERT data was: ${JSON.stringify(insertData)}`);
-            results.push({ local_id: localId, server_id: null, status: "error", retryable: true, error: error.message });
-            continue;
+          // ── UPSERT if payload includes server_id (handles stale INSERT
+          //    from a client crash between _updateLocalServerId and
+          //    removeQueueEntry) ────────────────────────────────────────
+          const insertServerId = getValue(insertData, "server_id", "serverId");
+          if (insertServerId) {
+            console.log(`[SYNC-PUSH-DIAG] UPSERT detected server_id=${insertServerId} (table=${table}, local_id=${localId})`);
+            const { data: upsertData_, error } = await supabase
+              .from(table)
+              .upsert(insertData, { onConflict: "server_id", ignoreDuplicates: false })
+              .select("id");
+            if (error) {
+              console.warn(`sync-push: UPSERT error on "${table}" (local_id=${localId}): ${error.message}`);
+              console.warn(`sync-push: UPSERT data was: ${JSON.stringify(insertData)}`);
+              results.push({ local_id: localId, server_id: null, status: "error", retryable: true, error: error.message });
+              continue;
+            }
+            const serverId = upsertData_?.[0]?.id as string | undefined;
+            console.log(`[SYNC-PUSH-DIAG] UPSERT result: localId=${localId}, serverId=${serverId ?? "null"}, upsertData_=${JSON.stringify(upsertData_)}`);
+            results.push({
+              local_id: localId,
+              server_id: serverId ?? null,
+              status: "updated",
+              retryable: false,
+            });
+            processed++;
+          } else {
+            // First-time INSERT — no server_id, no conflict possible.
+            // The UNIQUE constraint on server_id is the last-line defence.
+            console.log(`[SYNC-PUSH-DIAG] INSERT (no server_id) on table=${table}, local_id=${localId}`);
+            const { data: insertData_, error } = await supabase
+              .from(table)
+              .insert(insertData)
+              .select("id");
+            if (error) {
+              console.warn(`sync-push: INSERT error on "${table}" (local_id=${localId}): ${error.message}`);
+              console.warn(`sync-push: INSERT data was: ${JSON.stringify(insertData)}`);
+              results.push({ local_id: localId, server_id: null, status: "error", retryable: true, error: error.message });
+              continue;
+            }
+            const generatedId = insertData_?.[0]?.id as string | undefined;
+            console.log(`[SYNC-PUSH-DIAG] INSERT result: localId=${localId}, generatedId=${generatedId ?? "null"}, insertData_=${JSON.stringify(insertData_)}`);
+            results.push({
+              local_id: localId,
+              server_id: generatedId ?? null,
+              status: "created",
+              retryable: false,
+            });
+            processed++;
           }
-          const generatedId = insertData_?.[0]?.id as string | undefined;
-          // DIAG: Log what INSERT returned
-          console.log(`[SYNC-PUSH-DIAG] INSERT result: localId=${localId}, generatedId=${generatedId ?? "null"}, insertData_=${JSON.stringify(insertData_)}`);
-          results.push({
-            local_id: localId,
-            server_id: generatedId ?? null,
-            status: "created",
-            retryable: false,
-          });
-          processed++;
         } else if (op === "UPDATE") {
           // For UPDATES the client must include server_id in rowData
           const serverId = getValue(fullRowData, "server_id", "serverId", "id");

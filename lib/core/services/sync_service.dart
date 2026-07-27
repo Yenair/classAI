@@ -839,6 +839,17 @@ class SyncService {
   }
 
   Future<void> _pullChanges({String? schoolIdOverride}) async {
+    // ── Push FIRST ────────────────────────────────────────────────────
+    // Push local changes (INSERTs, UPDATEs, DELETEs) to the server before
+    // pulling remote changes. This ensures that locally created rows with
+    // serverId == null are uploaded first — the server returns the generated
+    // serverId, which _pushChanges stores locally via _updateLocalServerId().
+    // When the pull phase runs next, the upsert logic in _mergeRemoteChange
+    // finds the matching serverId and UPDATES the row instead of INSERTing
+    // a duplicate. See FIX A — pull-before-push ordering bug.
+    _setState(SyncState.pushing);
+    await _pushChanges();
+    // ── Pull SECOND ───────────────────────────────────────────────────
     _setState(SyncState.pulling);
 
     // ── One-shot duplicate cleanup ──────────────────────────────────────
@@ -965,8 +976,6 @@ class SyncService {
       }
     }
 
-    _setState(SyncState.pushing);
-    await _pushChanges();
     // Check subscription expiry using server time after a successful pull.
     await _checkSubscriptionExpiry();
     _setState(SyncState.applyingCredits);
@@ -1106,12 +1115,40 @@ class SyncService {
           'operation=${entry.operation}, '
           'localId=${entry.recordLocalId}, '
           'attempts=${entry.attempts}');
+
+      // ── Stale-INSERT recovery ──────────────────────────────────────────
+      // If the local record already has a serverId but the queue entry says
+      // INSERT, the previous push succeeded (row created on server, UUID
+      // stored locally via _updateLocalServerId) but the cleanup
+      // (saveSyncedRecord + removeQueueEntry) was interrupted by a crash.
+      //
+      // Without this check, the stale INSERT re-pushes as a plain INSERT
+      // without a server_id, causing the server to create a duplicate row.
+      //
+      // Fix: detect the stale INSERT, inject the server_id into the payload,
+      // and change the operation to UPDATE. The sync-push edge function then
+      // uses upsert().onConflict('server_id') instead of plain .insert().
+      String effectiveOperation = entry.operation;
+      if (effectiveOperation == 'INSERT') {
+        final serverId = await _getServerIdForQueueEntry(db, entry);
+        if (serverId != null && serverId.isNotEmpty) {
+          debugPrint(
+            '[PUSH-DIAG] Stale INSERT detected for ${entry.queueTable} '
+            'localId=${entry.recordLocalId}, serverId=$serverId — '
+            'injecting server_id, converting to upsert',
+          );
+          payload['server_id'] = serverId;
+          effectiveOperation = 'UPDATE';
+        }
+      }
+      // ───────────────────────────────────────────────────────────────────
+
       // Inject local_id so the server can echo it back in the results
       // array, enabling the client to match responses to entries.
       payload['local_id'] = entry.recordLocalId;
       // DIAG: Log the payload BEFORE compression to verify local_id was injected
       debugPrint('[PUSH-DIAG] Pre-compress payload for entry ${entry.id} '
-          '(table=${entry.queueTable}, op=${entry.operation}): '
+          '(table=${entry.queueTable}, op=$effectiveOperation): '
           'local_id=${payload['local_id']}, '
           'payload_keys=${payload.keys.join(', ')}');
       // Compress payload for 2G/3G optimization before pushing.
@@ -1122,7 +1159,7 @@ class SyncService {
       batches.add(
         SyncPushBatch(
           table: entry.queueTable,
-          operation: entry.operation,
+          operation: effectiveOperation,
           record: compressed,
         ),
       );
@@ -2860,4 +2897,48 @@ int? _readInt(Map<String, dynamic> map, String key) {
   if (value is int) return value;
   if (value is String) return int.tryParse(value);
   return null;
+}
+
+/// Top-level helper: returns the serverId of a local record if it exists
+/// and has one. Used by SyncService._pushChanges() to detect stale INSERT
+/// queue entries where the previous push succeeded (row created, UUID returned
+/// from server) but the cleanup was interrupted by a crash.
+Future<String?> _getServerIdForQueueEntry(
+  AppDatabase db,
+  SyncQueueData entry,
+) async {
+  switch (entry.queueTable) {
+    case 'lessons':
+      final row = await (db.select(db.lessons)
+            ..where((t) => t.id.equals(entry.recordLocalId)))
+          .getSingleOrNull();
+      return row?.serverId;
+    case 'exams':
+      final row = await (db.select(db.exams)
+            ..where((t) => t.id.equals(entry.recordLocalId)))
+          .getSingleOrNull();
+      return row?.serverId;
+    case 'scheme_of_work':
+      final row = await (db.select(db.schemeOfWork)
+            ..where((t) => t.id.equals(entry.recordLocalId)))
+          .getSingleOrNull();
+      return row?.serverId;
+    case 'subjects':
+      final row = await (db.select(db.subjects)
+            ..where((t) => t.id.equals(entry.recordLocalId)))
+          .getSingleOrNull();
+      return row?.serverId;
+    case 'vault_items':
+      final row = await (db.select(db.vaultItems)
+            ..where((t) => t.id.equals(entry.recordLocalId)))
+          .getSingleOrNull();
+      return row?.serverId;
+    case 'progress_logs':
+      final row = await (db.select(db.progressLogs)
+            ..where((t) => t.id.equals(entry.recordLocalId)))
+          .getSingleOrNull();
+      return row?.serverId;
+    default:
+      return null;
+  }
 }
