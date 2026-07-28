@@ -11,6 +11,7 @@ import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/features/dashboard/providers/unresolved_conflicts_provider.dart';
+import 'package:classai/features/dashboard/providers/dashboard_data_providers.dart';
 import 'package:classai/features/settings/providers/theme_provider.dart';
 import 'package:classai/core/services/payment_service.dart';
 import 'package:classai/core/database/database.dart';
@@ -1699,89 +1700,9 @@ class _RightColumn extends ConsumerWidget {
 //  Matches stitch_design_v2/dashboard_reader_phone/code.html
 // ═══════════════════════════════════════════════════════════════════════════
 
-/// Provider that fetches the most recent lessons for the phone dashboard.
-final recentLessonsProvider = FutureProvider<List<Lesson>>((ref) async {
-  final db = ref.read(databaseProvider);
-  return db.lessonsDao.getRecentLessons(limit: 5);
-});
-
-/// Holds a total count, a draft sub-count, and a secondary count (completed/unlocked).
-class _CountData {
-  final int total;
-  final int draftCount;
-  final int secondaryCount;
-  const _CountData({
-    required this.total,
-    required this.draftCount,
-    this.secondaryCount = 0,
-  });
-}
-
-/// Provider that fetches the total count of lessons, drafts, and completed
-/// for the current teacher.
-final lessonCountProvider = FutureProvider<_CountData>((ref) async {
-  final db = ref.read(databaseProvider);
-  final authData = ref.watch(authProvider);
-  final teacherId = authData.currentTeacher?.serverId;
-  if (teacherId == null) {
-    return const _CountData(total: 0, draftCount: 0, secondaryCount: 0);
-  }
-  final lessons = await db.lessonsDao.getAllForTeacher(teacherId);
-  final draftCount = lessons.where((l) => l.status == 'draft').length;
-  final completedCount = lessons.where((l) => l.status == 'completed').length;
-  return _CountData(
-    total: lessons.length,
-    draftCount: draftCount,
-    secondaryCount: completedCount,
-  );
-});
-
-/// Provider that fetches the total count of exams, drafts, and unlocked
-/// for the current teacher.
-final examCountProvider = FutureProvider<_CountData>((ref) async {
-  final db = ref.read(databaseProvider);
-  final authData = ref.watch(authProvider);
-  final teacherId = authData.currentTeacher?.serverId;
-  if (teacherId == null) {
-    return const _CountData(total: 0, draftCount: 0, secondaryCount: 0);
-  }
-  final exams = await db.examsDao.getAllForTeacher(teacherId);
-  final draftCount = exams.where((e) => !e.isUnlocked).length;
-  final unlockedCount = exams.where((e) => e.isUnlocked).length;
-  return _CountData(
-    total: exams.length,
-    draftCount: draftCount,
-    secondaryCount: unlockedCount,
-  );
-});
-
-final todayLessonCountProvider = FutureProvider<int>((ref) async {
-  final db = ref.read(databaseProvider);
-  final authData = ref.watch(authProvider);
-  final teacherId = authData.currentTeacher?.serverId;
-  if (teacherId == null) return 0;
-  final lessons = await db.lessonsDao.getAllForTeacher(teacherId);
-  final today = DateTime.now();
-  return lessons
-      .where((lesson) =>
-          lesson.createdAt.year == today.year &&
-          lesson.createdAt.month == today.month &&
-          lesson.createdAt.day == today.day)
-      .length;
-});
-
-final lastUpdatedLessonProvider = FutureProvider<Lesson?>((ref) async {
-  final db = ref.read(databaseProvider);
-  final authData = ref.read(authProvider);
-  final teacherId = authData.currentTeacher?.serverId;
-  final lessons = await db.lessonsDao.getAll();
-  final filtered = teacherId == null
-      ? lessons
-      : lessons.where((lesson) => lesson.teacherServerId == teacherId).toList();
-  if (filtered.isEmpty) return null;
-  filtered.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-  return filtered.first;
-});
+// Providers (recentLessonsProvider, lessonCountProvider, examCountProvider,
+// todayLessonCountProvider, lastUpdatedLessonProvider, CountData) are
+// defined in lib/features/dashboard/providers/dashboard_data_providers.dart.
 
 class CurrentWeekProgressData {
   final int weekNumber;

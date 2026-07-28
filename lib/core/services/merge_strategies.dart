@@ -1,19 +1,16 @@
 import 'merge_engine.dart';
 
 const lessonMergeStrategies = {
-  'title': MergeStrategy.lwwByUpdateCounter,
-  'content': MergeStrategy.lwwByUpdateCounter,
+  'title': MergeStrategy.lwwByUpdateCounterThenUpdatedAt,
+  'content': MergeStrategy.lwwByUpdateCounterThenUpdatedAt,
   'objectives': MergeStrategy.union,
   'materials': MergeStrategy.union,
-  'assessment': MergeStrategy.lwwByUpdateCounter,
-  'homework': MergeStrategy.lwwByUpdateCounter,
 };
 
 const examMergeStrategies = {
-  'title': MergeStrategy.lwwByUpdateCounter,
+  'title': MergeStrategy.lwwByUpdateCounterThenUpdatedAt,
   'questions': MergeStrategy.union,
   'theoryQuestions': MergeStrategy.union,
-  'markingScheme': MergeStrategy.lwwByUpdateCounter,
 };
 
 const schemeOfWorkMergeStrategies = {

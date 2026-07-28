@@ -11,6 +11,7 @@ import 'package:classai/features/auth/providers/auth_provider.dart'
     show authProvider, authServiceProvider, securityServiceProvider;
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart'
     show creditStateProvider;
+import 'package:classai/features/dashboard/providers/dashboard_data_providers.dart';
 import 'package:classai/main.dart' show databaseProvider, navigatorKey;
 
 /// Possible sync statuses for UI display.
@@ -196,6 +197,13 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
       // Refresh in-memory school state so any tier/school-name change
       // from the sync pull is visible immediately (no re-login required).
       await ref.read(authProvider.notifier).refreshSchoolFromDb();
+      // Invalidate lesson/exam list and count providers so the UI reflects
+      // any new/updated data pulled during sync.
+      ref.invalidate(lessonsListProvider);
+      ref.invalidate(examsListProvider);
+      ref.invalidate(recentLessonsProvider);
+      ref.invalidate(lessonCountProvider);
+      ref.invalidate(examCountProvider);
     } on SessionMismatchException {
       // Session was invalidated by a login on another device — force logout
       await ref.read(authProvider.notifier).manualLogout();
@@ -278,6 +286,13 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
     // Refresh in-memory school state so any tier/school-name change
     // from the sync pull is visible immediately (no re-login required).
     await ref.read(authProvider.notifier).refreshSchoolFromDb();
+    // Invalidate lesson/exam list and count providers so the UI reflects
+    // any new/updated data pulled during sync.
+    ref.invalidate(lessonsListProvider);
+    ref.invalidate(examsListProvider);
+    ref.invalidate(recentLessonsProvider);
+    ref.invalidate(lessonCountProvider);
+    ref.invalidate(examCountProvider);
   }
 
   /// Triggers a forced full resync.

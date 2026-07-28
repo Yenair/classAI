@@ -12,20 +12,16 @@ import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
 import 'package:classai/features/dashboard/providers/unresolved_conflicts_provider.dart';
+import 'package:classai/features/dashboard/providers/dashboard_data_providers.dart'
+    show examsListProvider;
 import 'package:classai/main.dart' show databaseProvider;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Provider that fetches all exams for the current teacher from the database.
-final examsListProvider = FutureProvider<List<Exam>>((ref) async {
-  final db = ref.read(databaseProvider);
-  final authData = ref.watch(authProvider);
-  final teacherId = authData.currentTeacher?.serverId;
-  if (teacherId == null) return [];
-  return db.examsDao.getAllForTeacher(teacherId);
-});
+/// examsListProvider is defined in
+/// lib/features/dashboard/providers/dashboard_data_providers.dart.
 
 /// Displays a list of exams from the local database.
 class ExamsListScreen extends ConsumerStatefulWidget {

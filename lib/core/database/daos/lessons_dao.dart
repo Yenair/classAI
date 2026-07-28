@@ -36,6 +36,20 @@ class LessonsDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
+  /// Get the most recent **non‑deleted** lessons for a specific teacher,
+  /// ordered by createdAt descending, limited to [limit].
+  Future<List<Lesson>> getRecentLessonsForTeacher(
+    String teacherServerId, {
+    int limit = 5,
+  }) {
+    return (select(lessons)
+          ..where((t) => t.teacherServerId.equals(teacherServerId))
+          ..where((t) => t.isDeleted.equals(false))
+          ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)])
+          ..limit(limit))
+        .get();
+  }
+
   /// Get lessons by subject (ID is the subject name string in the lessons table).
   Future<List<Lesson>> getBySubject(int subjectId) {
     return (select(lessons)

@@ -8,7 +8,7 @@ import 'package:classai/main.dart' show databaseProvider;
 import 'package:classai/features/dashboard/providers/unresolved_conflicts_provider.dart';
 
 /// Screen that lists all unresolved sync conflicts and allows the user to
-/// resolve them by choosing "Keep Mine", "Keep Theirs", or "Merge".
+/// resolve them by choosing "Keep Mine" or "Keep Theirs".
 class ConflictResolutionScreen extends ConsumerStatefulWidget {
   const ConflictResolutionScreen({super.key});
 
@@ -280,6 +280,116 @@ class _ConflictCard extends StatelessWidget {
     return value.toString();
   }
 
+  /// Threshold in characters above which a field value is truncated inline
+  /// with a "View full text" option. Set to 150 because typical short fields
+  /// (topic, title, term) fit well under this limit, while longer content
+  /// (notes, description, lesson_body) benefits from collapsed display.
+  static const int _inlineThreshold = 150;
+
+  /// Builds a display widget for a field value, truncating if it exceeds
+  /// [_inlineThreshold] characters and providing a "View full text" tap
+  /// target that opens a comparison dialog.
+  Widget _buildValueDisplay(
+    BuildContext context,
+    ColorScheme cs,
+    String field,
+    dynamic currentValue,
+    dynamic otherValue,
+  ) {
+    final formatted = _formatValue(currentValue);
+    if (formatted.length <= _inlineThreshold) {
+      return Text(
+        formatted,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              fontFamily: 'monospace',
+            ),
+      );
+    }
+
+    final preview = '${formatted.substring(0, _inlineThreshold)}...';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          preview,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontFamily: 'monospace',
+              ),
+        ),
+        const SizedBox(height: 4),
+        GestureDetector(
+          onTap: () =>
+              _showComparisonDialog(context, field, currentValue, otherValue),
+          child: Text(
+            'View full text',
+            style: TextStyle(
+              color: cs.primary,
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Shows a scrollable dialog comparing both versions of a long field.
+  void _showComparisonDialog(
+    BuildContext context,
+    String field,
+    dynamic localVal,
+    dynamic remoteVal,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(field),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Offline Version:',
+                style: Theme.of(context)
+                    .textTheme
+                    .labelMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              SelectableText(
+                _formatValue(localVal),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontFamily: 'monospace',
+                    ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Online Version:',
+                style: Theme.of(context)
+                    .textTheme
+                    .labelMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              SelectableText(
+                _formatValue(remoteVal),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontFamily: 'monospace',
+                    ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -348,15 +458,14 @@ class _ConflictCard extends StatelessWidget {
                           ),
                     ),
                     const SizedBox(height: 4),
-                    // Local value — surrounded by fixed-width container
-                    // to avoid Expanded-in-nested-Column intrinsic sizing issues
+                    // Offline version value — with truncation support
                     SizedBox(
                       width: double.infinity,
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Container(
-                            width: 56,
+                            width: 96,
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 5),
                             decoration: BoxDecoration(
@@ -365,7 +474,7 @@ class _ConflictCard extends StatelessWidget {
                             ),
                             child: Center(
                               child: Text(
-                                'Local:',
+                                'Offline Version:',
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodySmall
@@ -387,14 +496,12 @@ class _ConflictCard extends StatelessWidget {
                                     cs.primaryContainer.withValues(alpha: 0.16),
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: Text(
-                                _formatValue(localMap[field]),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      fontFamily: 'monospace',
-                                    ),
+                              child: _buildValueDisplay(
+                                context,
+                                cs,
+                                field,
+                                localMap[field],
+                                remoteMap[field],
                               ),
                             ),
                           ),
@@ -402,14 +509,14 @@ class _ConflictCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    // Remote value
+                    // Online version value — with truncation support
                     SizedBox(
                       width: double.infinity,
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Container(
-                            width: 56,
+                            width: 96,
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 5),
                             decoration: BoxDecoration(
@@ -418,7 +525,7 @@ class _ConflictCard extends StatelessWidget {
                             ),
                             child: Center(
                               child: Text(
-                                'Remote:',
+                                'Online Version:',
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodySmall
@@ -439,14 +546,12 @@ class _ConflictCard extends StatelessWidget {
                                 color: cs.errorContainer.withValues(alpha: 0.18),
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: Text(
-                                _formatValue(remoteMap[field]),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      fontFamily: 'monospace',
-                                    ),
+                              child: _buildValueDisplay(
+                                context,
+                                cs,
+                                field,
+                                remoteMap[field],
+                                localMap[field],
                               ),
                             ),
                           ),
@@ -463,32 +568,35 @@ class _ConflictCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                TextButton(
-                  onPressed: () => onResolve(conflict, 'local'),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
+                Tooltip(
+                  triggerMode: TooltipTriggerMode.longPress,
+                  message:
+                      'Keeps the version on this device. The other device\'s change will be replaced.',
+                  child: TextButton(
+                    onPressed: () => onResolve(conflict, 'local'),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
                     ),
+                    child: const Text('Keep Mine'),
                   ),
-                  child: const Text('Keep Mine'),
                 ),
                 const SizedBox(width: 4),
-                TextButton(
-                  onPressed: () => onResolve(conflict, 'remote'),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
+                Tooltip(
+                  triggerMode: TooltipTriggerMode.longPress,
+                  message:
+                      'Replaces this device\'s version with the one from the other device.',
+                  child: TextButton(
+                    onPressed: () => onResolve(conflict, 'remote'),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
                     ),
-                  ),
-                  child: const Text('Keep Theirs'),
-                ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: FilledButton.tonal(
-                    onPressed: () => onResolve(conflict, 'merged'),
-                    child: const Text('Merge'),
+                    child: const Text('Keep Theirs'),
                   ),
                 ),
               ],

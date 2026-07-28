@@ -16,6 +16,8 @@ import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
 import 'package:classai/features/dashboard/providers/unresolved_conflicts_provider.dart';
+import 'package:classai/features/dashboard/providers/dashboard_data_providers.dart'
+    show lessonsListProvider;
 import 'package:classai/main.dart' show databaseProvider;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -25,14 +27,8 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
 
-/// Provider that fetches all lessons for the current teacher from the database.
-final lessonsListProvider = FutureProvider<List<Lesson>>((ref) async {
-  final db = ref.read(databaseProvider);
-  final authData = ref.watch(authProvider);
-  final teacherId = authData.currentTeacher?.serverId;
-  if (teacherId == null) return [];
-  return db.lessonsDao.getAllForTeacher(teacherId);
-});
+/// lessonsListProvider is defined in
+/// lib/features/dashboard/providers/dashboard_data_providers.dart.
 
 /// Displays a list of lessons from the local database.
 class LessonsListScreen extends ConsumerStatefulWidget {

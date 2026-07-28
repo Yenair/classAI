@@ -32,22 +32,14 @@
 --   you can restore any row if the dedup logic turns out wrong:
 --     SELECT * FROM lessons_backup_20260727;       -- pre-dedup lessons
 --     SELECT * FROM exams_backup_20260727;          -- pre-dedup exams
---     SELECT * FROM progress_logs_backup_20260727;  -- pre-dedup progress_logs
---     SELECT * FROM vault_items_backup_20260727;    -- pre-dedup vault_items
 --
 --   To restore a single deleted row:
 --     INSERT INTO lessons SELECT * FROM lessons_backup_20260727 WHERE id = <uuid>;
---
---   NOTE: Only covers lessons and exams (confirmed active duplicates).
---   progress_logs and vault_items backups are included for safety but their
---   UNIQUE constraint will be added in Priority 3.
 -- ============================================================================
 
 -- ── 0. Snapshot tables before any destructive operations ─────────────────────
 CREATE TABLE lessons_backup_20260727 AS SELECT * FROM lessons;
 CREATE TABLE exams_backup_20260727 AS SELECT * FROM exams;
-CREATE TABLE progress_logs_backup_20260727 AS SELECT * FROM progress_logs;
-CREATE TABLE vault_items_backup_20260727 AS SELECT * FROM vault_items;
 
 -- ── 1. Deduplicate lessons ──────────────────────────────────────────────────
 -- Remove duplicates where the same server_id appears multiple times.

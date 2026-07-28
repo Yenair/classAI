@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-enum MergeStrategy { lwwByUpdateCounter, union, keepLocal, keepRemote, manual }
+enum MergeStrategy { lwwByUpdateCounter, union, keepLocal, keepRemote, manual, lwwByUpdateCounterThenUpdatedAt }
 
 enum MergeResolution { local, remote, merged, unresolved }
 
@@ -66,6 +66,8 @@ class MergeEngine {
         remoteValue: remoteVal,
         localUpdateCounter: (local['updateCounter'] as int?) ?? 0,
         remoteUpdateCounter: (remote['updateCounter'] as int?) ?? 0,
+        localUpdatedAt: _parseUpdatedAt(local['updatedAt']),
+        remoteUpdatedAt: _parseUpdatedAt(remote['updatedAt']),
         strategy: strategy,
       );
       merged[field] = outcome.value;
@@ -89,6 +91,8 @@ class MergeEngine {
     required int localUpdateCounter,
     required int remoteUpdateCounter,
     required MergeStrategy strategy,
+    DateTime? localUpdatedAt,
+    DateTime? remoteUpdatedAt,
   }) {
     switch (strategy) {
       case MergeStrategy.keepLocal:
@@ -112,6 +116,27 @@ class MergeEngine {
         if (_valuesEqual(localValue, remoteValue)) {
           return _StrategyOutcome(localValue, false);
         }
+        return _StrategyOutcome(remoteValue, true);
+      case MergeStrategy.lwwByUpdateCounterThenUpdatedAt:
+        if (localUpdateCounter > remoteUpdateCounter) {
+          return _StrategyOutcome(localValue, false);
+        }
+        if (remoteUpdateCounter > localUpdateCounter) {
+          return _StrategyOutcome(remoteValue, false);
+        }
+        if (_valuesEqual(localValue, remoteValue)) {
+          return _StrategyOutcome(localValue, false);
+        }
+        // Equal counters, different values — use updated_at as tiebreaker.
+        if (localUpdatedAt != null && remoteUpdatedAt != null) {
+          if (localUpdatedAt.isAfter(remoteUpdatedAt)) {
+            return _StrategyOutcome(localValue, false);
+          }
+          if (remoteUpdatedAt.isAfter(localUpdatedAt)) {
+            return _StrategyOutcome(remoteValue, false);
+          }
+        }
+        // Timestamps equal or one is null — fall back to conflict.
         return _StrategyOutcome(remoteValue, true);
     }
   }
@@ -163,6 +188,24 @@ class MergeEngine {
       return true;
     }
     return a == b;
+  }
+
+  /// Parse a raw value from a sync map into a [DateTime].
+  ///
+  /// The value may be:
+  /// - `null` → returns `null`
+  /// - a [DateTime] → returned as-is
+  /// - a [String] → parsed via [DateTime.tryParse]
+  /// - anything else → returns `null`
+  ///
+  /// This is necessary because maps that pass through [jsonDecode] (e.g. from
+  /// the local versionHashes table or the remote sync-pull response) always
+  /// carry DateTime values as ISO 8601 strings, not as Dart [DateTime] objects.
+  static DateTime? _parseUpdatedAt(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is DateTime) return raw;
+    if (raw is String) return DateTime.tryParse(raw);
+    return null;
   }
 
   String _canonicalJson(dynamic value) {

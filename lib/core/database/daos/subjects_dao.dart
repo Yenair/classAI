@@ -25,6 +25,16 @@ class SubjectsDao extends DatabaseAccessor<AppDatabase>
     return results.isNotEmpty ? results.first : null;
   }
 
+  /// Get a subject by name scoped to a school (case-insensitive search).
+  Future<Subject?> getByNameAndSchool(String name, String schoolId) async {
+    final results = await (select(subjects)
+          ..where((t) =>
+              t.name.equals(name) &
+              t.schoolId.equals(schoolId)))
+        .get();
+    return results.isNotEmpty ? results.first : null;
+  }
+
   /// Get a subject by its local ID.
   Future<Subject?> getById(int id) async {
     final results = await (select(subjects)..where((t) => t.id.equals(id))).get();

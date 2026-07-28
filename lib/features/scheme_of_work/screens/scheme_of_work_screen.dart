@@ -221,7 +221,11 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       } else {
         // Resolve subject name to subjectId
         _subjectId = null;
-        final subjectRow = await db.subjectsDao.getByName(_subject);
+        final school = await db.schoolsDao.getByLocalId(_schoolId!);
+        final schoolServerId = school?.serverId;
+        final subjectRow = schoolServerId != null
+            ? await db.subjectsDao.getByNameAndSchool(_subject, schoolServerId)
+            : await db.subjectsDao.getByName(_subject);
         if (subjectRow != null) {
           _subjectId = subjectRow.id;
         }
@@ -415,17 +419,27 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       final db = ref.read(databaseProvider);
       var subjectId = _subjectId;
       if (subjectId == null) {
-        final subjectRow = await db.subjectsDao.getByName(_subject);
+        final school = await db.schoolsDao.getByLocalId(_schoolId!);
+        final schoolServerId = school?.serverId;
+        final subjectRow = schoolServerId != null
+            ? await db.subjectsDao.getByNameAndSchool(_subject, schoolServerId)
+            : await db.subjectsDao.getByName(_subject);
         subjectId = subjectRow?.id;
       }
       if (subjectId == null) {
-        subjectId = await db.subjectsDao.insert(name: _subject);
+        final school = await db.schoolsDao.getByLocalId(_schoolId!);
+        final schoolServerId = school?.serverId;
+        subjectId = await db.subjectsDao.insert(
+          name: _subject,
+          schoolId: schoolServerId,
+        );
         await db.syncQueueDao.insertEntry(
           queueTable: 'subjects',
           recordLocalId: subjectId,
           operation: 'INSERT',
           payload: {
             'name': _subject,
+            'school_id': schoolServerId,
           },
         );
       }

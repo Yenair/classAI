@@ -52,6 +52,13 @@ class LessonEditorScreen extends ConsumerStatefulWidget {
 class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   final _formKey = GlobalKey<FormState>();
   final _topicController = TextEditingController();
+  final _undoController = UndoHistoryController();
+  final _objectivesController = TextEditingController();
+  final _vocabularyController = TextEditingController();
+  final _materialsController = TextEditingController();
+  final _presentationController = TextEditingController();
+  final _assessmentController = TextEditingController();
+  final _homeworkController = TextEditingController();
   int? _lessonId;
   String _lessonStatus = 'draft';
   int _week = 1;
@@ -144,6 +151,25 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     super.initState();
     _lessonId = widget.lessonId;
     _checkConnectivity();
+    // Sync preview controllers → state variables so onChanged behavior is preserved
+    _objectivesController.addListener(() {
+      setState(() => _objectivesText = _objectivesController.text);
+    });
+    _vocabularyController.addListener(() {
+      setState(() => _vocabularyText = _vocabularyController.text);
+    });
+    _materialsController.addListener(() {
+      setState(() => _materialsText = _materialsController.text);
+    });
+    _presentationController.addListener(() {
+      setState(() => _presentationText = _presentationController.text);
+    });
+    _assessmentController.addListener(() {
+      setState(() => _assessmentText = _assessmentController.text);
+    });
+    _homeworkController.addListener(() {
+      setState(() => _homeworkText = _homeworkController.text);
+    });
   }
 
   @override
@@ -207,15 +233,28 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     if (result != null && result.isNotEmpty) {
       try {
         final db = ref.read(databaseProvider);
-        final newSubjectId = await db.subjectsDao.insert(name: result);
-        await db.syncQueueDao.insertEntry(
-          queueTable: 'subjects',
-          recordLocalId: newSubjectId,
-          operation: 'INSERT',
-          payload: {
-            'name': result,
-          },
-        );
+        // Check for existing subject scoped to this school before inserting.
+        final existingSubject = _schoolId != null
+            ? await db.subjectsDao.getByNameAndSchool(result, _schoolId!)
+            : null;
+        final int newSubjectId;
+        if (existingSubject != null) {
+          newSubjectId = existingSubject.id;
+        } else {
+          newSubjectId = await db.subjectsDao.insert(
+            name: result,
+            schoolId: _schoolId,
+          );
+          await db.syncQueueDao.insertEntry(
+            queueTable: 'subjects',
+            recordLocalId: newSubjectId,
+            operation: 'INSERT',
+            payload: {
+              'name': result,
+              'school_id': _schoolId,
+            },
+          );
+        }
         await _loadSubjects();
         setState(() => _subject = result);
       } catch (_) {
@@ -284,11 +323,17 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           _encryptedContent = rawContent;
           if (parsedContent != null) {
             _objectivesText = _formatList(parsedContent['objectives']);
+            _objectivesController.text = _objectivesText;
             _vocabularyText = _formatList(parsedContent['vocabulary']);
+            _vocabularyController.text = _vocabularyText;
             _materialsText = _formatList(parsedContent['materials']);
+            _materialsController.text = _materialsText;
             _presentationText = _formatJson(parsedContent['presentation']);
+            _presentationController.text = _presentationText;
             _assessmentText = parsedContent['assessment'] as String? ?? '';
+            _assessmentController.text = _assessmentText;
             _homeworkText = parsedContent['homework'] as String? ?? '';
+            _homeworkController.text = _homeworkText;
             _hasGenerated = true;
             // Restore diagram results if present in stored content
             final storedDiagrams = parsedContent['diagrams'] as List<dynamic>?;
@@ -710,11 +755,17 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           setState(() {
             _encryptedContent = parsedEncrypted;
             _objectivesText = _formatList(parsedRaw['objectives']);
+            _objectivesController.text = _objectivesText;
             _vocabularyText = _formatList(parsedRaw['vocabulary']);
+            _vocabularyController.text = _vocabularyText;
             _materialsText = _formatList(parsedRaw['materials']);
+            _materialsController.text = _materialsText;
             _presentationText = _formatJson(parsedRaw['presentation']);
+            _presentationController.text = _presentationText;
             _assessmentText = parsedRaw['assessment'] as String? ?? '';
+            _assessmentController.text = _assessmentText;
             _homeworkText = parsedRaw['homework'] as String? ?? '';
+            _homeworkController.text = _homeworkText;
             _diagramResults = generatedDiagrams;
             _hasGenerated = true;
             _configExpanded = false;
@@ -824,11 +875,17 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       setState(() {
         _encryptedContent = result['encryptedContent'] as String?;
         _objectivesText = _formatList(raw['objectives']);
+        _objectivesController.text = _objectivesText;
         _vocabularyText = _formatList(raw['vocabulary']);
+        _vocabularyController.text = _vocabularyText;
         _materialsText = _formatList(raw['materials']);
+        _materialsController.text = _materialsText;
         _presentationText = _formatJson(raw['presentation']);
+        _presentationController.text = _presentationText;
         _assessmentText = raw['assessment'] as String? ?? '';
+        _assessmentController.text = _assessmentText;
         _homeworkText = raw['homework'] as String? ?? '';
+        _homeworkController.text = _homeworkText;
         _hasGenerated = true;
         _configExpanded = false;
         _isRegenerating = false;
@@ -1300,6 +1357,12 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     setState(() {
       _topicController.clear();
       _reviewController.clear();
+      _objectivesController.clear();
+      _vocabularyController.clear();
+      _materialsController.clear();
+      _presentationController.clear();
+      _assessmentController.clear();
+      _homeworkController.clear();
       _week = 1;
       _subject = 'Mathematics';
       _classLevel = 'JSS 1';
@@ -1398,6 +1461,13 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   void dispose() {
     _topicController.dispose();
     _reviewController.dispose();
+    _objectivesController.dispose();
+    _vocabularyController.dispose();
+    _materialsController.dispose();
+    _presentationController.dispose();
+    _assessmentController.dispose();
+    _homeworkController.dispose();
+    _undoController.dispose();
     super.dispose();
   }
 
@@ -1446,6 +1516,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                   cs: cs,
                   theme: theme,
                   creditBalance: _creditBalance,
+                  undoController: _undoController,
                 ),
 
                 // ── Scrollable content ─────────────────────────────
@@ -1468,6 +1539,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                               onToggleSidebar: () => setState(
                                   () => _editorSidebarOpen = !_editorSidebarOpen),
                               sidebarOpen: _editorSidebarOpen,
+                              undoController: _undoController,
                             ),
                             if (_schemeOfWorkLocalId != null)
                               Padding(
@@ -1588,32 +1660,14 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                               diagramResults: _diagramResults,
                                               isGeneratingDiagrams: _isGeneratingDiagrams,
                                               onRegenerateDiagram: _handleRegenerateDiagram,
-                                              objectivesText: _objectivesText,
-                                              vocabularyText: _vocabularyText,
-                                              materialsText: _materialsText,
-                                              presentationText:
-                                                  _presentationText,
-                                              assessmentText: _assessmentText,
-                                              homeworkText: _homeworkText,
+                                              objectivesController: _objectivesController,
+                                              vocabularyController: _vocabularyController,
+                                              materialsController: _materialsController,
+                                              presentationController: _presentationController,
+                                              assessmentController: _assessmentController,
+                                              homeworkController: _homeworkController,
                                               reviewController: _reviewController,
-                                              onObjectivesChanged: (v) =>
-                                                  setState(() =>
-                                                      _objectivesText = v),
-                                              onVocabularyChanged: (v) =>
-                                                  setState(() =>
-                                                      _vocabularyText = v),
-                                              onMaterialsChanged: (v) =>
-                                                  setState(() =>
-                                                      _materialsText = v),
-                                              onPresentationChanged: (v) =>
-                                                  setState(() =>
-                                                      _presentationText = v),
-                                              onAssessmentChanged: (v) =>
-                                                  setState(() =>
-                                                      _assessmentText = v),
-                                              onHomeworkChanged: (v) =>
-                                                  setState(() =>
-                                                      _homeworkText = v),
+                                              undoController: _undoController,
                                               onUnlock: _handleUnlock,
                                               onSave: _saveLesson,
                                               onDiscard: _discard,
@@ -1699,32 +1753,14 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                             diagramResults: _diagramResults,
                                             isGeneratingDiagrams: _isGeneratingDiagrams,
                                             onRegenerateDiagram: _handleRegenerateDiagram,
-                                            objectivesText: _objectivesText,
-                                            vocabularyText: _vocabularyText,
-                                            materialsText: _materialsText,
-                                            presentationText:
-                                                _presentationText,
-                                            assessmentText: _assessmentText,
-                                            homeworkText: _homeworkText,
+                                            objectivesController: _objectivesController,
+                                            vocabularyController: _vocabularyController,
+                                            materialsController: _materialsController,
+                                            presentationController: _presentationController,
+                                            assessmentController: _assessmentController,
+                                            homeworkController: _homeworkController,
                                             reviewController: _reviewController,
-                                            onObjectivesChanged: (v) =>
-                                                setState(() =>
-                                                    _objectivesText = v),
-                                            onVocabularyChanged: (v) =>
-                                                setState(() =>
-                                                    _vocabularyText = v),
-                                            onMaterialsChanged: (v) =>
-                                                setState(() =>
-                                                    _materialsText = v),
-                                            onPresentationChanged: (v) =>
-                                                setState(() =>
-                                                    _presentationText = v),
-                                            onAssessmentChanged: (v) =>
-                                                setState(() =>
-                                                    _assessmentText = v),
-                                            onHomeworkChanged: (v) =>
-                                                setState(() =>
-                                                    _homeworkText = v),
+                                            undoController: _undoController,
                                             onUnlock: _handleUnlock,
                                             onSave: _saveLesson,
                                             onDiscard: _discard,
@@ -1984,10 +2020,12 @@ class _MobileHeader extends StatelessWidget {
   final ColorScheme cs;
   final ThemeData theme;
   final int creditBalance;
+  final UndoHistoryController undoController;
   const _MobileHeader({
     required this.cs,
     required this.theme,
     required this.creditBalance,
+    required this.undoController,
   });
 
   @override
@@ -2037,6 +2075,35 @@ class _MobileHeader extends StatelessWidget {
                 ),
               ),
               const Spacer(),
+              // Undo / Redo buttons
+              ValueListenableBuilder<UndoHistoryValue>(
+                valueListenable: undoController,
+                builder: (context, value, child) {
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        onPressed: value.canUndo ? () => undoController.undo() : null,
+                        icon: const Icon(Icons.undo_rounded),
+                        tooltip: 'Undo (Ctrl+Z)',
+                        style: IconButton.styleFrom(
+                          foregroundColor: cs.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        onPressed: value.canRedo ? () => undoController.redo() : null,
+                        icon: const Icon(Icons.redo_rounded),
+                        tooltip: 'Redo (Ctrl+Shift+Z)',
+                        style: IconButton.styleFrom(
+                          foregroundColor: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(width: 4),
               RepaintBoundary(
                 child: Text(
                   '$creditBalance',
@@ -2062,11 +2129,13 @@ class _ToolHeader extends StatelessWidget {
   final ThemeData theme;
   final VoidCallback? onToggleSidebar;
   final bool sidebarOpen;
+  final UndoHistoryController undoController;
   const _ToolHeader({
     required this.cs,
     required this.theme,
     this.onToggleSidebar,
     required this.sidebarOpen,
+    required this.undoController,
   });
 
   @override
@@ -2118,6 +2187,35 @@ class _ToolHeader extends StatelessWidget {
                   ),
                 ),
               const Spacer(),
+              // Undo / Redo buttons
+              ValueListenableBuilder<UndoHistoryValue>(
+                valueListenable: undoController,
+                builder: (context, value, child) {
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        onPressed: value.canUndo ? () => undoController.undo() : null,
+                        icon: const Icon(Icons.undo_rounded),
+                        tooltip: 'Undo (Ctrl+Z)',
+                        style: IconButton.styleFrom(
+                          foregroundColor: cs.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        onPressed: value.canRedo ? () => undoController.redo() : null,
+                        icon: const Icon(Icons.redo_rounded),
+                        tooltip: 'Redo (Ctrl+Shift+Z)',
+                        style: IconButton.styleFrom(
+                          foregroundColor: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
             ],
           ),
           const SizedBox(height: 8),
@@ -2586,19 +2684,14 @@ class _PreviewColumn extends StatelessWidget {
   final List<Map<String, dynamic>> diagramResults;
   final bool isGeneratingDiagrams;
   final ValueChanged<int>? onRegenerateDiagram;
-  final String objectivesText;
-  final String vocabularyText;
-  final String materialsText;
-  final String presentationText;
-  final String assessmentText;
-  final String homeworkText;
+  final TextEditingController objectivesController;
+  final TextEditingController vocabularyController;
+  final TextEditingController materialsController;
+  final TextEditingController presentationController;
+  final TextEditingController assessmentController;
+  final TextEditingController homeworkController;
   final TextEditingController? reviewController;
-  final ValueChanged<String> onObjectivesChanged;
-  final ValueChanged<String> onVocabularyChanged;
-  final ValueChanged<String> onMaterialsChanged;
-  final ValueChanged<String> onPresentationChanged;
-  final ValueChanged<String> onAssessmentChanged;
-  final ValueChanged<String> onHomeworkChanged;
+  final UndoHistoryController undoController;
   final VoidCallback onUnlock;
   final VoidCallback onSave;
   final VoidCallback? onMarkCompleted;
@@ -2622,19 +2715,14 @@ class _PreviewColumn extends StatelessWidget {
     this.diagramResults = const [],
     this.isGeneratingDiagrams = false,
     this.onRegenerateDiagram,
-    required this.objectivesText,
-    required this.vocabularyText,
-    required this.materialsText,
-    required this.presentationText,
-    required this.assessmentText,
-    required this.homeworkText,
+    required this.objectivesController,
+    required this.vocabularyController,
+    required this.materialsController,
+    required this.presentationController,
+    required this.assessmentController,
+    required this.homeworkController,
     this.reviewController,
-    required this.onObjectivesChanged,
-    required this.onVocabularyChanged,
-    required this.onMaterialsChanged,
-    required this.onPresentationChanged,
-    required this.onAssessmentChanged,
-    required this.onHomeworkChanged,
+    required this.undoController,
     required this.onUnlock,
     required this.onSave,
     this.onMarkCompleted,
@@ -2823,9 +2911,9 @@ class _PreviewColumn extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildLockedPreviewCard('Objectives', objectivesText),
+                  _buildLockedPreviewCard('Objectives', objectivesController.text),
                   const SizedBox(height: 12),
-                  _buildLockedPreviewCard('Presentation', presentationText),
+                  _buildLockedPreviewCard('Presentation', presentationController.text),
                 ],
               ),
             ),
@@ -2871,34 +2959,28 @@ class _PreviewColumn extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildPreviewCard('Objectives', objectivesText,
+                  _buildPreviewCard('Objectives', objectivesController,
                     readOnly: !isUnlocked,
-                    onChanged: onObjectivesChanged,
                   ),
                   const SizedBox(height: 12),
-                  _buildPreviewCard('Vocabulary', vocabularyText,
+                  _buildPreviewCard('Vocabulary', vocabularyController,
                     readOnly: !isUnlocked,
-                    onChanged: onVocabularyChanged,
                   ),
                   const SizedBox(height: 12),
-                  _buildPreviewCard('Materials', materialsText,
+                  _buildPreviewCard('Materials', materialsController,
                     readOnly: !isUnlocked,
-                    onChanged: onMaterialsChanged,
                   ),
                   const SizedBox(height: 12),
-                  _buildPreviewCard('Presentation', presentationText,
+                  _buildPreviewCard('Presentation', presentationController,
                     readOnly: !isUnlocked,
-                    onChanged: onPresentationChanged,
                   ),
                   const SizedBox(height: 12),
-                  _buildPreviewCard('Assessment', assessmentText,
+                  _buildPreviewCard('Assessment', assessmentController,
                     readOnly: !isUnlocked,
-                    onChanged: onAssessmentChanged,
                   ),
                   const SizedBox(height: 12),
-                  _buildPreviewCard('Homework', homeworkText,
+                  _buildPreviewCard('Homework', homeworkController,
                     readOnly: !isUnlocked,
-                    onChanged: onHomeworkChanged,
                   ),
 
                   // ── Diagram Previews ─────────────────────────────
@@ -3360,9 +3442,8 @@ class _PreviewColumn extends StatelessWidget {
 
   Widget _buildPreviewCard(
     String title,
-    String content, {
+    TextEditingController controller, {
     bool readOnly = false,
-    required ValueChanged<String> onChanged,
   }) {
     return Card(
       margin: EdgeInsets.zero,
@@ -3387,9 +3468,10 @@ class _PreviewColumn extends StatelessWidget {
           ),
         ),
         subtitle: readOnly
-            ? _renderMarkdownContent(content)
+            ? _renderMarkdownContent(controller.text)
             : TextFormField(
-                initialValue: content,
+                controller: controller,
+                undoController: undoController,
                 maxLines: 6,
                 decoration: InputDecoration(
                   border: OutlineInputBorder(
@@ -3411,7 +3493,6 @@ class _PreviewColumn extends StatelessWidget {
                     color: cs.onSurfaceVariant.withValues(alpha: 0.5),
                   ),
                 ),
-                onChanged: onChanged,
               ),
       ),
     );

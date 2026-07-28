@@ -50,7 +50,7 @@ void main() {
   });
 
   testWidgets(
-      'ConflictResolutionScreen shows Keep Mine, Keep Theirs, Merge buttons',
+      'ConflictResolutionScreen shows Keep Mine and Keep Theirs buttons',
       (tester) async {
     final db = AppDatabase.forTesting();
     addTearDown(db.close);

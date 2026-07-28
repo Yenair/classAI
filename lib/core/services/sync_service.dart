@@ -2458,6 +2458,35 @@ class SyncService {
       debugPrint('[sync] _upsertSubjectFromSync: UPDATED subject $serverId');
       return existingSubject.id;
     } else {
+      // Fallback: check for existing local row matching (schoolId, name)
+      // before inserting, to avoid duplicates when the serverId hasn't
+      // been synced yet but a local row already exists.
+      if (schoolId != null && name.isNotEmpty) {
+        final localMatch = await (db.select(db.subjects)
+              ..where((t) =>
+                  t.schoolId.equals(schoolId) &
+                  t.name.equals(name)))
+            .get();
+        if (localMatch.isNotEmpty) {
+          final match = localMatch.first;
+          // Update the matched row with the serverId and any new fields.
+          await (db.update(db.subjects)
+                ..where((t) => t.id.equals(match.id)))
+              .write(SubjectsCompanion(
+            serverId: Value(serverId),
+            name: Value(name),
+            alias: alias != null ? Value(alias) : const Value.absent(),
+            schoolId: schoolId != null
+                ? Value(schoolId)
+                : const Value.absent(),
+            sortOrder: Value(sortOrder),
+            updatedAt: Value(updatedAt),
+          ));
+          debugPrint(
+              '[sync] _upsertSubjectFromSync: UPDATED local match ($schoolId, $name) with serverId $serverId');
+          return match.id;
+        }
+      }
       // Insert new subject record.
       final newLocalId = await (db.into(db.subjects).insert(
         SubjectsCompanion.insert(
