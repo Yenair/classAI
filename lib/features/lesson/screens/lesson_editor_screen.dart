@@ -1044,13 +1044,14 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
 
       int id;
 
-      // Dedup: check for existing lesson with same topic/subject/week/teacher
-      if (_teacherId != null) {
+      // Dedup: check for existing lesson with same topic/subject/week/teacher/school
+      if (_teacherId != null && _schoolId != null) {
         final existing = await db.lessonsDao.findByTopicSubjectWeekTeacher(
           topic: topic,
           subject: _subject,
           week: _week,
           teacherServerId: _teacherId!,
+          schoolServerId: _schoolId!,
         );
         if (existing != null) {
           // Update existing lesson

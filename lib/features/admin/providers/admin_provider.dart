@@ -217,11 +217,11 @@ class AdminDashboardNotifier extends Notifier<AdminDashboardData> {
       for (final t in uniqueTeachers) {
         final deviceCount =
             await _db.teacherDevicesDao.countActiveByTeacher(t.localId);
-        final generatedCount = t.serverId != null
-            ? await _db.lessonsDao.countByTeacher(t.serverId!)
+        final generatedCount = t.serverId != null && schoolServerId != null
+            ? await _db.lessonsDao.countByTeacher(t.serverId!, schoolServerId)
             : 0;
-        final completedCount = t.serverId != null
-            ? await _db.lessonsDao.countCompletedByTeacher(t.serverId!)
+        final completedCount = t.serverId != null && schoolServerId != null
+            ? await _db.lessonsDao.countCompletedByTeacher(t.serverId!, schoolServerId)
             : 0;
         final schemeStats = await _loadSchemeProgressForTeacher(t);
 

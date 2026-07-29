@@ -10,6 +10,7 @@
 .buildlog/
 .history
 .svn/
+.txt
 .swiftpm/
 migrate_working_dir/
 

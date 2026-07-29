@@ -1199,11 +1199,14 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       final existingId = _examId ?? widget.examId;
       final existingExam = existingId != null
           ? await db.examsDao.getById(existingId)
-          : await db.examsDao.findByTopicSubjectTeacher(
-              topic: topic,
-              subject: _subject,
-              teacherServerId: _teacherId ?? '',
-            );
+          : (_teacherId != null && _schoolId != null)
+              ? await db.examsDao.findByTopicSubjectTeacher(
+                  topic: topic,
+                  subject: _subject,
+                  teacherServerId: _teacherId!,
+                  schoolServerId: _schoolId!,
+                )
+              : null;
 
       int localId;
       String operation;

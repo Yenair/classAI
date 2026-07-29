@@ -18,10 +18,14 @@ class ExamsDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
-  /// Get all non-deleted exams for a specific teacher, ordered by created date descending.
-  Future<List<Exam>> getAllForTeacher(String teacherServerId) {
+  /// Get all non-deleted exams for a specific teacher and school, ordered by created date descending.
+  Future<List<Exam>> getAllForTeacher(
+    String teacherServerId,
+    String schoolServerId,
+  ) {
     return (select(exams)
           ..where((t) => t.teacherServerId.equals(teacherServerId))
+          ..where((t) => t.schoolServerId.equals(schoolServerId))
           ..where((t) => t.isDeleted.equals(false))
           ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)]))
         .get();
@@ -63,16 +67,18 @@ class ExamsDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
-  /// Find an existing exam by topic + subject + teacher to prevent duplicates.
+  /// Find an existing exam by topic + subject + teacher + school to prevent duplicates.
   Future<Exam?> findByTopicSubjectTeacher({
     required String topic,
     required String subject,
     required String teacherServerId,
+    required String schoolServerId,
   }) async {
     final results = await (select(exams)
           ..where((t) => t.topic.equals(topic))
           ..where((t) => t.subject.equals(subject))
           ..where((t) => t.teacherServerId.equals(teacherServerId))
+          ..where((t) => t.schoolServerId.equals(schoolServerId))
           ..where((t) => t.isDeleted.equals(false))
           ..limit(1))
         .get();

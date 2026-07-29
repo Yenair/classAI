@@ -19,7 +19,40 @@
 //   - Exams:   (schoolServerId, subject, classLevel, topic, teacherServerId)
 // ============================================================================
 
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
+
 import '../lib/core/database/database.dart';
+
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║  BACKUP — Write orphan rows to a timestamped JSONL file on disk        ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+/// Writes a backup JSONL file at [documentsDir]/cleanup_backup_{tag}_{timestamp}.jsonl
+/// and returns the absolute file path.
+///
+/// Each line is `jsonEncode(orphan.toJson())` — one JSON object per orphan row.
+/// The file path is also printed so it can be pulled from the device via adb.
+Future<String> _writeBackupFile({
+  required String tag,
+  required List<Map<String, dynamic>> orphanRows,
+}) async {
+  if (orphanRows.isEmpty) return '';
+
+  final dir = await getApplicationDocumentsDirectory();
+  final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+  final filePath = p.join(dir.path, 'cleanup_backup_${tag}_$timestamp.jsonl');
+
+  final lines = orphanRows.map(jsonEncode).join('\n');
+  await File(filePath).writeAsString('$lines\n');
+
+  print('📦 BACKUP file saved to: $filePath');
+  print('   (${orphanRows.length} orphan rows backed up)');
+  return filePath;
+}
 
 // ╔══════════════════════════════════════════════════════════════════════════╗
 // ║  DIAGNOSTIC — Count orphan pairs before cleanup                        ║
@@ -178,6 +211,12 @@ Future<void> printDiagnosticSummary(AppDatabase db) async {
 /// Deletes orphan duplicate lessons (serverId IS NULL, sharing the same
 /// curriculum slot, keeping only the latest createdAt).
 /// Also cleans up sync_queue and version_hashes references.
+///
+/// SAFETY: All three deletes (sync_queue, version_hashes, lessons) run inside
+/// a single atomic Drift transaction — if any step fails, none are committed.
+/// Before deletion, a timestamped JSONL backup file is written to the device's
+/// documents directory with the full row data of every orphan about to be
+/// deleted.
 Future<void> cleanupOrphanDuplicateLessons(AppDatabase db) async {
   // 1. Find all lessons with serverId IS NULL
   final allOrphans = await (db.select(db.lessons)
@@ -195,12 +234,14 @@ Future<void> cleanupOrphanDuplicateLessons(AppDatabase db) async {
 
   // 3. For each group with >1 member, keep the latest, delete the rest
   final idsToDelete = <int>{};
+  final backupRows = <Map<String, dynamic>>[];
   for (final list in groups.values) {
     if (list.length <= 1) continue;
     final sorted = List<Lesson>.from(list)
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     for (final orphan in sorted.skip(1)) {
       idsToDelete.add(orphan.id);
+      backupRows.add(orphan.toJson());
     }
   }
 
@@ -209,24 +250,30 @@ Future<void> cleanupOrphanDuplicateLessons(AppDatabase db) async {
     return;
   }
 
+  // ── Backup: write orphan rows to a timestamped JSONL file on disk ──
+  await _writeBackupFile(tag: 'lessons', orphanRows: backupRows);
+
   print('🗑️  Cleaning up ${idsToDelete.length} orphan duplicate lessons...');
 
-  // 4. Delete sync_queue entries referencing these IDs
-  await (db.delete(db.syncQueue)
-        ..where((t) => t.queueTable.equals('lessons'))
-        ..where((t) => t.recordLocalId.isIn(idsToDelete)))
-      .go();
+  // ── Atomic transaction: all three deletes succeed or none do ──
+  await db.transaction(() async {
+    // 4. Delete sync_queue entries referencing these IDs
+    await (db.delete(db.syncQueue)
+          ..where((t) => t.queueTable.equals('lessons'))
+          ..where((t) => t.recordLocalId.isIn(idsToDelete)))
+        .go();
 
-  // 5. Delete version_hashes entries referencing these IDs
-  await (db.delete(db.versionHashes)
-        ..where((t) => t.table.equals('lessons'))
-        ..where((t) => t.recordLocalId.isIn(idsToDelete)))
-      .go();
+    // 5. Delete version_hashes entries referencing these IDs
+    await (db.delete(db.versionHashes)
+          ..where((t) => t.table.equals('lessons'))
+          ..where((t) => t.recordLocalId.isIn(idsToDelete)))
+        .go();
 
-  // 6. Delete the orphan lessons themselves
-  await (db.delete(db.lessons)
-        ..where((t) => t.id.isIn(idsToDelete)))
-      .go();
+    // 6. Delete the orphan lessons themselves
+    await (db.delete(db.lessons)
+          ..where((t) => t.id.isIn(idsToDelete)))
+        .go();
+  });
 
   print('✅ Done — deleted ${idsToDelete.length} orphan duplicate lessons');
 }
@@ -234,6 +281,12 @@ Future<void> cleanupOrphanDuplicateLessons(AppDatabase db) async {
 /// Deletes orphan duplicate exams (serverId IS NULL, sharing the same
 /// curriculum slot, keeping only the latest createdAt).
 /// Also cleans up sync_queue and version_hashes references.
+///
+/// SAFETY: All three deletes (sync_queue, version_hashes, exams) run inside
+/// a single atomic Drift transaction — if any step fails, none are committed.
+/// Before deletion, a timestamped JSONL backup file is written to the device's
+/// documents directory with the full row data of every orphan about to be
+/// deleted.
 Future<void> cleanupOrphanDuplicateExams(AppDatabase db) async {
   // 1. Find all exams with serverId IS NULL
   final allOrphans = await (db.select(db.exams)
@@ -251,12 +304,14 @@ Future<void> cleanupOrphanDuplicateExams(AppDatabase db) async {
 
   // 3. For each group with >1 member, keep the latest, delete the rest
   final idsToDelete = <int>{};
+  final backupRows = <Map<String, dynamic>>[];
   for (final list in groups.values) {
     if (list.length <= 1) continue;
     final sorted = List<Exam>.from(list)
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     for (final orphan in sorted.skip(1)) {
       idsToDelete.add(orphan.id);
+      backupRows.add(orphan.toJson());
     }
   }
 
@@ -265,24 +320,30 @@ Future<void> cleanupOrphanDuplicateExams(AppDatabase db) async {
     return;
   }
 
+  // ── Backup: write orphan rows to a timestamped JSONL file on disk ──
+  await _writeBackupFile(tag: 'exams', orphanRows: backupRows);
+
   print('🗑️  Cleaning up ${idsToDelete.length} orphan duplicate exams...');
 
-  // 4. Delete sync_queue entries referencing these IDs
-  await (db.delete(db.syncQueue)
-        ..where((t) => t.queueTable.equals('exams'))
-        ..where((t) => t.recordLocalId.isIn(idsToDelete)))
-      .go();
+  // ── Atomic transaction: all three deletes succeed or none do ──
+  await db.transaction(() async {
+    // 4. Delete sync_queue entries referencing these IDs
+    await (db.delete(db.syncQueue)
+          ..where((t) => t.queueTable.equals('exams'))
+          ..where((t) => t.recordLocalId.isIn(idsToDelete)))
+        .go();
 
-  // 5. Delete version_hashes entries referencing these IDs
-  await (db.delete(db.versionHashes)
-        ..where((t) => t.table.equals('exams'))
-        ..where((t) => t.recordLocalId.isIn(idsToDelete)))
-      .go();
+    // 5. Delete version_hashes entries referencing these IDs
+    await (db.delete(db.versionHashes)
+          ..where((t) => t.table.equals('exams'))
+          ..where((t) => t.recordLocalId.isIn(idsToDelete)))
+        .go();
 
-  // 6. Delete the orphan exams themselves
-  await (db.delete(db.exams)
-        ..where((t) => t.id.isIn(idsToDelete)))
-      .go();
+    // 6. Delete the orphan exams themselves
+    await (db.delete(db.exams)
+          ..where((t) => t.id.isIn(idsToDelete)))
+        .go();
+  });
 
   print('✅ Done — deleted ${idsToDelete.length} orphan duplicate exams');
 }

@@ -8,8 +8,9 @@ final lessonsListProvider = FutureProvider<List<Lesson>>((ref) async {
   final db = ref.read(databaseProvider);
   final authData = ref.watch(authProvider);
   final teacherId = authData.currentTeacher?.serverId;
-  if (teacherId == null) return [];
-  return db.lessonsDao.getAllForTeacher(teacherId);
+  final schoolId = authData.currentSchool?.serverId;
+  if (teacherId == null || schoolId == null) return [];
+  return db.lessonsDao.getAllForTeacher(teacherId, schoolId);
 });
 
 /// Provider that fetches all exams for the current teacher from the database.
@@ -17,8 +18,9 @@ final examsListProvider = FutureProvider<List<Exam>>((ref) async {
   final db = ref.read(databaseProvider);
   final authData = ref.watch(authProvider);
   final teacherId = authData.currentTeacher?.serverId;
-  if (teacherId == null) return [];
-  return db.examsDao.getAllForTeacher(teacherId);
+  final schoolId = authData.currentSchool?.serverId;
+  if (teacherId == null || schoolId == null) return [];
+  return db.examsDao.getAllForTeacher(teacherId, schoolId);
 });
 
 /// Holds a total count, a draft sub-count, and a secondary count (completed/unlocked).
@@ -38,8 +40,9 @@ final recentLessonsProvider = FutureProvider<List<Lesson>>((ref) async {
   final db = ref.read(databaseProvider);
   final authData = ref.watch(authProvider);
   final teacherId = authData.currentTeacher?.serverId;
-  if (teacherId == null) return [];
-  return db.lessonsDao.getRecentLessonsForTeacher(teacherId, limit: 5);
+  final schoolId = authData.currentSchool?.serverId;
+  if (teacherId == null || schoolId == null) return [];
+  return db.lessonsDao.getRecentLessonsForTeacher(teacherId, schoolId, limit: 5);
 });
 
 /// Provider that fetches the total count of lessons, drafts, and completed
@@ -48,10 +51,11 @@ final lessonCountProvider = FutureProvider<CountData>((ref) async {
   final db = ref.read(databaseProvider);
   final authData = ref.watch(authProvider);
   final teacherId = authData.currentTeacher?.serverId;
-  if (teacherId == null) {
+  final schoolId = authData.currentSchool?.serverId;
+  if (teacherId == null || schoolId == null) {
     return const CountData(total: 0, draftCount: 0, secondaryCount: 0);
   }
-  final lessons = await db.lessonsDao.getAllForTeacher(teacherId);
+  final lessons = await db.lessonsDao.getAllForTeacher(teacherId, schoolId);
   final draftCount = lessons.where((l) => l.status == 'draft').length;
   final completedCount = lessons.where((l) => l.status == 'completed').length;
   return CountData(
@@ -67,10 +71,11 @@ final examCountProvider = FutureProvider<CountData>((ref) async {
   final db = ref.read(databaseProvider);
   final authData = ref.watch(authProvider);
   final teacherId = authData.currentTeacher?.serverId;
-  if (teacherId == null) {
+  final schoolId = authData.currentSchool?.serverId;
+  if (teacherId == null || schoolId == null) {
     return const CountData(total: 0, draftCount: 0, secondaryCount: 0);
   }
-  final exams = await db.examsDao.getAllForTeacher(teacherId);
+  final exams = await db.examsDao.getAllForTeacher(teacherId, schoolId);
   final draftCount = exams.where((e) => !e.isUnlocked).length;
   final unlockedCount = exams.where((e) => e.isUnlocked).length;
   return CountData(
@@ -84,8 +89,9 @@ final todayLessonCountProvider = FutureProvider<int>((ref) async {
   final db = ref.read(databaseProvider);
   final authData = ref.watch(authProvider);
   final teacherId = authData.currentTeacher?.serverId;
-  if (teacherId == null) return 0;
-  final lessons = await db.lessonsDao.getAllForTeacher(teacherId);
+  final schoolId = authData.currentSchool?.serverId;
+  if (teacherId == null || schoolId == null) return 0;
+  final lessons = await db.lessonsDao.getAllForTeacher(teacherId, schoolId);
   final today = DateTime.now();
   return lessons
       .where((lesson) =>
@@ -99,11 +105,11 @@ final lastUpdatedLessonProvider = FutureProvider<Lesson?>((ref) async {
   final db = ref.read(databaseProvider);
   final authData = ref.read(authProvider);
   final teacherId = authData.currentTeacher?.serverId;
-  final lessons = await db.lessonsDao.getAll();
-  final filtered = teacherId == null
-      ? lessons
-      : lessons.where((lesson) => lesson.teacherServerId == teacherId).toList();
-  if (filtered.isEmpty) return null;
-  filtered.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-  return filtered.first;
+  final schoolId = authData.currentSchool?.serverId;
+  if (teacherId == null || schoolId == null) return null;
+  final lessons = await db.lessonsDao.getAllForTeacher(teacherId, schoolId);
+  if (lessons.isEmpty) return null;
+  final sorted = List<Lesson>.from(lessons)
+    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  return sorted.first;
 });

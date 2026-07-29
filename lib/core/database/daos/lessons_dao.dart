@@ -18,10 +18,14 @@ class LessonsDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
-  /// Get all **non‑deleted** lessons for a specific teacher, ordered by week.
-  Future<List<Lesson>> getAllForTeacher(String teacherServerId) {
+  /// Get all **non‑deleted** lessons for a specific teacher AND school, ordered by week.
+  Future<List<Lesson>> getAllForTeacher(
+    String teacherServerId,
+    String schoolServerId,
+  ) {
     return (select(lessons)
           ..where((t) => t.teacherServerId.equals(teacherServerId))
+          ..where((t) => t.schoolServerId.equals(schoolServerId))
           ..where((t) => t.isDeleted.equals(false))
           ..orderBy([(t) => OrderingTerm(expression: t.week, mode: OrderingMode.asc)]))
         .get();
@@ -36,14 +40,16 @@ class LessonsDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
-  /// Get the most recent **non‑deleted** lessons for a specific teacher,
+  /// Get the most recent **non‑deleted** lessons for a specific teacher AND school,
   /// ordered by createdAt descending, limited to [limit].
   Future<List<Lesson>> getRecentLessonsForTeacher(
-    String teacherServerId, {
+    String teacherServerId,
+    String schoolServerId, {
     int limit = 5,
   }) {
     return (select(lessons)
           ..where((t) => t.teacherServerId.equals(teacherServerId))
+          ..where((t) => t.schoolServerId.equals(schoolServerId))
           ..where((t) => t.isDeleted.equals(false))
           ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)])
           ..limit(limit))
@@ -69,20 +75,22 @@ class LessonsDao extends DatabaseAccessor<AppDatabase>
     return results.isNotEmpty ? results.first : null;
   }
 
-  /// Count lessons by teacher server ID.
-  Future<int> countByTeacher(String teacherServerId) async {
+  /// Count lessons by teacher AND school.
+  Future<int> countByTeacher(String teacherServerId, String schoolServerId) async {
     final query = selectOnly(lessons)
       ..addColumns([lessons.id.count()])
-      ..where(lessons.teacherServerId.equals(teacherServerId));
+      ..where(lessons.teacherServerId.equals(teacherServerId))
+      ..where(lessons.schoolServerId.equals(schoolServerId));
     final row = await query.getSingle();
     return row.read<int>(lessons.id.count()) ?? 0;
   }
 
-  /// Count completed lessons by teacher server ID.
-  Future<int> countCompletedByTeacher(String teacherServerId) async {
+  /// Count completed lessons by teacher AND school.
+  Future<int> countCompletedByTeacher(String teacherServerId, String schoolServerId) async {
     final query = selectOnly(lessons)
       ..addColumns([lessons.id.count()])
       ..where(lessons.teacherServerId.equals(teacherServerId))
+      ..where(lessons.schoolServerId.equals(schoolServerId))
       ..where(lessons.status.equals('completed'));
     final row = await query.getSingle();
     return row.read<int>(lessons.id.count()) ?? 0;
@@ -98,18 +106,20 @@ class LessonsDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
-  /// Find an existing lesson by topic + subject + week + teacher to prevent duplicates.
+  /// Find an existing lesson by topic + subject + week + teacher + school to prevent duplicates.
   Future<Lesson?> findByTopicSubjectWeekTeacher({
     required String topic,
     required String subject,
     required int week,
     required String teacherServerId,
+    required String schoolServerId,
   }) async {
     final results = await (select(lessons)
           ..where((t) => t.topic.equals(topic))
           ..where((t) => t.subject.equals(subject))
           ..where((t) => t.week.equals(week))
           ..where((t) => t.teacherServerId.equals(teacherServerId))
+          ..where((t) => t.schoolServerId.equals(schoolServerId))
           ..where((t) => t.isDeleted.equals(false))
           ..limit(1))
         .get();

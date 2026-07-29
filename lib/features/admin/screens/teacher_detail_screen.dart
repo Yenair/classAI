@@ -71,12 +71,13 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
 
   Future<void> _loadSchemeProgress(Teacher teacher) async {
     final db = ref.read(databaseProvider);
+    final schoolServerId = ref.read(authProvider).currentSchool?.serverId;
     try {
-      final generatedCount = teacher.serverId != null
-          ? await db.lessonsDao.countByTeacher(teacher.serverId!)
+      final generatedCount = teacher.serverId != null && schoolServerId != null
+          ? await db.lessonsDao.countByTeacher(teacher.serverId!, schoolServerId)
           : 0;
-      final completedCount = teacher.serverId != null
-          ? await db.lessonsDao.countCompletedByTeacher(teacher.serverId!)
+      final completedCount = teacher.serverId != null && schoolServerId != null
+          ? await db.lessonsDao.countCompletedByTeacher(teacher.serverId!, schoolServerId)
           : 0;
 
       final teacherSchemes = await (db.select(db.schemeOfWork)

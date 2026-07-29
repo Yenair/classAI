@@ -1723,15 +1723,13 @@ final currentWeekProgressProvider =
   final teacher = authData.currentTeacher;
   final teacherId = teacher?.localId;
   final teacherServerId = teacher?.serverId;
+  final schoolServerId = authData.currentSchool?.serverId;
 
-  if (teacherId == null || teacherServerId == null) {
+  if (teacherId == null || teacherServerId == null || schoolServerId == null) {
     return null;
   }
 
-  final lessons = await db.lessonsDao.getAll();
-  final teacherLessons = lessons
-      .where((lesson) => lesson.teacherServerId == teacherServerId)
-      .toList();
+  final teacherLessons = await db.lessonsDao.getAllForTeacher(teacherServerId, schoolServerId);
   if (teacherLessons.isEmpty) return null;
 
   final activeWeek = teacherLessons
