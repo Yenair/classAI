@@ -10495,6 +10495,508 @@ class PaymentEventsCompanion extends UpdateCompanion<PaymentEvent> {
   }
 }
 
+class $FieldConflictHistoryTable extends FieldConflictHistory
+    with TableInfo<$FieldConflictHistoryTable, FieldConflictHistoryData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FieldConflictHistoryTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _recordTableMeta =
+      const VerificationMeta('recordTable');
+  @override
+  late final GeneratedColumn<String> recordTable = GeneratedColumn<String>(
+      'record_table', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _recordLocalIdMeta =
+      const VerificationMeta('recordLocalId');
+  @override
+  late final GeneratedColumn<int> recordLocalId = GeneratedColumn<int>(
+      'record_local_id', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _fieldNameMeta =
+      const VerificationMeta('fieldName');
+  @override
+  late final GeneratedColumn<String> fieldName = GeneratedColumn<String>(
+      'field_name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _discardedValueJsonMeta =
+      const VerificationMeta('discardedValueJson');
+  @override
+  late final GeneratedColumn<String> discardedValueJson =
+      GeneratedColumn<String>('discarded_value_json', aliasedName, false,
+          type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _winningValueJsonMeta =
+      const VerificationMeta('winningValueJson');
+  @override
+  late final GeneratedColumn<String> winningValueJson = GeneratedColumn<String>(
+      'winning_value_json', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _localUpdatedAtMeta =
+      const VerificationMeta('localUpdatedAt');
+  @override
+  late final GeneratedColumn<DateTime> localUpdatedAt =
+      GeneratedColumn<DateTime>('local_updated_at', aliasedName, true,
+          type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _remoteUpdatedAtMeta =
+      const VerificationMeta('remoteUpdatedAt');
+  @override
+  late final GeneratedColumn<DateTime> remoteUpdatedAt =
+      GeneratedColumn<DateTime>('remote_updated_at', aliasedName, true,
+          type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _recordedAtMeta =
+      const VerificationMeta('recordedAt');
+  @override
+  late final GeneratedColumn<DateTime> recordedAt = GeneratedColumn<DateTime>(
+      'recorded_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        recordTable,
+        recordLocalId,
+        fieldName,
+        discardedValueJson,
+        winningValueJson,
+        localUpdatedAt,
+        remoteUpdatedAt,
+        recordedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'field_conflict_history';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<FieldConflictHistoryData> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('record_table')) {
+      context.handle(
+          _recordTableMeta,
+          recordTable.isAcceptableOrUnknown(
+              data['record_table']!, _recordTableMeta));
+    } else if (isInserting) {
+      context.missing(_recordTableMeta);
+    }
+    if (data.containsKey('record_local_id')) {
+      context.handle(
+          _recordLocalIdMeta,
+          recordLocalId.isAcceptableOrUnknown(
+              data['record_local_id']!, _recordLocalIdMeta));
+    } else if (isInserting) {
+      context.missing(_recordLocalIdMeta);
+    }
+    if (data.containsKey('field_name')) {
+      context.handle(_fieldNameMeta,
+          fieldName.isAcceptableOrUnknown(data['field_name']!, _fieldNameMeta));
+    } else if (isInserting) {
+      context.missing(_fieldNameMeta);
+    }
+    if (data.containsKey('discarded_value_json')) {
+      context.handle(
+          _discardedValueJsonMeta,
+          discardedValueJson.isAcceptableOrUnknown(
+              data['discarded_value_json']!, _discardedValueJsonMeta));
+    } else if (isInserting) {
+      context.missing(_discardedValueJsonMeta);
+    }
+    if (data.containsKey('winning_value_json')) {
+      context.handle(
+          _winningValueJsonMeta,
+          winningValueJson.isAcceptableOrUnknown(
+              data['winning_value_json']!, _winningValueJsonMeta));
+    } else if (isInserting) {
+      context.missing(_winningValueJsonMeta);
+    }
+    if (data.containsKey('local_updated_at')) {
+      context.handle(
+          _localUpdatedAtMeta,
+          localUpdatedAt.isAcceptableOrUnknown(
+              data['local_updated_at']!, _localUpdatedAtMeta));
+    }
+    if (data.containsKey('remote_updated_at')) {
+      context.handle(
+          _remoteUpdatedAtMeta,
+          remoteUpdatedAt.isAcceptableOrUnknown(
+              data['remote_updated_at']!, _remoteUpdatedAtMeta));
+    }
+    if (data.containsKey('recorded_at')) {
+      context.handle(
+          _recordedAtMeta,
+          recordedAt.isAcceptableOrUnknown(
+              data['recorded_at']!, _recordedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  FieldConflictHistoryData map(Map<String, dynamic> data,
+      {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FieldConflictHistoryData(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      recordTable: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}record_table'])!,
+      recordLocalId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}record_local_id'])!,
+      fieldName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}field_name'])!,
+      discardedValueJson: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}discarded_value_json'])!,
+      winningValueJson: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}winning_value_json'])!,
+      localUpdatedAt: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime, data['${effectivePrefix}local_updated_at']),
+      remoteUpdatedAt: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime, data['${effectivePrefix}remote_updated_at']),
+      recordedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}recorded_at'])!,
+    );
+  }
+
+  @override
+  $FieldConflictHistoryTable createAlias(String alias) {
+    return $FieldConflictHistoryTable(attachedDatabase, alias);
+  }
+}
+
+class FieldConflictHistoryData extends DataClass
+    implements Insertable<FieldConflictHistoryData> {
+  final int id;
+  final String recordTable;
+  final int recordLocalId;
+  final String fieldName;
+  final String discardedValueJson;
+  final String winningValueJson;
+  final DateTime? localUpdatedAt;
+  final DateTime? remoteUpdatedAt;
+  final DateTime recordedAt;
+  const FieldConflictHistoryData(
+      {required this.id,
+      required this.recordTable,
+      required this.recordLocalId,
+      required this.fieldName,
+      required this.discardedValueJson,
+      required this.winningValueJson,
+      this.localUpdatedAt,
+      this.remoteUpdatedAt,
+      required this.recordedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['record_table'] = Variable<String>(recordTable);
+    map['record_local_id'] = Variable<int>(recordLocalId);
+    map['field_name'] = Variable<String>(fieldName);
+    map['discarded_value_json'] = Variable<String>(discardedValueJson);
+    map['winning_value_json'] = Variable<String>(winningValueJson);
+    if (!nullToAbsent || localUpdatedAt != null) {
+      map['local_updated_at'] = Variable<DateTime>(localUpdatedAt);
+    }
+    if (!nullToAbsent || remoteUpdatedAt != null) {
+      map['remote_updated_at'] = Variable<DateTime>(remoteUpdatedAt);
+    }
+    map['recorded_at'] = Variable<DateTime>(recordedAt);
+    return map;
+  }
+
+  FieldConflictHistoryCompanion toCompanion(bool nullToAbsent) {
+    return FieldConflictHistoryCompanion(
+      id: Value(id),
+      recordTable: Value(recordTable),
+      recordLocalId: Value(recordLocalId),
+      fieldName: Value(fieldName),
+      discardedValueJson: Value(discardedValueJson),
+      winningValueJson: Value(winningValueJson),
+      localUpdatedAt: localUpdatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(localUpdatedAt),
+      remoteUpdatedAt: remoteUpdatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(remoteUpdatedAt),
+      recordedAt: Value(recordedAt),
+    );
+  }
+
+  factory FieldConflictHistoryData.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FieldConflictHistoryData(
+      id: serializer.fromJson<int>(json['id']),
+      recordTable: serializer.fromJson<String>(json['recordTable']),
+      recordLocalId: serializer.fromJson<int>(json['recordLocalId']),
+      fieldName: serializer.fromJson<String>(json['fieldName']),
+      discardedValueJson:
+          serializer.fromJson<String>(json['discardedValueJson']),
+      winningValueJson: serializer.fromJson<String>(json['winningValueJson']),
+      localUpdatedAt: serializer.fromJson<DateTime?>(json['localUpdatedAt']),
+      remoteUpdatedAt: serializer.fromJson<DateTime?>(json['remoteUpdatedAt']),
+      recordedAt: serializer.fromJson<DateTime>(json['recordedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'recordTable': serializer.toJson<String>(recordTable),
+      'recordLocalId': serializer.toJson<int>(recordLocalId),
+      'fieldName': serializer.toJson<String>(fieldName),
+      'discardedValueJson': serializer.toJson<String>(discardedValueJson),
+      'winningValueJson': serializer.toJson<String>(winningValueJson),
+      'localUpdatedAt': serializer.toJson<DateTime?>(localUpdatedAt),
+      'remoteUpdatedAt': serializer.toJson<DateTime?>(remoteUpdatedAt),
+      'recordedAt': serializer.toJson<DateTime>(recordedAt),
+    };
+  }
+
+  FieldConflictHistoryData copyWith(
+          {int? id,
+          String? recordTable,
+          int? recordLocalId,
+          String? fieldName,
+          String? discardedValueJson,
+          String? winningValueJson,
+          Value<DateTime?> localUpdatedAt = const Value.absent(),
+          Value<DateTime?> remoteUpdatedAt = const Value.absent(),
+          DateTime? recordedAt}) =>
+      FieldConflictHistoryData(
+        id: id ?? this.id,
+        recordTable: recordTable ?? this.recordTable,
+        recordLocalId: recordLocalId ?? this.recordLocalId,
+        fieldName: fieldName ?? this.fieldName,
+        discardedValueJson: discardedValueJson ?? this.discardedValueJson,
+        winningValueJson: winningValueJson ?? this.winningValueJson,
+        localUpdatedAt:
+            localUpdatedAt.present ? localUpdatedAt.value : this.localUpdatedAt,
+        remoteUpdatedAt: remoteUpdatedAt.present
+            ? remoteUpdatedAt.value
+            : this.remoteUpdatedAt,
+        recordedAt: recordedAt ?? this.recordedAt,
+      );
+  FieldConflictHistoryData copyWithCompanion(
+      FieldConflictHistoryCompanion data) {
+    return FieldConflictHistoryData(
+      id: data.id.present ? data.id.value : this.id,
+      recordTable:
+          data.recordTable.present ? data.recordTable.value : this.recordTable,
+      recordLocalId: data.recordLocalId.present
+          ? data.recordLocalId.value
+          : this.recordLocalId,
+      fieldName: data.fieldName.present ? data.fieldName.value : this.fieldName,
+      discardedValueJson: data.discardedValueJson.present
+          ? data.discardedValueJson.value
+          : this.discardedValueJson,
+      winningValueJson: data.winningValueJson.present
+          ? data.winningValueJson.value
+          : this.winningValueJson,
+      localUpdatedAt: data.localUpdatedAt.present
+          ? data.localUpdatedAt.value
+          : this.localUpdatedAt,
+      remoteUpdatedAt: data.remoteUpdatedAt.present
+          ? data.remoteUpdatedAt.value
+          : this.remoteUpdatedAt,
+      recordedAt:
+          data.recordedAt.present ? data.recordedAt.value : this.recordedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FieldConflictHistoryData(')
+          ..write('id: $id, ')
+          ..write('recordTable: $recordTable, ')
+          ..write('recordLocalId: $recordLocalId, ')
+          ..write('fieldName: $fieldName, ')
+          ..write('discardedValueJson: $discardedValueJson, ')
+          ..write('winningValueJson: $winningValueJson, ')
+          ..write('localUpdatedAt: $localUpdatedAt, ')
+          ..write('remoteUpdatedAt: $remoteUpdatedAt, ')
+          ..write('recordedAt: $recordedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      recordTable,
+      recordLocalId,
+      fieldName,
+      discardedValueJson,
+      winningValueJson,
+      localUpdatedAt,
+      remoteUpdatedAt,
+      recordedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FieldConflictHistoryData &&
+          other.id == this.id &&
+          other.recordTable == this.recordTable &&
+          other.recordLocalId == this.recordLocalId &&
+          other.fieldName == this.fieldName &&
+          other.discardedValueJson == this.discardedValueJson &&
+          other.winningValueJson == this.winningValueJson &&
+          other.localUpdatedAt == this.localUpdatedAt &&
+          other.remoteUpdatedAt == this.remoteUpdatedAt &&
+          other.recordedAt == this.recordedAt);
+}
+
+class FieldConflictHistoryCompanion
+    extends UpdateCompanion<FieldConflictHistoryData> {
+  final Value<int> id;
+  final Value<String> recordTable;
+  final Value<int> recordLocalId;
+  final Value<String> fieldName;
+  final Value<String> discardedValueJson;
+  final Value<String> winningValueJson;
+  final Value<DateTime?> localUpdatedAt;
+  final Value<DateTime?> remoteUpdatedAt;
+  final Value<DateTime> recordedAt;
+  const FieldConflictHistoryCompanion({
+    this.id = const Value.absent(),
+    this.recordTable = const Value.absent(),
+    this.recordLocalId = const Value.absent(),
+    this.fieldName = const Value.absent(),
+    this.discardedValueJson = const Value.absent(),
+    this.winningValueJson = const Value.absent(),
+    this.localUpdatedAt = const Value.absent(),
+    this.remoteUpdatedAt = const Value.absent(),
+    this.recordedAt = const Value.absent(),
+  });
+  FieldConflictHistoryCompanion.insert({
+    this.id = const Value.absent(),
+    required String recordTable,
+    required int recordLocalId,
+    required String fieldName,
+    required String discardedValueJson,
+    required String winningValueJson,
+    this.localUpdatedAt = const Value.absent(),
+    this.remoteUpdatedAt = const Value.absent(),
+    this.recordedAt = const Value.absent(),
+  })  : recordTable = Value(recordTable),
+        recordLocalId = Value(recordLocalId),
+        fieldName = Value(fieldName),
+        discardedValueJson = Value(discardedValueJson),
+        winningValueJson = Value(winningValueJson);
+  static Insertable<FieldConflictHistoryData> custom({
+    Expression<int>? id,
+    Expression<String>? recordTable,
+    Expression<int>? recordLocalId,
+    Expression<String>? fieldName,
+    Expression<String>? discardedValueJson,
+    Expression<String>? winningValueJson,
+    Expression<DateTime>? localUpdatedAt,
+    Expression<DateTime>? remoteUpdatedAt,
+    Expression<DateTime>? recordedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (recordTable != null) 'record_table': recordTable,
+      if (recordLocalId != null) 'record_local_id': recordLocalId,
+      if (fieldName != null) 'field_name': fieldName,
+      if (discardedValueJson != null)
+        'discarded_value_json': discardedValueJson,
+      if (winningValueJson != null) 'winning_value_json': winningValueJson,
+      if (localUpdatedAt != null) 'local_updated_at': localUpdatedAt,
+      if (remoteUpdatedAt != null) 'remote_updated_at': remoteUpdatedAt,
+      if (recordedAt != null) 'recorded_at': recordedAt,
+    });
+  }
+
+  FieldConflictHistoryCompanion copyWith(
+      {Value<int>? id,
+      Value<String>? recordTable,
+      Value<int>? recordLocalId,
+      Value<String>? fieldName,
+      Value<String>? discardedValueJson,
+      Value<String>? winningValueJson,
+      Value<DateTime?>? localUpdatedAt,
+      Value<DateTime?>? remoteUpdatedAt,
+      Value<DateTime>? recordedAt}) {
+    return FieldConflictHistoryCompanion(
+      id: id ?? this.id,
+      recordTable: recordTable ?? this.recordTable,
+      recordLocalId: recordLocalId ?? this.recordLocalId,
+      fieldName: fieldName ?? this.fieldName,
+      discardedValueJson: discardedValueJson ?? this.discardedValueJson,
+      winningValueJson: winningValueJson ?? this.winningValueJson,
+      localUpdatedAt: localUpdatedAt ?? this.localUpdatedAt,
+      remoteUpdatedAt: remoteUpdatedAt ?? this.remoteUpdatedAt,
+      recordedAt: recordedAt ?? this.recordedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (recordTable.present) {
+      map['record_table'] = Variable<String>(recordTable.value);
+    }
+    if (recordLocalId.present) {
+      map['record_local_id'] = Variable<int>(recordLocalId.value);
+    }
+    if (fieldName.present) {
+      map['field_name'] = Variable<String>(fieldName.value);
+    }
+    if (discardedValueJson.present) {
+      map['discarded_value_json'] = Variable<String>(discardedValueJson.value);
+    }
+    if (winningValueJson.present) {
+      map['winning_value_json'] = Variable<String>(winningValueJson.value);
+    }
+    if (localUpdatedAt.present) {
+      map['local_updated_at'] = Variable<DateTime>(localUpdatedAt.value);
+    }
+    if (remoteUpdatedAt.present) {
+      map['remote_updated_at'] = Variable<DateTime>(remoteUpdatedAt.value);
+    }
+    if (recordedAt.present) {
+      map['recorded_at'] = Variable<DateTime>(recordedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FieldConflictHistoryCompanion(')
+          ..write('id: $id, ')
+          ..write('recordTable: $recordTable, ')
+          ..write('recordLocalId: $recordLocalId, ')
+          ..write('fieldName: $fieldName, ')
+          ..write('discardedValueJson: $discardedValueJson, ')
+          ..write('winningValueJson: $winningValueJson, ')
+          ..write('localUpdatedAt: $localUpdatedAt, ')
+          ..write('remoteUpdatedAt: $remoteUpdatedAt, ')
+          ..write('recordedAt: $recordedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $RecoveryCodesTable extends RecoveryCodes
     with TableInfo<$RecoveryCodesTable, RecoveryCode> {
   @override
@@ -13636,6 +14138,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $VersionHashesTable versionHashes = $VersionHashesTable(this);
   late final $ConflictsTable conflicts = $ConflictsTable(this);
   late final $PaymentEventsTable paymentEvents = $PaymentEventsTable(this);
+  late final $FieldConflictHistoryTable fieldConflictHistory =
+      $FieldConflictHistoryTable(this);
   late final $RecoveryCodesTable recoveryCodes = $RecoveryCodesTable(this);
   late final $PendingRecoveryRequestsTable pendingRecoveryRequests =
       $PendingRecoveryRequestsTable(this);
@@ -13666,6 +14170,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         versionHashes,
         conflicts,
         paymentEvents,
+        fieldConflictHistory,
         recoveryCodes,
         pendingRecoveryRequests,
         teacherDevices,
@@ -18926,6 +19431,248 @@ typedef $$PaymentEventsTableProcessedTableManager = ProcessedTableManager<
     ),
     PaymentEvent,
     PrefetchHooks Function()>;
+typedef $$FieldConflictHistoryTableCreateCompanionBuilder
+    = FieldConflictHistoryCompanion Function({
+  Value<int> id,
+  required String recordTable,
+  required int recordLocalId,
+  required String fieldName,
+  required String discardedValueJson,
+  required String winningValueJson,
+  Value<DateTime?> localUpdatedAt,
+  Value<DateTime?> remoteUpdatedAt,
+  Value<DateTime> recordedAt,
+});
+typedef $$FieldConflictHistoryTableUpdateCompanionBuilder
+    = FieldConflictHistoryCompanion Function({
+  Value<int> id,
+  Value<String> recordTable,
+  Value<int> recordLocalId,
+  Value<String> fieldName,
+  Value<String> discardedValueJson,
+  Value<String> winningValueJson,
+  Value<DateTime?> localUpdatedAt,
+  Value<DateTime?> remoteUpdatedAt,
+  Value<DateTime> recordedAt,
+});
+
+class $$FieldConflictHistoryTableFilterComposer
+    extends Composer<_$AppDatabase, $FieldConflictHistoryTable> {
+  $$FieldConflictHistoryTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get recordTable => $composableBuilder(
+      column: $table.recordTable, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get recordLocalId => $composableBuilder(
+      column: $table.recordLocalId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get fieldName => $composableBuilder(
+      column: $table.fieldName, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get discardedValueJson => $composableBuilder(
+      column: $table.discardedValueJson,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get winningValueJson => $composableBuilder(
+      column: $table.winningValueJson,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get localUpdatedAt => $composableBuilder(
+      column: $table.localUpdatedAt,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get remoteUpdatedAt => $composableBuilder(
+      column: $table.remoteUpdatedAt,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get recordedAt => $composableBuilder(
+      column: $table.recordedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$FieldConflictHistoryTableOrderingComposer
+    extends Composer<_$AppDatabase, $FieldConflictHistoryTable> {
+  $$FieldConflictHistoryTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get recordTable => $composableBuilder(
+      column: $table.recordTable, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get recordLocalId => $composableBuilder(
+      column: $table.recordLocalId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get fieldName => $composableBuilder(
+      column: $table.fieldName, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get discardedValueJson => $composableBuilder(
+      column: $table.discardedValueJson,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get winningValueJson => $composableBuilder(
+      column: $table.winningValueJson,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get localUpdatedAt => $composableBuilder(
+      column: $table.localUpdatedAt,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get remoteUpdatedAt => $composableBuilder(
+      column: $table.remoteUpdatedAt,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get recordedAt => $composableBuilder(
+      column: $table.recordedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$FieldConflictHistoryTableAnnotationComposer
+    extends Composer<_$AppDatabase, $FieldConflictHistoryTable> {
+  $$FieldConflictHistoryTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get recordTable => $composableBuilder(
+      column: $table.recordTable, builder: (column) => column);
+
+  GeneratedColumn<int> get recordLocalId => $composableBuilder(
+      column: $table.recordLocalId, builder: (column) => column);
+
+  GeneratedColumn<String> get fieldName =>
+      $composableBuilder(column: $table.fieldName, builder: (column) => column);
+
+  GeneratedColumn<String> get discardedValueJson => $composableBuilder(
+      column: $table.discardedValueJson, builder: (column) => column);
+
+  GeneratedColumn<String> get winningValueJson => $composableBuilder(
+      column: $table.winningValueJson, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get localUpdatedAt => $composableBuilder(
+      column: $table.localUpdatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get remoteUpdatedAt => $composableBuilder(
+      column: $table.remoteUpdatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get recordedAt => $composableBuilder(
+      column: $table.recordedAt, builder: (column) => column);
+}
+
+class $$FieldConflictHistoryTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $FieldConflictHistoryTable,
+    FieldConflictHistoryData,
+    $$FieldConflictHistoryTableFilterComposer,
+    $$FieldConflictHistoryTableOrderingComposer,
+    $$FieldConflictHistoryTableAnnotationComposer,
+    $$FieldConflictHistoryTableCreateCompanionBuilder,
+    $$FieldConflictHistoryTableUpdateCompanionBuilder,
+    (
+      FieldConflictHistoryData,
+      BaseReferences<_$AppDatabase, $FieldConflictHistoryTable,
+          FieldConflictHistoryData>
+    ),
+    FieldConflictHistoryData,
+    PrefetchHooks Function()> {
+  $$FieldConflictHistoryTableTableManager(
+      _$AppDatabase db, $FieldConflictHistoryTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FieldConflictHistoryTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FieldConflictHistoryTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$FieldConflictHistoryTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<String> recordTable = const Value.absent(),
+            Value<int> recordLocalId = const Value.absent(),
+            Value<String> fieldName = const Value.absent(),
+            Value<String> discardedValueJson = const Value.absent(),
+            Value<String> winningValueJson = const Value.absent(),
+            Value<DateTime?> localUpdatedAt = const Value.absent(),
+            Value<DateTime?> remoteUpdatedAt = const Value.absent(),
+            Value<DateTime> recordedAt = const Value.absent(),
+          }) =>
+              FieldConflictHistoryCompanion(
+            id: id,
+            recordTable: recordTable,
+            recordLocalId: recordLocalId,
+            fieldName: fieldName,
+            discardedValueJson: discardedValueJson,
+            winningValueJson: winningValueJson,
+            localUpdatedAt: localUpdatedAt,
+            remoteUpdatedAt: remoteUpdatedAt,
+            recordedAt: recordedAt,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required String recordTable,
+            required int recordLocalId,
+            required String fieldName,
+            required String discardedValueJson,
+            required String winningValueJson,
+            Value<DateTime?> localUpdatedAt = const Value.absent(),
+            Value<DateTime?> remoteUpdatedAt = const Value.absent(),
+            Value<DateTime> recordedAt = const Value.absent(),
+          }) =>
+              FieldConflictHistoryCompanion.insert(
+            id: id,
+            recordTable: recordTable,
+            recordLocalId: recordLocalId,
+            fieldName: fieldName,
+            discardedValueJson: discardedValueJson,
+            winningValueJson: winningValueJson,
+            localUpdatedAt: localUpdatedAt,
+            remoteUpdatedAt: remoteUpdatedAt,
+            recordedAt: recordedAt,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$FieldConflictHistoryTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDatabase,
+        $FieldConflictHistoryTable,
+        FieldConflictHistoryData,
+        $$FieldConflictHistoryTableFilterComposer,
+        $$FieldConflictHistoryTableOrderingComposer,
+        $$FieldConflictHistoryTableAnnotationComposer,
+        $$FieldConflictHistoryTableCreateCompanionBuilder,
+        $$FieldConflictHistoryTableUpdateCompanionBuilder,
+        (
+          FieldConflictHistoryData,
+          BaseReferences<_$AppDatabase, $FieldConflictHistoryTable,
+              FieldConflictHistoryData>
+        ),
+        FieldConflictHistoryData,
+        PrefetchHooks Function()>;
 typedef $$RecoveryCodesTableCreateCompanionBuilder = RecoveryCodesCompanion
     Function({
   Value<int> id,
@@ -21138,6 +21885,8 @@ class $AppDatabaseManager {
       $$ConflictsTableTableManager(_db, _db.conflicts);
   $$PaymentEventsTableTableManager get paymentEvents =>
       $$PaymentEventsTableTableManager(_db, _db.paymentEvents);
+  $$FieldConflictHistoryTableTableManager get fieldConflictHistory =>
+      $$FieldConflictHistoryTableTableManager(_db, _db.fieldConflictHistory);
   $$RecoveryCodesTableTableManager get recoveryCodes =>
       $$RecoveryCodesTableTableManager(_db, _db.recoveryCodes);
   $$PendingRecoveryRequestsTableTableManager get pendingRecoveryRequests =>

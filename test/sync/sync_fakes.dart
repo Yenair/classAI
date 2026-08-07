@@ -12,6 +12,7 @@ class FakeSyncRecordStore implements SyncRecordStore {
   final Map<String, Map<int, Map<String, dynamic>>> syncedRecords = {};
   final Map<String, Map<int, Map<String, dynamic>>> baseRecords = {};
   final List<Map<String, dynamic>> savedConflicts = [];
+  final List<Map<String, dynamic>> savedFieldConflictHistory = [];
 
   FakeSyncRecordStore(this.db);
 
@@ -119,6 +120,27 @@ class FakeSyncRecordStore implements SyncRecordStore {
       'remoteValue': remoteValue,
       'resolution': resolution,
       'notified': notified,
+    });
+  }
+
+  @override
+  Future<void> saveFieldConflictHistory({
+    required String recordTable,
+    required int recordLocalId,
+    required String fieldName,
+    required String discardedValueJson,
+    required String winningValueJson,
+    required DateTime? localUpdatedAt,
+    required DateTime? remoteUpdatedAt,
+  }) async {
+    savedFieldConflictHistory.add({
+      'recordTable': recordTable,
+      'recordLocalId': recordLocalId,
+      'fieldName': fieldName,
+      'discardedValueJson': discardedValueJson,
+      'winningValueJson': winningValueJson,
+      'localUpdatedAt': localUpdatedAt,
+      'remoteUpdatedAt': remoteUpdatedAt,
     });
   }
 

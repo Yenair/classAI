@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart' hide Column;
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
@@ -1076,6 +1077,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
               'school_server_id': _schoolId,
               'content': lessonContent,
               'is_unlocked': _isUnlocked,
+              'status': _lessonStatus,
               if (schemeOfWorkIdStr != null) 'scheme_of_work_id': schemeOfWorkIdStr,
               'week_number': _week,
               if (termLabel != null) 'term': termLabel,
@@ -1145,6 +1147,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           'content': lessonContent,
           'content_hash': lessonContent.hashCode.toString(),
           'is_unlocked': _isUnlocked,
+          'status': _lessonStatus,
           if (schemeOfWorkIdStr != null) 'scheme_of_work_id': schemeOfWorkIdStr,
           'week_number': _week,
           if (termLabel != null) 'term': termLabel,
@@ -1494,7 +1497,12 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
 
-    return Scaffold(
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyY, control: true):
+            _undoController.redo,
+      },
+      child: Scaffold(
       backgroundColor: cs.surface,
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1788,6 +1796,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

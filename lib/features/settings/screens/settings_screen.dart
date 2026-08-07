@@ -1,18 +1,15 @@
-import 'dart:convert';
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart';
+
+import 'dart:io' ;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
-import 'package:classai/core/database/database.dart';
-import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
-import 'package:classai/features/dashboard/providers/unresolved_conflicts_provider.dart';
 import 'package:classai/features/settings/providers/theme_provider.dart';
-import 'package:classai/main.dart' show databaseProvider;
-import 'package:drift/drift.dart' hide Column;
+
+import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
+
 
 void _goToLessonsDeferred(BuildContext context) {
   WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -431,11 +428,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
         _buildAboutCard(context, cs, textTheme),
 
-        // DEBUG: Seed a fake conflict row for testing /conflicts screen
-        if (kDebugMode) ...[
-          const SizedBox(height: 16),
-          _buildDebugSeedCard(context, cs, textTheme),
-        ],
       ],
     );
   }
@@ -1270,125 +1262,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return '${diff.inDays}d ago';
   }
 
-  /// Debug-only card that seeds a fake conflict row for testing /conflicts.
-  Widget _buildDebugSeedCard(
-      BuildContext context, ColorScheme cs, TextTheme textTheme) {
-    return _StitchCard(
-      cs: cs,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.bug_report_rounded,
-                size: 28,
-                color: Colors.orangeAccent,
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Debug (dev only)',
-                style: textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.orangeAccent,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: FilledButton.icon(
-              onPressed: () async {
-                final scaffold = ScaffoldMessenger.of(context);
-                try {
-                  await _seedDebugConflict();
-                  scaffold.showSnackBar(
-                    const SnackBar(content: Text('Seeded debug conflict')),
-                  );
-                } catch (e) {
-                  scaffold.showSnackBar(
-                    SnackBar(content: Text('Failed: $e')),
-                  );
-                }
-              },
-              style: FilledButton.styleFrom(
-                backgroundColor: Colors.orangeAccent.withValues(alpha: 0.2),
-                foregroundColor: Colors.orangeAccent.shade700,
-              ),
-              icon: const Icon(Icons.add_circle_outline_rounded),
-              label: const Text('Seed fake conflict row'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
-  /// TEMPORARY DEBUG: Seeds a fake 'lessons' conflict row into the local DB.
-  /// Only call this in debug mode on a dev device.
-  Future<void> _seedDebugConflict() async {
-    assert(() {
-      // This must only ever run in debug mode
-      return true;
-    }());
-
-    final db = ref.read(databaseProvider);
-
-    // Pick the first real lesson from the local DB for a realistic ID
-    final firstLesson = await (db.select(db.lessons)..limit(1)).getSingleOrNull();
-    if (firstLesson == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No lessons found — create a lesson first')),
-        );
-      }
-      return;
-    }
-
-    final localId = firstLesson.id;
-    final localTopic = firstLesson.topic;
-    final remoteTopic = '$localTopic (remote edit)';
-
-    await db.into(db.conflicts).insert(
-      ConflictsCompanion.insert(
-        recordType: 'lessons',
-        recordLocalId: localId,
-        conflictingFields: jsonEncode(['topic']),
-        localValue: Value(jsonEncode({
-          'id': localId,
-          'topic': localTopic,
-          'subject': firstLesson.subject,
-          'classLevel': firstLesson.classLevel,
-          'week': firstLesson.week,
-          'content': firstLesson.content,
-        })),
-        remoteValue: Value(jsonEncode({
-          'id': localId,
-          'topic': remoteTopic,
-          'subject': firstLesson.subject,
-          'classLevel': firstLesson.classLevel,
-          'week': firstLesson.week,
-          'content': firstLesson.content,
-        })),
-        resolution: Value('unresolved'),
-        notified: Value(false),
-        createdAt: Value(DateTime.now()),
-        updatedAt: Value(DateTime.now()),
-      ),
-    );
-
-    // Refresh the unresolved conflicts counter so the banner / badge updates
-    ref.read(unresolvedConflictsProvider.notifier).refresh();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Debug conflict seeded for lesson #$localId')),
-      );
-    }
-  }
-
+ 
+ 
   @override
   void dispose() {
     super.dispose();

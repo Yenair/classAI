@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 
 import 'package:drift/drift.dart' hide Column;
@@ -19,6 +20,8 @@ import 'package:classai/features/dashboard/providers/unresolved_conflicts_provid
 import 'package:classai/features/dashboard/providers/dashboard_data_providers.dart'
     show lessonsListProvider;
 import 'package:classai/main.dart' show databaseProvider;
+import 'package:file_selector/file_selector.dart'
+    show getSaveLocation, XTypeGroup;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -191,10 +194,17 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
         final existingForScheme = lessons.any((lesson) {
           if (lesson.isDeleted || lesson.status != 'draft') return false;
           final linkedSchemeId = int.tryParse(lesson.schemeOfWorkId ?? '');
-          return linkedSchemeId == scheme.id &&
+          // Primary check: all key fields match
+          if (linkedSchemeId == scheme.id &&
               lesson.subject == subjectName &&
               lesson.classLevel == classLevel &&
-              (lesson.weekNumber ?? lesson.week) == scheme.weekNumber;
+              (lesson.weekNumber ?? lesson.week) == scheme.weekNumber) {
+            return true;
+          }
+          // Fallback: same scheme_of_work_id (resilient to subject being
+          // wiped to '' by sync pull before the empty-remote guard fix).
+          if (linkedSchemeId == scheme.id) return true;
+          return false;
         });
         if (existingForScheme) {
           existingDraftKeys.add(key);
@@ -1118,13 +1128,29 @@ Future<void> exportLessonPdf(
     );
     await file.writeAsBytes(pdfBytes);
 
-    // Share via system share sheet
-    await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(file.path)],
-        text: 'Lesson: ${lesson.topic}',
-      ),
-    );
+    if (kIsWeb || Platform.isAndroid || Platform.isIOS) {
+      // Share via system share sheet
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path)],
+          text: 'Lesson: ${lesson.topic}',
+        ),
+      );
+    } else {
+      // Desktop (Windows/macOS/Linux): native "Save As" dialog so the user
+      // picks a location and gets a real .pdf on disk.
+      final saveLocation = await getSaveLocation(
+        suggestedName:
+            '${safeName}_${DateTime.now().millisecondsSinceEpoch}.pdf',
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'PDF', extensions: ['pdf']),
+        ],
+      );
+      // User cancellation (null location) is normal; no error SnackBar needed.
+      if (saveLocation != null) {
+        await File(saveLocation.path).writeAsBytes(pdfBytes);
+      }
+    }
     // User cancellation is normal; no error SnackBar needed.
   } on PdfExportException catch (e) {
     // ── Unified daily limit handling ──

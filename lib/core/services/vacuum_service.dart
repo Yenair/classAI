@@ -6,6 +6,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart' as sql;
 
 import '../database/database.dart';
+import '../database/database_encryption_bootstrap.dart';
+import 'security_service.dart';
 
 /// Safe VACUUM implementation for ClassAI.
 ///
@@ -60,10 +62,18 @@ class VacuumService {
     final tempPath = '${originalPath}_vacuum';
     originalFile.copySync(tempPath);
 
-    // 4. Run VACUUM in background isolate on the temp copy
+    // 4. Run VACUUM in background isolate on the temp copy.
+    // The temp copy is an encrypted database (copied from the live classai.db),
+    // so it must be opened with the same key. Secure storage is not readable
+    // from a background isolate, so the passphrase is captured here.
+    final passphrase = await _dbEncryptionPassphrase();
     final success = await Isolate.run(() async {
+      // The isolate has its own copy of the open registry, so the Android
+      // native override must be applied here again.
+      DatabaseEncryptionBootstrap.applyNativeOverrides();
       final vacDb = sql.sqlite3.open(tempPath);
       try {
+        vacDb.execute("PRAGMA key = '$passphrase';");
         vacDb.execute('VACUUM');
         vacDb.execute('PRAGMA integrity_check');
         return true;
@@ -106,10 +116,16 @@ class VacuumService {
       return false;
     }
 
-    // Verify integrity of the vacuumed database
+    // Verify integrity of the vacuumed database. It is encrypted (copied from
+    // the live classai.db), so it must be opened with the same key. Secure
+    // storage is not readable from a background isolate, so the passphrase is
+    // captured here.
+    final passphrase = await _dbEncryptionPassphrase();
     final integrityOk = await Isolate.run(() {
+      DatabaseEncryptionBootstrap.applyNativeOverrides();
       final db = sql.sqlite3.open(vacPath);
       try {
+        db.execute("PRAGMA key = '$passphrase';");
         final results = db.select('PRAGMA integrity_check');
         for (final row in results) {
           if (row[0] != 'ok') return false;
@@ -169,6 +185,14 @@ class VacuumService {
   Future<String> getDatabasePath() async {
     final dbFolder = await getApplicationDocumentsDirectory();
     return p.join(dbFolder.path, 'classai.db');
+  }
+
+  /// Reads (and, on a fresh install, creates) the SQLCipher database passphrase
+  /// so it can be threaded into background isolates that open `classai.db`
+  /// directly (secure storage is not readable from a background isolate).
+  Future<String> _dbEncryptionPassphrase() async {
+    final security = SecurityService();
+    return security.getOrCreateDbEncryptionPassphrase();
   }
 
   /// Helper to read an int column from a PRAGMA result.

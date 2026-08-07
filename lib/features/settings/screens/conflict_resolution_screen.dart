@@ -411,7 +411,7 @@ class _ConflictCard extends StatelessWidget {
               children: [
                 Chip(
                   label: Text(
-                    conflict.recordType,
+                    conflict.recordType.toUpperCase(),
                     style: Theme.of(context).textTheme.labelSmall,
                   ),
                   visualDensity: VisualDensity.compact,
@@ -425,7 +425,7 @@ class _ConflictCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    'ID: ${conflict.recordLocalId}',
+                    'ID: ${conflict.recordLocalId}'.toUpperCase(),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           fontFamily: 'monospace',
                         ),
@@ -433,16 +433,7 @@ class _ConflictCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-
-            // Conflicting fields with local vs remote values
-            Text(
-              'Conflicting fields:',
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-            ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
             ...fields.map(
               (field) => Padding(
                 padding: const EdgeInsets.only(left: 4, bottom: 12),
@@ -451,7 +442,7 @@ class _ConflictCard extends StatelessWidget {
                   children: [
                     // Field name header
                     Text(
-                      field,
+                      " "+field.toUpperCase(),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             fontWeight: FontWeight.w700,
                             color: cs.primary,
@@ -571,7 +562,7 @@ class _ConflictCard extends StatelessWidget {
                 Tooltip(
                   triggerMode: TooltipTriggerMode.longPress,
                   message:
-                      'Keeps the version on this device. The other device\'s change will be replaced.',
+                      'Keeps the version on this device. \n The other device\'s change will be replaced.',
                   child: TextButton(
                     onPressed: () => onResolve(conflict, 'local'),
                     style: TextButton.styleFrom(
@@ -587,7 +578,7 @@ class _ConflictCard extends StatelessWidget {
                 Tooltip(
                   triggerMode: TooltipTriggerMode.longPress,
                   message:
-                      'Replaces this device\'s version with the one from the other device.',
+                      'Replaces this device\'s version with the one online.',
                   child: TextButton(
                     onPressed: () => onResolve(conflict, 'remote'),
                     style: TextButton.styleFrom(
@@ -596,7 +587,7 @@ class _ConflictCard extends StatelessWidget {
                         vertical: 8,
                       ),
                     ),
-                    child: const Text('Keep Theirs'),
+                    child: const Text('Keep Online Version'),
                   ),
                 ),
               ],

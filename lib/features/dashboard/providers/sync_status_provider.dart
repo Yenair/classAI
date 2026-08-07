@@ -142,14 +142,32 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
   Future<String?> _setJwtOnRemoteApi(SyncService syncService) async {
     final authService = ref.read(authServiceProvider);
     final securityService = ref.read(securityServiceProvider);
+    final authState = ref.read(authProvider);
     String? jwt = authService.currentJwt;
     if (jwt == null || jwt.isEmpty) {
-      // In-memory JWT may have been cleared by a failed session timer
-      // while offline — fall back to secure storage.
+      debugPrint(
+        '[SYNC-AUTH] In-memory JWT missing before sync-push. '
+        'authState=${authState.state}. Falling back to secure storage.',
+      );
       jwt = await securityService.getStoredJwt();
       if (jwt != null && jwt.isNotEmpty) {
+        debugPrint(
+          '[SYNC-AUTH] Restored JWT from secure storage and reloaded '
+          'it into memory.',
+        );
         authService.setJwt(jwt);
+      } else {
+        debugPrint(
+          '[SYNC-AUTH] No JWT found in memory or secure storage. '
+          'sync-push will remain unauthenticated until the session is '
+          'restored.',
+        );
       }
+    } else {
+      debugPrint(
+        '[SYNC-AUTH] In-memory JWT available for sync-push. '
+        'authState=${authState.state}.',
+      );
     }
     if (jwt != null && jwt.isNotEmpty && syncService.remoteApi is SupabaseSyncRemoteApi) {
       (syncService.remoteApi as SupabaseSyncRemoteApi).setJwt(jwt);

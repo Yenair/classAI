@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
 import 'package:classai/core/database/database.dart';
@@ -792,6 +793,10 @@ class SupabaseAuthService implements AuthService {
 
       final data = response.data as Map<String, dynamic>?;
       if (data == null || data['valid'] != true) {
+        debugPrint(
+          '[AUTH] validateSession() returned invalid response; clearing '
+          'in-memory JWT. response=$data',
+        );
         _currentJwt = null;
         throw AuthException(
           code: AuthErrorCode.invalidCredentials,
@@ -801,6 +806,10 @@ class SupabaseAuthService implements AuthService {
 
       return _parseAuthResult(data);
     } on supabase_pkg.FunctionException catch (e) {
+      debugPrint(
+        '[AUTH] validateSession() FunctionException; clearing in-memory JWT. '
+        'status=${e.status}, details=${e.details}',
+      );
       _currentJwt = null;
       // Check if this is a token_version_mismatch
       final code = (e.details is Map)
@@ -819,6 +828,10 @@ class SupabaseAuthService implements AuthService {
         originalError: e,
       );
     } catch (e) {
+      debugPrint(
+        '[AUTH] validateSession() network/unknown error; clearing in-memory '
+        'JWT. error=$e',
+      );
       _currentJwt = null;
       throw AuthException(
         code: AuthErrorCode.networkError,
@@ -830,6 +843,7 @@ class SupabaseAuthService implements AuthService {
 
   /// Clears the stored JWT. Called on logout.
   void clearJwt() {
+    debugPrint('[AUTH] clearJwt() called; clearing in-memory JWT.');
     _currentJwt = null;
   }
 

@@ -725,7 +725,7 @@ serve(async (req) => {
     //   verification_codes  — email verification OTPs
     //   recovery_codes      — password-reset recovery codes
     const adminTables = new Set([
-      "teachers", "schools", "subjects",
+      "teachers", "schools",
       "payment_events",
       "app_config",
       "pending_activations",
@@ -752,6 +752,20 @@ serve(async (req) => {
       }
 
       const op = (operation as string).toUpperCase();
+
+      if (table === "subjects" && op === "DELETE" && !isAdmin) {
+        console.warn(
+          `sync-push: non-admin teacher ${jwtClaims.teacher_id} attempted DELETE on admin-only subjects table`,
+        );
+        results.push({
+          local_id: localId,
+          server_id: null,
+          status: "error",
+          retryable: false,
+          error: "Admin access required for this table",
+        });
+        continue;
+      }
 
       // ──────────────────────────────────────────────────────────────────
       // IMPORTANT: Decompress + extract local_id BEFORE any guard checks,

@@ -15,8 +15,10 @@ dependencies:
 
   # Database
   drift: ^2.31.0
-  # Drift 2.x still uses sqlite3 2.x, so keep the matching Flutter libs package.
-  sqlite3_flutter_libs: ^0.5.42
+  # SQLCipher-native build for the sqlite3 2.x line used by Drift 2.x.
+  # NOTE: 0.7.0+ is a deprecated no-op; 0.6.8 is the last version that actually
+  # bundles the SQLCipher 4.10.0 native library. Keep pinned to 0.6.8.
+  sqlcipher_flutter_libs: 0.6.8
 
   # Platform & Device
   path_provider: ^2.1.5
@@ -33,6 +35,7 @@ dependencies:
 
   # Documents
   pdf: ^3.12.0
+  file_selector: ^1.0.3
 
   # Media
   flutter_image_compress: ^2.4.0
@@ -72,6 +75,9 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   flutter_launcher_icons: ^0.14.3
+  # Required by test/database/db_encryption_bootstrap_test.dart to provide an
+  # in-memory fake for flutter_secure_storage's platform interface.
+  flutter_secure_storage_platform_interface: ^2.0.1
 
 flutter:
   uses-material-design: true

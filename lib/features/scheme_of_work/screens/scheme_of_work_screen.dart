@@ -542,14 +542,26 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
         // Auto-create draft lesson if not already existing
         if (teacherServerId != null && termLabel.isNotEmpty) {
           final existingLessons = await db.lessonsDao.getAll();
-          final lessonExists = existingLessons.any((l) =>
-              !l.isDeleted &&
-              l.teacherServerId == teacherServerId &&
-              l.subject == _subject &&
-              l.classLevel == _classLevel &&
-              (l.term ?? '') == termLabel &&
-              (l.weekNumber ?? l.week) == weekNumber &&
-              l.status == 'draft');
+          final weekId = _weekRecordIds[weekNumber];
+          final lessonExists = existingLessons.any((l) {
+            if (l.isDeleted || l.status != 'draft') return false;
+            // Fallback: same scheme_of_work_id. The _saveScheme handler
+            // always writes schemeOfWorkId: Value(weekId.toString()), so
+            // any existing lesson linked to the same scheme record is a
+            // duplicate regardless of subject text (which may have been
+            // wiped to '' by sync pull).
+            if (weekId != null) {
+              final existingSchemeId = int.tryParse(l.schemeOfWorkId ?? '');
+              if (existingSchemeId == weekId) return true;
+            }
+            if (l.teacherServerId == teacherServerId &&
+                l.classLevel == _classLevel &&
+                (l.term ?? '') == termLabel &&
+                (l.weekNumber ?? l.week) == weekNumber) {
+              return true;
+            }
+            return false;
+          });
           if (!lessonExists) {
             final lessonId = await db.lessonsDao.insertLesson(
               LessonsCompanion.insert(
@@ -613,13 +625,17 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
 
           // Auto-create draft exam if not already existing
           final existingExams = await db.examsDao.getAll();
-          final examExists = existingExams.any((e) =>
-              !e.isDeleted &&
-              e.teacherServerId == teacherServerId &&
-              e.subject == _subject &&
-              e.classLevel == _classLevel &&
-              (e.term ?? '') == termLabel &&
-              e.weekNumber == weekNumber);
+          final examExists = existingExams.any((e) {
+            if (e.isDeleted) return false;
+            if (weekId != null) {
+              final existingSchemeId = int.tryParse(e.schemeOfWorkId ?? '');
+              if (existingSchemeId == weekId) return true;
+            }
+            return e.teacherServerId == teacherServerId &&
+                e.classLevel == _classLevel &&
+                (e.term ?? '') == termLabel &&
+                e.weekNumber == weekNumber;
+          });
           if (!examExists) {
             final examId = await db.examsDao.insertExam(
               ExamsCompanion.insert(
@@ -809,14 +825,20 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
             classLevel.isNotEmpty) {
           // Check for and create draft lesson
           final existingLessons = await db.lessonsDao.getAll();
-          final lessonExists = existingLessons.any((l) =>
-              !l.isDeleted &&
-              l.teacherServerId == teacherServerId &&
-              l.subject == subjectName &&
-              l.classLevel == classLevel &&
-              (l.term ?? '') == termLabel &&
-              (l.weekNumber ?? l.week) == weekNumber &&
-              l.status == 'draft');
+          final lessonExists = existingLessons.any((l) {
+            if (l.isDeleted || l.status != 'draft') return false;
+            // Fallback: same scheme_of_work_id (resilient to subject being
+            // wiped to '' by sync pull before the empty-remote guard fix).
+            final existingSchemeId = int.tryParse(l.schemeOfWorkId ?? '');
+            if (existingSchemeId == schemeWeekId) return true;
+            if (l.teacherServerId == teacherServerId &&
+                l.classLevel == classLevel &&
+                (l.term ?? '') == termLabel &&
+                (l.weekNumber ?? l.week) == weekNumber) {
+              return true;
+            }
+            return false;
+          });
           if (!lessonExists) {
             final lessonId = await db.lessonsDao.insertLesson(
               LessonsCompanion.insert(
@@ -880,13 +902,15 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
 
           // Check for and create draft exam
           final existingExams = await db.examsDao.getAll();
-          final examExists = existingExams.any((e) =>
-              !e.isDeleted &&
-              e.teacherServerId == teacherServerId &&
-              e.subject == subjectName &&
-              e.classLevel == classLevel &&
-              (e.term ?? '') == termLabel &&
-              e.weekNumber == weekNumber);
+          final examExists = existingExams.any((e) {
+            if (e.isDeleted) return false;
+            final existingSchemeId = int.tryParse(e.schemeOfWorkId ?? '');
+            if (existingSchemeId == schemeWeekId) return true;
+            return e.teacherServerId == teacherServerId &&
+                e.classLevel == classLevel &&
+                (e.term ?? '') == termLabel &&
+                e.weekNumber == weekNumber;
+          });
           if (!examExists) {
             final examId = await db.examsDao.insertExam(
               ExamsCompanion.insert(

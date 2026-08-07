@@ -19,6 +19,7 @@ import 'tables/sync_queue_snapshot.dart';
 import 'tables/version_hashes.dart';
 import 'tables/conflicts.dart';
 import 'tables/payment_events.dart';
+import 'tables/field_conflict_history.dart';
 import 'tables/recovery_codes.dart';
 import 'tables/pending_recovery_requests.dart';
 import 'tables/teacher_devices.dart';
@@ -28,6 +29,8 @@ import 'tables/teacher_subjects.dart';
 import 'tables/terms.dart';
 import 'tables/audit_logs.dart';
 
+import '../services/security_service.dart';
+import 'database_encryption_bootstrap.dart';
 import 'daos/security_config_dao.dart';
 import 'daos/sync_queue_dao.dart';
 import 'daos/payment_events_dao.dart';
@@ -63,6 +66,7 @@ part 'database.g.dart'; // generated
   VersionHashes,
   Conflicts,
   PaymentEvents,
+  FieldConflictHistory,
   RecoveryCodes,
   PendingRecoveryRequests,
   TeacherDevices,
@@ -96,15 +100,36 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 23;
+  int get schemaVersion => 24;
 
   static QueryExecutor _openConnection() {
+    final security = SecurityService();
     return LazyDatabase(() async {
       final dbFolder = await getApplicationDocumentsDirectory();
-      final file = p.join(dbFolder.path, 'classai.db');
+      final dbDirectory = dbFolder.path;
+      final file = p.join(dbDirectory, 'classai.db');
+
+      // One-time plaintext -> SQLCipher conversion. Idempotent and crash-safe:
+      // it only acts when the DB is still plaintext and resumes from a sidecar
+      // marker if a previous attempt was interrupted. On a fresh install there
+      // is no file yet, so this is a no-op.
+      final bootstrap = DatabaseEncryptionBootstrap(security);
+      final passphrase = await bootstrap.ensureEncrypted(dbDirectory);
 
       return NativeDatabase.createInBackground(
         File(file),
+        // Runs in the background isolate before the DB is opened, so the
+        // Android native override is applied there too (drift opens the DB on
+        // a background isolate, which has its own copy of the open registry).
+        isolateSetup: () async {
+          DatabaseEncryptionBootstrap.applyNativeOverrides();
+        },
+        // Runs on the just-opened database inside the background isolate, right
+        // after open and before drift's version delegate runs. SQLCipher
+        // requires the key to be set before any other statement is executed.
+        setup: (db) {
+          db.execute("PRAGMA key = '$passphrase';");
+        },
       );
     });
   }
@@ -133,168 +158,163 @@ class AppDatabase extends _$AppDatabase {
       ''');
 
     await reconcileLegacyTeachers();
-    }
-  
-    /// Removes duplicate teacher rows that share the same non-null [serverId],
-    /// keeping only the row with the lowest [localId] for each serverId.
-    ///
-    /// Previous buggy sync runs (before school_id filtering was added) could
-    /// insert the same teacher multiple times because there was no unique
-    /// constraint on the server_id column. This method cleans up any such
-    /// duplicates in a single pass using raw SQL.
-    Future<void> deduplicateTeachers() async {
-      final dupRows = await customSelect(
-        'SELECT server_id, COUNT(*) AS cnt '
-        'FROM teachers '
-        'WHERE server_id IS NOT NULL '
-        'GROUP BY server_id '
-        'HAVING COUNT(*) > 1',
-      ).get();
-  
-      if (dupRows.isEmpty) return;
-  
-      for (final row in dupRows) {
-        final serverId = row.data['server_id'] as String;
+  }
 
-        final idRows = await customSelect(
-          'SELECT local_id FROM teachers '
-          'WHERE server_id = ? '
-          'ORDER BY local_id ASC',
-          variables: [Variable(serverId)],
-        ).get();
+  /// Removes duplicate teacher rows that share the same non-null [serverId],
+  /// keeping only the row with the lowest [localId] for each serverId.
+  ///
+  /// Previous buggy sync runs (before school_id filtering was added) could
+  /// insert the same teacher multiple times because there was no unique
+  /// constraint on the server_id column. This method cleans up any such
+  /// duplicates in a single pass using raw SQL.
+  Future<void> deduplicateTeachers() async {
+    final dupRows = await customSelect(
+      'SELECT server_id, COUNT(*) AS cnt '
+      'FROM teachers '
+      'WHERE server_id IS NOT NULL '
+      'GROUP BY server_id '
+      'HAVING COUNT(*) > 1',
+    ).get();
 
-        if (idRows.length <= 1) continue;
+    if (dupRows.isEmpty) return;
 
-        final ids = idRows.map((r) => r.data['local_id'] as int).toList();
-        final deleteIds = ids.skip(1).toList();
+    for (final row in dupRows) {
+      final serverId = row.data['server_id'] as String;
 
-        await customStatement(
-          'DELETE FROM teachers WHERE local_id IN (${deleteIds.join(',')})',
-        );
-      }
-    }
-
-    /// Repairs teacher rows that were created before the current school
-    /// linkage and roster rules were in place.
-    ///
-    /// The repair is conservative: it only writes when the school match is
-    /// unambiguous and never guesses across multiple schools.
-    Future<void> reconcileLegacyTeachers() async {
-      final schools = await (select(this.schools)
-            ..where((s) => s.isDeleted.equals(false)))
-          .get();
-      if (schools.isEmpty) return;
-
-      final schoolsByServerId = <String, School>{};
-      for (final school in schools) {
-        final serverId = school.serverId;
-        if (serverId != null && serverId.isNotEmpty) {
-          schoolsByServerId[serverId.toLowerCase()] = school;
-        }
-      }
-
-      final teachersToReview = await (select(teachers)
-            ..where((t) => t.isDeleted.equals(false)))
-          .get();
-      if (teachersToReview.isEmpty) return;
-
-      final singleSchool = schools.length == 1 ? schools.first : null;
-      var repairedCount = 0;
-
-      for (final teacher in teachersToReview) {
-        School? resolvedSchool;
-
-        final teacherSchoolServerId = teacher.schoolServerId;
-        if (teacherSchoolServerId != null &&
-            teacherSchoolServerId.isNotEmpty) {
-          resolvedSchool =
-              schoolsByServerId[teacherSchoolServerId.toLowerCase()];
-        }
-
-        if (resolvedSchool == null &&
-            teacher.schoolLocalId > 0 &&
-            schools.any((school) => school.localId == teacher.schoolLocalId)) {
-          resolvedSchool = schools
-              .firstWhere((school) => school.localId == teacher.schoolLocalId);
-        }
-
-        if (resolvedSchool == null && singleSchool != null) {
-          resolvedSchool = singleSchool;
-        }
-
-        if (resolvedSchool == null) {
-          continue;
-        }
-
-        final normalizedEmail = teacher.email.toLowerCase();
-        final shouldUpdate = teacher.schoolLocalId != resolvedSchool.localId ||
-            teacher.schoolServerId != resolvedSchool.serverId ||
-            teacher.email != normalizedEmail;
-
-        if (!shouldUpdate) {
-          continue;
-        }
-
-        await (update(this.teachers)
-              ..where((t) => t.localId.equals(teacher.localId)))
-            .write(
-          TeachersCompanion(
-            schoolLocalId: Value(resolvedSchool.localId),
-            schoolServerId: Value(resolvedSchool.serverId),
-            email: Value(normalizedEmail),
-            updatedAt: Value(DateTime.now()),
-          ),
-        );
-        repairedCount++;
-      }
-
-      if (repairedCount > 0) {
-        debugPrint(
-          '[db] reconcileLegacyTeachers: repaired $repairedCount teacher row(s)',
-        );
-      }
-    }
-
-    /// Removes duplicate school rows that share the same non-null [serverId],
-    /// keeping only the row with the lowest [localId] for each serverId.
-    Future<void> deduplicateSchools() async {
-      final dupRows = await customSelect(
-        'SELECT server_id '
-        'FROM schools '
-        'WHERE server_id IS NOT NULL '
-        'GROUP BY server_id '
-        'HAVING COUNT(*) > 1',
+      final idRows = await customSelect(
+        'SELECT local_id FROM teachers '
+        'WHERE server_id = ? '
+        'ORDER BY local_id ASC',
+        variables: [Variable(serverId)],
       ).get();
 
-      for (final row in dupRows) {
-        final serverId = row.data['server_id'] as String;
+      if (idRows.length <= 1) continue;
 
-        final idRows = await customSelect(
-          'SELECT local_id FROM schools '
-          'WHERE server_id = ? '
-          'ORDER BY local_id ASC',
-          variables: [Variable(serverId)],
-        ).get();
+      final ids = idRows.map((r) => r.data['local_id'] as int).toList();
+      final deleteIds = ids.skip(1).toList();
 
-        if (idRows.length <= 1) continue;
+      await customStatement(
+        'DELETE FROM teachers WHERE local_id IN (${deleteIds.join(',')})',
+      );
+    }
+  }
 
-        final deleteIds = idRows
-            .map((r) => r.data['local_id'] as int)
-            .skip(1)
-            .toList();
+  /// Repairs teacher rows that were created before the current school
+  /// linkage and roster rules were in place.
+  ///
+  /// The repair is conservative: it only writes when the school match is
+  /// unambiguous and never guesses across multiple schools.
+  Future<void> reconcileLegacyTeachers() async {
+    final schools = await (select(this.schools)
+          ..where((s) => s.isDeleted.equals(false)))
+        .get();
+    if (schools.isEmpty) return;
 
-        await customStatement(
-          'DELETE FROM schools WHERE local_id IN (${deleteIds.join(',')})',
-        );
+    final schoolsByServerId = <String, School>{};
+    for (final school in schools) {
+      final serverId = school.serverId;
+      if (serverId != null && serverId.isNotEmpty) {
+        schoolsByServerId[serverId.toLowerCase()] = school;
       }
     }
 
-    /// Cleans up duplicate auth rows before login reads them.
-    Future<void> deduplicateAuthLoginRows() async {
-      await deduplicateSchools();
-      await deduplicateTeachers();
-      await reconcileLegacyTeachers();
+    final teachersToReview =
+        await (select(teachers)..where((t) => t.isDeleted.equals(false))).get();
+    if (teachersToReview.isEmpty) return;
+
+    final singleSchool = schools.length == 1 ? schools.first : null;
+    var repairedCount = 0;
+
+    for (final teacher in teachersToReview) {
+      School? resolvedSchool;
+
+      final teacherSchoolServerId = teacher.schoolServerId;
+      if (teacherSchoolServerId != null && teacherSchoolServerId.isNotEmpty) {
+        resolvedSchool = schoolsByServerId[teacherSchoolServerId.toLowerCase()];
+      }
+
+      if (resolvedSchool == null &&
+          teacher.schoolLocalId > 0 &&
+          schools.any((school) => school.localId == teacher.schoolLocalId)) {
+        resolvedSchool = schools
+            .firstWhere((school) => school.localId == teacher.schoolLocalId);
+      }
+
+      if (resolvedSchool == null && singleSchool != null) {
+        resolvedSchool = singleSchool;
+      }
+
+      if (resolvedSchool == null) {
+        continue;
+      }
+
+      final normalizedEmail = teacher.email.toLowerCase();
+      final shouldUpdate = teacher.schoolLocalId != resolvedSchool.localId ||
+          teacher.schoolServerId != resolvedSchool.serverId ||
+          teacher.email != normalizedEmail;
+
+      if (!shouldUpdate) {
+        continue;
+      }
+
+      await (update(this.teachers)
+            ..where((t) => t.localId.equals(teacher.localId)))
+          .write(
+        TeachersCompanion(
+          schoolLocalId: Value(resolvedSchool.localId),
+          schoolServerId: Value(resolvedSchool.serverId),
+          email: Value(normalizedEmail),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      repairedCount++;
     }
+
+    if (repairedCount > 0) {
+      debugPrint(
+        '[db] reconcileLegacyTeachers: repaired $repairedCount teacher row(s)',
+      );
+    }
+  }
+
+  /// Removes duplicate school rows that share the same non-null [serverId],
+  /// keeping only the row with the lowest [localId] for each serverId.
+  Future<void> deduplicateSchools() async {
+    final dupRows = await customSelect(
+      'SELECT server_id '
+      'FROM schools '
+      'WHERE server_id IS NOT NULL '
+      'GROUP BY server_id '
+      'HAVING COUNT(*) > 1',
+    ).get();
+
+    for (final row in dupRows) {
+      final serverId = row.data['server_id'] as String;
+
+      final idRows = await customSelect(
+        'SELECT local_id FROM schools '
+        'WHERE server_id = ? '
+        'ORDER BY local_id ASC',
+        variables: [Variable(serverId)],
+      ).get();
+
+      if (idRows.length <= 1) continue;
+
+      final deleteIds =
+          idRows.map((r) => r.data['local_id'] as int).skip(1).toList();
+
+      await customStatement(
+        'DELETE FROM schools WHERE local_id IN (${deleteIds.join(',')})',
+      );
+    }
+  }
+
+  /// Cleans up duplicate auth rows before login reads them.
+  Future<void> deduplicateAuthLoginRows() async {
+    await deduplicateSchools();
+    await deduplicateTeachers();
+    await reconcileLegacyTeachers();
+  }
 
   // Migration support
   @override
@@ -957,6 +977,21 @@ class AppDatabase extends _$AppDatabase {
                 'ALTER TABLE teachers ADD COLUMN last_sync_at TEXT NULL',
               );
             }
+          }
+          if (from < 24) {
+            await customStatement('''
+              CREATE TABLE IF NOT EXISTS field_conflict_history (
+                id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                record_table TEXT NOT NULL,
+                record_local_id INTEGER NOT NULL,
+                field_name TEXT NOT NULL,
+                discarded_value_json TEXT NOT NULL,
+                winning_value_json TEXT NOT NULL,
+                local_updated_at TEXT,
+                remote_updated_at TEXT,
+                recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+              )
+            ''');
           }
         },
         beforeOpen: (details) async {

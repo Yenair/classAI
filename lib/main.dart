@@ -20,7 +20,6 @@ import 'features/auth/screens/teacher_recovery_dialog.dart';
 import 'features/settings/providers/theme_provider.dart';
 import 'core/providers/config_provider.dart';
 import 'router/app_router.dart';
-import 'scripts/cleanup_orphan_local_duplicates.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -187,9 +186,6 @@ class _DatabaseBootstrapperState extends State<DatabaseBootstrapper> {
     final db = AppDatabase();
     await db.initialize();
     await db.reconcileLegacyTeachers();
-    // TEMPORARY: Run orphan cleanup — REMOVE AFTER ONE RUN
-    await runFullCleanup(db);
-
     return db;
   }
 

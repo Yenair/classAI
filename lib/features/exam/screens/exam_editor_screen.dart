@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart' hide Column;
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
@@ -1421,7 +1422,12 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     final theme = Theme.of(context);
     final totalQuestions = _mcqs.length + _theoryQuestions.length + _subjectiveQuestions.length;
 
-    return Scaffold(
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyY, control: true):
+            _undoController.redo,
+      },
+      child: Scaffold(
       backgroundColor: cs.surface,
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1685,6 +1691,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

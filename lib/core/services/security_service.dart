@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
@@ -7,6 +8,19 @@ class SecurityService {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final LocalAuthentication _localAuth = LocalAuthentication();
   static const _lastLoggedInTeacherKey = 'last_logged_in_teacher';
+
+  /// Key under which the SQLCipher database encryption passphrase is stored.
+  ///
+  /// The passphrase protects the local `classai.db` file at rest. It is
+  /// generated once (see [getOrCreateDbEncryptionPassphrase]) and stored in
+  /// the platform secure enclave / keystore via [FlutterSecureStorage], the
+  /// same mechanism used for the JWT, password hash and session key above.
+  ///
+  /// NOTE: If this key is ever cleared or invalidated (app data reset, iOS
+  /// keychain wipe, Android Keystore invalidation), the encrypted database
+  /// becomes unreadable and local-only data is unrecoverable. This risk is
+  /// accepted by design for this change.
+  static const _dbEncryptionKey = 'db_encryption_key';
 
   /// Store password hash in platform secure storage (biometric-protected)
   Future<void> storePasswordHash(String hash) async {
@@ -91,6 +105,40 @@ class SecurityService {
   /// Clear the cached last-login teacher marker from secure storage.
   Future<void> clearLastLoggedInTeacherIdentifier() async {
     await _secureStorage.delete(key: _lastLoggedInTeacherKey);
+  }
+
+  /// Read the stored SQLCipher database encryption passphrase, or `null` if
+  /// none has been generated yet.
+  ///
+  /// This should be called on the main isolate. The passphrase is intentionally
+  /// returned to the caller so it can be threaded into background isolates
+  /// (e.g. drift's `createInBackground` or the vacuum service) rather than
+  /// re-read from secure storage inside those isolates.
+  Future<String?> getDbEncryptionPassphrase() async {
+    return await _secureStorage.read(key: _dbEncryptionKey);
+  }
+
+  /// Return the SQLCipher database encryption passphrase, generating and
+  /// persisting it on first call if it does not already exist.
+  ///
+  /// The passphrase is 32 cryptographically-random bytes, base64-encoded. It is
+  /// generated exactly once and never regenerated — regenerating it would make
+  /// the existing encrypted database unreadable.
+  Future<String> getOrCreateDbEncryptionPassphrase() async {
+    final existing = await getDbEncryptionPassphrase();
+    if (existing != null && existing.isNotEmpty) {
+      return existing;
+    }
+
+    final random = Random.secure();
+    final bytes = Uint8List(32);
+    for (var i = 0; i < bytes.length; i++) {
+      bytes[i] = random.nextInt(256);
+    }
+    final passphrase = base64Encode(bytes);
+
+    await _secureStorage.write(key: _dbEncryptionKey, value: passphrase);
+    return passphrase;
   }
 
   /// Clear all sensitive data from secure storage

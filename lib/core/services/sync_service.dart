@@ -80,8 +80,7 @@ class SyncPullPage {
 
   factory SyncPullPage.fromJson(Map<String, dynamic> json) {
     final rawChanges = (json['changes'] as List? ?? const []);
-    final rawPendingTeachers =
-        (json['pending_teachers'] as List? ?? const []);
+    final rawPendingTeachers = (json['pending_teachers'] as List? ?? const []);
     return SyncPullPage(
       changes: rawChanges
           .map((item) =>
@@ -288,9 +287,8 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
       }
     } on FunctionException catch (e) {
       if (e.status == 401) {
-        final code = (e.details is Map)
-            ? (e.details as Map)['code'] as String?
-            : null;
+        final code =
+            (e.details is Map) ? (e.details as Map)['code'] as String? : null;
         if (code == 'token_version_mismatch') {
           throw SessionMismatchException();
         }
@@ -365,9 +363,8 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
               details['detail']?.toString())
           : null;
       if (e.status == 401) {
-        final code = (e.details is Map)
-            ? (e.details as Map)['code'] as String?
-            : null;
+        final code =
+            (e.details is Map) ? (e.details as Map)['code'] as String? : null;
         if (code == 'token_version_mismatch') {
           debugPrint('[PUSH-ERROR] Throwing SessionMismatchException');
           throw SessionMismatchException();
@@ -414,13 +411,12 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
       if (_jwt != null && _jwt!.isNotEmpty) {
         headers['x-classai-jwt'] = _jwt!;
       }
-      final response =
-          await client.functions.invoke('sync-realtime-events',
-        headers: headers.isNotEmpty ? headers : null,
-        body: {
-        'since_event_id': sinceEventId,
-        'school_id': schoolId,
-      });
+      final response = await client.functions.invoke('sync-realtime-events',
+          headers: headers.isNotEmpty ? headers : null,
+          body: {
+            'since_event_id': sinceEventId,
+            'school_id': schoolId,
+          });
       final data = response.data as Map<String, dynamic>?;
       if (data != null) {
         // Try to parse the response as a real SyncRealtimePage.
@@ -431,9 +427,8 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
       }
     } on FunctionException catch (e) {
       if (e.status == 401) {
-        final code = (e.details is Map)
-            ? (e.details as Map)['code'] as String?
-            : null;
+        final code =
+            (e.details is Map) ? (e.details as Map)['code'] as String? : null;
         if (code == 'token_version_mismatch') {
           throw SessionMismatchException();
         }
@@ -505,6 +500,16 @@ abstract class SyncRecordStore {
     required String? remoteValue,
     required String resolution,
     required bool notified,
+  });
+
+  Future<void> saveFieldConflictHistory({
+    required String recordTable,
+    required int recordLocalId,
+    required String fieldName,
+    required String discardedValueJson,
+    required String winningValueJson,
+    required DateTime? localUpdatedAt,
+    required DateTime? remoteUpdatedAt,
   });
 
   Future<List<SyncQueueData>> loadPendingQueue();
@@ -609,6 +614,33 @@ class DriftSyncRecordStore implements SyncRecordStore {
             notified: Value(notified),
             createdAt: Value(now),
             updatedAt: Value(now),
+          ),
+        );
+  }
+
+  @override
+  Future<void> saveFieldConflictHistory({
+    required String recordTable,
+    required int recordLocalId,
+    required String fieldName,
+    required String discardedValueJson,
+    required String winningValueJson,
+    required DateTime? localUpdatedAt,
+    required DateTime? remoteUpdatedAt,
+  }) async {
+    await db.into(db.fieldConflictHistory).insert(
+          FieldConflictHistoryCompanion.insert(
+            recordTable: recordTable,
+            recordLocalId: recordLocalId,
+            fieldName: fieldName,
+            discardedValueJson: discardedValueJson,
+            winningValueJson: winningValueJson,
+            localUpdatedAt: localUpdatedAt != null
+                ? Value(localUpdatedAt)
+                : const Value.absent(),
+            remoteUpdatedAt: remoteUpdatedAt != null
+                ? Value(remoteUpdatedAt)
+                : const Value.absent(),
           ),
         );
   }
@@ -742,17 +774,17 @@ class SyncService {
   /// subsequent full pull).
   Future<bool> forceFullResync({String? jwt}) async {
     debugPrint('[SYNC] Initiating force full resync...');
-    
+
     // 1. Push any pending changes FIRST to preserve local edits
     if (jwt != null && jwt.isNotEmpty && remoteApi is SupabaseSyncRemoteApi) {
       (remoteApi as SupabaseSyncRemoteApi).setJwt(jwt);
     }
     await _pushChanges();
-    
+
     // Check if push left any pending entries (push failures)
     final pendingAfterPush = await store.loadPendingQueue();
     final hasPushFailures = pendingAfterPush.isNotEmpty;
-    
+
     // 2. Clear version hashes
     await store.clearVersionHashes();
     // 3. Clear sync cursor
@@ -760,7 +792,7 @@ class SyncService {
     // 4. Trigger a sync cycle
     await onConnectivityRestored(jwt: jwt);
     debugPrint('[SYNC] Force full resync completed.');
-    
+
     return hasPushFailures;
   }
 
@@ -885,9 +917,8 @@ class SyncService {
       );
 
       // Log teacher changes specifically
-      final teacherChanges = page.changes
-          .where((c) => c.table == 'teachers')
-          .toList();
+      final teacherChanges =
+          page.changes.where((c) => c.table == 'teachers').toList();
       if (teacherChanges.isNotEmpty) {
         debugPrint(
           '[SYNC-DEBUG] Teacher changes in this page: ${teacherChanges.length}',
@@ -920,8 +951,7 @@ class SyncService {
       if (page.activeTeacherIds != null) {
         activeTeacherIds = page.activeTeacherIds;
       }
-      if (page.pendingTeachers != null &&
-          page.pendingTeachers!.isNotEmpty) {
+      if (page.pendingTeachers != null && page.pendingTeachers!.isNotEmpty) {
         pendingTeachers = page.pendingTeachers;
       }
 
@@ -1059,8 +1089,8 @@ class SyncService {
           await (db.update(db.teachers)
                 ..where((t) => t.localId.equals(teacher.localId)))
               .write(const TeachersCompanion(
-                isDeleted: Value(true),
-              ));
+            isDeleted: Value(true),
+          ));
           debugPrint(
             '[sync] _reconcileTeacherRoster: SOFT-DELETED teacher '
             '${teacher.serverId} (not in server roster)',
@@ -1082,11 +1112,9 @@ class SyncService {
   Future<MergeResult> _threeWayMerge(
     Map<String, dynamic> local,
     Map<String, dynamic> remote,
-    String? baseHash,
     String tableName,
-    int localId,
+    Map<String, dynamic>? base,
   ) async {
-    final base = await store.loadBaseRecordByHash(tableName, localId, baseHash);
     return mergeEngine.merge(
       local: local,
       remote: remote,
@@ -1094,6 +1122,117 @@ class SyncService {
       tableName: tableName,
       fieldStrategies: mergeStrategiesForTable(tableName),
     );
+  }
+
+  DateTime? _parseDateTimeValue(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is DateTime) return raw;
+    if (raw is String) return DateTime.tryParse(raw);
+    return null;
+  }
+
+  bool _valuesEqual(dynamic a, dynamic b) {
+    if (identical(a, b)) return true;
+    if (a == null || b == null) return false;
+    if (a is Map && b is Map) {
+      if (a.length != b.length) return false;
+      for (final entry in a.entries) {
+        if (!b.containsKey(entry.key)) return false;
+        if (!_valuesEqual(entry.value, b[entry.key])) return false;
+      }
+      return true;
+    }
+    if (a is List && b is List) {
+      if (a.length != b.length) return false;
+      for (var i = 0; i < a.length; i++) {
+        if (!_valuesEqual(a[i], b[i])) return false;
+      }
+      return true;
+    }
+    return a == b;
+  }
+
+  bool _isTimestampTiebreakWin({
+    required MapEntry<String, MergeStrategy> strategyEntry,
+    required Map<String, dynamic> local,
+    required Map<String, dynamic> remote,
+    required Map<String, dynamic> base,
+  }) {
+    if (strategyEntry.value != MergeStrategy.lwwByUpdateCounterThenUpdatedAt) {
+      return false;
+    }
+
+    final fieldName = strategyEntry.key;
+    final localValue = local[fieldName];
+    final remoteValue = remote[fieldName];
+    final baseValue = base[fieldName];
+
+    if (_valuesEqual(localValue, baseValue) ||
+        _valuesEqual(remoteValue, baseValue)) {
+      return false;
+    }
+    if (_valuesEqual(localValue, remoteValue)) {
+      return false;
+    }
+
+    final localUpdateCounter = (local['updateCounter'] as int?) ?? 0;
+    final remoteUpdateCounter = (remote['updateCounter'] as int?) ?? 0;
+    if (localUpdateCounter != remoteUpdateCounter) {
+      return false;
+    }
+
+    final localUpdatedAt = _parseDateTimeValue(local['updatedAt']);
+    final remoteUpdatedAt = _parseDateTimeValue(remote['updatedAt']);
+    if (localUpdatedAt == null || remoteUpdatedAt == null) {
+      return false;
+    }
+
+    return localUpdatedAt.isAfter(remoteUpdatedAt) ||
+        remoteUpdatedAt.isAfter(localUpdatedAt);
+  }
+
+  Future<void> _recordTimestampTiebreakHistory({
+    required String tableName,
+    required int localId,
+    required Map<String, dynamic> local,
+    required Map<String, dynamic> remote,
+    required Map<String, dynamic> base,
+  }) async {
+    final fieldStrategies = mergeStrategiesForTable(tableName);
+    if (fieldStrategies.isEmpty) return;
+
+    for (final entry in fieldStrategies.entries) {
+      if (!_isTimestampTiebreakWin(
+        strategyEntry: entry,
+        local: local,
+        remote: remote,
+        base: base,
+      )) {
+        continue;
+      }
+
+      final fieldName = entry.key;
+      final localValue = local[fieldName];
+      final remoteValue = remote[fieldName];
+      final localUpdatedAt = _parseDateTimeValue(local['updatedAt']);
+      final remoteUpdatedAt = _parseDateTimeValue(remote['updatedAt']);
+      final localWins = localUpdatedAt != null &&
+          remoteUpdatedAt != null &&
+          localUpdatedAt.isAfter(remoteUpdatedAt);
+
+      final winningValue = localWins ? localValue : remoteValue;
+      final discardedValue = localWins ? remoteValue : localValue;
+
+      await store.saveFieldConflictHistory(
+        recordTable: tableName,
+        recordLocalId: localId,
+        fieldName: fieldName,
+        discardedValueJson: jsonEncode(discardedValue),
+        winningValueJson: jsonEncode(winningValue),
+        localUpdatedAt: localUpdatedAt,
+        remoteUpdatedAt: remoteUpdatedAt,
+      );
+    }
   }
 
   Future<void> _pushChanges() async {
@@ -1203,8 +1342,7 @@ class SyncService {
           );
           await store.markQueueTerminalFailure(
             entry.id,
-            lastError:
-                'No server result after $nextAttempts attempts — '
+            lastError: 'No server result after $nextAttempts attempts — '
                 'likely rejected by admin-table guard with local_id=0',
           );
         } else {
@@ -1307,68 +1445,60 @@ class SyncService {
   }) async {
     switch (tableName) {
       case 'lessons':
-        await (db.update(db.lessons)
-              ..where((t) => t.id.equals(localId)))
+        await (db.update(db.lessons)..where((t) => t.id.equals(localId)))
             .write(LessonsCompanion(
-              serverId: Value(serverId),
-              updatedAt: Value(DateTime.now()),
-            ));
+          serverId: Value(serverId),
+          updatedAt: Value(DateTime.now()),
+        ));
         break;
       case 'exams':
-        await (db.update(db.exams)
-              ..where((t) => t.id.equals(localId)))
+        await (db.update(db.exams)..where((t) => t.id.equals(localId)))
             .write(ExamsCompanion(
-              serverId: Value(serverId),
-              updatedAt: Value(DateTime.now()),
-            ));
+          serverId: Value(serverId),
+          updatedAt: Value(DateTime.now()),
+        ));
         break;
       case 'scheme_of_work':
-        await (db.update(db.schemeOfWork)
-              ..where((t) => t.id.equals(localId)))
+        await (db.update(db.schemeOfWork)..where((t) => t.id.equals(localId)))
             .write(SchemeOfWorkCompanion(
-              serverId: Value(serverId),
-              updatedAt: Value(DateTime.now()),
-            ));
+          serverId: Value(serverId),
+          updatedAt: Value(DateTime.now()),
+        ));
         break;
       case 'vault_items':
-        await (db.update(db.vaultItems)
-              ..where((t) => t.id.equals(localId)))
+        await (db.update(db.vaultItems)..where((t) => t.id.equals(localId)))
             .write(VaultItemsCompanion(
-              serverId: Value(serverId),
-              updatedAt: Value(DateTime.now()),
-            ));
+          serverId: Value(serverId),
+          updatedAt: Value(DateTime.now()),
+        ));
         break;
       case 'teachers':
-        await (db.update(db.teachers)
-              ..where((t) => t.localId.equals(localId)))
+        await (db.update(db.teachers)..where((t) => t.localId.equals(localId)))
             .write(TeachersCompanion(
-              serverId: Value(serverId),
-              updatedAt: Value(DateTime.now()),
-            ));
+          serverId: Value(serverId),
+          updatedAt: Value(DateTime.now()),
+        ));
         break;
       case 'schools':
-        await (db.update(db.schools)
-              ..where((t) => t.localId.equals(localId)))
+        await (db.update(db.schools)..where((t) => t.localId.equals(localId)))
             .write(SchoolsCompanion(
-              serverId: Value(serverId),
-              updatedAt: Value(DateTime.now()),
-            ));
+          serverId: Value(serverId),
+          updatedAt: Value(DateTime.now()),
+        ));
         break;
       case 'progress_logs':
-        await (db.update(db.progressLogs)
-              ..where((t) => t.id.equals(localId)))
+        await (db.update(db.progressLogs)..where((t) => t.id.equals(localId)))
             .write(ProgressLogsCompanion(
-              serverId: Value(serverId),
-              updatedAt: Value(DateTime.now()),
-            ));
+          serverId: Value(serverId),
+          updatedAt: Value(DateTime.now()),
+        ));
         break;
       case 'subjects':
-        await (db.update(db.subjects)
-              ..where((t) => t.id.equals(localId)))
+        await (db.update(db.subjects)..where((t) => t.id.equals(localId)))
             .write(SubjectsCompanion(
-              serverId: Value(serverId),
-              updatedAt: Value(DateTime.now()),
-            ));
+          serverId: Value(serverId),
+          updatedAt: Value(DateTime.now()),
+        ));
         break;
       // Extend with other tables as needed.
       default:
@@ -1475,8 +1605,8 @@ class SyncService {
     // resolve the localId by looking up the existing Drift row via
     // serverId (READ ONLY — no write until after three-way merge).
     if (change.table == 'teachers') {
-      final serverId = remote['server_id'] as String? ??
-          remote['id'] as String?;
+      final serverId =
+          remote['server_id'] as String? ?? remote['id'] as String?;
       if (serverId == null || serverId.isEmpty) {
         debugPrint(
           '[SYNC] _mergeRemoteChange: skipping teacher — no serverId',
@@ -1521,12 +1651,11 @@ class SyncService {
         existing.sort((a, b) => a.localId.compareTo(b.localId));
       }
       localId = existing.first.localId;
-      local =
-          await store.loadLocalRecord(change.table, localId) ?? const {};
+      local = await store.loadLocalRecord(change.table, localId) ?? const {};
       baseHash = await _loadBaseHash(change.table, localId);
     } else if (change.table == 'schools') {
-      final serverId = remote['server_id'] as String? ??
-          remote['id'] as String?;
+      final serverId =
+          remote['server_id'] as String? ?? remote['id'] as String?;
       if (serverId == null || serverId.isEmpty) {
         debugPrint(
           '[SYNC] _mergeRemoteChange: skipping school — no serverId',
@@ -1570,12 +1699,11 @@ class SyncService {
         existing.sort((a, b) => a.localId.compareTo(b.localId));
       }
       localId = existing.first.localId;
-      local =
-          await store.loadLocalRecord(change.table, localId) ?? const {};
+      local = await store.loadLocalRecord(change.table, localId) ?? const {};
       baseHash = await _loadBaseHash(change.table, localId);
     } else if (change.table == 'lessons') {
-      final serverId = remote['server_id'] as String? ??
-          remote['id'] as String?;
+      final serverId =
+          remote['server_id'] as String? ?? remote['id'] as String?;
       if (serverId == null || serverId.isEmpty) {
         debugPrint(
           '[SYNC] _mergeRemoteChange: skipping lesson — no serverId',
@@ -1617,12 +1745,11 @@ class SyncService {
         existing.sort((a, b) => a.id.compareTo(b.id));
       }
       localId = existing.first.id;
-      local =
-          await store.loadLocalRecord(change.table, localId) ?? const {};
+      local = await store.loadLocalRecord(change.table, localId) ?? const {};
       baseHash = await _loadBaseHash(change.table, localId);
     } else if (change.table == 'exams') {
-      final serverId = remote['server_id'] as String? ??
-          remote['id'] as String?;
+      final serverId =
+          remote['server_id'] as String? ?? remote['id'] as String?;
       if (serverId == null || serverId.isEmpty) {
         debugPrint(
           '[SYNC] _mergeRemoteChange: skipping exam — no serverId',
@@ -1663,12 +1790,11 @@ class SyncService {
         existing.sort((a, b) => a.id.compareTo(b.id));
       }
       localId = existing.first.id;
-      local =
-          await store.loadLocalRecord(change.table, localId) ?? const {};
+      local = await store.loadLocalRecord(change.table, localId) ?? const {};
       baseHash = await _loadBaseHash(change.table, localId);
     } else if (change.table == 'subjects') {
-      final serverId = remote['server_id'] as String? ??
-          remote['id'] as String?;
+      final serverId =
+          remote['server_id'] as String? ?? remote['id'] as String?;
       if (serverId == null || serverId.isEmpty) {
         debugPrint(
           '[SYNC] _mergeRemoteChange: skipping subject — no serverId',
@@ -1709,12 +1835,11 @@ class SyncService {
         existing.sort((a, b) => a.id.compareTo(b.id));
       }
       localId = existing.first.id;
-      local =
-          await store.loadLocalRecord(change.table, localId) ?? const {};
+      local = await store.loadLocalRecord(change.table, localId) ?? const {};
       baseHash = await _loadBaseHash(change.table, localId);
     } else if (change.table == 'scheme_of_work') {
-      final serverId = remote['server_id'] as String? ??
-          remote['id'] as String?;
+      final serverId =
+          remote['server_id'] as String? ?? remote['id'] as String?;
       if (serverId == null || serverId.isEmpty) {
         debugPrint(
           '[SYNC] _mergeRemoteChange: skipping scheme_of_work — no serverId',
@@ -1756,14 +1881,12 @@ class SyncService {
         existing.sort((a, b) => a.id.compareTo(b.id));
       }
       localId = existing.first.id;
-      local =
-          await store.loadLocalRecord(change.table, localId) ?? const {};
+      local = await store.loadLocalRecord(change.table, localId) ?? const {};
       baseHash = await _loadBaseHash(change.table, localId);
     } else if (change.table == 'payment_events') {
       // payment_events has no serverId column; the unique identifier is
       // transactionReference. Look up the existing local row by this key.
-      final transactionReference =
-          remote['transaction_reference'] as String?;
+      final transactionReference = remote['transaction_reference'] as String?;
       if (transactionReference == null || transactionReference.isEmpty) {
         debugPrint(
           '[SYNC] _mergeRemoteChange: skipping payment_event — '
@@ -1774,8 +1897,7 @@ class SyncService {
 
       // Read-only lookup: find existing payment_event by transactionReference.
       final existing = await (db.select(db.paymentEvents)
-            ..where((t) =>
-                t.transactionReference.equals(transactionReference)))
+            ..where((t) => t.transactionReference.equals(transactionReference)))
           .get();
 
       if (existing.isEmpty) {
@@ -1800,8 +1922,7 @@ class SyncService {
 
       // EXISTING payment_event — use real localId for versionHashes ops.
       localId = existing.first.id;
-      local =
-          await store.loadLocalRecord(change.table, localId) ?? const {};
+      local = await store.loadLocalRecord(change.table, localId) ?? const {};
       baseHash = await _loadBaseHash(change.table, localId);
     } else {
       // For all remaining tables (progress_logs, vault_items) the
@@ -1811,14 +1932,14 @@ class SyncService {
           _readInt(remote, 'local_id') ??
           _readInt(remote, 'id') ??
           0;
-      local =
-          await store.loadLocalRecord(change.table, localId) ?? const {};
+      local = await store.loadLocalRecord(change.table, localId) ?? const {};
       baseHash = await _loadBaseHash(change.table, localId);
     }
+    final base =
+        await store.loadBaseRecordByHash(change.table, localId, baseHash);
 
     try {
-      final result =
-          await _threeWayMerge(local, remote, baseHash, change.table, localId);
+      final result = await _threeWayMerge(local, remote, change.table, base);
 
       if (baseHash == null) {
         _setState(SyncState.savingConflicts);
@@ -1841,6 +1962,16 @@ class SyncService {
           remoteValue: jsonEncode(remote),
           resolution: result.resolution.name,
           notified: false,
+        );
+      }
+
+      if (base != null) {
+        await _recordTimestampTiebreakHistory(
+          tableName: change.table,
+          localId: localId,
+          local: local,
+          remote: remote,
+          base: base,
         );
       }
 
@@ -1893,10 +2024,10 @@ class SyncService {
   /// upsert was skipped (e.g. no serverId, or the teacher's school hasn't
   /// been synced yet).
   Future<int?> _upsertTeacherFromSync(Map<String, dynamic> merged) async {
-    final serverId = merged['server_id'] as String? ??
-        merged['id'] as String?;
+    final serverId = merged['server_id'] as String? ?? merged['id'] as String?;
     if (serverId == null || serverId.isEmpty) {
-      debugPrint('[sync] _upsertTeacherFromSync skipped: no serverId in $merged');
+      debugPrint(
+          '[sync] _upsertTeacherFromSync skipped: no serverId in $merged');
       return null;
     }
 
@@ -1907,8 +2038,7 @@ class SyncService {
 
     // Map snake_case remote fields to Drift column values
     String? strVal(String key) => merged[key] as String?;
-    bool boolVal(String key) =>
-        merged[key] == true || merged[key] == 'true';
+    bool boolVal(String key) => merged[key] == true || merged[key] == 'true';
     int? intVal(String key) => _readInt(merged, key);
     DateTime? dateVal(String key) {
       final raw = merged[key];
@@ -1926,8 +2056,8 @@ class SyncService {
     final forcePasswordReset = boolVal('force_password_reset');
     final passwordHashVersion = intVal('password_hash_version') ?? 1;
     final tempPassword = strVal('temp_password');
-    final schoolKeyWrapped = strVal('school_key_wrapped') ??
-        strVal('school_master_key_wrapped');
+    final schoolKeyWrapped =
+        strVal('school_key_wrapped') ?? strVal('school_master_key_wrapped');
     final salt = strVal('salt');
     final currentDeviceId = strVal('current_device_id');
     final isDeleted = boolVal('is_deleted');
@@ -1988,9 +2118,8 @@ class SyncService {
         currentDeviceId: currentDeviceId != null
             ? Value(currentDeviceId)
             : const Value.absent(),
-        tempPassword: tempPassword != null
-            ? Value(tempPassword)
-            : const Value.absent(),
+        tempPassword:
+            tempPassword != null ? Value(tempPassword) : const Value.absent(),
         isDeleted: Value(isDeleted),
         updatedAt: Value(updatedAt),
         lastModifiedBy: lastModifiedBy != null
@@ -2025,37 +2154,37 @@ class SyncService {
       }
 
       final newLocalId = await (db.into(db.teachers).insert(
-        TeachersCompanion.insert(
-          serverId: Value(serverId),
-          email: email,
-          teacherName: teacherName,
-          role: Value(role),
-          schoolLocalId: resolvedSchoolLocalId,
-          schoolServerId: schoolServerId != null
-              ? Value(schoolServerId)
-              : const Value.absent(),
-          isActive: Value(isActive),
-          forcePasswordReset: Value(forcePasswordReset),
-          passwordHashVersion: Value(passwordHashVersion),
-          schoolKeyWrapped: schoolKeyWrapped != null
-              ? Value(schoolKeyWrapped)
-              : const Value.absent(),
-          tempPassword: tempPassword != null
-              ? Value(tempPassword)
-              : const Value.absent(),
-          salt: salt != null ? Value(salt) : const Value.absent(),
-          currentDeviceId: currentDeviceId != null
-              ? Value(currentDeviceId)
-              : const Value.absent(),
-          isDeleted: Value(isDeleted),
-          createdAt: Value(createdAt),
-          updatedAt: Value(updatedAt),
-          lastModifiedBy: lastModifiedBy != null
-              ? Value(lastModifiedBy)
-              : const Value.absent(),
-          lastSyncAt: Value(dateVal('last_sync_at')),
-        ),
-      ));
+            TeachersCompanion.insert(
+              serverId: Value(serverId),
+              email: email,
+              teacherName: teacherName,
+              role: Value(role),
+              schoolLocalId: resolvedSchoolLocalId,
+              schoolServerId: schoolServerId != null
+                  ? Value(schoolServerId)
+                  : const Value.absent(),
+              isActive: Value(isActive),
+              forcePasswordReset: Value(forcePasswordReset),
+              passwordHashVersion: Value(passwordHashVersion),
+              schoolKeyWrapped: schoolKeyWrapped != null
+                  ? Value(schoolKeyWrapped)
+                  : const Value.absent(),
+              tempPassword: tempPassword != null
+                  ? Value(tempPassword)
+                  : const Value.absent(),
+              salt: salt != null ? Value(salt) : const Value.absent(),
+              currentDeviceId: currentDeviceId != null
+                  ? Value(currentDeviceId)
+                  : const Value.absent(),
+              isDeleted: Value(isDeleted),
+              createdAt: Value(createdAt),
+              updatedAt: Value(updatedAt),
+              lastModifiedBy: lastModifiedBy != null
+                  ? Value(lastModifiedBy)
+                  : const Value.absent(),
+              lastSyncAt: Value(dateVal('last_sync_at')),
+            ),
+          ));
       debugPrint('[sync] _upsertTeacherFromSync: INSERTED teacher $serverId');
       return newLocalId;
     }
@@ -2073,10 +2202,10 @@ class SyncService {
   /// Returns the Drift [localId] of the upserted row, or `null` if the
   /// upsert was skipped (e.g. no serverId).
   Future<int?> _upsertSchoolFromSync(Map<String, dynamic> merged) async {
-    final serverId = merged['server_id'] as String? ??
-        merged['id'] as String?;
+    final serverId = merged['server_id'] as String? ?? merged['id'] as String?;
     if (serverId == null || serverId.isEmpty) {
-      debugPrint('[sync] _upsertSchoolFromSync skipped: no serverId in $merged');
+      debugPrint(
+          '[sync] _upsertSchoolFromSync skipped: no serverId in $merged');
       return null;
     }
 
@@ -2089,12 +2218,12 @@ class SyncService {
     final activeCurriculum = strVal('active_curriculum') ?? 'nerdc';
     final activeCurriculumVersion = strVal('active_curriculum_version');
     final totalSeats = _readInt(merged, 'total_seats') ?? 5;
-    final schoolMasterKeyWrapped = strVal('school_master_key_wrapped') ??
-        strVal('school_key_wrapped');
+    final schoolMasterKeyWrapped =
+        strVal('school_master_key_wrapped') ?? strVal('school_key_wrapped');
     final adminRecoveryEmail = strVal('admin_recovery_email');
     final adminRecoveryEmailVerified =
         merged['admin_recovery_email_verified'] == true ||
-        merged['admin_recovery_email_verified'] == 'true';
+            merged['admin_recovery_email_verified'] == 'true';
 
     // Parse optional DateTime fields (matching the pattern used by dateVal
     // in _upsertTeacherFromSync).
@@ -2141,10 +2270,10 @@ class SyncService {
   /// local FK constraint, so no foreign-key resolution is required — unlike
   /// teachers/schools which have integer [schoolLocalId] FKs.
   Future<int?> _upsertLessonFromSync(Map<String, dynamic> merged) async {
-    final serverId = merged['server_id'] as String? ??
-        merged['id'] as String?;
+    final serverId = merged['server_id'] as String? ?? merged['id'] as String?;
     if (serverId == null || serverId.isEmpty) {
-      debugPrint('[sync] _upsertLessonFromSync skipped: no serverId in $merged');
+      debugPrint(
+          '[sync] _upsertLessonFromSync skipped: no serverId in $merged');
       return null;
     }
 
@@ -2155,8 +2284,7 @@ class SyncService {
 
     // Map snake_case remote fields to Drift column values.
     String? strVal(String key) => merged[key] as String?;
-    bool boolVal(String key) =>
-        merged[key] == true || merged[key] == 'true';
+    bool boolVal(String key) => merged[key] == true || merged[key] == 'true';
     int? intVal(String key) => _readInt(merged, key);
     DateTime? dateVal(String key) {
       final raw = merged[key];
@@ -2166,7 +2294,6 @@ class SyncService {
       return null;
     }
 
-    final subject = strVal('subject') ?? '';
     final classLevel = strVal('class_level') ?? '';
     final week = intVal('week') ?? 0;
     final topic = strVal('topic') ?? '';
@@ -2179,10 +2306,8 @@ class SyncService {
     final weekNumber = intVal('week_number');
     final isDeleted = boolVal('is_deleted');
     final lastModifiedBy = strVal('last_modified_by');
-    final teacherServerId =
-        strVal('teacher_id') ?? strVal('teacher_server_id');
-    final schoolServerId =
-        strVal('school_id') ?? strVal('school_server_id');
+    final teacherServerId = strVal('teacher_id') ?? strVal('teacher_server_id');
+    final schoolServerId = strVal('school_id') ?? strVal('school_server_id');
     final isUnlocked = boolVal('is_unlocked');
     final status = strVal('status') ?? 'draft';
     final term = strVal('term');
@@ -2193,27 +2318,48 @@ class SyncService {
     if (existing.isNotEmpty) {
       // Update existing lesson record.
       final existingLesson = existing.first;
+
+      // ── Empty-remote guard ──────────────────────────────────────────────
+      // The sync-push Edge Function deletes the `subject` text field from
+      // the INSERT payload after resolving it to `subject_id` (a UUID FK on
+      // the server). When the client pulls the row back, `subject` is ''
+      // or null, which overwrites the valid local subject (e.g. "Mathematics")
+      // with ''. This cascading data loss causes duplicate-detection failures
+      // downstream because `l.subject == _subject` evaluates `"" == "Mathematics"`
+      // → false, so the scheme-of-work screens create duplicate draft lessons
+      // on every save.
+      //
+      final resolvedSubject = await _resolveSubjectNameFromSync(
+        merged,
+        existingSubject: existingLesson.subject,
+      );
+      final resolvedClassLevel =
+          (classLevel.isEmpty && existingLesson.classLevel.isNotEmpty)
+              ? existingLesson.classLevel
+              : classLevel;
+      final resolvedTopic = (topic.isEmpty && existingLesson.topic.isNotEmpty)
+          ? existingLesson.topic
+          : topic;
+
       await (db.update(db.lessons)
             ..where((t) => t.id.equals(existingLesson.id)))
           .write(LessonsCompanion(
         serverId: Value(serverId),
-        subject: Value(subject),
-        classLevel: Value(classLevel),
+        subject: Value(resolvedSubject),
+        classLevel: Value(resolvedClassLevel),
         week: Value(week),
-        topic: Value(topic),
+        topic: Value(resolvedTopic),
         difficulty: Value(difficulty),
         bloomsVerbs: Value(bloomsVerbs),
         curriculum: Value(curriculum),
         content: Value(content),
-        contentHash: contentHash != null
-            ? Value(contentHash)
-            : const Value.absent(),
+        contentHash:
+            contentHash != null ? Value(contentHash) : const Value.absent(),
         schemeOfWorkId: schemeOfWorkId != null
             ? Value(schemeOfWorkId)
             : const Value.absent(),
-        weekNumber: weekNumber != null
-            ? Value(weekNumber)
-            : const Value.absent(),
+        weekNumber:
+            weekNumber != null ? Value(weekNumber) : const Value.absent(),
         isDeleted: Value(isDeleted),
         lastModifiedBy: lastModifiedBy != null
             ? Value(lastModifiedBy)
@@ -2234,43 +2380,43 @@ class SyncService {
       return existingLesson.id;
     } else {
       // Insert new lesson record.
+      final resolvedSubject = await _resolveSubjectNameFromSync(merged);
       final newLocalId = await (db.into(db.lessons).insert(
-        LessonsCompanion.insert(
-          serverId: Value(serverId),
-          subject: subject,
-          classLevel: classLevel,
-          week: week,
-          topic: topic,
-          difficulty: difficulty,
-          bloomsVerbs: bloomsVerbs,
-          curriculum: curriculum,
-          content: content,
-          contentHash: contentHash != null
-              ? Value(contentHash)
-              : const Value.absent(),
-          schemeOfWorkId: schemeOfWorkId != null
-              ? Value(schemeOfWorkId)
-              : const Value.absent(),
-          weekNumber: weekNumber != null
-              ? Value(weekNumber)
-              : const Value.absent(),
-          isDeleted: Value(isDeleted),
-          lastModifiedBy: lastModifiedBy != null
-              ? Value(lastModifiedBy)
-              : const Value.absent(),
-          teacherServerId: teacherServerId != null
-              ? Value(teacherServerId)
-              : const Value.absent(),
-          schoolServerId: schoolServerId != null
-              ? Value(schoolServerId)
-              : const Value.absent(),
-          isUnlocked: Value(isUnlocked),
-          status: Value(status),
-          term: term != null ? Value(term) : const Value.absent(),
-          createdAt: Value(createdAt),
-          updatedAt: Value(updatedAt),
-        ),
-      ));
+            LessonsCompanion.insert(
+              serverId: Value(serverId),
+              subject: resolvedSubject,
+              classLevel: classLevel,
+              week: week,
+              topic: topic,
+              difficulty: difficulty,
+              bloomsVerbs: bloomsVerbs,
+              curriculum: curriculum,
+              content: content,
+              contentHash: contentHash != null
+                  ? Value(contentHash)
+                  : const Value.absent(),
+              schemeOfWorkId: schemeOfWorkId != null
+                  ? Value(schemeOfWorkId)
+                  : const Value.absent(),
+              weekNumber:
+                  weekNumber != null ? Value(weekNumber) : const Value.absent(),
+              isDeleted: Value(isDeleted),
+              lastModifiedBy: lastModifiedBy != null
+                  ? Value(lastModifiedBy)
+                  : const Value.absent(),
+              teacherServerId: teacherServerId != null
+                  ? Value(teacherServerId)
+                  : const Value.absent(),
+              schoolServerId: schoolServerId != null
+                  ? Value(schoolServerId)
+                  : const Value.absent(),
+              isUnlocked: Value(isUnlocked),
+              status: Value(status),
+              term: term != null ? Value(term) : const Value.absent(),
+              createdAt: Value(createdAt),
+              updatedAt: Value(updatedAt),
+            ),
+          ));
       debugPrint('[sync] _upsertLessonFromSync: INSERTED lesson $serverId');
       return newLocalId;
     }
@@ -2285,8 +2431,7 @@ class SyncService {
   /// Note: [teacherServerId] and [schoolServerId] are text columns with no
   /// local FK constraint, so no foreign-key resolution is required.
   Future<int?> _upsertExamFromSync(Map<String, dynamic> merged) async {
-    final serverId = merged['server_id'] as String? ??
-        merged['id'] as String?;
+    final serverId = merged['server_id'] as String? ?? merged['id'] as String?;
     if (serverId == null || serverId.isEmpty) {
       debugPrint('[sync] _upsertExamFromSync skipped: no serverId in $merged');
       return null;
@@ -2299,8 +2444,7 @@ class SyncService {
 
     // Map snake_case remote fields to Drift column values.
     String? strVal(String key) => merged[key] as String?;
-    bool boolVal(String key) =>
-        merged[key] == true || merged[key] == 'true';
+    bool boolVal(String key) => merged[key] == true || merged[key] == 'true';
     int? intVal(String key) => _readInt(merged, key);
     DateTime? dateVal(String key) {
       final raw = merged[key];
@@ -2310,7 +2454,6 @@ class SyncService {
       return null;
     }
 
-    final subject = strVal('subject') ?? '';
     final classLevel = strVal('class_level') ?? '';
     final topic = strVal('topic') ?? '';
     final difficulty = strVal('difficulty') ?? '';
@@ -2320,10 +2463,8 @@ class SyncService {
     final weekNumber = intVal('week_number');
     final isDeleted = boolVal('is_deleted');
     final lastModifiedBy = strVal('last_modified_by');
-    final teacherServerId =
-        strVal('teacher_id') ?? strVal('teacher_server_id');
-    final schoolServerId =
-        strVal('school_id') ?? strVal('school_server_id');
+    final teacherServerId = strVal('teacher_id') ?? strVal('teacher_server_id');
+    final schoolServerId = strVal('school_id') ?? strVal('school_server_id');
     final isUnlocked = boolVal('is_unlocked');
     final term = strVal('term');
     final createdAt = dateVal('created_at') ?? DateTime.now();
@@ -2333,22 +2474,34 @@ class SyncService {
     if (existing.isNotEmpty) {
       // Update existing exam record.
       final existingExam = existing.first;
-      await (db.update(db.exams)
-            ..where((t) => t.id.equals(existingExam.id)))
+
+      // ── Empty-remote guard (mirrors _upsertLessonFromSync) ───────────────
+      final resolvedSubject = await _resolveSubjectNameFromSync(
+        merged,
+        existingSubject: existingExam.subject,
+      );
+      final resolvedClassLevel =
+          (classLevel.isEmpty && existingExam.classLevel.isNotEmpty)
+              ? existingExam.classLevel
+              : classLevel;
+      final resolvedTopic = (topic.isEmpty && existingExam.topic.isNotEmpty)
+          ? existingExam.topic
+          : topic;
+
+      await (db.update(db.exams)..where((t) => t.id.equals(existingExam.id)))
           .write(ExamsCompanion(
         serverId: Value(serverId),
-        subject: Value(subject),
-        classLevel: Value(classLevel),
-        topic: Value(topic),
+        subject: Value(resolvedSubject),
+        classLevel: Value(resolvedClassLevel),
+        topic: Value(resolvedTopic),
         difficulty: Value(difficulty),
         curriculum: Value(curriculum),
         content: Value(content),
         schemeOfWorkId: schemeOfWorkId != null
             ? Value(schemeOfWorkId)
             : const Value.absent(),
-        weekNumber: weekNumber != null
-            ? Value(weekNumber)
-            : const Value.absent(),
+        weekNumber:
+            weekNumber != null ? Value(weekNumber) : const Value.absent(),
         isDeleted: Value(isDeleted),
         lastModifiedBy: lastModifiedBy != null
             ? Value(lastModifiedBy)
@@ -2368,40 +2521,67 @@ class SyncService {
       return existingExam.id;
     } else {
       // Insert new exam record.
+      final resolvedSubject = await _resolveSubjectNameFromSync(merged);
       final newLocalId = await (db.into(db.exams).insert(
-        ExamsCompanion.insert(
-          serverId: Value(serverId),
-          subject: subject,
-          classLevel: classLevel,
-          topic: topic,
-          difficulty: difficulty,
-          curriculum: curriculum,
-          content: content,
-          schemeOfWorkId: schemeOfWorkId != null
-              ? Value(schemeOfWorkId)
-              : const Value.absent(),
-          weekNumber: weekNumber != null
-              ? Value(weekNumber)
-              : const Value.absent(),
-          isDeleted: Value(isDeleted),
-          lastModifiedBy: lastModifiedBy != null
-              ? Value(lastModifiedBy)
-              : const Value.absent(),
-          teacherServerId: teacherServerId != null
-              ? Value(teacherServerId)
-              : const Value.absent(),
-          schoolServerId: schoolServerId != null
-              ? Value(schoolServerId)
-              : const Value.absent(),
-          isUnlocked: Value(isUnlocked),
-          term: term != null ? Value(term) : const Value.absent(),
-          createdAt: Value(createdAt),
-          updatedAt: Value(updatedAt),
-        ),
-      ));
+            ExamsCompanion.insert(
+              serverId: Value(serverId),
+              subject: resolvedSubject,
+              classLevel: classLevel,
+              topic: topic,
+              difficulty: difficulty,
+              curriculum: curriculum,
+              content: content,
+              schemeOfWorkId: schemeOfWorkId != null
+                  ? Value(schemeOfWorkId)
+                  : const Value.absent(),
+              weekNumber:
+                  weekNumber != null ? Value(weekNumber) : const Value.absent(),
+              isDeleted: Value(isDeleted),
+              lastModifiedBy: lastModifiedBy != null
+                  ? Value(lastModifiedBy)
+                  : const Value.absent(),
+              teacherServerId: teacherServerId != null
+                  ? Value(teacherServerId)
+                  : const Value.absent(),
+              schoolServerId: schoolServerId != null
+                  ? Value(schoolServerId)
+                  : const Value.absent(),
+              isUnlocked: Value(isUnlocked),
+              term: term != null ? Value(term) : const Value.absent(),
+              createdAt: Value(createdAt),
+              updatedAt: Value(updatedAt),
+            ),
+          ));
       debugPrint('[sync] _upsertExamFromSync: INSERTED exam $serverId');
       return newLocalId;
     }
+  }
+
+  Future<String> _resolveSubjectNameFromSync(
+    Map<String, dynamic> merged, {
+    String? existingSubject,
+  }) async {
+    final remoteSubject = (merged['subject'] as String?)?.trim() ?? '';
+    if (remoteSubject.isNotEmpty) {
+      return remoteSubject;
+    }
+
+    final subjectServerId = (merged['subject_id'] as String?)?.trim();
+    if (subjectServerId != null && subjectServerId.isNotEmpty) {
+      final subjectRow = await (db.select(db.subjects)
+            ..where((t) => t.serverId.equals(subjectServerId)))
+          .getSingleOrNull();
+      final resolvedSubject = subjectRow?.name.trim() ?? '';
+      if (resolvedSubject.isNotEmpty) {
+        return resolvedSubject;
+      }
+    }
+
+    if (existingSubject != null && existingSubject.trim().isNotEmpty) {
+      return existingSubject.trim();
+    }
+
+    return '';
   }
 
   /// Upserts a subject row from synced remote data into the local Drift
@@ -2410,10 +2590,10 @@ class SyncService {
   /// Returns the Drift [localId] of the upserted row, or `null` if the
   /// upsert was skipped (e.g. no serverId).
   Future<int?> _upsertSubjectFromSync(Map<String, dynamic> merged) async {
-    final serverId = merged['server_id'] as String? ??
-        merged['id'] as String?;
+    final serverId = merged['server_id'] as String? ?? merged['id'] as String?;
     if (serverId == null || serverId.isEmpty) {
-      debugPrint('[sync] _upsertSubjectFromSync skipped: no serverId in $merged');
+      debugPrint(
+          '[sync] _upsertSubjectFromSync skipped: no serverId in $merged');
       return null;
     }
 
@@ -2449,9 +2629,7 @@ class SyncService {
         serverId: Value(serverId),
         name: Value(name),
         alias: alias != null ? Value(alias) : const Value.absent(),
-        schoolId: schoolId != null
-            ? Value(schoolId)
-            : const Value.absent(),
+        schoolId: schoolId != null ? Value(schoolId) : const Value.absent(),
         sortOrder: Value(sortOrder),
         updatedAt: Value(updatedAt),
       ));
@@ -2463,22 +2641,17 @@ class SyncService {
       // been synced yet but a local row already exists.
       if (schoolId != null && name.isNotEmpty) {
         final localMatch = await (db.select(db.subjects)
-              ..where((t) =>
-                  t.schoolId.equals(schoolId) &
-                  t.name.equals(name)))
+              ..where((t) => t.schoolId.equals(schoolId) & t.name.equals(name)))
             .get();
         if (localMatch.isNotEmpty) {
           final match = localMatch.first;
           // Update the matched row with the serverId and any new fields.
-          await (db.update(db.subjects)
-                ..where((t) => t.id.equals(match.id)))
+          await (db.update(db.subjects)..where((t) => t.id.equals(match.id)))
               .write(SubjectsCompanion(
             serverId: Value(serverId),
             name: Value(name),
             alias: alias != null ? Value(alias) : const Value.absent(),
-            schoolId: schoolId != null
-                ? Value(schoolId)
-                : const Value.absent(),
+            schoolId: schoolId != null ? Value(schoolId) : const Value.absent(),
             sortOrder: Value(sortOrder),
             updatedAt: Value(updatedAt),
           ));
@@ -2489,18 +2662,17 @@ class SyncService {
       }
       // Insert new subject record.
       final newLocalId = await (db.into(db.subjects).insert(
-        SubjectsCompanion.insert(
-          serverId: Value(serverId),
-          name: name,
-          alias: alias != null ? Value(alias) : const Value.absent(),
-          schoolId: schoolId != null
-              ? Value(schoolId)
-              : const Value.absent(),
-          sortOrder: Value(sortOrder),
-          createdAt: Value(createdAt),
-          updatedAt: Value(updatedAt),
-        ),
-      ));
+            SubjectsCompanion.insert(
+              serverId: Value(serverId),
+              name: name,
+              alias: alias != null ? Value(alias) : const Value.absent(),
+              schoolId:
+                  schoolId != null ? Value(schoolId) : const Value.absent(),
+              sortOrder: Value(sortOrder),
+              createdAt: Value(createdAt),
+              updatedAt: Value(updatedAt),
+            ),
+          ));
       debugPrint('[sync] _upsertSubjectFromSync: INSERTED subject $serverId');
       return newLocalId;
     }
@@ -2520,8 +2692,7 @@ class SyncService {
   /// Returns the Drift [id] of the upserted row, or `null` if the upsert
   /// was skipped (e.g. no serverId, or a required FK could not be resolved).
   Future<int?> _upsertSchemeOfWorkFromSync(Map<String, dynamic> merged) async {
-    final serverId = merged['server_id'] as String? ??
-        merged['id'] as String?;
+    final serverId = merged['server_id'] as String? ?? merged['id'] as String?;
     if (serverId == null || serverId.isEmpty) {
       debugPrint(
         '[sync] _upsertSchemeOfWorkFromSync skipped: no serverId in $merged',
@@ -2594,8 +2765,7 @@ class SyncService {
 
     // ── Map snake_case remote fields to Drift column values ────────
     String? strVal(String key) => merged[key] as String?;
-    bool boolVal(String key) =>
-        merged[key] == true || merged[key] == 'true';
+    bool boolVal(String key) => merged[key] == true || merged[key] == 'true';
     int? intVal(String key) => _readInt(merged, key);
     DateTime? dateVal(String key) {
       final raw = merged[key];
@@ -2636,9 +2806,8 @@ class SyncService {
         adminEditedTopic: adminEditedTopic != null
             ? Value(adminEditedTopic)
             : const Value.absent(),
-        adminComment: adminComment != null
-            ? Value(adminComment)
-            : const Value.absent(),
+        adminComment:
+            adminComment != null ? Value(adminComment) : const Value.absent(),
         updateCounter: Value(updateCounter),
         isDeleted: Value(isDeleted),
         classLevel: Value(classLevel),
@@ -2651,29 +2820,29 @@ class SyncService {
     } else {
       // Insert new scheme_of_work record.
       final newLocalId = await (db.into(db.schemeOfWork).insert(
-        SchemeOfWorkCompanion.insert(
-          serverId: Value(serverId),
-          schoolId: Value(resolvedSchoolId),
-          teacherId: Value(resolvedTeacherId),
-          subjectId: Value(resolvedSubjectId),
-          term: Value(term),
-          weekNumber: Value(weekNumber),
-          topic: Value(topic),
-          objectives: Value(objectives),
-          status: Value(status),
-          adminEditedTopic: adminEditedTopic != null
-              ? Value(adminEditedTopic)
-              : const Value.absent(),
-          adminComment: adminComment != null
-              ? Value(adminComment)
-              : const Value.absent(),
-          updateCounter: Value(updateCounter),
-          isDeleted: Value(isDeleted),
-          classLevel: Value(classLevel),
-          createdAt: Value(createdAt),
-          updatedAt: Value(updatedAt),
-        ),
-      ));
+            SchemeOfWorkCompanion.insert(
+              serverId: Value(serverId),
+              schoolId: Value(resolvedSchoolId),
+              teacherId: Value(resolvedTeacherId),
+              subjectId: Value(resolvedSubjectId),
+              term: Value(term),
+              weekNumber: Value(weekNumber),
+              topic: Value(topic),
+              objectives: Value(objectives),
+              status: Value(status),
+              adminEditedTopic: adminEditedTopic != null
+                  ? Value(adminEditedTopic)
+                  : const Value.absent(),
+              adminComment: adminComment != null
+                  ? Value(adminComment)
+                  : const Value.absent(),
+              updateCounter: Value(updateCounter),
+              isDeleted: Value(isDeleted),
+              classLevel: Value(classLevel),
+              createdAt: Value(createdAt),
+              updatedAt: Value(updatedAt),
+            ),
+          ));
       debugPrint(
         '[sync] _upsertSchemeOfWorkFromSync: INSERTED scheme_of_work $serverId',
       );
@@ -2690,13 +2859,15 @@ class SyncService {
   /// duplicates in a single pass using raw SQL.
   Future<void> _deduplicateTeachers() async {
     // Use raw SQL to find duplicate serverIds
-    final dupRows = await db.customSelect(
-      'SELECT server_id, COUNT(*) AS cnt '
-      'FROM teachers '
-      'WHERE server_id IS NOT NULL '
-      'GROUP BY server_id '
-      'HAVING COUNT(*) > 1',
-    ).get();
+    final dupRows = await db
+        .customSelect(
+          'SELECT server_id, COUNT(*) AS cnt '
+          'FROM teachers '
+          'WHERE server_id IS NOT NULL '
+          'GROUP BY server_id '
+          'HAVING COUNT(*) > 1',
+        )
+        .get();
 
     if (dupRows.isEmpty) return;
 
@@ -2838,8 +3009,7 @@ class SyncService {
   /// Returns the Drift [id] of the upserted row, or `null` if the upsert
   /// was skipped (e.g. no transactionReference).
   Future<int?> _upsertPaymentEventFromSync(Map<String, dynamic> merged) async {
-    final transactionReference =
-        merged['transaction_reference'] as String?;
+    final transactionReference = merged['transaction_reference'] as String?;
     if (transactionReference == null || transactionReference.isEmpty) {
       debugPrint(
         '[sync] _upsertPaymentEventFromSync skipped: '
@@ -2850,14 +3020,12 @@ class SyncService {
 
     // Look up existing payment_event by transactionReference.
     final existing = await (db.select(db.paymentEvents)
-          ..where((t) =>
-              t.transactionReference.equals(transactionReference)))
+          ..where((t) => t.transactionReference.equals(transactionReference)))
         .get();
 
     // Map snake_case remote fields to Drift column values.
     String? strVal(String key) => merged[key] as String?;
-    bool boolVal(String key) =>
-        merged[key] == true || merged[key] == 'true';
+    bool boolVal(String key) => merged[key] == true || merged[key] == 'true';
     int? intVal(String key) => _readInt(merged, key);
     DateTime? dateVal(String key) {
       final raw = merged[key];
@@ -2896,17 +3064,17 @@ class SyncService {
     } else {
       // Insert new payment_event in a single atomic SQL write.
       final newLocalId = await (db.into(db.paymentEvents).insert(
-        PaymentEventsCompanion.insert(
-          transactionReference: transactionReference,
-          confirmedByWebhook: Value(confirmedByWebhook),
-          amount: amount,
-          plan: plan,
-          createdAt: Value(createdAt),
-          confirmationDate: confirmationDate != null
-              ? Value(confirmationDate)
-              : const Value.absent(),
-        ),
-      ));
+            PaymentEventsCompanion.insert(
+              transactionReference: transactionReference,
+              confirmedByWebhook: Value(confirmedByWebhook),
+              amount: amount,
+              plan: plan,
+              createdAt: Value(createdAt),
+              confirmationDate: confirmationDate != null
+                  ? Value(confirmationDate)
+                  : const Value.absent(),
+            ),
+          ));
       debugPrint(
         '[sync] _upsertPaymentEventFromSync: INSERTED '
         'payment_event $transactionReference',

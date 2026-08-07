@@ -59,6 +59,7 @@ lib/core/constants/supabase_keys.dart
 /push_75_orphans.py
 /push_75_entries.py
 /push_first3_last3_raw.py
+lib/scripts/cleanup_orphan_local_duplicates.dart
 
 # Supabase temporary files
 supabase/.temp/

@@ -480,6 +480,10 @@ class AuthNotifier extends Notifier<AuthStateData> {
           }
           // Session validation failed (expired, token_version_mismatch, offline)
           // Clear the stored JWT and fall through to the local credential cache.
+          debugPrint(
+            '[AUTH] Auto-login session validation failed; clearing JWT from '
+            'secure storage and memory. error=$e',
+          );
           await _securityService.clearJwt();
           _authService.clearJwt();
         }
@@ -800,12 +804,14 @@ class AuthNotifier extends Notifier<AuthStateData> {
   /// Perform a manual logout (clean).
   /// Transitions to the login screen after cleanup.
   Future<void> manualLogout() async {
+    debugPrint('[AUTH] manualLogout() called; clearing JWT and secure storage.');
     await _performLogout(
         isForced: false, targetState: AuthState.onlineLoginRequired);
   }
 
   /// Perform a forced logout (triggers emergency save).
   Future<void> forceLogout() async {
+    debugPrint('[AUTH] forceLogout() called; clearing JWT and secure storage.');
     await _performLogout(isForced: true);
   }
 
@@ -820,7 +826,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
   ///   Hard-delete unconditionally; they will be re-fetched on next login.
   ///
   /// *Tables explicitly skipped:*
-  ///   - `progress_logs` — no serverId column, low-value data
+  ///   - `progress_logs` — has serverId now, but remains excluded from
+  ///     teacher-local cleanup because it is low-value sync history
   ///   - `teachers` — must remain for re-auth; the current row is kept
   ///   - `sync_queue` — no teacher-scoping column; pending ops remain safe
   ///   - `payment_events` — billing records must be preserved
