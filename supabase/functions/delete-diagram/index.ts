@@ -124,10 +124,10 @@ async function authorizeDeletion(
 serve(async (req) => {
   try {
     // ── 1. Validate JWT ────────────────────────────────────────────────
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    const classaiJwt = req.headers.get("x-classai-jwt");
+    if (!classaiJwt) {
       return new Response(
-        JSON.stringify({ error: "Missing or invalid Authorization header" }),
+        JSON.stringify({ error: "Missing or invalid JWT header" }),
         { status: 401, headers: { "Content-Type": "application/json" } }
       );
     }
@@ -140,7 +140,7 @@ serve(async (req) => {
       );
     }
 
-    const token = authHeader.replace("Bearer ", "");
+    const token = classaiJwt;
     let claims: Record<string, unknown>;
     try {
       claims = await validateTokenVersion(

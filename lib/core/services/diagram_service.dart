@@ -56,7 +56,7 @@ class DiagramService {
         'Content-Type': 'application/json',
       };
       if (jwt != null) {
-        headers['Authorization'] = 'Bearer $jwt';
+        headers['x-classai-jwt'] = jwt;
       }
 
       final response = await _client.functions.invoke(

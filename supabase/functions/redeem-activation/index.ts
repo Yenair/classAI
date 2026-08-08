@@ -18,10 +18,9 @@ serve(async (req) => {
     }
 
     // ── 1. Extract and verify JWT ──────────────────────────────────
-    const authHeader = req.headers.get("authorization") ?? "";
-    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const token = req.headers.get("x-classai-jwt")?.trim() ?? "";
     if (!token) {
-      return jsonResponse({ error: "Missing Authorization header" }, 401);
+      return jsonResponse({ error: "Missing authentication token" }, 401);
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");

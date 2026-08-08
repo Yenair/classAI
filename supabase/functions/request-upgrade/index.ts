@@ -31,14 +31,13 @@ serve(async (req) => {
       return jsonResponse({ error: "Method not allowed" }, 405);
     }
 
-    // ── 1. Read JWT from the Authorization header ──────────────────────
-    // When deployed with verify_jwt=true, the Supabase runtime verifies
-    // the signature and expiry before this handler runs. We additionally
-    // call validateTokenVersion below for the custom claims (teacher_id, etc.).
-    const authHeader = req.headers.get("authorization") ?? "";
-    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    // ── 1. Read JWT from the x-classai-jwt custom header ───────────────
+    // The custom header bypasses the platform gateway's Authorization
+    // inspection. We validate the custom claims (teacher_id, etc.) via
+    // validateTokenVersion below.
+    const token = req.headers.get("x-classai-jwt")?.trim() ?? "";
     if (!token) {
-      return jsonResponse({ error: "Missing Authorization header" }, 401);
+      return jsonResponse({ error: "Missing authentication token" }, 401);
     }
 
     // ── 2. Validate JWT with the shared helper ─────────────────────────

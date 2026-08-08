@@ -392,7 +392,8 @@ void main() {
       'C: Exam created on server appears in version_hashes after pull',
       () async {
         await _seedSchool(db, serverId: 'srv-school-1');
-        await _seedExam(db, id: 100, title: 'Local placeholder', updateCounter: 0);
+        await _seedExam(db, id: 100, title: 'Local placeholder',
+            updateCounter: 0, serverId: 'srv-exam-100');
 
         // Establish merge base AND seed local record so merge engine finds it.
         await _seedBase(db, store,
@@ -418,6 +419,7 @@ void main() {
               changes: [
                 SyncChange(table: 'exams', row: {
                   'localId': 100, 'title': 'Remote Algebra Exam',
+                  'server_id': 'srv-exam-100',
                   'subject': 'Mathematics', 'classLevel': 'SS1',
                   'topic': 'Algebra', 'difficulty': 'hard',
                   'curriculum': 'nerdc',
@@ -492,7 +494,8 @@ void main() {
             SyncPullPage(
               changes: [
                 SyncChange(table: 'lessons', row: {
-                  'localId': 5, 'title': 'Lesson to Delete',
+                  'localId': 5, 'server_id': 'srv-lesson-5',
+                  'title': 'Lesson to Delete',
                   'content': '{"body":"content"}',
                   'is_deleted': true, 'updateCounter': 3,
                 }),
@@ -540,7 +543,8 @@ void main() {
       'E1: Conflict saved when both sides modify the same lesson field',
       () async {
         await _seedSchool(db, serverId: 'srv-school-1');
-        await _seedLesson(db, id: 10, title: 'Base title', updateCounter: 1);
+        await _seedLesson(db, id: 10, title: 'Base title',
+            updateCounter: 1, serverId: 'srv-lesson-10');
 
         await _seedBase(db, store,
             table: 'lessons', localId: 10,
@@ -559,7 +563,8 @@ void main() {
             SyncPullPage(
               changes: [
                 SyncChange(table: 'lessons', row: {
-                  'localId': 10, 'title': 'Remote title',
+                  'localId': 10, 'server_id': 'srv-lesson-10',
+                  'title': 'Remote title',
                   'content': 'Base body', 'updateCounter': 2,
                 }),
               ],
@@ -609,7 +614,8 @@ void main() {
       () async {
         await _seedSchool(db, serverId: 'srv-school-1');
         await _seedLesson(db, id: 20,
-            title: 'Base title', content: 'Base body', updateCounter: 1);
+            title: 'Base title', content: 'Base body', updateCounter: 1,
+            serverId: 'srv-lesson-20');
 
         await _seedBase(db, store,
             table: 'lessons', localId: 20,
@@ -628,7 +634,8 @@ void main() {
             SyncPullPage(
               changes: [
                 SyncChange(table: 'lessons', row: {
-                  'localId': 20, 'title': 'Base title',
+                  'localId': 20, 'server_id': 'srv-lesson-20',
+                  'title': 'Base title',
                   'content': 'Remote body', 'updateCounter': 2,
                 }),
               ],

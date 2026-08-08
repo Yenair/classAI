@@ -57,7 +57,7 @@ class PaymentService {
     final response = await _client.functions.invoke(
       'init-payment',
       headers: {
-        'Authorization': 'Bearer $jwt',
+        'x-classai-jwt': jwt,
       },
       body: {
         'email': email,
@@ -96,7 +96,7 @@ class PaymentService {
     final response = await _client.functions.invoke(
       'verify-payment',
       headers: {
-        'Authorization': 'Bearer $jwt',
+        'x-classai-jwt': jwt,
       },
       body: {
         'reference': reference,

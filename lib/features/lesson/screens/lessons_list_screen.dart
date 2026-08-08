@@ -813,7 +813,7 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
         try {
           await client.functions.invoke(
             'delete-diagram',
-            headers: {'Authorization': 'Bearer $jwt'},
+            headers: {'x-classai-jwt': jwt},
             body: {'url': url},
           );
         } catch (_) {

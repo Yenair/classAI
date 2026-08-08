@@ -74,6 +74,7 @@ Future<TestFixture> _seedTeacherSchemeFixture(
   final subjectId = await db.subjectsDao.insert(
     serverId: '00000000-0000-0000-0000-000000000301',
     name: 'Mathematics',
+    schoolId: '00000000-0000-0000-0000-000000000101',
     sortOrder: 1,
   );
 

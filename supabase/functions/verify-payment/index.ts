@@ -29,13 +29,10 @@ serve(async (req) => {
   }
 
   try {
-    const authorization = req.headers.get("Authorization") ?? "";
-    const token = authorization.startsWith("Bearer ")
-      ? authorization.slice("Bearer ".length).trim()
-      : "";
+    const token = req.headers.get("x-classai-jwt")?.trim() ?? "";
 
     if (!token) {
-      return jsonResponse({ error: "Missing Authorization header" }, 401);
+      return jsonResponse({ error: "Missing authentication token" }, 401);
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");

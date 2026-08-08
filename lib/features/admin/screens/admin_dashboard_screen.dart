@@ -1242,6 +1242,8 @@ Future<void> _handleSubmit() async {
           'code': code,
           'email': email,
           'school_name': schoolName,
+        }, headers: {
+          'x-classai-jwt': SupabaseAuthService().currentJwt ?? '',
         });
 
     if (response.data != null && response.data is Map) {

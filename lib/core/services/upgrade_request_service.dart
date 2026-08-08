@@ -75,7 +75,7 @@ class UpgradeRequestService {
       final response = await client.functions.invoke(
         'request-upgrade',
         headers: {
-          'Authorization': 'Bearer $accessToken',
+          'x-classai-jwt': accessToken,
         },
         body: {
           'requested_tier': requestedTier,

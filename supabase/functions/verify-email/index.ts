@@ -28,8 +28,7 @@ serve(async (req) => {
     // If a valid JWT is present, we additionally verify the caller is the
     // same teacher whose email is being verified (prevents abuse by
     // authenticated users triggering verification for arbitrary emails).
-    const authHeader = req.headers.get("Authorization") ?? "";
-    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const token = req.headers.get("x-classai-jwt")?.trim() ?? "";
     let jwtClaims: Record<string, unknown> | null = null;
     let presentedJwt = false;
 

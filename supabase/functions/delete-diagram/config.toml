@@ -1,2 +1,2 @@
-[functions]
-verify_jwt = true
+[auth]
+verify_jwt = false

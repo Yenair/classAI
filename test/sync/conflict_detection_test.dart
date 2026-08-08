@@ -51,6 +51,27 @@ void main() {
     );
     await store.seedVersionHashRow(tableName: 'lessons', localId: 10);
 
+    // Seed a real Drift lessons row (matched by serverId) so _mergeRemoteChange
+    // runs the existing-record three-way merge path (not the plain-INSERT path).
+    await db.into(db.lessons).insert(
+      LessonsCompanion.insert(
+        id: const Value(10),
+        serverId: const Value('srv-lesson-10'),
+        subject: 'Mathematics',
+        classLevel: 'SS1',
+        week: 1,
+        topic: 'Algebra',
+        difficulty: 'medium',
+        bloomsVerbs: '["analyze"]',
+        curriculum: 'nerdc',
+        content: 'Local body',
+        updateCounter: const Value(2),
+        isDeleted: const Value(false),
+        status: const Value('draft'),
+        isUnlocked: const Value(true),
+      ),
+    );
+
     final remote = FakeSyncRemoteApi(
       pullPages: [
         SyncPullPage(
@@ -59,6 +80,7 @@ void main() {
               table: 'lessons',
               row: {
                 'localId': 10,
+                'server_id': 'srv-lesson-10',
                 'title': 'Remote title',
                 'content': 'Remote body',
                 'updateCounter': 2,
@@ -125,6 +147,26 @@ void main() {
     );
     await store.seedVersionHashRow(tableName: 'lessons', localId: 20);
 
+    // Seed a real Drift lessons row (matched by serverId) so the merge path runs.
+    await db.into(db.lessons).insert(
+      LessonsCompanion.insert(
+        id: const Value(20),
+        serverId: const Value('srv-lesson-20'),
+        subject: 'Mathematics',
+        classLevel: 'SS1',
+        week: 1,
+        topic: 'Algebra',
+        difficulty: 'medium',
+        bloomsVerbs: '["analyze"]',
+        curriculum: 'nerdc',
+        content: 'Base body',
+        updateCounter: const Value(2),
+        isDeleted: const Value(false),
+        status: const Value('draft'),
+        isUnlocked: const Value(true),
+      ),
+    );
+
     final remote = FakeSyncRemoteApi(
       pullPages: [
         SyncPullPage(
@@ -133,6 +175,7 @@ void main() {
               table: 'lessons',
               row: {
                 'localId': 20,
+                'server_id': 'srv-lesson-20',
                 'title': 'Base title',
                 'content': 'Remote body',
                 'updateCounter': 2,
@@ -185,6 +228,26 @@ void main() {
     );
     await store.seedVersionHashRow(tableName: 'lessons', localId: 30);
 
+    // Seed a real Drift lessons row (matched by serverId) so the merge path runs.
+    await db.into(db.lessons).insert(
+      LessonsCompanion.insert(
+        id: const Value(30),
+        serverId: const Value('srv-lesson-30'),
+        subject: 'Mathematics',
+        classLevel: 'SS1',
+        week: 1,
+        topic: 'Algebra',
+        difficulty: 'medium',
+        bloomsVerbs: '["analyze"]',
+        curriculum: 'nerdc',
+        content: '{"objectives":["Obj A","Obj B"]}',
+        updateCounter: const Value(1),
+        isDeleted: const Value(false),
+        status: const Value('draft'),
+        isUnlocked: const Value(true),
+      ),
+    );
+
     final remote = FakeSyncRemoteApi(
       pullPages: [
         SyncPullPage(
@@ -193,6 +256,7 @@ void main() {
               table: 'lessons',
               row: {
                 'localId': 30,
+                'server_id': 'srv-lesson-30',
                 'objectives': ['Obj B', 'Obj C'],
                 'updateCounter': 2,
               },

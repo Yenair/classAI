@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -95,14 +96,15 @@ class AiService {
   }
 
   Future<Map<String, dynamic>> _callDeepSeek(String prompt) async {
-    // The proxy functions require the custom ClassAI JWT as a Bearer token in
-    // the Authorization header. Read it from the static singleton so we don't
-    // need to thread it through every call site (consistent with PaymentService).
+    // The proxy functions require the custom ClassAI JWT via the x-classai-jwt
+    // custom header. Read it from the static singleton so we don't need to
+    // thread it through every call site (consistent with PaymentService).
     final jwt = SupabaseAuthService().currentJwt;
     final headers = <String, String>{};
     if (jwt != null && jwt.isNotEmpty) {
-      headers['Authorization'] = 'Bearer $jwt';
+      headers['x-classai-jwt'] = jwt;
     }
+    _debugLogJwt('deepseek-proxy', jwt);
     final response = await _supabase.functions.invoke(
       'deepseek-proxy',
       headers: headers.isNotEmpty ? headers : null,
@@ -132,8 +134,9 @@ class AiService {
     final jwt = SupabaseAuthService().currentJwt;
     final headers = <String, String>{};
     if (jwt != null && jwt.isNotEmpty) {
-      headers['Authorization'] = 'Bearer $jwt';
+      headers['x-classai-jwt'] = jwt;
     }
+    _debugLogJwt('gemini-proxy', jwt);
     final response = await _supabase.functions.invoke(
       'gemini-proxy',
       headers: headers.isNotEmpty ? headers : null,
@@ -156,6 +159,34 @@ class AiService {
       generated = generatedJson as Map<String, dynamic>;
     }
     return _encrypt(generated);
+  }
+
+  // ── TEMPORARY DEBUG LOGGING (NOT COMMITTED) ────────────────────────────────
+  // Captures the exact JWT being sent to the AI proxy so we can inspect the
+  // header/payload claims (alg, exp, iat). Prints ONLY header + payload — the
+  // signature segment is never printed. Remove after evidence is captured.
+  void _debugLogJwt(String fn, String? jwt) {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (jwt == null || jwt.isEmpty) {
+      debugPrint('[DEBUG-JWT] fn=$fn jwt=<null/empty> nowMs=$nowMs');
+      return;
+    }
+    final parts = jwt.split('.');
+    if (parts.length != 3) {
+      debugPrint('[DEBUG-JWT] fn=$fn MALFORMED segmentCount=${parts.length} '
+          'nowMs=$nowMs');
+      return;
+    }
+    String decode(String seg) {
+      var b = seg.replaceAll('-', '+').replaceAll('_', '/');
+      while (b.length % 4 != 0) {
+        b += '=';
+      }
+      return utf8.decode(base64Url.decode(b), allowMalformed: true);
+    }
+
+    debugPrint('[DEBUG-JWT] fn=$fn nowMs=$nowMs header=${decode(parts[0])}');
+    debugPrint('[DEBUG-JWT] fn=$fn nowMs=$nowMs payload=${decode(parts[1])}');
   }
 
   Future<Map<String, dynamic>> _encrypt(Map<String, dynamic> parsed) async {

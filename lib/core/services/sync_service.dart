@@ -1403,7 +1403,20 @@ class SyncService {
       final failureMessage = result.errorMessage ??
           'Sync push failed for ${entry.queueTable} ${entry.operation}';
 
-      if (!result.retryable) {
+      // ── Emergency exemption ────────────────────────────────────────
+      // Emergency entries must NEVER be marked terminal on push failure.
+      // They are the survival guarantee for force-logout/deactivation:
+      // _applyCreditState() deletes only isEmergency==false rows, and
+      // pendingEntries() filters isTerminal==false, so marking an emergency
+      // entry terminal would silently drop it from the queue. Instead it
+      // falls through to backoff and stays pending.
+      if (entry.isEmergency) {
+        debugPrint(
+          '[PUSH-RESULT] Emergency entry ${entry.id} NOT marked terminal '
+          '(attempt $nextAttempts/5) — retained in pending queue',
+        );
+        _setState(SyncState.backoff);
+      } else if (!result.retryable) {
         // ── Non-retryable: server indicated this entry will NEVER succeed
         // (e.g. admin-table push from a non-admin user, or a non-syncable
         // table). Preserve it as terminal so the failure stays visible.

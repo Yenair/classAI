@@ -52,6 +52,25 @@ void main() {
       payload: {'local_id': 2, 'data': {'name': 'Math'}},
     );
 
+    await db.into(db.lessons).insert(
+      LessonsCompanion.insert(
+        id: const Value(10),
+        serverId: const Value('srv-lesson-10'),
+        subject: 'Mathematics',
+        classLevel: 'SS1',
+        week: 1,
+        topic: 'Local lesson',
+        difficulty: 'medium',
+        bloomsVerbs: '[]',
+        curriculum: 'nerdc',
+        content: '',
+        updateCounter: const Value(1),
+        isDeleted: const Value(false),
+        status: const Value('draft'),
+        isUnlocked: const Value(true),
+      ),
+    );
+
     store.seedLocalRecord('lessons', 10, {
       'localId': 10,
       'title': 'Local lesson',
@@ -76,6 +95,7 @@ void main() {
               table: 'lessons',
               row: {
                 'localId': 10,
+                'server_id': 'srv-lesson-10',
                 'title': 'Remote lesson',
                 'updateCounter': 2,
               },
@@ -115,14 +135,14 @@ void main() {
 
     expect(remote.pullCalls, isNotEmpty);
     expect(remote.pushCalls, isNotEmpty);
-    // Topological order: schools → subjects → exams first, then security_config from _pullChanges
+    // Topological order: schools → subjects → exams. security_config is no longer client-pushed.
     expect(
       remote.pushCalls.first.map((batch) => batch.table).toList(),
-      ['schools', 'subjects', 'exams', 'security_config'],
+      ['schools', 'subjects', 'exams'],
     );
     expect(store.syncedRecords['lessons']?[10]?['title'], 'Remote lesson');
     final pending = await db.syncQueueDao.pendingEntries();
-    expect(pending.where((e) => e.queueTable != 'security_config'), isEmpty);
+    expect(pending, isEmpty);
     expect(service.state, SyncState.idle);
   });
 

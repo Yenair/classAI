@@ -612,7 +612,7 @@ class SupabaseAuthService implements AuthService {
     try {
       final response = await client.functions.invoke(
         'add-teacher',
-        headers: {'Authorization': 'Bearer $jwt'},
+        headers: {'x-classai-jwt': jwt},
         body: {
           'email': email,
           'teacher_name': teacherName,
@@ -671,7 +671,7 @@ class SupabaseAuthService implements AuthService {
     try {
       final response = await client.functions.invoke(
         'add-teacher',
-        headers: {'Authorization': 'Bearer $jwt'},
+        headers: {'x-classai-jwt': jwt},
         body: {
           'email': email,
           'teacher_name': teacherName,
@@ -726,7 +726,7 @@ class SupabaseAuthService implements AuthService {
     try {
       final response = await client.functions.invoke(
         'change-password',
-        headers: {'Authorization': 'Bearer $jwt'},
+        headers: {'x-classai-jwt': jwt},
         body: {
           'new_password': newPassword,
         },
