@@ -36,7 +36,7 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
   final _contentFocusNode = FocusNode();
   final _thumbnailUrlCtrl = TextEditingController();
 
-  int _creditCost = 0;
+  int _offlineCreditCost = 0;
   bool _submitting = false;
   bool _previewing = false;
 
@@ -202,7 +202,7 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
         authorTeacherId: teacher.serverId ?? teacher.email,
         authorName: teacher.teacherName,
         schoolServerId: school?.serverId,
-        creditCost: _creditCost,
+        creditCost: _offlineCreditCost,
         needsApproval: true,
         thumbnailUrl: _thumbnailUrlCtrl.text.trim().isNotEmpty
             ? _thumbnailUrlCtrl.text.trim()
@@ -226,7 +226,7 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
           'author_name': teacher.teacherName,
           'teacher_server_id': teacher.serverId ?? teacher.email,
           'school_server_id': school?.serverId,
-          'credit_cost': _creditCost,
+          'credit_cost': _offlineCreditCost,
           'needs_approval': true,
           'thumbnail_url': _thumbnailUrlCtrl.text.trim().isNotEmpty
               ? _thumbnailUrlCtrl.text.trim()
@@ -347,13 +347,13 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
                               contentCtrl: _contentCtrl,
                               contentFocusNode: _contentFocusNode,
                               thumbnailUrlCtrl: _thumbnailUrlCtrl,
-                              creditCost: _creditCost,
+                              offlineCreditCost: _offlineCreditCost,
                               submitting: _submitting,
                               previewing: _previewing,
                               pickedImage: _pickedImage,
                               pickingImage: _pickingImage,
-                              onCreditCostChanged: (v) =>
-                                  setState(() => _creditCost = v),
+                              onOfflineCreditCostChanged: (v) =>
+                                  setState(() => _offlineCreditCost = v),
                               onPickImage: _pickImage,
                               onRemoveImage: _removeImage,
                               onSubmit: _submit,
@@ -390,13 +390,13 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
                             contentCtrl: _contentCtrl,
                             contentFocusNode: _contentFocusNode,
                             thumbnailUrlCtrl: _thumbnailUrlCtrl,
-                            creditCost: _creditCost,
+                            offlineCreditCost: _offlineCreditCost,
                             submitting: _submitting,
                             previewing: _previewing,
                             pickedImage: _pickedImage,
                             pickingImage: _pickingImage,
-                            onCreditCostChanged: (v) =>
-                                setState(() => _creditCost = v),
+                            onOfflineCreditCostChanged: (v) =>
+                                setState(() => _offlineCreditCost = v),
                             onPickImage: _pickImage,
                             onRemoveImage: _removeImage,
                             onSubmit: _submit,
@@ -526,7 +526,7 @@ class _VaultPublisherScreenState extends ConsumerState<VaultPublisherScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Credit Cost: $_creditCost',
+            'Offline Credit Cost: $_offlineCreditCost',
             style: tt.bodyMedium?.copyWith(
               fontWeight: FontWeight.w600,
               color: cs.tertiary,
@@ -779,12 +779,12 @@ class _FormContent extends StatelessWidget {
   final TextEditingController contentCtrl;
   final FocusNode contentFocusNode;
   final TextEditingController thumbnailUrlCtrl;
-  final int creditCost;
+  final int offlineCreditCost;
   final bool submitting;
   final bool previewing;
   final XFile? pickedImage;
   final bool pickingImage;
-  final ValueChanged<int> onCreditCostChanged;
+  final ValueChanged<int> onOfflineCreditCostChanged;
   final VoidCallback onPickImage;
   final VoidCallback onRemoveImage;
   final VoidCallback onSubmit;
@@ -802,12 +802,12 @@ class _FormContent extends StatelessWidget {
     required this.curriculumCtrl,
     required this.contentCtrl,
     required this.thumbnailUrlCtrl,
-    required this.creditCost,
+    required this.offlineCreditCost,
     required this.submitting,
     required this.previewing,
     required this.pickedImage,
     required this.pickingImage,
-    required this.onCreditCostChanged,
+    required this.onOfflineCreditCostChanged,
     required this.onPickImage,
     required this.onRemoveImage,
     required this.onSubmit,
@@ -1049,14 +1049,14 @@ class _FormContent extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // Credit Cost
-            _FieldLabel(text: 'Credit Cost', tt: tt),
+            // Offline Credit Cost
+            _FieldLabel(text: 'Offline Credit Cost', tt: tt),
             const SizedBox(height: 4),
             Row(
               children: [
                 Flexible(
                   child: Text(
-                    'Credits required to acquire:',
+                    'Offline credits required to acquire:',
                     style: tt.bodyMedium?.copyWith(
                       overflow: TextOverflow.clip,
                     ),
@@ -1074,7 +1074,7 @@ class _FormContent extends StatelessWidget {
                           horizontal: 16, vertical: 16),
                     ),
                     onChanged: (v) =>
-                        onCreditCostChanged(int.tryParse(v) ?? 0),
+                        onOfflineCreditCostChanged(int.tryParse(v) ?? 0),
                   ),
                 ),
               ],

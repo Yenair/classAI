@@ -83,7 +83,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   bool _isExporting = false;
   bool _editorSidebarOpen = false;
   bool _sidebarInitialized = false;
-  int _creditBalance = 0;
+  int _offlineCreditBalance = 0;
   int _remainingDailyPreviews = 10;
   String? _encryptedContent;
   String? _teacherId;
@@ -152,6 +152,11 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   void initState() {
     super.initState();
     _lessonId = widget.lessonId;
+    // A brand-new (blank) lesson opens with the config form expanded so the
+    // fields are immediately visible/interactive; a reopened existing lesson
+    // stays collapsed. Post-generation, _handleGenerate sets this back to
+    // false to auto-collapse after a successful generation.
+    _configExpanded = widget.lessonId == null;
     _checkConnectivity();
     // Sync preview controllers → state variables so onChanged behavior is preserved
     _objectivesController.addListener(() {
@@ -195,7 +200,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     if (mounted) setState(() => _isOnline = online);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _registerWithEmergencyFlush();
-      _loadCreditBalance();
+      _loadOfflineCreditBalance();
       _loadDailyPreviewData();
       _loadAuthInfo();
       _loadSubjects();
@@ -415,12 +420,12 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     } catch (_) {}
   }
 
-  Future<void> _loadCreditBalance() async {
+  Future<void> _loadOfflineCreditBalance() async {
     try {
-      await ref.read(creditStateProvider.notifier).refresh();
+      await ref.read(offlineCreditStateProvider.notifier).refresh();
       if (mounted) {
-        setState(() =>
-            _creditBalance = ref.read(creditStateProvider).currentCredits);
+        setState(() => _offlineCreditBalance =
+            ref.read(offlineCreditStateProvider).currentOfflineCredits);
       }
     } catch (_) {}
   }
@@ -911,11 +916,12 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   Future<void> _handleUnlock() async {
     final isOnline = await PlatformHelper.isOnline();
 
-    if (!isOnline && _creditBalance < 1) {
+    if (!isOnline && _offlineCreditBalance < 1) {
       // Show persistent toast with sync option
       AppToast.instance.showToast(
         context: context,
-        message: 'Out of credits. Connect to internet and sync to refill.',
+        message:
+            'Out of offline credits. Connect to internet and sync to refill.',
         icon: Icons.warning,
       );
       _showSyncBottomSheet();
@@ -923,8 +929,10 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     }
 
     try {
-      final creditService = CreditService(ref.read(databaseProvider));
-      await creditService.spendCredits(amount: 1, contentIds: ['lesson_draft']);
+      final offlineCreditService =
+          OfflineCreditService(ref.read(databaseProvider));
+      await offlineCreditService.spendOfflineCredits(
+          amount: 1, contentIds: ['lesson_draft']);
 
       // Audit log the unlock
       await ref.read(databaseProvider).auditLogsDao.insert(
@@ -944,11 +952,11 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       setState(() {
         _isUnlocked = true;
         if (!isOnline) {
-          _creditBalance = _creditBalance - 1;
+          _offlineCreditBalance = _offlineCreditBalance - 1;
         }
       });
 
-      ref.read(creditStateProvider.notifier).refresh();
+      ref.read(offlineCreditStateProvider.notifier).refresh();
 
       if (mounted) {
         showInfoToast(context: context, message: 'Lesson unlocked!');
@@ -968,15 +976,17 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Sync Credits', style: Theme.of(context).textTheme.titleLarge),
+            Text('Sync Offline Credits',
+                style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
-            Text('Tap below to sync with the server and refill your credits.'),
+            Text(
+                'Tap below to sync with the server and refill your offline credits.'),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: () {
                 Navigator.pop(context);
                 // Trigger sync
-                ref.read(creditStateProvider.notifier).refresh();
+                ref.read(offlineCreditStateProvider.notifier).refresh();
               },
               child: const Text('Sync Now'),
             ),
@@ -1523,7 +1533,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                 _MobileHeader(
                   cs: cs,
                   theme: theme,
-                  creditBalance: _creditBalance,
+                  offlineCreditBalance: _offlineCreditBalance,
                   undoController: _undoController,
                 ),
 
@@ -2030,12 +2040,12 @@ class _NavigationDrawer extends StatelessWidget {
 class _MobileHeader extends StatelessWidget {
   final ColorScheme cs;
   final ThemeData theme;
-  final int creditBalance;
+  final int offlineCreditBalance;
   final UndoHistoryController undoController;
   const _MobileHeader({
     required this.cs,
     required this.theme,
-    required this.creditBalance,
+    required this.offlineCreditBalance,
     required this.undoController,
   });
 
@@ -2117,7 +2127,7 @@ class _MobileHeader extends StatelessWidget {
               const SizedBox(width: 4),
               RepaintBoundary(
                 child: Text(
-                  '$creditBalance',
+                  '$offlineCreditBalance',
                   style: theme.textTheme.labelLarge?.copyWith(
                     fontWeight: FontWeight.w500,
                     color: cs.onSurfaceVariant,
@@ -3622,7 +3632,7 @@ class _PreviewColumn extends StatelessWidget {
     if (remainingDailyPreviews > 0) {
       return 'Unlock \u2014 $remainingDailyPreviews previews left';
     }
-    return 'Unlock for 1 Credit';
+    return 'Unlock for 1 Offline Credit';
   }
 }
 

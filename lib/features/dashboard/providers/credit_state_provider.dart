@@ -2,26 +2,26 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
-/// Data exposed to the credit counter widget.
-class CreditStateData {
-  final int currentCredits;
+/// Data exposed to the offline credit counter widget.
+class OfflineCreditStateData {
+  final int currentOfflineCredits;
   final String tierName;
   final bool loading;
   final String? errorMessage;
 
-  const CreditStateData({
-    this.currentCredits = 0,
+  const OfflineCreditStateData({
+    this.currentOfflineCredits = 0,
     this.tierName = 'Free',
     this.loading = false,
     this.errorMessage,
   });
 }
 
-/// Notifier that provides current credit state for UI display.
-class CreditStateNotifier extends Notifier<CreditStateData> {
+/// Notifier that provides current offline credit state for UI display.
+class OfflineCreditStateNotifier extends Notifier<OfflineCreditStateData> {
   @override
-  CreditStateData build() {
-    return const CreditStateData(loading: true);
+  OfflineCreditStateData build() {
+    return const OfflineCreditStateData(loading: true);
   }
 
   AppDatabase get _db => ref.read(databaseProvider);
@@ -30,13 +30,13 @@ class CreditStateNotifier extends Notifier<CreditStateData> {
   Future<void> refresh() async {
     try {
       final config = await _db.securityConfigDao.get();
-      state = CreditStateData(
-        currentCredits: config.offlineCredits,
+      state = OfflineCreditStateData(
+        currentOfflineCredits: config.offlineCredits,
         tierName: _tierFromCredits(config.offlineCredits),
       );
     } catch (e) {
-      state = CreditStateData(
-        errorMessage: 'Failed to load credits: $e',
+      state = OfflineCreditStateData(
+        errorMessage: 'Failed to load offline credits: $e',
       );
     }
   }
@@ -49,7 +49,7 @@ class CreditStateNotifier extends Notifier<CreditStateData> {
   }
 }
 
-final creditStateProvider =
-    NotifierProvider<CreditStateNotifier, CreditStateData>(
-  CreditStateNotifier.new,
+final offlineCreditStateProvider =
+    NotifierProvider<OfflineCreditStateNotifier, OfflineCreditStateData>(
+  OfflineCreditStateNotifier.new,
 );

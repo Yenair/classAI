@@ -191,7 +191,7 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(syncStatusProvider.notifier).refresh();
-      ref.read(creditStateProvider.notifier).refresh();
+      ref.read(offlineCreditStateProvider.notifier).refresh();
       ref.read(unresolvedConflictsProvider.notifier).refresh();
     });
   }
@@ -508,8 +508,8 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                       // Sync indicator (Stitch green dot style)
                       const _SyncChip(),
                       const SizedBox(width: 8),
-                      // Credit chip
-                      _CreditChip(visible: ref.watch(isOfflineProvider)),
+                      // Offline credit chip
+                      _OfflineCreditChip(visible: ref.watch(isOfflineProvider)),
                       const SizedBox(width: 8),
                       // Login button — only visible for guest users
                       if (authData.currentTeacher == null)
@@ -867,8 +867,8 @@ class _SyncChip extends ConsumerWidget {
   }
 }
 
-class _CreditChip extends ConsumerWidget {
-  const _CreditChip({required this.visible});
+class _OfflineCreditChip extends ConsumerWidget {
+  const _OfflineCreditChip({required this.visible});
 
   final bool visible;
 
@@ -876,14 +876,15 @@ class _CreditChip extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (!visible) return const SizedBox.shrink();
 
-    final creditData = ref.watch(creditStateProvider);
+    final offlineCreditData = ref.watch(offlineCreditStateProvider);
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => _showCreditInfo(context, ref, creditData, cs, theme),
+        onTap: () =>
+            _showOfflineCreditInfo(context, ref, offlineCreditData, cs, theme),
         borderRadius: BorderRadius.circular(AppTheme.radiusFull),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -901,7 +902,9 @@ class _CreditChip extends ConsumerWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                creditData.loading ? '…' : '${creditData.currentCredits}',
+                offlineCreditData.loading
+                    ? '…'
+                    : '${offlineCreditData.currentOfflineCredits}',
                 style: theme.textTheme.labelLarge?.copyWith(
                   fontWeight: FontWeight.w700,
                   color: cs.primary,
@@ -914,10 +917,10 @@ class _CreditChip extends ConsumerWidget {
     );
   }
 
-  void _showCreditInfo(
+  void _showOfflineCreditInfo(
     BuildContext context,
     WidgetRef ref,
-    CreditStateData creditData,
+    OfflineCreditStateData offlineCreditData,
     ColorScheme cs,
     ThemeData theme,
   ) {
@@ -970,18 +973,18 @@ class _CreditChip extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 24),
-              _CreditInfoRow(
-                label: 'Available Credits',
-                value: creditData.loading
+              _OfflineCreditInfoRow(
+                label: 'Available Offline Credits',
+                value: offlineCreditData.loading
                     ? '…'
-                    : '${creditData.currentCredits}',
+                    : '${offlineCreditData.currentOfflineCredits}',
                 cs: cs,
                 theme: theme,
               ),
               const SizedBox(height: 12),
-              _CreditInfoRow(
+              _OfflineCreditInfoRow(
                 label: 'Tier',
-                value: creditData.tierName,
+                value: offlineCreditData.tierName,
                 cs: cs,
                 theme: theme,
               ),
@@ -993,8 +996,8 @@ class _CreditChip extends ConsumerWidget {
   }
 }
 
-class _CreditInfoRow extends StatelessWidget {
-  const _CreditInfoRow({
+class _OfflineCreditInfoRow extends StatelessWidget {
+  const _OfflineCreditInfoRow({
     required this.label,
     required this.value,
     required this.cs,
@@ -1782,7 +1785,7 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(syncStatusProvider.notifier).refresh();
-      ref.read(creditStateProvider.notifier).refresh();
+      ref.read(offlineCreditStateProvider.notifier).refresh();
       ref.read(unresolvedConflictsProvider.notifier).refresh();
     });
   }
@@ -1817,7 +1820,7 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
   void _showReaderCreditInfo(
     BuildContext context,
     WidgetRef ref,
-    CreditStateData creditData,
+    OfflineCreditStateData offlineCreditData,
     ColorScheme cs,
     ThemeData theme,
   ) {
@@ -1870,17 +1873,18 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
                 ),
               ),
               const SizedBox(height: 24),
-              _CreditInfoRow(
-                label: 'Available Credits',
-                value:
-                    creditData.loading ? '…' : '${creditData.currentCredits}',
+              _OfflineCreditInfoRow(
+                label: 'Available Offline Credits',
+                value: offlineCreditData.loading
+                    ? '…'
+                    : '${offlineCreditData.currentOfflineCredits}',
                 cs: cs,
                 theme: theme,
               ),
               const SizedBox(height: 12),
-              _CreditInfoRow(
+              _OfflineCreditInfoRow(
                 label: 'Tier',
-                value: creditData.tierName,
+                value: offlineCreditData.tierName,
                 cs: cs,
                 theme: theme,
               ),
@@ -1898,7 +1902,7 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
     final authData = ref.watch(authProvider);
     final themeMode = ref.watch(themeProvider);
     final syncData = ref.watch(syncStatusProvider);
-    final creditData = ref.watch(creditStateProvider);
+    final offlineCreditData = ref.watch(offlineCreditStateProvider);
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -2095,14 +2099,14 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
                       foregroundColor: cs.primary,
                     ),
                   ),
-                // Credit chip (live from creditStateProvider)
+                // Credit chip (live from offlineCreditStateProvider)
                 Material(
                   color: Colors.transparent,
                   child: InkWell(
                     onTap: () => _showReaderCreditInfo(
                       context,
                       ref,
-                      creditData,
+                      offlineCreditData,
                       cs,
                       theme,
                     ),
@@ -2119,9 +2123,9 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
                         ),
                       ),
                       child: Text(
-                        creditData.loading
+                        offlineCreditData.loading
                             ? '…'
-                            : '${creditData.currentCredits}',
+                            : '${offlineCreditData.currentOfflineCredits}',
                         style: theme.textTheme.labelLarge?.copyWith(
                           color: cs.onPrimaryContainer,
                           fontWeight: FontWeight.w500,

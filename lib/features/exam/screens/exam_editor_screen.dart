@@ -61,7 +61,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   int? _examId;
   bool _editorSidebarOpen = false;
   bool _sidebarInitialized = false;
-  int _creditBalance = 3;
+  int _offlineCreditBalance = 3;
   int _remainingDailyPreviews = 10;
   String? _teacherId;
   String? _schoolId;
@@ -138,6 +138,11 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   @override
   void initState() {
     super.initState();
+    // A brand-new (blank) exam opens with the config form expanded so the
+    // fields are immediately visible/interactive; a reopened existing exam
+    // stays collapsed. Post-generation, the generate handler sets this back
+    // to false to auto-collapse after a successful generation.
+    _configExpanded = widget.examId == null;
     _checkConnectivity();
   }
 
@@ -146,7 +151,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     if (mounted) setState(() => _isOnline = online);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _registerWithEmergencyFlush();
-      _loadCreditBalance();
+      _loadOfflineCreditBalance();
       _loadDailyPreviewData();
       _loadAuthInfo();
       _loadSubjects();
@@ -560,12 +565,12 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     } catch (_) {}
   }
 
-  Future<void> _loadCreditBalance() async {
+  Future<void> _loadOfflineCreditBalance() async {
     try {
-      await ref.read(creditStateProvider.notifier).refresh();
+      await ref.read(offlineCreditStateProvider.notifier).refresh();
       if (mounted) {
-        setState(() =>
-            _creditBalance = ref.read(creditStateProvider).currentCredits);
+        setState(() => _offlineCreditBalance =
+            ref.read(offlineCreditStateProvider).currentOfflineCredits);
       }
     } catch (_) {}
   }
@@ -786,12 +791,13 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   Future<void> _handleUnlock() async {
     final isOnline = await PlatformHelper.isOnline();
 
-    if (!isOnline && _creditBalance < 1) {
+    if (!isOnline && _offlineCreditBalance < 1) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         AppToast.instance.showToast(
           context: context,
-          message: 'Out of credits. Connect to internet and sync to refill.',
+          message:
+              'Out of offline credits. Connect to internet and sync to refill.',
           icon: Icons.warning,
         );
         _showSyncBottomSheet();
@@ -800,9 +806,10 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     }
 
     try {
-      final creditService = CreditService(ref.read(databaseProvider));
+      final offlineCreditService =
+          OfflineCreditService(ref.read(databaseProvider));
       final topicId = _topicController.text.trim();
-      await creditService.spendCredits(
+      await offlineCreditService.spendOfflineCredits(
         amount: 1,
         contentIds: ['exam_$_subject\$$topicId'],
       );
@@ -826,11 +833,11 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       setState(() {
         _isUnlocked = true;
         if (!isOnline) {
-          _creditBalance = _creditBalance - 1;
+          _offlineCreditBalance = _offlineCreditBalance - 1;
         }
       });
 
-      ref.read(creditStateProvider.notifier).refresh();
+      ref.read(offlineCreditStateProvider.notifier).refresh();
 
       if (mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -856,18 +863,21 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Sync Credits', style: Theme.of(context).textTheme.titleLarge),
+            Text('Sync Offline Credits',
+                style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
-            Text('Tap below to sync with the server and refill your credits.'),
+            Text(
+                'Tap below to sync with the server and refill your offline credits.'),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: () {
                 Navigator.pop(context);
-                // Refresh credit state
+                // Refresh offline credit state
                 final db = ref.read(databaseProvider);
                 db.securityConfigDao.get().then((config) {
                   if (mounted) {
-                    setState(() => _creditBalance = config.offlineCredits);
+                    setState(() =>
+                        _offlineCreditBalance = config.offlineCredits);
                   }
                 });
               },
@@ -1449,7 +1459,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                 _TopBar(
                   cs: cs,
                   theme: theme,
-                  creditBalance: _creditBalance,
+                  offlineCreditBalance: _offlineCreditBalance,
                   onToggleSidebar: () => setState(
                       () => _editorSidebarOpen = !_editorSidebarOpen),
                   sidebarOpen: _editorSidebarOpen,
@@ -1525,7 +1535,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                           isRegenerating: _isRegenerating,
                                           onRegenerate: _isUnlocked ? _handleRegenerate : null,
                                           reviewController: _reviewController,
-                                          creditBalance: _creditBalance,
+                                          offlineCreditBalance: _offlineCreditBalance,
                                           subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
                                           classLevels: _classLevels,
                                           difficulties: _difficulties,
@@ -1612,7 +1622,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                         isRegenerating: _isRegenerating,
                                         onRegenerate: _isUnlocked ? _handleRegenerate : null,
                                         reviewController: _reviewController,
-                                        creditBalance: _creditBalance,
+                                        offlineCreditBalance: _offlineCreditBalance,
                                         subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
                                         classLevels: _classLevels,
                                         difficulties: _difficulties,
@@ -1916,14 +1926,14 @@ class _NavDrawer extends StatelessWidget {
 class _TopBar extends StatelessWidget {
   final ColorScheme cs;
   final ThemeData theme;
-  final int creditBalance;
+  final int offlineCreditBalance;
   final VoidCallback? onToggleSidebar;
   final bool sidebarOpen;
   final UndoHistoryController undoController;
   const _TopBar({
     required this.cs,
     required this.theme,
-    required this.creditBalance,
+    required this.offlineCreditBalance,
     this.onToggleSidebar,
     required this.sidebarOpen,
     required this.undoController,
@@ -2028,7 +2038,7 @@ class _TopBar extends StatelessWidget {
                   Icon(Icons.stars_rounded, size: 20, color: cs.primary),
                   const SizedBox(width: 6),
                   Text(
-                    '$creditBalance',
+                    '$offlineCreditBalance',
                     style: theme.textTheme.labelLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                       color: cs.primary,
@@ -2059,7 +2069,7 @@ class _ConfigPanel extends StatelessWidget {
   final String difficulty;
   final bool isGenerating;
   final bool isRegenerating;
-  final int creditBalance;
+  final int offlineCreditBalance;
   final List<String> subjects;
   final List<String> classLevels;
   final List<String> difficulties;
@@ -2096,7 +2106,7 @@ class _ConfigPanel extends StatelessWidget {
     required this.difficulty,
     required this.isGenerating,
     this.isRegenerating = false,
-    required this.creditBalance,
+    required this.offlineCreditBalance,
     required this.subjects,
     required this.classLevels,
     required this.difficulties,
@@ -3122,7 +3132,7 @@ class _PreviewPanel extends StatelessWidget {
     if (remainingDailyPreviews > 0) {
       return 'Unlock \u2014 $remainingDailyPreviews previews left';
     }
-    return 'Unlock for 1 Credit';
+    return 'Unlock for 1 Offline Credit';
   }
 
   Widget _previewHeader(int? totalQuestions) {

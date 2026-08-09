@@ -87,7 +87,7 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
     _loadFilterPreferences();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(syncStatusProvider.notifier).refresh();
-      ref.read(creditStateProvider.notifier).refresh();
+      ref.read(offlineCreditStateProvider.notifier).refresh();
       ref.read(unresolvedConflictsProvider.notifier).refresh();
       _bootstrapSchemeDrafts();
     });
@@ -532,7 +532,7 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
           actions: [
             const SyncIndicator(),
             const SizedBox(width: 8),
-            CreditCounter(visible: ref.watch(isOfflineProvider)),
+            OfflineCreditCounter(visible: ref.watch(isOfflineProvider)),
             const SizedBox(width: 8),
           ],
         elevation: 0,

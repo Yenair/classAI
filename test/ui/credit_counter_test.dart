@@ -4,14 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:classai/core/widgets/credit_counter.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 
-/// Test notifier extending CreditStateNotifier with fixed data.
-class TestCreditStateNotifier extends CreditStateNotifier {
-  final CreditStateData fixedData;
+/// Test notifier extending OfflineCreditStateNotifier with fixed data.
+class TestOfflineCreditStateNotifier extends OfflineCreditStateNotifier {
+  final OfflineCreditStateData fixedData;
 
-  TestCreditStateNotifier(this.fixedData);
+  TestOfflineCreditStateNotifier(this.fixedData);
 
   @override
-  CreditStateData build() => fixedData;
+  OfflineCreditStateData build() => fixedData;
 
   @override
   Future<void> refresh() async {
@@ -19,20 +19,21 @@ class TestCreditStateNotifier extends CreditStateNotifier {
   }
 }
 
-Widget _buildApp(CreditStateData data) {
+Widget _buildApp(OfflineCreditStateData data) {
   return ProviderScope(
     overrides: [
-      creditStateProvider.overrideWith(() => TestCreditStateNotifier(data)),
+      offlineCreditStateProvider.overrideWith(
+          () => TestOfflineCreditStateNotifier(data)),
     ],
-    child: const MaterialApp(home: Scaffold(body: CreditCounter())),
+    child: const MaterialApp(home: Scaffold(body: OfflineCreditCounter())),
   );
 }
 
 void main() {
-  testWidgets('CreditCounter shows ActionChip with credit count',
+  testWidgets('OfflineCreditCounter shows ActionChip with credit count',
       (tester) async {
     await tester.pumpWidget(_buildApp(
-      const CreditStateData(currentCredits: 5),
+      const OfflineCreditStateData(currentOfflineCredits: 5),
     ));
 
     await tester.pumpAndSettle();
@@ -41,9 +42,9 @@ void main() {
     expect(find.text('5'), findsOneWidget);
   });
 
-  testWidgets('CreditCounter shows loading indicator', (tester) async {
+  testWidgets('OfflineCreditCounter shows loading indicator', (tester) async {
     await tester.pumpWidget(_buildApp(
-      const CreditStateData(loading: true),
+      const OfflineCreditStateData(loading: true),
     ));
 
     await tester.pumpAndSettle();
@@ -51,10 +52,10 @@ void main() {
     expect(find.text('…'), findsOneWidget);
   });
 
-  testWidgets('tapping CreditCounter opens AlertDialog with details',
+  testWidgets('tapping OfflineCreditCounter opens AlertDialog with details',
       (tester) async {
     await tester.pumpWidget(_buildApp(
-      const CreditStateData(currentCredits: 10, tierName: 'Standard'),
+      const OfflineCreditStateData(currentOfflineCredits: 10, tierName: 'Standard'),
     ));
 
     await tester.pumpAndSettle();
@@ -62,7 +63,7 @@ void main() {
     await tester.tap(find.byType(ActionChip));
     await tester.pumpAndSettle();
 
-    expect(find.text('Credits'), findsOneWidget);
+    expect(find.text('Offline Credits'), findsOneWidget);
     // "10" appears in both ActionChip label & dialog; scope to AlertDialog
     final dialog = find.byType(AlertDialog);
     expect(dialog, findsOneWidget);
@@ -74,7 +75,7 @@ void main() {
 
   testWidgets('CreditDialog has Close and Upgrade buttons', (tester) async {
     await tester.pumpWidget(_buildApp(
-      const CreditStateData(currentCredits: 10, tierName: 'Standard'),
+      const OfflineCreditStateData(currentOfflineCredits: 10, tierName: 'Standard'),
     ));
 
     await tester.pumpAndSettle();

@@ -4,12 +4,12 @@ import 'package:classai/core/services/credit_service.dart';
 
 void main() {
   late AppDatabase db;
-  late CreditService creditService;
+  late OfflineCreditService creditService;
 
   setUp(() async {
     db = AppDatabase.forTesting();
     await db.initialize();
-    creditService = CreditService(db);
+    creditService = OfflineCreditService(db);
     // Set initial credits
     await db.securityConfigDao.updateConfig(offlineCredits: 10);
   });
@@ -19,8 +19,8 @@ void main() {
   });
 
   test('spend credits decrements locally', () async {
-    // spendCredits clamps amount>1 to 1 (only deducts 1 credit per unlock)
-    final batchId = await creditService.spendCredits(
+    // spendOfflineCredits clamps amount>1 to 1 (only deducts 1 credit per unlock)
+    final batchId = await creditService.spendOfflineCredits(
       amount: 2,
       contentIds: ['content_1'],
     );
@@ -31,16 +31,16 @@ void main() {
   });
 
   test('spend credits when insufficient throws', () async {
-    // spendCredits clamps amount>1 to 1; set credits to 0 so the check fails
+    // spendOfflineCredits clamps amount>1 to 1; set credits to 0 so the check fails
     await db.securityConfigDao.updateConfig(offlineCredits: 0);
     await expectLater(
-      () => creditService.spendCredits(amount: 20, contentIds: ['x']),
-      throwsA(isA<CreditInsufficientException>()),
+      () => creditService.spendOfflineCredits(amount: 20, contentIds: ['x']),
+      throwsA(isA<OfflineCreditInsufficientException>()),
     );
   });
 
   test('batch ID is persisted before spend', () async {
-    final batchId = await creditService.spendCredits(
+    final batchId = await creditService.spendOfflineCredits(
       amount: 1,
       contentIds: ['c1'],
     );
@@ -53,7 +53,7 @@ void main() {
 
   test('server state overwrites local state', () async {
     // Spend some credits locally
-    await creditService.spendCredits(amount: 3, contentIds: ['a', 'b', 'c']);
+    await creditService.spendOfflineCredits(amount: 3, contentIds: ['a', 'b', 'c']);
 
     // Server returns authoritative state
     await creditService.applyServerCreditState(

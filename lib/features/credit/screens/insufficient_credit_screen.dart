@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-/// Screen shown when the user has insufficient credits.
+/// Screen shown when the user has insufficient offline credits.
 ///
-/// Displays options to purchase more credits or learn about credit tiers.
-class InsufficientCreditScreen extends StatelessWidget {
-  const InsufficientCreditScreen({super.key});
+/// Displays options to purchase more offline credits or learn about
+/// offline credit tiers.
+class InsufficientOfflineCreditScreen extends StatelessWidget {
+  const InsufficientOfflineCreditScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -13,7 +14,7 @@ class InsufficientCreditScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Insufficient Credits'),
+        title: const Text('Insufficient Offline Credits'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
@@ -28,7 +29,7 @@ class InsufficientCreditScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             Text(
-              'You need credits to use this feature',
+              'You need offline credits to use this feature',
               textAlign: TextAlign.center,
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w600,
@@ -36,7 +37,7 @@ class InsufficientCreditScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'Purchase a plan to get more credits for generating content.',
+              'Purchase a plan to get more offline credits for generating content.',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyLarge?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,

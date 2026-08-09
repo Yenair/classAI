@@ -1,8 +1,10 @@
+import 'dart:ffi';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqlite3/open.dart';
 import 'package:sqlite3/sqlite3.dart' as sql;
 
 import 'package:classai/core/database/database_encryption_bootstrap.dart';
@@ -60,9 +62,21 @@ class FakeSecureStorage extends FlutterSecureStoragePlatform {
   }
 }
 
+/// Windows SQLCipher override mirroring scripts/sqlcipher_manual_copy_probe.dart.
+/// Points sqlite3 at the real SQLCipher-enabled DLL so ensureEncrypted
+/// genuinely encrypts/decrypts during these tests.
+const String kCipherDll =
+    r'C:\Users\Yene\classai\build\windows\x64\runner\Debug\sqlite3.dll';
+
+DynamicLibrary _openCipherDll() => DynamicLibrary.open(kCipherDll);
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   FlutterSecureStoragePlatform.instance = FakeSecureStorage();
+
+  // Point sqlite3 at the real SQLCipher DLL on Windows before any
+  // ensureEncrypted call (mirrors scripts/sqlcipher_manual_copy_probe.dart).
+  open.overrideFor(OperatingSystem.windows, _openCipherDll);
 
   late Directory tempDir;
   late FakeSecureStorage secureStorage;
@@ -88,16 +102,16 @@ void main() {
     final db = sql.sqlite3.open(path);
     try {
       db.execute('''
-        CREATE TABLE vault_items (id INTEGER PRIMARY KEY, payload TEXT NOT NULL);
+        CREATE TABLE vault_items (id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL);
       ''');
       db.execute('''
-        CREATE TABLE sync_queue (id INTEGER PRIMARY KEY, data TEXT NOT NULL);
+        CREATE TABLE sync_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT NOT NULL);
       ''');
       db.execute('''
-        CREATE TABLE lessons (id INTEGER PRIMARY KEY, title TEXT NOT NULL);
+        CREATE TABLE lessons (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL);
       ''');
       db.execute('''
-        CREATE TABLE exams (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+        CREATE TABLE exams (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL);
       ''');
       for (var i = 0; i < vaultRows; i++) {
         db.execute(

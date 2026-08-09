@@ -2,17 +2,17 @@ import 'package:uuid/uuid.dart';
 import '../utils/platform_helper.dart';
 import '../database/database.dart';
 
-class CreditService {
+class OfflineCreditService {
   final AppDatabase _db;
   final _uuid = const Uuid();
 
-  CreditService(this._db);
+  OfflineCreditService(this._db);
 
   /// Spend credits for content unlock. Returns batch ID.
   /// CRITICAL: Batch ID is written to SQLite BEFORE the network call.
   /// This is used for unlocking already-generated content.
   /// Only deducts 1 credit per unlock.
-  Future<String> spendCredits({
+  Future<String> spendOfflineCredits({
     required int amount,
     required List<String> contentIds,
   }) async {
@@ -27,7 +27,7 @@ class CreditService {
     final config = await _db.securityConfigDao.get();
 
     if (config.offlineCredits < effectiveAmount) {
-      throw CreditInsufficientException(
+      throw OfflineCreditInsufficientException(
         available: config.offlineCredits,
         required: effectiveAmount,
       );
@@ -85,10 +85,10 @@ class CreditService {
   }
 }
 
-class CreditInsufficientException implements Exception {
+class OfflineCreditInsufficientException implements Exception {
   final int available;
   final int required;
-  CreditInsufficientException(
+  OfflineCreditInsufficientException(
       {required this.available, required this.required});
 
   @override

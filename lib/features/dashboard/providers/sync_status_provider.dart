@@ -10,7 +10,7 @@ import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart'
     show authProvider, authServiceProvider, securityServiceProvider;
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart'
-    show creditStateProvider;
+    show offlineCreditStateProvider;
 import 'package:classai/features/dashboard/providers/dashboard_data_providers.dart';
 import 'package:classai/main.dart' show databaseProvider, navigatorKey;
 
@@ -210,7 +210,7 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
       final jwt = await _setJwtOnRemoteApi(syncService);
       await syncService.onConnectivityRestored(jwt: jwt);
       await refresh();
-      await ref.read(creditStateProvider.notifier).refresh();
+      await ref.read(offlineCreditStateProvider.notifier).refresh();
       await ref.read(configServiceProvider).refresh();
       // Refresh in-memory school state so any tier/school-name change
       // from the sync pull is visible immediately (no re-login required).
@@ -299,7 +299,7 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
 
     // Refresh display state after successful sync
     await refresh();
-    await ref.read(creditStateProvider.notifier).refresh();
+    await ref.read(offlineCreditStateProvider.notifier).refresh();
     await ref.read(configServiceProvider).refresh();
     // Refresh in-memory school state so any tier/school-name change
     // from the sync pull is visible immediately (no re-login required).
@@ -365,7 +365,7 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
     } finally {
       // Refresh display state after sync attempt
       await refresh();
-      await ref.read(creditStateProvider.notifier).refresh();
+      await ref.read(offlineCreditStateProvider.notifier).refresh();
       await ref.read(configServiceProvider).refresh();
       await ref.read(authProvider.notifier).refreshSchoolFromDb();
     }

@@ -36,9 +36,9 @@ class TestAuthNotifier extends AuthNotifier {
       );
 }
 
-class TestCreditStateNotifier extends CreditStateNotifier {
+class TestOfflineCreditStateNotifier extends OfflineCreditStateNotifier {
   @override
-  CreditStateData build() => const CreditStateData();
+  OfflineCreditStateData build() => const OfflineCreditStateData();
 }
 
 class TestSyncStatusNotifier extends SyncStatusNotifier {
@@ -74,8 +74,8 @@ void main() {
           syncStatusProvider.overrideWith(() => TestSyncStatusNotifier(
                 const SyncStatusData(status: SyncStatus.synced),
               )),
-          creditStateProvider.overrideWith(
-            () => TestCreditStateNotifier(),
+          offlineCreditStateProvider.overrideWith(
+            () => TestOfflineCreditStateNotifier(),
           ),
         ],
         child: _wrapApp(const ReaderLayout()),
@@ -148,8 +148,8 @@ void main() {
           syncStatusProvider.overrideWith(() => TestSyncStatusNotifier(
                 const SyncStatusData(status: SyncStatus.synced),
               )),
-          creditStateProvider.overrideWith(
-            () => TestCreditStateNotifier(),
+          offlineCreditStateProvider.overrideWith(
+            () => TestOfflineCreditStateNotifier(),
           ),
         ],
         child: _wrapApp(const ReaderLayout()),
@@ -216,8 +216,8 @@ void main() {
           syncStatusProvider.overrideWith(() => TestSyncStatusNotifier(
                 const SyncStatusData(status: SyncStatus.synced),
               )),
-          creditStateProvider.overrideWith(
-            () => TestCreditStateNotifier(),
+          offlineCreditStateProvider.overrideWith(
+            () => TestOfflineCreditStateNotifier(),
           ),
         ],
         child: _wrapApp(const ReaderLayout()),

@@ -4,20 +4,21 @@ import 'package:go_router/go_router.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 
-/// Credit counter chip in the AppBar.
+/// Offline credit counter chip in the AppBar.
 ///
 /// Stitch style: compact pill container, primary tint background when
-/// credits are positive, thin mono-style numerics for the count.
-class CreditCounter extends ConsumerStatefulWidget {
-  const CreditCounter({super.key, this.visible = true});
+/// offline credits are positive, thin mono-style numerics for the count.
+class OfflineCreditCounter extends ConsumerStatefulWidget {
+  const OfflineCreditCounter({super.key, this.visible = true});
 
   final bool visible;
 
   @override
-  ConsumerState<CreditCounter> createState() => _CreditCounterState();
+  ConsumerState<OfflineCreditCounter> createState() =>
+      _OfflineCreditCounterState();
 }
 
-class _CreditCounterState extends ConsumerState<CreditCounter>
+class _OfflineCreditCounterState extends ConsumerState<OfflineCreditCounter>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
@@ -55,8 +56,8 @@ class _CreditCounterState extends ConsumerState<CreditCounter>
   Widget build(BuildContext context) {
     if (!widget.visible) return const SizedBox.shrink();
 
-    final creditData = ref.watch(creditStateProvider);
-    final balance = creditData.currentCredits;
+    final offlineCreditData = ref.watch(offlineCreditStateProvider);
+    final balance = offlineCreditData.currentOfflineCredits;
 
     if (_previousBalance >= 0 &&
         balance != _previousBalance &&
@@ -71,8 +72,9 @@ class _CreditCounterState extends ConsumerState<CreditCounter>
     _previousBalance = balance;
 
     final cs = Theme.of(context).colorScheme;
-    final hasError = creditData.errorMessage != null;
-    final isPositive = !hasError && creditData.currentCredits > 0;
+    final hasError = offlineCreditData.errorMessage != null;
+    final isPositive =
+        !hasError && offlineCreditData.currentOfflineCredits > 0;
     final labelColor = hasError ? cs.error : (isPositive ? cs.primary : cs.error);
 
     return RepaintBoundary(
@@ -111,7 +113,9 @@ class _CreditCounterState extends ConsumerState<CreditCounter>
           label: Text(
             hasError
                 ? '—'
-                : (creditData.loading ? '…' : '${creditData.currentCredits}'),
+                : (offlineCreditData.loading
+                    ? '…'
+                    : '${offlineCreditData.currentOfflineCredits}'),
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                   color: labelColor,
@@ -119,10 +123,10 @@ class _CreditCounterState extends ConsumerState<CreditCounter>
                 ),
           ),
           onPressed: () {
-            if (creditData.currentCredits <= 0) {
-              context.push('/insufficient-credit');
+            if (offlineCreditData.currentOfflineCredits <= 0) {
+              context.push('/insufficient-offline-credit');
             } else {
-              _showCreditDetailsDialog(context, creditData);
+              _showOfflineCreditDetailsDialog(context, offlineCreditData);
             }
           },
         ),
@@ -130,12 +134,12 @@ class _CreditCounterState extends ConsumerState<CreditCounter>
     );
   }
 
-  void _showCreditDetailsDialog(BuildContext context, dynamic data) {
+  void _showOfflineCreditDetailsDialog(BuildContext context, dynamic data) {
     final authData = ref.read(authProvider);
     final schoolTier = authData.currentSchool?.subscriptionTier ?? 'free';
     showDialog(
       context: context,
-      builder: (_) => _CreditDetailsDialog(
+      builder: (_) => _OfflineCreditDetailsDialog(
         data: data,
         schoolTier: schoolTier,
       ),
@@ -143,8 +147,8 @@ class _CreditCounterState extends ConsumerState<CreditCounter>
   }
 }
 
-class _CreditDetailsDialog extends StatelessWidget {
-  const _CreditDetailsDialog({
+class _OfflineCreditDetailsDialog extends StatelessWidget {
+  const _OfflineCreditDetailsDialog({
     required this.data,
     required this.schoolTier,
   });
@@ -182,7 +186,7 @@ class _CreditDetailsDialog extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Text(
-            'Credits',
+            'Offline Credits',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w700,
                   color: cs.onSurface,
@@ -199,7 +203,7 @@ class _CreditDetailsDialog extends StatelessWidget {
             children: [
               Flexible(
                 child: Text(
-                  'Available credits',
+                  'Available offline credits',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: cs.onSurfaceVariant,
                         overflow: TextOverflow.clip,
@@ -209,7 +213,7 @@ class _CreditDetailsDialog extends StatelessWidget {
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  '${data.currentCredits}',
+                  '${data.currentOfflineCredits}',
                   textAlign: TextAlign.end,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,

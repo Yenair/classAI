@@ -209,27 +209,37 @@ class DatabaseEncryptionBootstrap {
         newDb.execute(indexSql);
       }
 
-      final seqExists = newDb.select(
-        "SELECT name FROM main.sqlite_master WHERE type='table' AND name='sqlite_sequence'",
+      // sqlite_sequence only exists when at least one AUTOINCREMENT table is
+      // present. If the ORIGINAL plaintext database never had one, there is
+      // nothing to preserve and this step is skipped entirely. Only fail if the
+      // source HAD a sqlite_sequence table but the copy failed to recreate it,
+      // which would indicate an actual copy failure.
+      final plainSeqExists = newDb.select(
+        "SELECT name FROM plaintext.sqlite_master WHERE type='table' AND name='sqlite_sequence'",
       );
-      if (seqExists.isEmpty) {
-        throw StateError('main.sqlite_sequence does not exist after table copy.');
-      }
-      newDb.execute('DELETE FROM main.sqlite_sequence;');
-      final seqRows = newDb.select(
-        'SELECT name, seq FROM plaintext.sqlite_sequence ORDER BY name',
-      );
-      for (final row in seqRows) {
-        final name = row['name'] as String;
-        final seq = row['seq'];
-        final seqValue = seq is int ? seq : int.tryParse('$seq');
-        if (seqValue == null) {
-          throw StateError('sqlite_sequence value unexpectedly invalid for $name');
-        }
-        newDb.execute(
-          "INSERT INTO main.sqlite_sequence (name, seq) "
-          "VALUES ('${_escapeSql(name)}', $seqValue);",
+      if (plainSeqExists.isNotEmpty) {
+        final seqExists = newDb.select(
+          "SELECT name FROM main.sqlite_master WHERE type='table' AND name='sqlite_sequence'",
         );
+        if (seqExists.isEmpty) {
+          throw StateError('main.sqlite_sequence does not exist after table copy.');
+        }
+        newDb.execute('DELETE FROM main.sqlite_sequence;');
+        final seqRows = newDb.select(
+          'SELECT name, seq FROM plaintext.sqlite_sequence ORDER BY name',
+        );
+        for (final row in seqRows) {
+          final name = row['name'] as String;
+          final seq = row['seq'];
+          final seqValue = seq is int ? seq : int.tryParse('$seq');
+          if (seqValue == null) {
+            throw StateError('sqlite_sequence value unexpectedly invalid for $name');
+          }
+          newDb.execute(
+            "INSERT INTO main.sqlite_sequence (name, seq) "
+            "VALUES ('${_escapeSql(name)}', $seqValue);",
+          );
+        }
       }
 
       newDb.execute('DETACH DATABASE plaintext;');

@@ -213,9 +213,9 @@ final appRouter = GoRouter(
       builder: (context, state) => const PaymentScreen(),
     ),
     _route(
-      path: '/insufficient-credit',
-      name: 'insufficient-credit',
-      builder: (context, state) => const InsufficientCreditScreen(),
+      path: '/insufficient-offline-credit',
+      name: 'insufficient-offline-credit',
+      builder: (context, state) => const InsufficientOfflineCreditScreen(),
     ),
     _route(
       path: '/full-term-exam',
