@@ -236,7 +236,7 @@ serve(async (req) => {
         school_id: teacherRecord.school_id,
         is_admin: teacherRecord.role === "admin",
         token_version: tokenVersion,
-        exp: getNumericDate(60 * 60 * 24), // 24 hours
+        exp: getNumericDate(60 * 60 * 24 * 7), // 7 days
       },
       cryptoKey
     );

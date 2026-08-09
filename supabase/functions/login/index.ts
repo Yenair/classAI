@@ -80,7 +80,7 @@ serve(async (req) => {
 
     // 5. If force_password_reset, issue short-lived JWT (5 min) with flag
     const isForceReset = teacher.force_password_reset === true;
-    const tokenExpiry = isForceReset ? getNumericDate(60 * 5) : getNumericDate(60 * 60 * 24); // 5 min vs 24 hours
+    const tokenExpiry = isForceReset ? getNumericDate(60 * 5) : getNumericDate(60 * 60 * 24 * 7); // 5 min vs 7 days
 
     // 6. Increment token_version for no-concurrent-sessions enforcement
     const newTokenVersion = (teacher.token_version ?? 0) + 1;
