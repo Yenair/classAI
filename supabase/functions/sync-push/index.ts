@@ -949,23 +949,47 @@ serve(async (req) => {
             continue;
           }
 
+          // Guard: if the target id is not a valid server UUID (e.g. a client
+          // queued a DELETE for a record whose INSERT was skipped server-side
+          // so only its local integer id is present), the `.eq("id", serverId)`
+          // soft-delete would throw and retry forever. Treat it as idempotent:
+          // there is no server row to soft-delete, so report success.
+          const serverIdStr = String(serverId);
+          const isUuid =
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+              serverIdStr,
+            );
+          if (!isUuid) {
+            console.warn(
+              `sync-push: DELETE on "${table}" (local_id=${localId}) has non-UUID id "${serverIdStr}" — treating as already deleted`,
+            );
+            results.push({
+              local_id: localId,
+              server_id: serverIdStr,
+              status: "deleted",
+              retryable: false,
+            });
+            processed++;
+            continue;
+          }
+
           // ── Diagram cleanup: fetch lesson content before soft-delete ────
           if (table === "lessons") {
-            await cleanupLessonDiagrams(supabase, serverId as string, localId);
+            await cleanupLessonDiagrams(supabase, serverIdStr, localId);
           }
 
           const { error } = await supabase
             .from(table)
             .update({ is_deleted: true })
-            .eq("id", serverId);
+            .eq("id", serverIdStr);
           if (error) {
             console.warn(`sync-push: DELETE error on "${table}" (local_id=${localId}): ${error.message}`);
-            results.push({ local_id: localId, server_id: serverId as string, status: "error", retryable: true });
+            results.push({ local_id: localId, server_id: serverIdStr, status: "error", retryable: true });
             continue;
           }
           results.push({
             local_id: localId,
-            server_id: serverId as string,
+            server_id: serverIdStr,
             status: "deleted",
             retryable: false,
           });

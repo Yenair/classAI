@@ -512,6 +512,14 @@ abstract class SyncRecordStore {
     required DateTime? remoteUpdatedAt,
   });
 
+  Future<List<SyncQueueSnapshotData>> loadDeferredTeacherSnapshots();
+
+  Future<void> saveDeferredTeacherSnapshot({
+    required Map<String, dynamic> snapshot,
+  });
+
+  Future<void> removeDeferredTeacherSnapshot(int snapshotId);
+
   Future<List<SyncQueueData>> loadPendingQueue();
 
   Future<void> markQueueAttempt(int queueId, {DateTime? attemptedAt});
@@ -643,6 +651,33 @@ class DriftSyncRecordStore implements SyncRecordStore {
                 : const Value.absent(),
           ),
         );
+  }
+
+  @override
+  Future<List<SyncQueueSnapshotData>> loadDeferredTeacherSnapshots() {
+    return (db.select(db.syncQueueSnapshot)
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.createdAt),
+          ]))
+        .get();
+  }
+
+  @override
+  Future<void> saveDeferredTeacherSnapshot({
+    required Map<String, dynamic> snapshot,
+  }) async {
+    await db.into(db.syncQueueSnapshot).insert(
+          SyncQueueSnapshotCompanion.insert(
+            snapshotData: jsonEncode(snapshot),
+          ),
+        );
+  }
+
+  @override
+  Future<void> removeDeferredTeacherSnapshot(int snapshotId) {
+    return (db.delete(db.syncQueueSnapshot)
+          ..where((t) => t.id.equals(snapshotId)))
+        .go();
   }
 
   @override
@@ -1005,6 +1040,8 @@ class SyncService {
         await _upsertTeacherFromSync(change.row);
       }
     }
+
+    await _flushDeferredTeachers();
 
     // Check subscription expiry using server time after a successful pull.
     await _checkSubscriptionExpiry();
@@ -2091,6 +2128,7 @@ class SyncService {
       resolvedSchoolLocalId = schoolRow?.localId;
     }
     if (resolvedSchoolLocalId == null || resolvedSchoolLocalId == 0) {
+      await _queueDeferredTeacher(merged);
       debugPrint(
         '[sync] _upsertTeacherFromSync: no local school found for '
         'schoolServerId=$schoolServerId (teacher $serverId). '
@@ -2200,6 +2238,73 @@ class SyncService {
           ));
       debugPrint('[sync] _upsertTeacherFromSync: INSERTED teacher $serverId');
       return newLocalId;
+    }
+  }
+
+  Future<void> _queueDeferredTeacher(Map<String, dynamic> merged) async {
+    final serverId = merged['server_id'] as String? ?? merged['id'] as String?;
+    if (serverId == null || serverId.isEmpty) return;
+
+    try {
+      final deferred = await store.loadDeferredTeacherSnapshots();
+      for (final snapshot in deferred) {
+        try {
+          final decoded = jsonDecode(snapshot.snapshotData);
+          if (decoded is! Map) continue;
+          final queued = Map<String, dynamic>.from(decoded);
+          final queuedServerId =
+              queued['server_id'] as String? ?? queued['id'] as String?;
+          if (queuedServerId == serverId) {
+            return;
+          }
+        } catch (_) {
+          // Ignore malformed entries; flush will clean them up if needed.
+        }
+      }
+
+      await store.saveDeferredTeacherSnapshot(
+        snapshot: Map<String, dynamic>.from(merged),
+      );
+    } catch (e, st) {
+      debugPrint('[sync] _queueDeferredTeacher failed for $serverId: $e');
+      await Sentry.captureException(
+        e,
+        stackTrace: st,
+      );
+    }
+  }
+
+  Future<void> _flushDeferredTeachers() async {
+    final deferred = await store.loadDeferredTeacherSnapshots();
+    if (deferred.isEmpty) return;
+
+    for (final snapshot in deferred) {
+      try {
+        final decoded = jsonDecode(snapshot.snapshotData);
+        if (decoded is! Map) {
+          await store.removeDeferredTeacherSnapshot(snapshot.id);
+          continue;
+        }
+
+        final row = Map<String, dynamic>.from(decoded);
+        final localId = await _upsertTeacherFromSync(row);
+        if (localId != null) {
+          await store.saveSyncedRecord(
+            tableName: 'teachers',
+            localId: localId,
+            snapshot: row,
+          );
+          await store.removeDeferredTeacherSnapshot(snapshot.id);
+        }
+      } catch (e, st) {
+        debugPrint(
+          '[sync] _flushDeferredTeachers failed for snapshot ${snapshot.id}: $e',
+        );
+        await Sentry.captureException(
+          e,
+          stackTrace: st,
+        );
+      }
     }
   }
 

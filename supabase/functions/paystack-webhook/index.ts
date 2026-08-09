@@ -121,7 +121,6 @@ serve(async (req) => {
 
     const eventType = payload.event ?? "unknown";
     const eventReference = payload.data?.reference ?? "unknown";
-    const now = new Date();
 
     // ── Log every webhook event ────────────────────────────────────
     console.log(

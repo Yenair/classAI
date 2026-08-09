@@ -71,6 +71,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   bool _includeDiagrams = false;
   List<Map<String, dynamic>> _diagramResults = [];
   bool _isGeneratingDiagrams = false;
+  int? _generatingDiagramIndex;
   bool _isGenerating = false;
   bool _isRegenerating = false;
   bool _hasGenerated = false;
@@ -706,39 +707,19 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       final parsedRaw = result['raw'] as Map<String, dynamic>? ?? result;
       final parsedEncrypted = result['encryptedContent'] as String?;
 
-      await _saveLesson(notify: false);
-
-      // ── Generate diagrams (Elite only) ──────────────────────────
       List<Map<String, dynamic>> generatedDiagrams = [];
-      if (_includeDiagrams && _subscriptionTier.toLowerCase() == 'elite') {
-        final diagramsRaw = parsedRaw['diagrams'] as List<dynamic>?;
-        if (diagramsRaw != null && diagramsRaw.isNotEmpty) {
-          final requests = diagramsRaw
-              .map((d) => DiagramRequest(
-                    description: (d as Map<String, dynamic>)['description']
-                            as String? ??
-                        'Diagram',
-                  ))
-              .toList();
-          try {
-            final diagramService = DiagramService();
-            final lessonIdStr = _lessonId?.toString();
-            final results = await diagramService.generateDiagrams(
-              requests,
-              lessonId: lessonIdStr ?? 'new_${DateTime.now().millisecondsSinceEpoch}',
-            );
-            generatedDiagrams = results
-                .map((r) => <String, dynamic>{
-                      'index': r.index,
-                      'description': r.description,
-                      'imageUrl': r.imageUrl,
-                      'error': r.error,
-                    })
-                .toList();
-          } catch (e) {
-            debugPrint('[LessonEditor] Diagram generation failed: $e');
-          }
-        }
+      final diagramsRaw = parsedRaw['diagrams'] as List<dynamic>?;
+      if (diagramsRaw != null && diagramsRaw.isNotEmpty) {
+        generatedDiagrams = diagramsRaw.take(3).map((entry) {
+          final diagram = entry is Map<String, dynamic>
+              ? entry
+              : <String, dynamic>{};
+          return <String, dynamic>{
+            'description': diagram['description'] as String? ?? 'Suggested image',
+            'imageUrl': diagram['imageUrl'] as String?,
+            'error': diagram['error'] as String?,
+          };
+        }).toList();
       }
 
       if (mounted) {
@@ -763,9 +744,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             _materialsController.text = _materialsText;
             _presentationText = _formatJson(parsedRaw['presentation']);
             _presentationController.text = _presentationText;
-            _assessmentText = parsedRaw['assessment'] as String? ?? '';
+            _assessmentText = _formatList(parsedRaw['assessment']);
             _assessmentController.text = _assessmentText;
-            _homeworkText = parsedRaw['homework'] as String? ?? '';
+            _homeworkText = _formatList(parsedRaw['homework']);
             _homeworkController.text = _homeworkText;
             _diagramResults = generatedDiagrams;
             _hasGenerated = true;
@@ -774,9 +755,15 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             _isGenerating = false;
             _previewRevision++;
           });
+          _saveLesson(notify: false);
           if (mounted) {
             showInfoToast(
                 context: context, message: 'Lesson generated successfully!');
+            if (_includeDiagrams &&
+                _subscriptionTier.toLowerCase() == 'elite' &&
+                _diagramResults.isNotEmpty) {
+              _generateSuggestedImage(0);
+            }
           }
         });
       }
@@ -788,20 +775,27 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     }
   }
 
-  Future<void> _handleRegenerateDiagram(int diagramIndex) async {
+  Future<void> _generateSuggestedImage(int diagramIndex) async {
     final currentTier = (ref.read(authProvider).currentSchool?.subscriptionTier ?? _subscriptionTier).toLowerCase();
     if (currentTier != 'elite') {
       if (mounted) {
-        showErrorToast(context: context, message: 'Diagram generation requires Elite subscription');
+        await _showUpgradeRequiredDialog();
       }
       return;
     }
-    setState(() => _isGeneratingDiagrams = true);
+    if (diagramIndex < 0 || diagramIndex >= _diagramResults.length) {
+      return;
+    }
+
+    setState(() {
+      _isGeneratingDiagrams = true;
+      _generatingDiagramIndex = diagramIndex;
+    });
+
     try {
       // Find the diagram description from current results
-      final diagram = _diagramResults.length > diagramIndex ? _diagramResults[diagramIndex] : null;
-      if (diagram == null) return;
-      final description = diagram['description'] as String? ?? 'Diagram';
+      final diagram = _diagramResults[diagramIndex];
+      final description = diagram['description'] as String? ?? 'Suggested image';
       final oldUrl = diagram['imageUrl'] as String?;
       final requests = [DiagramRequest(description: description)];
       final diagramService = DiagramService();
@@ -820,12 +814,17 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             'error': results[0].error,
           };
           _isGeneratingDiagrams = false;
+          _generatingDiagramIndex = null;
         });
+        await _saveLesson(notify: false);
       }
     } catch (e) {
-      debugPrint('[LessonEditor] Diagram regeneration failed: $e');
+      debugPrint('[LessonEditor] Suggested image generation failed: $e');
       if (mounted) {
-        setState(() => _isGeneratingDiagrams = false);
+        setState(() {
+          _isGeneratingDiagrams = false;
+          _generatingDiagramIndex = null;
+        });
       }
     }
   }
@@ -1668,7 +1667,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                               isRegenerating: _isRegenerating,
                                               diagramResults: _diagramResults,
                                               isGeneratingDiagrams: _isGeneratingDiagrams,
-                                              onRegenerateDiagram: _handleRegenerateDiagram,
+                                              generatingDiagramIndex: _generatingDiagramIndex,
+                                              onRegenerateDiagram: _generateSuggestedImage,
                                               objectivesController: _objectivesController,
                                               vocabularyController: _vocabularyController,
                                               materialsController: _materialsController,
@@ -1761,7 +1761,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                             isRegenerating: _isRegenerating,
                                             diagramResults: _diagramResults,
                                             isGeneratingDiagrams: _isGeneratingDiagrams,
-                                            onRegenerateDiagram: _handleRegenerateDiagram,
+                                            generatingDiagramIndex: _generatingDiagramIndex,
+                                            onRegenerateDiagram: _generateSuggestedImage,
                                             objectivesController: _objectivesController,
                                             vocabularyController: _vocabularyController,
                                             materialsController: _materialsController,
@@ -2613,13 +2614,13 @@ class _ConfigColumn extends StatelessWidget {
                   contentPadding: EdgeInsets.zero,
                   visualDensity: VisualDensity.compact,
                   title: Text(
-                    'Include diagrams',
+                    'Auto-generate first image',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: cs.onSurface,
                     ),
                   ),
                   subtitle: Text(
-                    'Generate AI illustrations for this lesson',
+                    'Automatically create the first suggested image after lesson generation',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: cs.onSurfaceVariant,
                     ),
@@ -2693,6 +2694,7 @@ class _PreviewColumn extends StatelessWidget {
   final bool isRegenerating;
   final List<Map<String, dynamic>> diagramResults;
   final bool isGeneratingDiagrams;
+  final int? generatingDiagramIndex;
   final ValueChanged<int>? onRegenerateDiagram;
   final TextEditingController objectivesController;
   final TextEditingController vocabularyController;
@@ -2724,6 +2726,7 @@ class _PreviewColumn extends StatelessWidget {
     this.isRegenerating = false,
     this.diagramResults = const [],
     this.isGeneratingDiagrams = false,
+    this.generatingDiagramIndex,
     this.onRegenerateDiagram,
     required this.objectivesController,
     required this.vocabularyController,
@@ -2999,7 +3002,7 @@ class _PreviewColumn extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(left: 4, bottom: 8),
                       child: Text(
-                        'Diagrams',
+                        'Suggested Images',
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                           color: cs.onSurface,
@@ -3008,10 +3011,12 @@ class _PreviewColumn extends StatelessWidget {
                     ),
                     ...diagramResults.asMap().entries.map((entry) {
                       final index = entry.key;
-                      final diagram = entry.value;
-                      final desc = diagram['description'] as String? ?? '';
-                      final imageUrl = diagram['imageUrl'] as String?;
-                      final error = diagram['error'] as String?;
+                      final suggestion = entry.value;
+                      final desc = suggestion['description'] as String? ?? '';
+                      final imageUrl = suggestion['imageUrl'] as String?;
+                      final error = suggestion['error'] as String?;
+                      final isElite = subscriptionTier.toLowerCase() == 'elite';
+                      final isGeneratingThisItem = generatingDiagramIndex == index;
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: Card(
@@ -3030,7 +3035,7 @@ class _PreviewColumn extends StatelessWidget {
                               Padding(
                                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                                 child: Text(
-                                  'Diagram ${index + 1}',
+                                  'Suggestion ${index + 1}',
                                   style: theme.textTheme.labelMedium?.copyWith(
                                     fontWeight: FontWeight.w600,
                                     color: cs.onSurfaceVariant,
@@ -3051,7 +3056,14 @@ class _PreviewColumn extends StatelessWidget {
                                 ),
                               const SizedBox(height: 8),
                               if (imageUrl != null)
-                                DiagramImage(url: imageUrl)
+                                GestureDetector(
+                                  onTap: () => _openDiagramViewer(
+                                    context,
+                                    imageUrl,
+                                    desc: desc,
+                                  ),
+                                  child: DiagramImage(url: imageUrl),
+                                )
                               else if (error != null)
                                 Padding(
                                   padding: const EdgeInsets.all(32),
@@ -3072,25 +3084,58 @@ class _PreviewColumn extends StatelessWidget {
                                     ),
                                   ),
                                 ),
-                              // Regenerate button for this diagram
+                              // Generate button for this suggestion
                               if (onRegenerateDiagram != null) ...[
                                 const Divider(height: 1),
                                 Padding(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   child: SizedBox(
-                                    height: 32,
-                                    child: TextButton.icon(
-                                      onPressed: isGeneratingDiagrams
-                                          ? null
-                                          : () => onRegenerateDiagram!(index),
-                                      icon: Icon(Icons.refresh_rounded,
-                                          size: 16, color: cs.primary),
-                                      label: Text(
-                                        isGeneratingDiagrams ? 'Regenerating...' : 'Regenerate',
-                                        style: theme.textTheme.labelSmall?.copyWith(
-                                          color: cs.primary),
-                                      ),
-                                    ),
+                                    width: double.infinity,
+                                    height: 40,
+                                    child: isElite
+                                        ? FilledButton.icon(
+                                            onPressed: !isGeneratingDiagrams &&
+                                                    !isGeneratingThisItem
+                                                ? () => onRegenerateDiagram!(index)
+                                                : null,
+                                            icon: isGeneratingThisItem
+                                                ? SizedBox(
+                                                    height: 16,
+                                                    width: 16,
+                                                    child: CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                      color: cs.onPrimary,
+                                                    ),
+                                                  )
+                                                : const Icon(
+                                                    Icons.auto_awesome_rounded,
+                                                    size: 16,
+                                                  ),
+                                            label: Text(
+                                              isGeneratingThisItem
+                                                  ? 'Generating...'
+                                                  : 'Generate Image',
+                                              style: theme.textTheme.labelSmall?.copyWith(
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          )
+                                        : Tooltip(
+                                            message: 'Upgrade to Elite to generate images',
+                                            child: FilledButton.icon(
+                                              onPressed: null,
+                                              icon: const Icon(
+                                                Icons.lock_rounded,
+                                                size: 16,
+                                              ),
+                                              label: Text(
+                                                'Generate Image',
+                                                style: theme.textTheme.labelSmall?.copyWith(
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
                                   ),
                                 ),
                               ],
@@ -3310,6 +3355,69 @@ class _PreviewColumn extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  /// Open a fullscreen dialog with the diagram so the user can pinch-zoom
+  /// and inspect it closely.
+  void _openDiagramViewer(
+    BuildContext context,
+    String url, {
+    String desc = '',
+  }) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) => Dialog.fullscreen(
+        backgroundColor: Colors.black,
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Top bar with close button + description.
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                color: Colors.black.withValues(alpha: 0.6),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      tooltip: 'Close',
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                    ),
+                    if (desc.isNotEmpty)
+                      Expanded(
+                        child: Text(
+                          desc,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              // The image, pinch-zoomable.
+              Expanded(
+                child: InteractiveViewer(
+                  minScale: 0.5,
+                  maxScale: 6.0,
+                  boundaryMargin: const EdgeInsets.all(32),
+                  child: Center(
+                    child: DiagramImage(url: url),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

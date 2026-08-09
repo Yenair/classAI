@@ -145,6 +145,29 @@ class FakeSyncRecordStore implements SyncRecordStore {
   }
 
   @override
+  Future<List<SyncQueueSnapshotData>> loadDeferredTeacherSnapshots() {
+    return db.select(db.syncQueueSnapshot).get();
+  }
+
+  @override
+  Future<void> saveDeferredTeacherSnapshot({
+    required Map<String, dynamic> snapshot,
+  }) async {
+    await db.into(db.syncQueueSnapshot).insert(
+          SyncQueueSnapshotCompanion.insert(
+            snapshotData: jsonEncode(snapshot),
+          ),
+        );
+  }
+
+  @override
+  Future<void> removeDeferredTeacherSnapshot(int snapshotId) {
+    return (db.delete(db.syncQueueSnapshot)
+          ..where((t) => t.id.equals(snapshotId)))
+        .go();
+  }
+
+  @override
   Future<List<SyncQueueData>> loadPendingQueue() {
     return db.syncQueueDao.pendingEntries();
   }

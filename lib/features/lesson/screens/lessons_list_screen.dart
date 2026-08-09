@@ -855,15 +855,21 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
 
         final db = ref.read(databaseProvider);
         await db.lessonsDao.deleteLesson(lesson.id);
-        await db.syncQueueDao.insertEntry(
-          queueTable: 'lessons',
-          recordLocalId: lesson.id,
-          operation: 'DELETE',
-          payload: {
-            'id': lesson.id,
-            if (lesson.serverId != null) 'server_id': lesson.serverId,
-          },
-        );
+        // Only queue a remote DELETE when the lesson has a server UUID.
+        // Lessons whose original INSERT was skipped server-side have no
+        // server row; queueing a DELETE with only the local id caused the
+        // server to fail `.eq("id", <localInt>)` forever.
+        if (lesson.serverId != null && lesson.serverId!.isNotEmpty) {
+          await db.syncQueueDao.insertEntry(
+            queueTable: 'lessons',
+            recordLocalId: lesson.id,
+            operation: 'DELETE',
+            payload: {
+              'id': lesson.id,
+              'server_id': lesson.serverId,
+            },
+          );
+        }
         ref.invalidate(lessonsListProvider);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

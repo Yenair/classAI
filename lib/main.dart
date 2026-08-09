@@ -1,15 +1,19 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide AuthState;
 import 'core/constants/app_constants.dart';
 import 'core/database/database.dart';
-import 'core/services/auth_service.dart';
+import 'core/services/security_service.dart';
+import 'package:classai/core/services/auth_service.dart';
 import 'core/services/deep_link_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/providers/auth_provider.dart';
@@ -181,6 +185,7 @@ class DatabaseBootstrapper extends StatefulWidget {
 class _DatabaseBootstrapperState extends State<DatabaseBootstrapper> {
   late Future<AppDatabase> _databaseFuture = _initDatabase();
   ProviderContainer? _overrideContainer;
+  bool _isWiping = false;
 
   Future<AppDatabase> _initDatabase() async {
     final db = AppDatabase();
@@ -193,6 +198,82 @@ class _DatabaseBootstrapperState extends State<DatabaseBootstrapper> {
     setState(() {
       _databaseFuture = _initDatabase();
     });
+  }
+
+  /// Erases all local data (the encrypted database and its sidecars), clears
+  /// the stored encryption passphrase + cached auth credentials from secure
+  /// storage, then re-initialises a fresh database. On the next launch the
+  /// user signs in again and all data is re-downloaded from the server.
+  ///
+  /// [dialogContext] must be a context that sits under a Navigator (the
+  /// bootstrapper's own context is above the MaterialApp it returns, so it is
+  /// passed from a [Builder] inside the error screen).
+  Future<void> _wipeAndReDownload(BuildContext dialogContext) async {
+    final confirmed = await showDialog<bool>(
+      context: dialogContext,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Re-download your data?'),
+        content: const Text(
+          'This will erase all data stored on this device, including the '
+          'database that failed to open, and then download a fresh copy from '
+          'your account.\n\n'
+          'You will be asked to sign in again. Any unsynced local edits will '
+          'be lost.\n\n'
+          'Continue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Erase & Re-download'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isWiping = true);
+
+    try {
+      // 1. Delete the database file(s) and the encryption bootstrap marker.
+      final dbDirectory = (await getApplicationDocumentsDirectory()).path;
+      const candidates = [
+        'classai.db',
+        'classai.db-wal',
+        'classai.db-shm',
+        'classai_encrypted.db',
+        'classai_encrypted.db-wal',
+        'classai_encrypted.db-shm',
+        'classai_encryption_state',
+      ];
+      for (final name in candidates) {
+        final file = File(p.join(dbDirectory, name));
+        if (file.existsSync()) file.deleteSync();
+      }
+
+      // 2. Clear the stored encryption passphrase and cached auth credentials
+      //    so a fresh DB is created and the user must sign in again.
+      try {
+        await SecurityService().clearAll();
+      } catch (_) {
+        // Best-effort: if clearing secure storage fails, the DB re-creation
+        // still proceeds and a fresh passphrase matching the new DB is used.
+      }
+
+      if (!mounted) return;
+      _retry();
+    } catch (e) {
+      debugPrint('Failed to wipe local data: $e');
+      if (mounted) {
+        setState(() => _isWiping = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not wipe local data: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -256,6 +337,30 @@ class _DatabaseBootstrapperState extends State<DatabaseBootstrapper> {
                         onPressed: _retry,
                         icon: const Icon(Icons.refresh),
                         label: const Text('Retry'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Builder(
+                      builder: (buttonCtx) => Center(
+                        child: ElevatedButton.icon(
+                          onPressed: _isWiping
+                              ? null
+                              : () => _wipeAndReDownload(buttonCtx),
+                          icon: _isWiping
+                              ? const SizedBox(
+                                  height: 16,
+                                  width: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.download_for_offline_outlined),
+                          label: Text(
+                            _isWiping
+                                ? 'Erasing & Re-downloading...'
+                                : 'Download data from server',
+                          ),
+                        ),
                       ),
                     ),
                   ],

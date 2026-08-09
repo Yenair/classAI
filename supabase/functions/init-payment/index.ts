@@ -79,7 +79,7 @@ serve(async (req) => {
 
     const { data: teacher, error: teacherError } = await supabase
       .from("teachers")
-      .select("role, school_id")
+      .select("role, school_id, email")
       .eq("id", teacherId)
       .maybeSingle();
 
@@ -135,6 +135,7 @@ serve(async (req) => {
           school_id: schoolId,
           plan: planName,
           source: "classai-init",
+          email: teacher.email,
         },
       }),
     });

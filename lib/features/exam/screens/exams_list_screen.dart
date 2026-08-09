@@ -462,15 +462,21 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
       try {
         final db = ref.read(databaseProvider);
         await db.examsDao.deleteExam(exam.id);
-        await db.syncQueueDao.insertEntry(
-          queueTable: 'exams',
-          recordLocalId: exam.id,
-          operation: 'DELETE',
-          payload: {
-            'id': exam.id,
-            if (exam.serverId != null) 'server_id': exam.serverId,
-          },
-        );
+        // Only queue a remote DELETE when the exam has a server UUID.
+        // Exams whose original INSERT was skipped server-side have no server
+        // row; queueing a DELETE with only the local id caused the server to
+        // fail `.eq("id", <localInt>)` forever.
+        if (exam.serverId != null && exam.serverId!.isNotEmpty) {
+          await db.syncQueueDao.insertEntry(
+            queueTable: 'exams',
+            recordLocalId: exam.id,
+            operation: 'DELETE',
+            payload: {
+              'id': exam.id,
+              'server_id': exam.serverId,
+            },
+          );
+        }
         ref.invalidate(examsListProvider);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:classai/core/services/auth_service.dart';
 
 /// Service that generates diagrams via the `generate-diagram` Edge Function
 /// and stores the resulting URL in the lesson content for sync.
@@ -52,11 +53,15 @@ class DiagramService {
     String? oldUrl,
   }) async {
     try {
+      // Read the custom ClassAI JWT from the caller-supplied param, falling
+      // back to the static singleton (consistent with AiService) so callers
+      // that don't pass `jwt` still send the required x-classai-jwt header.
+      final effectiveJwt = jwt ?? SupabaseAuthService().currentJwt;
       final headers = <String, String>{
         'Content-Type': 'application/json',
       };
-      if (jwt != null) {
-        headers['x-classai-jwt'] = jwt;
+      if (effectiveJwt != null && effectiveJwt.isNotEmpty) {
+        headers['x-classai-jwt'] = effectiveJwt;
       }
 
       final response = await _client.functions.invoke(

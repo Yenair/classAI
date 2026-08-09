@@ -238,4 +238,78 @@ void main() {
     final config = await db.securityConfigDao.get();
     expect(config.lastRealtimeEventId, 5);
   });
+
+  test(
+    'flushes deferred teachers on the next normal pull once the school exists locally',
+    () async {
+      final remote = FakeSyncRemoteApi(
+        pullPages: [
+          SyncPullPage(
+            changes: [
+              SyncChange(
+                table: 'teachers',
+                row: {
+                  'id': 'teacher-1',
+                  'email': 'teacher@example.com',
+                  'teacher_name': 'Teacher One',
+                  'role': 'teacher',
+                  'school_id': 'school-1',
+                  'is_active': true,
+                  'force_password_reset': true,
+                  'password_hash_version': 1,
+                  'created_at': '2026-08-09T08:00:00.000Z',
+                  'updated_at': '2026-08-09T08:00:00.000Z',
+                },
+              ),
+            ],
+            nextCursor: null,
+          ),
+          const SyncPullPage(changes: [], nextCursor: null),
+        ],
+        pushResponses: [const SyncPushResponse(results: [])],
+        realtimePages: [const SyncRealtimePage(events: [], latestEventId: 0)],
+      );
+
+      final service = SyncService(
+        db: db,
+        schoolId: 'school-1',
+        securityService: TrackingSecurityService(),
+        remoteApi: remote,
+        store: store,
+        isForeground: false,
+        sessionKeyValid: true,
+        biometricAvailable: false,
+      );
+
+      await service.onConnectivityRestored();
+
+      final deferredAfterFirstPull = await db.select(db.syncQueueSnapshot).get();
+      expect(deferredAfterFirstPull, hasLength(1));
+      expect(
+        await (db.select(db.teachers)
+              ..where((t) => t.serverId.equals('teacher-1')))
+            .get(),
+        isEmpty,
+      );
+
+      await db.into(db.schools).insert(
+            SchoolsCompanion.insert(
+              serverId: const Value('school-1'),
+              schoolName: 'Test School',
+              shortCode: 'TS1',
+            ),
+          );
+
+      await service.onConnectivityRestored();
+
+      final teachers = await (db.select(db.teachers)
+            ..where((t) => t.serverId.equals('teacher-1')))
+          .get();
+      final deferredAfterSecondPull = await db.select(db.syncQueueSnapshot).get();
+
+      expect(teachers, hasLength(1));
+      expect(teachers.first.email, 'teacher@example.com');
+      expect(deferredAfterSecondPull, isEmpty);
+    },
+  );
 }
