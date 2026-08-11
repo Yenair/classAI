@@ -923,6 +923,13 @@ serve(async (req) => {
             });
             continue;
           }
+          // Bump updated_at server-side: client payloads never include it and
+          // sync-pull only returns rows with updated_at > lastSyncTimestamp.
+          // Without this, an UPDATE (e.g. admin approval changing status)
+          // never propagates to other devices.
+          if (updateData["updated_at"] === undefined) {
+            updateData["updated_at"] = new Date().toISOString();
+          }
           const { error } = await supabase
             .from(table)
             .update(updateData)
@@ -980,7 +987,12 @@ serve(async (req) => {
 
           const { error } = await supabase
             .from(table)
-            .update({ is_deleted: true })
+            .update({
+              is_deleted: true,
+              // Bump updated_at so the soft-delete propagates to peers
+              // (sync-pull filters by updated_at > lastSyncTimestamp).
+              updated_at: new Date().toISOString(),
+            })
             .eq("id", serverIdStr);
           if (error) {
             console.warn(`sync-push: DELETE error on "${table}" (local_id=${localId}): ${error.message}`);

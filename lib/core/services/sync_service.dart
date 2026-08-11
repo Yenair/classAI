@@ -1317,6 +1317,18 @@ class SyncService {
           effectiveOperation = 'UPDATE';
         }
       }
+      // ── Inject server_id for UPDATE/DELETE entries that lack it ────────
+      // DAO-crafted UPDATE payloads (scheme_of_work, lessons, exams) never
+      // include server_id, so the server's UPDATE branch rejects them with
+      // "missing server_id" and they retry forever — status changes (admin
+      // approval, submit-for-approval) and edits never reach other devices.
+      if (payload['server_id'] == null &&
+          (effectiveOperation == 'UPDATE' || effectiveOperation == 'DELETE')) {
+        final serverId = await _getServerIdForQueueEntry(db, entry);
+        if (serverId != null && serverId.isNotEmpty) {
+          payload['server_id'] = serverId;
+        }
+      }
       // ───────────────────────────────────────────────────────────────────
 
       // Inject local_id so the server can echo it back in the results

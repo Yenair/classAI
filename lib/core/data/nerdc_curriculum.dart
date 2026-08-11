@@ -384,9 +384,10 @@ const Map<String, Map<String, Map<String, List<NerdcWeekTopic>>>> nerdcCurriculu
     },
   },
 
-  // ─────────────────────────── BIOLOGY ───────────────────────────
-  // Note: at JSS level this is the biology strand of Basic Science.
-  'biology': {
+  // ─────────────────────────── BASIC SCIENCE ───────────────────────────
+  // Basic Science is the JSS-level subject in the Nigerian curriculum.
+  // (The SSS-level Biology strand lives under 'biology' below.)
+  'basic science': {
     'jss 1': {
       '1st': [
         NerdcWeekTopic('Living and Non-Living Things: Meaning and Differences',
@@ -477,6 +478,10 @@ const Map<String, Map<String, Map<String, List<NerdcWeekTopic>>>> nerdcCurriculu
             ['Review the examination script', 'Correct mistakes and clarify difficult topics']),
       ],
     },
+  },
+
+  // ─────────────────────────── BIOLOGY ───────────────────────────
+  'biology': {
     'sss 1': {
       '1st': [
         NerdcWeekTopic('Introduction to Biology: Meaning and Branches',
