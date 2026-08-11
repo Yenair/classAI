@@ -8,6 +8,7 @@ import '../utils/sanitization_utils.dart';
 import '../utils/token_counter.dart';
 import '../utils/encryption_utils.dart';
 import 'auth_service.dart';
+import 'security_service.dart';
 
 class AiService {
   final Uint8List? _schoolKey;
@@ -95,11 +96,23 @@ class AiService {
     return raw.trim();
   }
 
+  /// Resolves the current JWT, falling back to secure storage if needed.
+  Future<String?> _resolveJwt() async {
+    var jwt = SupabaseAuthService().currentJwt;
+    if (jwt == null || jwt.isEmpty) {
+      jwt = await SecurityService().getStoredJwt();
+      if (jwt != null && jwt.isNotEmpty) {
+        SupabaseAuthService().setJwt(jwt);
+      }
+    }
+    return jwt;
+  }
+
   Future<Map<String, dynamic>> _callDeepSeek(String prompt) async {
     // The proxy functions require the custom ClassAI JWT via the x-classai-jwt
     // custom header. Read it from the static singleton so we don't need to
     // thread it through every call site (consistent with PaymentService).
-    final jwt = SupabaseAuthService().currentJwt;
+    final jwt = await _resolveJwt();
     final headers = <String, String>{};
     if (jwt != null && jwt.isNotEmpty) {
       headers['x-classai-jwt'] = jwt;
@@ -131,7 +144,7 @@ class AiService {
 
   Future<Map<String, dynamic>> _callGemini(String prompt) async {
     // Same JWT injection as _callDeepSeek — see note above.
-    final jwt = SupabaseAuthService().currentJwt;
+    final jwt = await _resolveJwt();
     final headers = <String, String>{};
     if (jwt != null && jwt.isNotEmpty) {
       headers['x-classai-jwt'] = jwt;

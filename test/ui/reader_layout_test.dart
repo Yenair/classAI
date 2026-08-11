@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide AuthState;
 import 'package:classai/features/dashboard/screens/dashboard_screen.dart';
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/providers/config_provider.dart';
+import 'package:classai/core/services/config_service.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
@@ -56,10 +60,26 @@ class TestSyncStatusNotifier extends SyncStatusNotifier {
   Future<void> syncNow() async {}
 }
 
+class MockSupabaseClient extends Mock implements SupabaseClient {}
+class MockFunctionsClient extends Mock implements FunctionsClient {}
+
+/// Builds a mock Supabase client whose `get-config` function fails fast so
+/// [ConfigService.refresh] throws synchronously with no network I/O.
+MockSupabaseClient buildMockSupabase() {
+  final supabase = MockSupabaseClient();
+  final functions = MockFunctionsClient();
+  when(() => functions.invoke('get-config')).thenThrow(
+    FunctionException(status: 500),
+  );
+  when(() => supabase.functions).thenReturn(functions);
+  return supabase;
+}
+
 void main() {
   final testDb = AppDatabase.forTesting();
+  final mockSupabase = buildMockSupabase();
 
-  testWidgets('ReaderLayout shows bottom navigation with 5 items',
+  testWidgets('ReaderLayout shows bottom navigation with 4 items',
       (tester) async {
     await ensureViewportHeight(tester);
     SharedPreferences.setMockInitialValues({
@@ -76,6 +96,9 @@ void main() {
               )),
           offlineCreditStateProvider.overrideWith(
             () => TestOfflineCreditStateNotifier(),
+          ),
+          configServiceProvider.overrideWithValue(
+            ConfigService(client: mockSupabase),
           ),
         ],
         child: _wrapApp(const ReaderLayout()),
@@ -91,9 +114,10 @@ void main() {
       (widget) => widget.runtimeType.toString() == '_BottomNavItem',
     );
 
-    expect(bottomNavItems, findsNWidgets(5));
+    expect(bottomNavItems, findsNWidgets(4));
 
-    // Custom bottom nav renders Home, Lessons, Exams, Scheme of Work, More.
+    // Custom bottom nav renders Home, Lessons, Exams, More for a non-admin.
+    // (Scheme of Work is admin-only and hidden for teachers.)
     expect(
       find.descendant(
         of: bottomNavItems,
@@ -120,7 +144,7 @@ void main() {
         of: bottomNavItems,
         matching: find.text('Scheme of Work'),
       ),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.descendant(
@@ -133,7 +157,7 @@ void main() {
     expect(find.text('Dashboard'), findsNothing);
   });
 
-  testWidgets('ReaderLayout shows Home, Lessons, Exams, Scheme of Work, More labels',
+  testWidgets('ReaderLayout shows Home, Lessons, Exams, More labels',
       (tester) async {
     await ensureViewportHeight(tester);
     SharedPreferences.setMockInitialValues({
@@ -151,6 +175,9 @@ void main() {
           offlineCreditStateProvider.overrideWith(
             () => TestOfflineCreditStateNotifier(),
           ),
+          configServiceProvider.overrideWithValue(
+            ConfigService(client: mockSupabase),
+          ),
         ],
         child: _wrapApp(const ReaderLayout()),
       ),
@@ -163,7 +190,7 @@ void main() {
       (widget) => widget.runtimeType.toString() == '_BottomNavItem',
     );
 
-    expect(bottomNavItems, findsNWidgets(5));
+    expect(bottomNavItems, findsNWidgets(4));
     expect(
       find.descendant(
         of: bottomNavItems,
@@ -190,7 +217,7 @@ void main() {
         of: bottomNavItems,
         matching: find.text('Scheme of Work'),
       ),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.descendant(
@@ -218,6 +245,9 @@ void main() {
               )),
           offlineCreditStateProvider.overrideWith(
             () => TestOfflineCreditStateNotifier(),
+          ),
+          configServiceProvider.overrideWithValue(
+            ConfigService(client: mockSupabase),
           ),
         ],
         child: _wrapApp(const ReaderLayout()),

@@ -102,4 +102,11 @@ class SchemeOfWorkDao extends DatabaseAccessor<AppDatabase>
           ..where((t) => t.serverId.isNotNull()))
         .go();
   }
+
+  /// Hard-delete a single scheme row. Used by the "Plan My Term" recreate
+  /// flow AFTER the row's linked draft lessons/exams have been soft-deleted
+  /// and DELETE sync entries queued.
+  Future<void> hardDelete(int id) {
+    return (delete(schemeOfWork)..where((t) => t.id.equals(id))).go();
+  }
 }

@@ -81,4 +81,10 @@ class PlatformHelper {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('platform_mode_override');
   }
+
+  /// Whether a screen should render the desktop sidebar.
+  /// Returns `false` on Android (always bottom-nav) and on narrow (<768) viewports.
+  static bool shouldShowSidebar(BuildContext context, {int minWidth = 768}) =>
+      !Platform.isAndroid &&
+      MediaQuery.of(context).size.width >= minWidth;
 }

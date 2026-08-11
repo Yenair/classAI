@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
 
-import 'package:flutter/services.dart';
-
 import 'package:drift/drift.dart' hide Column;
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/widgets/conflict_banner.dart';
@@ -32,35 +30,6 @@ class ExamsListScreen extends ConsumerStatefulWidget {
 }
 
 class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
-  /// Shows a confirmation dialog when the system back button is pressed on a
-  /// root-level route. If the user confirms, the app is closed.
-  void _showQuitConfirmation(BuildContext ctx) {
-    showDialog<void>(
-      context: ctx,
-      barrierDismissible: true,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
-        title: const Text('Quit ClassAI?'),
-        content: const Text('Are you sure you want to quit the app?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-              SystemNavigator.pop();
-            },
-            child: const Text('Quit'),
-          ),
-        ],
-      ),
-    );
-  }
 
   static const _termFilters = ['All', '1st Term', '2nd Term', '3rd Term'];
   static const _statusFilters = [
@@ -76,6 +45,7 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
   String _selectedTermFilter = 'All';
   String _selectedClassFilter = 'All';
   String _selectedSubjectFilter = 'All';
+  bool _filtersExpanded = true;
   bool _schemeDraftsBootstrapped = false;
   final Map<int, SchemeOfWorkData> _schemesById = {};
 
@@ -100,7 +70,14 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
       _selectedTermFilter = prefs.getString('${_prefPrefix}term') ?? 'All';
       _selectedClassFilter = prefs.getString('${_prefPrefix}class') ?? 'All';
       _selectedSubjectFilter = prefs.getString('${_prefPrefix}subject') ?? 'All';
+      _filtersExpanded = prefs.getBool('exams_filters_expanded') ?? true;
     });
+  }
+
+  Future<void> _toggleFiltersExpanded() async {
+    setState(() => _filtersExpanded = !_filtersExpanded);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('exams_filters_expanded', _filtersExpanded);
   }
 
   Future<void> _bootstrapSchemeDrafts() async {
@@ -498,30 +475,21 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
     final examsAsync = ref.watch(examsListProvider);
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
-    final canPop = Navigator.of(context).canPop();
 
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && mounted) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (Navigator.of(context).canPop()) {
-              Navigator.of(context).pop();
-            } else {
-              _showQuitConfirmation(context);
-            }
-          });
+          context.go('/');
         }
       },
       child: Scaffold(
       appBar: AppBar(
-        leading: canPop
-            ? IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.arrow_back_rounded),
-                tooltip: 'Back',
-              )
-            : null,
+        leading: IconButton(
+          onPressed: () => context.go('/'),
+          icon: const Icon(Icons.arrow_back_rounded),
+          tooltip: 'Back to Home',
+        ),
         title: Text(
           'Exams',
           style: theme.textTheme.titleLarge?.copyWith(
@@ -615,6 +583,8 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
                   child: _ExamFiltersPanel(
                     cs: cs,
                     theme: theme,
+                    expanded: _filtersExpanded,
+                    onToggleExpanded: _toggleFiltersExpanded,
                     selectedStatusFilter: _selectedStatusFilter,
                     selectedTermFilter: _selectedTermFilter,
                     selectedClassFilter: _selectedClassFilter,
@@ -812,6 +782,8 @@ class _ExamFiltersPanel extends StatelessWidget {
   const _ExamFiltersPanel({
     required this.cs,
     required this.theme,
+    required this.expanded,
+    required this.onToggleExpanded,
     required this.selectedStatusFilter,
     required this.selectedTermFilter,
     required this.selectedClassFilter,
@@ -828,6 +800,8 @@ class _ExamFiltersPanel extends StatelessWidget {
 
   final ColorScheme cs;
   final ThemeData theme;
+  final bool expanded;
+  final VoidCallback onToggleExpanded;
   final String selectedStatusFilter;
   final String selectedTermFilter;
   final String selectedClassFilter;
@@ -853,18 +827,33 @@ class _ExamFiltersPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.tune_rounded, size: 18, color: cs.primary),
-              const SizedBox(width: 8),
-              Text(
-                'Filters',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: cs.onSurface,
-                ),
+          InkWell(
+            onTap: onToggleExpanded,
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  Icon(Icons.tune_rounded, size: 18, color: cs.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Filters',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    expanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    size: 20,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
           const SizedBox(height: 12),
           SingleChildScrollView(
@@ -900,43 +889,45 @@ class _ExamFiltersPanel extends StatelessWidget {
               }).toList(),
             ),
           ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              SizedBox(
-                width: 220,
-                child: _FilterDropdownField(
-                  cs: cs,
-                  label: 'Term',
-                  value: selectedTermFilter,
-                  items: termFilters,
-                  onChanged: onTermChanged,
+          if (expanded) ...[
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                SizedBox(
+                  width: 220,
+                  child: _FilterDropdownField(
+                    cs: cs,
+                    label: 'Term',
+                    value: selectedTermFilter,
+                    items: termFilters,
+                    onChanged: onTermChanged,
+                  ),
                 ),
-              ),
-              SizedBox(
-                width: 220,
-                child: _FilterDropdownField(
-                  cs: cs,
-                  label: 'Class Level',
-                  value: selectedClassFilter,
-                  items: classFilters,
-                  onChanged: onClassChanged,
+                SizedBox(
+                  width: 220,
+                  child: _FilterDropdownField(
+                    cs: cs,
+                    label: 'Class Level',
+                    value: selectedClassFilter,
+                    items: classFilters,
+                    onChanged: onClassChanged,
+                  ),
                 ),
-              ),
-              SizedBox(
-                width: 220,
-                child: _FilterDropdownField(
-                  cs: cs,
-                  label: 'Subject',
-                  value: selectedSubjectFilter,
-                  items: subjectFilters,
-                  onChanged: onSubjectChanged,
+                SizedBox(
+                  width: 220,
+                  child: _FilterDropdownField(
+                    cs: cs,
+                    label: 'Subject',
+                    value: selectedSubjectFilter,
+                    items: subjectFilters,
+                    onChanged: onSubjectChanged,
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ],
       ),
     );

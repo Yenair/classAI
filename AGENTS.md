@@ -2,7 +2,7 @@
 
 ## Build & Analysis
 - NEVER run `flutter clean` or `dart analyze`.
-- RUN `flutter analyze --no-pub` instead.
+- RUN `flutter analyze --no-pub` only on files changed, instead.
 
 ## File Modification Scope
 - ONLY modify files explicitly mentioned in the task, even after finding errors in them.

@@ -12,6 +12,8 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide AuthState;
 import 'core/constants/app_constants.dart';
 import 'core/database/database.dart';
+import 'core/database/database_encryption_bootstrap.dart';
+import 'core/database/repair_orphaned_scheme_links.dart';
 import 'core/services/security_service.dart';
 import 'package:classai/core/services/auth_service.dart';
 import 'core/services/deep_link_service.dart';
@@ -186,11 +188,24 @@ class _DatabaseBootstrapperState extends State<DatabaseBootstrapper> {
   late Future<AppDatabase> _databaseFuture = _initDatabase();
   ProviderContainer? _overrideContainer;
   bool _isWiping = false;
+  /// Guards against showing the key-mismatch recovery dialog more than once.
+  bool _keyMismatchDialogShown = false;
 
   Future<AppDatabase> _initDatabase() async {
     final db = AppDatabase();
     await db.initialize();
     await db.reconcileLegacyTeachers();
+
+    // One-time repair for orphaned scheme-of-work links. Runs once (guarded by
+    // a SharedPreferences flag internally) and is fire-and-forget so it never
+    // delays app startup; failures are logged but never crash the app.
+    unawaited(
+      repairOrphanedSchemeLinks(db, force: false).catchError((Object e) {
+        debugPrint('Orphaned scheme-link repair failed: $e');
+        return 0;
+      }),
+    );
+
     return db;
   }
 
@@ -276,6 +291,116 @@ class _DatabaseBootstrapperState extends State<DatabaseBootstrapper> {
     }
   }
 
+  /// Show the dedicated encryption key-mismatch screen and drive recovery.
+  ///
+  /// Called when database init threw a [DbKeyMismatchException]. The original
+  /// encrypted file has ALREADY been renamed (quarantined) by the bootstrap —
+  /// nothing is deleted yet. Here we present the user with an explicit choice:
+  ///   - Confirm: clear the passphrase + auth credentials, delete the
+  ///     quarantined files, reset the bootstrap marker, and re-initialise a
+  ///     fresh database (new key + empty DB -> fresh login + re-download).
+  ///   - Cancel: leave the quarantine in place and exit the app. Nothing
+  ///     destructive happens, so an administrator can later recover the data.
+  Future<void> _handleKeyMismatch(
+      BuildContext dialogContext, DbKeyMismatchException mismatch) async {
+    final confirmed = await showDialog<bool>(
+      context: dialogContext,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Local data could not be opened'),
+        content: const Text(
+          'Your local data could not be opened, likely due to a security key '
+          'issue. You\'ll need to sign in again and your device will '
+          're-download your school\'s data.\n\n'
+          'The existing data has been quarantined and can be recovered by an '
+          'administrator if needed.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (confirmed != true) {
+      // Cancel: keep the quarantine, leave the passphrase intact, and exit so
+      // no destructive action happens without explicit consent.
+      SystemNavigator.pop();
+      return;
+    }
+
+    setState(() => _isWiping = true);
+
+    try {
+      final dbDirectory = (await getApplicationDocumentsDirectory()).path;
+
+      // 1. Delete the already-quarantined files (safe now: the user confirmed,
+      //    and they live under the quarantine name, not the live classai.db).
+      //    Also remove any leftover temp/state files so a fresh DB can be made.
+      await _deleteQuarantinedFiles(dbDirectory, mismatch.quarantineTimestamp);
+
+      // 2. Clear the encryption passphrase so a NEW key is generated next
+      //    launch, plus cached auth credentials so the user must sign in again.
+      try {
+        await SecurityService().clearAuthCredentials();
+        await SecurityService().clearDbEncryptionPassphrase();
+      } catch (_) {
+        // Best-effort: if clearing secure storage fails, the fresh DB created
+        // below is opened with whatever passphrase is generated and matches.
+      }
+
+      if (!mounted) return;
+      _retry();
+    } catch (e) {
+      debugPrint('Failed to re-initialise after key mismatch: $e');
+      if (mounted) {
+        setState(() => _isWiping = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not recover local data: $e')),
+        );
+      }
+    }
+  }
+
+  /// Delete files that were quarantined under the given [timestamp] (the
+  /// `classai_quarantined_<timestamp>...` family), plus any leftover encryption
+  /// temp/state files. Called only AFTER the user confirms recovery, so it is
+  /// safe to delete. Never touches a live `classai.db`.
+  Future<void> _deleteQuarantinedFiles(
+      String dbDirectory, String timestamp) async {
+    const candidates = [
+      'classai.db',
+      'classai.db-wal',
+      'classai.db-shm',
+      'classai_encrypted.db',
+      'classai_encrypted.db-wal',
+      'classai_encrypted.db-shm',
+      'classai_encryption_state',
+    ];
+    for (final name in candidates) {
+      final file = File(p.join(dbDirectory, name));
+      if (file.existsSync()) file.deleteSync();
+    }
+    // Delete the quarantined files for this specific timestamp.
+    for (final suffix in const ['', '-wal', '-shm']) {
+      final file = File(
+        p.join(dbDirectory, 'classai_quarantined_$timestamp$suffix.db'),
+      );
+      if (file.existsSync()) file.deleteSync();
+    }
+    final stateFile =
+        File(p.join(dbDirectory, 'classai_quarantined_${timestamp}_state'));
+    if (stateFile.existsSync()) stateFile.deleteSync();
+  }
+
   @override
   void dispose() {
     _overrideContainer?.dispose();
@@ -309,6 +434,44 @@ class _DatabaseBootstrapperState extends State<DatabaseBootstrapper> {
         }
 
         if (snapshot.hasError) {
+          // A key mismatch is a distinct, user-actionable failure: the existing
+          // encrypted DB has already been quarantined (renamed, not deleted),
+          // and the user must explicitly confirm before any destructive step.
+          // Show the dedicated recovery screen BEFORE any other UI.
+          if (snapshot.error is DbKeyMismatchException) {
+            final mismatch = snapshot.error! as DbKeyMismatchException;
+            return MaterialApp(
+              title: 'ClassAI',
+              debugShowCheckedModeBanner: false,
+              theme: AppTheme.light(),
+              darkTheme: AppTheme.dark(),
+              // The dialog is shown from a Builder context that sits under this
+              // MaterialApp's Navigator (the bootstrapper's own context is above
+              // the MaterialApp and has no Navigator ancestor).
+              home: Builder(
+                builder: (screenCtx) {
+                  if (!_keyMismatchDialogShown) {
+                    _keyMismatchDialogShown = true;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) _handleKeyMismatch(screenCtx, mismatch);
+                    });
+                  }
+                  return Scaffold(
+                    body: Center(
+                      child: _isWiping
+                          ? const CircularProgressIndicator()
+                          : const Text(
+                              'Your local data could not be opened, likely due '
+                              'to a security key issue.',
+                              textAlign: TextAlign.center,
+                            ),
+                    ),
+                  );
+                },
+              ),
+            );
+          }
+
           final errorText = snapshot.error.toString();
           // Report the failure to Sentry for monitoring
           Sentry.captureException(

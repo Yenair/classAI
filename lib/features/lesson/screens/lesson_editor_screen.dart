@@ -1352,7 +1352,17 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       final db = ref.read(databaseProvider);
       final exists = await db.schemeOfWorkDao.getById(_schemeOfWorkLocalId!) != null;
       if (mounted) {
-        setState(() => _sourceMissing = !exists);
+        setState(() {
+          _sourceMissing = !exists;
+          // Prevention: release the dead scheme link in-memory so the lesson
+          // becomes fully editable (topic field) and the error banner clears.
+          // No DB row is modified until the user explicitly saves.
+          if (!exists) {
+            _schemeOfWorkLocalId = null;
+            _isFromSchemeOfWork = false;
+            _isManualTopicEntry = true;
+          }
+        });
       }
     } catch (_) {}
   }
@@ -1516,14 +1526,15 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Navigation Drawer (tablet+) ─────────────────────────
-          _NavigationDrawer(
-            cs: cs,
-            theme: theme,
-            isOpen: _editorSidebarOpen,
-            onToggleSidebar: () => setState(
-                () => _editorSidebarOpen = !_editorSidebarOpen),
-          ),
+          // ── Navigation Drawer (tablet+; never on Android) ────────
+          if (PlatformHelper.shouldShowSidebar(context))
+            _NavigationDrawer(
+              cs: cs,
+              theme: theme,
+              isOpen: _editorSidebarOpen,
+              onToggleSidebar: () => setState(
+                  () => _editorSidebarOpen = !_editorSidebarOpen),
+            ),
 
           // ── Main Content ────────────────────────────────────────
           Expanded(
@@ -2759,6 +2770,16 @@ class _PreviewColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // True when there is no generated lesson body to regenerate. Guards the
+    // "Regenerate with AI" button so it is disabled for title-only lessons.
+    final lessonBodyEmpty =
+        objectivesController.text.trim().isEmpty &&
+        vocabularyController.text.trim().isEmpty &&
+        materialsController.text.trim().isEmpty &&
+        presentationController.text.trim().isEmpty &&
+        assessmentController.text.trim().isEmpty &&
+        homeworkController.text.trim().isEmpty;
+
     // Empty state (before generation)
     if (!hasGenerated) {
       return Container(
@@ -3221,8 +3242,9 @@ class _PreviewColumn extends StatelessWidget {
                             width: double.infinity,
                             height: AppTheme.touchTarget,
                             child: FilledButton.icon(
-                              onPressed:
-                                  isRegenerating ? null : onRegenerate,
+                              onPressed: isRegenerating || lessonBodyEmpty
+                                  ? null
+                                  : onRegenerate,
                               style: FilledButton.styleFrom(
                                 backgroundColor: cs.secondary,
                                 foregroundColor: cs.onSecondary,

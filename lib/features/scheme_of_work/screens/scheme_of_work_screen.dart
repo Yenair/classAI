@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/services/ai_service.dart';
+import 'package:classai/core/services/scheme_of_work_service.dart';
 import 'package:classai/core/constants/prompt_templates.dart';
 import 'package:classai/core/constants/curriculum_types.dart';
 import 'package:classai/core/theme/app_theme.dart';
@@ -417,275 +418,36 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     if (_schoolId == null || _teacherId == null) return;
     try {
       final db = ref.read(databaseProvider);
-      var subjectId = _subjectId;
-      if (subjectId == null) {
-        final school = await db.schoolsDao.getByLocalId(_schoolId!);
-        final schoolServerId = school?.serverId;
-        final subjectRow = schoolServerId != null
-            ? await db.subjectsDao.getByNameAndSchool(_subject, schoolServerId)
-            : await db.subjectsDao.getByName(_subject);
-        subjectId = subjectRow?.id;
-      }
-      if (subjectId == null) {
-        final school = await db.schoolsDao.getByLocalId(_schoolId!);
-        final schoolServerId = school?.serverId;
-        subjectId = await db.subjectsDao.insert(
-          name: _subject,
-          schoolId: schoolServerId,
-        );
-        await db.syncQueueDao.insertEntry(
-          queueTable: 'subjects',
-          recordLocalId: subjectId,
-          operation: 'INSERT',
-          payload: {
-            'name': _subject,
-            'school_id': schoolServerId,
-          },
-        );
-      }
-      _subjectId = subjectId;
+      final service = SchemeOfWorkService(db);
 
-      // Resolve server IDs for draft creation
-      final teacher = await db.teachersDao.getById(_teacherId!);
-      final teacherServerId = teacher?.serverId;
-      // _schoolId is the correct localId resolved in _loadAuthInfo via
-      // serverId lookup — avoid schoolsDao.get() which uses limit(1) with
-      // no serverId filter and may return the wrong school.
-      final school = await db.schoolsDao.getByLocalId(_schoolId!);
-      final schoolServerId = school?.serverId;
-      final termLabel = _normalizeTermLabelForDraft(_term);
+      final weeks = _weeks.map((week) {
+        final weekNumber = (week['week'] as int?) ?? 0;
+        return <String, dynamic>{
+          'week': weekNumber,
+          'topic': _topicControllers[weekNumber]?.text ??
+              week['topic']?.toString() ??
+              '',
+          'objectives': _objectivesControllers[weekNumber]?.text ??
+              week['objectives']?.toString() ??
+              '',
+        };
+      }).toList();
 
-      // Resolve subject server ID for sync payload
-      final subject = await db.subjectsDao.getById(subjectId);
-      final subjectServerId = subject?.serverId;
+      _weekRecordIds = await service.saveScheme(
+        schoolId: _schoolId!,
+        teacherId: _teacherId!,
+        subject: _subject,
+        classLevel: _classLevel,
+        term: _term,
+        weeks: weeks,
+        existingWeekRecordIds: _weekRecordIds,
+      );
+      // _submitForApproval needs the resolved subject id afterwards.
+      _subjectId = await service.findSubjectId(
+        schoolId: _schoolId!,
+        subject: _subject,
+      );
 
-      for (var index = 0; index < _weeks.length; index++) {
-        final week = _weeks[index];
-        final weekNumber = index + 1;
-        final topicText = _topicControllers[weekNumber]?.text ?? week['topic']?.toString() ?? '';
-        final objectivesText = _objectivesControllers[weekNumber]?.text ?? week['objectives']?.toString() ?? '';
-        final existingId = _weekRecordIds[weekNumber];
-        if (existingId != null) {
-          // Update existing record
-          await db.schemeOfWorkDao.updateWeekEntry(
-            existingId,
-            topic: topicText,
-            objectives: objectivesText,
-          );
-
-          // Queue UPDATE sync entry (only if subject has a server ID)
-          if (subjectServerId != null) {
-            final sowRecord = await db.schemeOfWorkDao.getById(existingId);
-            if (sowRecord != null) {
-              await db.syncQueueDao.insertEntry(
-                queueTable: 'scheme_of_work',
-                recordLocalId: existingId,
-                operation: 'UPDATE',
-                payload: {
-                  'teacher_server_id': teacherServerId,
-                  'school_server_id': schoolServerId,
-                  'subject_id': subjectServerId,
-                  'term': _term,
-                  'week_number': weekNumber,
-                  'topic': topicText,
-                  'objectives': objectivesText,
-                  'status': sowRecord.status,
-                  'admin_edited_topic': sowRecord.adminEditedTopic,
-                  'admin_comment': sowRecord.adminComment,
-                  'class_level': _classLevel,
-                },
-              );
-            }
-          }
-        } else {
-          // Insert new record
-          final newId = await db.schemeOfWorkDao.insert(
-            SchemeOfWorkCompanion.insert(
-              schoolId: Value(_schoolId!),
-              teacherId: Value(_teacherId!),
-              subjectId: Value(subjectId),
-              term: Value(_term),
-              classLevel: Value(_classLevel),
-              weekNumber: Value(weekNumber),
-              topic: Value(topicText),
-              objectives: Value(objectivesText),
-              status: const Value('draft'),
-              createdAt: Value(DateTime.now()),
-              updatedAt: Value(DateTime.now()),
-            ),
-          );
-          _weekRecordIds[weekNumber] = newId;
-
-          // Queue INSERT sync entry (only if subject has a server ID)
-          if (subjectServerId != null) {
-            await db.syncQueueDao.insertEntry(
-              queueTable: 'scheme_of_work',
-              recordLocalId: newId,
-              operation: 'INSERT',
-              payload: {
-                'teacher_server_id': teacherServerId,
-                'school_server_id': schoolServerId,
-                'subject_id': subjectServerId,
-                'term': _term,
-                'week_number': weekNumber,
-                'topic': topicText,
-                'objectives': objectivesText,
-                'status': 'draft',
-                'admin_edited_topic': null,
-                'admin_comment': null,
-                'class_level': _classLevel,
-              },
-            );
-          }
-        }
-
-        // Auto-create draft lesson if not already existing
-        if (teacherServerId != null && termLabel.isNotEmpty) {
-          final existingLessons = await db.lessonsDao.getAll();
-          final weekId = _weekRecordIds[weekNumber];
-          final lessonExists = existingLessons.any((l) {
-            if (l.isDeleted || l.status != 'draft') return false;
-            // Fallback: same scheme_of_work_id. The _saveScheme handler
-            // always writes schemeOfWorkId: Value(weekId.toString()), so
-            // any existing lesson linked to the same scheme record is a
-            // duplicate regardless of subject text (which may have been
-            // wiped to '' by sync pull).
-            if (weekId != null) {
-              final existingSchemeId = int.tryParse(l.schemeOfWorkId ?? '');
-              if (existingSchemeId == weekId) return true;
-            }
-            if (l.teacherServerId == teacherServerId &&
-                l.classLevel == _classLevel &&
-                (l.term ?? '') == termLabel &&
-                (l.weekNumber ?? l.week) == weekNumber) {
-              return true;
-            }
-            return false;
-          });
-          if (!lessonExists) {
-            final lessonId = await db.lessonsDao.insertLesson(
-              LessonsCompanion.insert(
-                subject: _subject,
-                classLevel: _classLevel,
-                week: weekNumber,
-                topic: topicText,
-                difficulty: 'medium',
-                bloomsVerbs: '',
-                curriculum: 'NERDC',
-                content: jsonEncode({
-                  'objectives': [],
-                  'vocabulary': [],
-                  'materials': [],
-                  'presentation': [],
-                  'assessment': '',
-                  'homework': '',
-                }),
-                teacherServerId: Value(teacherServerId),
-                schoolServerId: schoolServerId != null
-                    ? Value(schoolServerId)
-                    : const Value.absent(),
-                schemeOfWorkId: Value(_weekRecordIds[weekNumber].toString()),
-                weekNumber: Value(weekNumber),
-                isUnlocked: const Value(false),
-                status: const Value('draft'),
-                term: Value(termLabel),
-              ),
-            );
-            final lessonContent = jsonEncode({
-              'objectives': [],
-              'vocabulary': [],
-              'materials': [],
-              'presentation': [],
-              'assessment': '',
-              'homework': '',
-            });
-            await db.syncQueueDao.insertEntry(
-              queueTable: 'lessons',
-              recordLocalId: lessonId,
-              operation: 'INSERT',
-              payload: {
-                'subject': _subject,
-                'classLevel': _classLevel,
-                'week': weekNumber,
-                'topic': topicText,
-                'difficulty': 'medium',
-                'bloomsVerbs': '',
-                'curriculum': 'NERDC',
-                'teacher_server_id': teacherServerId,
-                'school_server_id': schoolServerId,
-                'content': lessonContent,
-                'content_hash': lessonContent.hashCode.toString(),
-                'is_unlocked': false,
-                'scheme_of_work_id': _weekRecordIds[weekNumber].toString(),
-                'week_number': weekNumber,
-                'term': termLabel,
-              },
-            );
-          }
-
-          // Auto-create draft exam if not already existing
-          final existingExams = await db.examsDao.getAll();
-          final examExists = existingExams.any((e) {
-            if (e.isDeleted) return false;
-            if (weekId != null) {
-              final existingSchemeId = int.tryParse(e.schemeOfWorkId ?? '');
-              if (existingSchemeId == weekId) return true;
-            }
-            return e.teacherServerId == teacherServerId &&
-                e.classLevel == _classLevel &&
-                (e.term ?? '') == termLabel &&
-                e.weekNumber == weekNumber;
-          });
-          if (!examExists) {
-            final examId = await db.examsDao.insertExam(
-              ExamsCompanion.insert(
-                subject: _subject,
-                classLevel: _classLevel,
-                topic: topicText,
-                difficulty: 'medium',
-                curriculum: 'NERDC',
-                content: jsonEncode({
-                  'mcqs': [],
-                  'theory': [],
-                  'subjective': [],
-                }),
-                teacherServerId: Value(teacherServerId),
-                schoolServerId: schoolServerId != null
-                    ? Value(schoolServerId)
-                    : const Value.absent(),
-                isUnlocked: const Value(false),
-                schemeOfWorkId: Value(_weekRecordIds[weekNumber].toString()),
-                weekNumber: Value(weekNumber),
-                term: Value(termLabel),
-              ),
-            );
-            final examContent = jsonEncode({
-              'mcqs': [],
-              'theory': [],
-              'subjective': [],
-            });
-            await db.syncQueueDao.insertEntry(
-              queueTable: 'exams',
-              recordLocalId: examId,
-              operation: 'INSERT',
-              payload: {
-                'subject': _subject,
-                'classLevel': _classLevel,
-                'topic': topicText,
-                'difficulty': 'medium',
-                'curriculum': 'NERDC',
-                'teacher_server_id': teacherServerId,
-                'school_server_id': schoolServerId,
-                'content': examContent,
-                'is_unlocked': false,
-                'scheme_of_work_id': _weekRecordIds[weekNumber].toString(),
-                'week_number': weekNumber,
-                'term': termLabel,
-              },
-            );
-          }
-        }
-      }
       await _loadSchemeForSelection();
       if (mounted) {
         showInfoToast(context: context, message: 'Scheme of Work saved!');

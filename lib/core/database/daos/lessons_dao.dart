@@ -131,6 +131,17 @@ class LessonsDao extends DatabaseAccessor<AppDatabase>
     return (update(lessons)..where((t) => t.id.equals(id))).write(companion);
   }
 
+  /// Clear (null out) the `schemeOfWorkId` on a lesson whose local scheme link
+  /// no longer resolves to an existing row. Used by the orphaned-link repair.
+  Future<void> clearSchemeOfWorkId(int id) {
+    return (update(lessons)..where((t) => t.id.equals(id))).write(
+      LessonsCompanion(
+        schemeOfWorkId: const Value(null),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
   /// Count non-deleted lessons for a given school.
   Future<int> countNonDeletedBySchool(String schoolServerId) async {
     final query = selectOnly(lessons)

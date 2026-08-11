@@ -1,12 +1,112 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide AuthState;
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/providers/config_provider.dart';
+import 'package:classai/core/services/config_service.dart';
+import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/lesson/screens/lesson_editor_screen.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
+class MockSupabaseClient extends Mock implements SupabaseClient {}
+class MockFunctionsClient extends Mock implements FunctionsClient {}
+
+/// Builds a mock Supabase client whose `get-config` function fails fast so
+/// [ConfigService.refresh] throws synchronously with no network I/O.
+MockSupabaseClient buildMockSupabase() {
+  final supabase = MockSupabaseClient();
+  final functions = MockFunctionsClient();
+  when(() => functions.invoke('get-config')).thenThrow(
+    FunctionException(status: 500),
+  );
+  when(() => supabase.functions).thenReturn(functions);
+  return supabase;
+}
+
+/// Returns an authenticated state with a non-free (elite) school so
+/// _handleGenerate() passes the subscription-tier gate.
+class FixedAuthNotifier extends AuthNotifier {
+  FixedAuthNotifier(this.fixedState);
+  final AuthStateData fixedState;
+  @override
+  AuthStateData build() => fixedState;
+}
+
+AuthStateData _eliteAuthState() {
+  final now = DateTime.now();
+  return AuthStateData(
+    state: AuthState.authenticated,
+    currentTeacher: Teacher(
+      localId: 1,
+      serverId: '00000000-0000-0000-0000-000000000001',
+      email: 'teacher@test.com',
+      teacherName: 'Test Teacher',
+      role: 'teacher',
+      schoolLocalId: 1,
+      schoolServerId: '00000000-0000-0000-0000-000000000010',
+      isActive: true,
+      forcePasswordReset: false,
+      passwordHashVersion: 1,
+      schoolKeyWrapped: 'wrapped',
+      lastCreditRefillDate: now,
+      createdAt: now,
+      updatedAt: now,
+      updateCounter: 0,
+      isDeleted: false,
+      lastModifiedBy: null,
+      themeMode: 'system',
+    ),
+    currentSchool: School(
+      localId: 1,
+      serverId: '00000000-0000-0000-0000-000000000010',
+      schoolName: 'Test School',
+      shortCode: 'TST',
+      logoUrl: null,
+      subscriptionTier: 'elite',
+      activeCurriculum: 'nerdc',
+      activeCurriculumVersion: '2024',
+      totalSeats: 5,
+      schoolMasterKeyWrapped: 'wrapped',
+      adminRecoveryEmail: null,
+      adminRecoveryEmailVerified: false,
+      createdAt: now,
+      updatedAt: now,
+      updateCounter: 0,
+      isDeleted: false,
+      lastModifiedBy: null,
+    ),
+  );
+}
+
+/// Mocks the connectivity_plus method channel so PlatformHelper.isOnline()
+/// returns the given value. Copied pattern from auth_state_machine_test.
+void _mockConnectivityChannel({bool isOnline = false}) {
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+    const MethodChannel('dev.fluttercommunity.plus/connectivity'),
+    (MethodCall methodCall) async {
+      if (methodCall.method == 'check') {
+        return isOnline ? <String>['wifi'] : <String>['none'];
+      }
+      return null;
+    },
+  );
+}
+
+/// Types into the Topic TextField. It is the first TextField in the tree on
+/// a fresh (non-generated) form, so find.byType(TextField).first is reliable.
+Future<void> _enterTopic(WidgetTester tester, String text) async {
+  await tester.enterText(find.byType(TextField).first, text);
+  await tester.pump();
+}
+
 void main() {
   late AppDatabase db;
+  final mockSupabase = buildMockSupabase();
 
   setUp(() async {
     db = AppDatabase.forTesting();
@@ -52,6 +152,10 @@ void main() {
     return ProviderScope(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        authProvider.overrideWith(() => FixedAuthNotifier(_eliteAuthState())),
+        configServiceProvider.overrideWithValue(
+          ConfigService(client: mockSupabase),
+        ),
       ],
       child: MaterialApp(
         builder: (context, widget) => MediaQuery(
@@ -133,6 +237,8 @@ void main() {
     });
 
     testWidgets('week spinbox increments and decrements', (tester) async {
+      await ensureViewportHeight(tester);
+
       await tester.pumpWidget(createTestApp());
       await tester.pumpAndSettle();
 
@@ -165,6 +271,7 @@ void main() {
       };
 
       await ensureViewportHeight(tester);
+      _mockConnectivityChannel(isOnline: true);
 
       await tester.pumpWidget(buildApp(
         generateCallback: (prompt) async {
@@ -173,6 +280,8 @@ void main() {
         },
       ));
       await tester.pumpAndSettle();
+
+      await _enterTopic(tester, 'Algebraic Expressions');
 
       // Scroll to and tap Generate with AI
       await tester.scrollUntilVisible(
@@ -189,12 +298,15 @@ void main() {
       expect(capturedPrompt, contains('Mathematics'));
       expect(capturedPrompt, contains('Week 1'));
 
-      // Verify preview cards appear with generated content
-      // Note: _buildPreviewCard only renders the content, NOT the title string
+      // After generation the preview is in the locked state: the header and a
+      // locked overlay are shown, plus brief locked preview cards for
+      // Objectives and Presentation. The full Vocabulary/Materials/etc. cards
+      // are gated behind isUnlocked, so only the Objectives content is visible.
       expect(find.text('Preview Generated Content'), findsOneWidget);
+      expect(find.text('Locked — Preview only'), findsOneWidget);
+      expect(find.text('Objectives'), findsOneWidget);
       expect(find.text('Learn X'), findsOneWidget);
-      expect(find.text('Term1'), findsOneWidget);
-      expect(find.text('Book'), findsOneWidget);
+      expect(find.text('Full content visible after unlock'), findsWidgets);
     });
 
     testWidgets('save button persists to database', (tester) async {
@@ -210,11 +322,14 @@ void main() {
       };
 
       await ensureViewportHeight(tester);
+      _mockConnectivityChannel(isOnline: true);
 
       await tester.pumpWidget(buildApp(
         generateCallback: (prompt) async => result,
       ));
       await tester.pumpAndSettle();
+
+      await _enterTopic(tester, 'Algebraic Expressions');
 
       // Scroll to and tap Generate with AI
       await tester.scrollUntilVisible(
@@ -225,6 +340,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Generate with AI'));
       await tester.pumpAndSettle();
+      // Let the async _saveLesson inside the post-frame callback complete.
+      await tester.pump(const Duration(seconds: 1));
 
       // Dismiss the "Lesson generated successfully!" toast dialog
       await tester.tap(find.text('Close'));
@@ -249,11 +366,14 @@ void main() {
       };
 
       await ensureViewportHeight(tester);
+      _mockConnectivityChannel(isOnline: true);
 
       await tester.pumpWidget(buildApp(
         generateCallback: (prompt) async => result,
       ));
       await tester.pumpAndSettle();
+
+      await _enterTopic(tester, 'Algebraic Expressions');
 
       // Scroll to and tap Generate with AI
       await tester.scrollUntilVisible(

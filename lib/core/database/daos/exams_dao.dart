@@ -47,6 +47,17 @@ class ExamsDao extends DatabaseAccessor<AppDatabase>
     return (update(exams)..where((t) => t.id.equals(id))).write(companion);
   }
 
+  /// Clear (null out) the `schemeOfWorkId` on an exam whose local scheme link
+  /// no longer resolves to an existing row. Used by the orphaned-link repair.
+  Future<void> clearSchemeOfWorkId(int id) {
+    return (update(exams)..where((t) => t.id.equals(id))).write(
+      ExamsCompanion(
+        schemeOfWorkId: const Value(null),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
   /// Count non-deleted exams for a given school.
   Future<int> countNonDeletedBySchool(String schoolServerId) async {
     final query = selectOnly(exams)

@@ -3,10 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/services.dart';
 
-import 'package:drift/drift.dart' hide Column;
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/constants/curriculum_types.dart' show nerdcSubjects;
+import 'package:classai/core/constants/prompt_templates.dart';
+import 'package:classai/core/data/nerdc_curriculum.dart';
+import 'package:classai/core/services/ai_service.dart';
+import 'package:classai/core/services/scheme_of_work_service.dart';
 import 'package:classai/core/providers/pdf_service_provider.dart';
 import 'package:classai/core/services/pdf_service.dart';
 import 'package:classai/core/utils/platform_helper.dart';
@@ -42,35 +45,6 @@ class LessonsListScreen extends ConsumerStatefulWidget {
 }
 
 class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
-  /// Shows a confirmation dialog when the system back button is pressed on a
-  /// root-level route. If the user confirms, the app is closed.
-  void _showQuitConfirmation(BuildContext ctx) {
-    showDialog<void>(
-      context: ctx,
-      barrierDismissible: true,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
-        title: const Text('Quit ClassAI?'),
-        content: const Text('Are you sure you want to quit the app?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-              SystemNavigator.pop();
-            },
-            child: const Text('Quit'),
-          ),
-        ],
-      ),
-    );
-  }
 
   static const _termFilters = ['All', '1st Term', '2nd Term', '3rd Term'];
   static const _statusFilters = [
@@ -86,7 +60,8 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
   String _selectedTermFilter = 'All';
   String _selectedClassFilter = 'All';
   String _selectedSubjectFilter = 'All';
-  bool _schemeDraftsBootstrapped = false;
+  bool _filtersExpanded = true;
+  bool _autoGenerating = false;
   final Map<int, SchemeOfWorkData> _schemesById = {};
 
   static const _prefPrefix = 'lessons_filter_';
@@ -99,7 +74,7 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
       ref.read(syncStatusProvider.notifier).refresh();
       ref.read(offlineCreditStateProvider.notifier).refresh();
       ref.read(unresolvedConflictsProvider.notifier).refresh();
-      _bootstrapSchemeDrafts();
+      _loadSchemesForDisplay();
     });
   }
 
@@ -110,13 +85,20 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
       _selectedTermFilter = prefs.getString('${_prefPrefix}term') ?? 'All';
       _selectedClassFilter = prefs.getString('${_prefPrefix}class') ?? 'All';
       _selectedSubjectFilter = prefs.getString('${_prefPrefix}subject') ?? 'All';
+      _filtersExpanded = prefs.getBool('lessons_filters_expanded') ?? true;
     });
   }
 
-  Future<void> _bootstrapSchemeDrafts() async {
-    if (_schemeDraftsBootstrapped) return;
-    _schemeDraftsBootstrapped = true;
+  Future<void> _toggleFiltersExpanded() async {
+    setState(() => _filtersExpanded = !_filtersExpanded);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('lessons_filters_expanded', _filtersExpanded);
+  }
 
+  /// Populates the scheme lookup used to display term labels on lesson
+  /// cards. Does NOT create lessons — plan creation is now exclusively the
+  /// explicit "Plan My Term" flow (silent draft seeding was removed).
+  Future<void> _loadSchemesForDisplay() async {
     try {
       final db = ref.read(databaseProvider);
       final authState = ref.read(authProvider);
@@ -126,16 +108,6 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
       final schemes = (await db.schemeOfWorkDao.getSaved())
           .where((scheme) => scheme.schoolId == school.localId)
           .toList();
-      if (schemes.isEmpty) return;
-
-      final subjects = await db.subjectsDao.getAll();
-      final subjectNamesById = <int, String>{
-        for (final subject in subjects) subject.id: subject.name,
-      };
-      final lessons = await db.lessonsDao.getAll();
-      final exams = await db.examsDao.getAll();
-      final teacherServerId = authState.currentTeacher?.serverId;
-
       final schemeMap = <int, SchemeOfWorkData>{
         for (final scheme in schemes) scheme.id: scheme,
       };
@@ -150,105 +122,217 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
           ..clear()
           ..addAll(schemeMap);
       }
-
-      final existingDraftKeys = <String>{};
-      for (final lesson in lessons) {
-        if (lesson.isDeleted || lesson.status != 'draft') continue;
-        final termLabel = _termLabelForLesson(lesson);
-        if (termLabel == null || lesson.weekNumber == null) continue;
-        existingDraftKeys.add(
-          _draftKey(
-            subject: lesson.subject,
-            classLevel: lesson.classLevel,
-            term: termLabel,
-            weekNumber: lesson.weekNumber!,
-          ),
-        );
-      }
-
-      var insertedCount = 0;
-      for (final scheme in schemes) {
-        final subjectName = subjectNamesById[scheme.subjectId];
-        if (subjectName == null || subjectName.isEmpty) continue;
-
-        final classLevel = _inferClassLevelForScheme(
-          scheme: scheme,
-          subjectName: subjectName,
-          lessons: lessons,
-          exams: exams,
-          teacherServerId: teacherServerId,
-        );
-        if (classLevel == null || classLevel.isEmpty) continue;
-
-        final termLabel = _normalizeTermLabel(scheme.term);
-        if (termLabel.isEmpty) continue;
-
-        final key = _draftKey(
-          subject: subjectName,
-          classLevel: classLevel,
-          term: termLabel,
-          weekNumber: scheme.weekNumber,
-        );
-        if (existingDraftKeys.contains(key)) continue;
-
-        final existingForScheme = lessons.any((lesson) {
-          if (lesson.isDeleted || lesson.status != 'draft') return false;
-          final linkedSchemeId = int.tryParse(lesson.schemeOfWorkId ?? '');
-          // Primary check: all key fields match
-          if (linkedSchemeId == scheme.id &&
-              lesson.subject == subjectName &&
-              lesson.classLevel == classLevel &&
-              (lesson.weekNumber ?? lesson.week) == scheme.weekNumber) {
-            return true;
-          }
-          // Fallback: same scheme_of_work_id (resilient to subject being
-          // wiped to '' by sync pull before the empty-remote guard fix).
-          if (linkedSchemeId == scheme.id) return true;
-          return false;
-        });
-        if (existingForScheme) {
-          existingDraftKeys.add(key);
-          continue;
-        }
-
-        await db.lessonsDao.insertLesson(
-          LessonsCompanion.insert(
-            subject: subjectName,
-            classLevel: classLevel,
-            week: scheme.weekNumber,
-            topic: _displayTopicForScheme(scheme),
-            difficulty: 'medium',
-            bloomsVerbs: '',
-            curriculum: 'NERDC',
-            content: jsonEncode({
-              'objectives': const [],
-              'vocabulary': const [],
-              'materials': const [],
-              'presentation': const [],
-              'assessment': '',
-              'homework': '',
-            }),
-            teacherServerId: teacherServerId != null
-                ? Value(teacherServerId)
-                : const Value.absent(),
-            schoolServerId: school.serverId != null
-                ? Value(school.serverId)
-                : const Value.absent(),
-            schemeOfWorkId: Value(scheme.id.toString()),
-            weekNumber: Value(scheme.weekNumber),
-            isUnlocked: const Value(false),
-            status: const Value('draft'),
-          ),
-        );
-        existingDraftKeys.add(key);
-        insertedCount++;
-      }
-
-      if (insertedCount > 0 && mounted) {
-        ref.invalidate(lessonsListProvider);
-      }
     } catch (_) {
-      // Keep the screen silent if draft seeding fails.
+      // Display-only; failure is not worth interrupting the screen.
+    }
+  }
+
+  static const _prefAutoGenerateSubject = 'auto_generate_subject';
+  static const _prefAutoGenerateClass = 'auto_generate_class';
+  static const _prefAutoGenerateTerm = 'auto_generate_term';
+
+  Future<void> _openAutoGenerateDialog() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedSubject = prefs.getString(_prefAutoGenerateSubject) ?? 'Mathematics';
+    final savedClass = prefs.getString(_prefAutoGenerateClass) ?? 'JSS 1';
+    final savedTerm = prefs.getString(_prefAutoGenerateTerm) ?? '1st Term';
+
+    final subject =
+        _selectedSubjectFilter != 'All' ? _selectedSubjectFilter : savedSubject;
+    final classLevel =
+        _selectedClassFilter != 'All' ? _selectedClassFilter : savedClass;
+    final termLabel =
+        _selectedTermFilter != 'All' ? _selectedTermFilter : savedTerm;
+
+    // Subject options = any subject the teacher filters on + the curated
+    // subjects, so a filter like "French" stays selected instead of silently
+    // falling back to Mathematics.
+    final filterSubjects = _selectedSubjectFilter != 'All'
+        ? [_selectedSubjectFilter]
+        : const <String>[];
+    final subjectOptions =
+        <String>[...filterSubjects, ...nerdcSubjects].toSet().toList();
+
+    final selection = await showDialog<_AutoGenerateSelection>(
+      context: context,
+      builder: (ctx) => _AutoGenerateDialog(
+        subjectOptions: subjectOptions,
+        initialSubject: subject,
+        initialClassLevel: classLevel,
+        initialTerm: termLabel,
+      ),
+    );
+    if (selection == null || !mounted) return;
+
+    await prefs.setString(_prefAutoGenerateSubject, selection.subject);
+    await prefs.setString(_prefAutoGenerateClass, selection.classLevel);
+    await prefs.setString(_prefAutoGenerateTerm, selection.termLabel);
+
+    await _runAutoGenerate(selection);
+  }
+
+  Future<void> _runAutoGenerate(_AutoGenerateSelection selection) async {
+    if (mounted) setState(() => _autoGenerating = true);
+    try {
+      final db = ref.read(databaseProvider);
+      final authState = ref.read(authProvider);
+      final school = authState.currentSchool ?? await db.schoolsDao.get();
+      if (school == null) throw Exception('School data not available');
+
+      // ── 1. Build the 13-week topic list (curated first, AI fallback) ──
+      List<Map<String, dynamic>> weeks;
+      final curated = getNerdcTopics(
+        selection.subject, selection.classLevel, selection.termLabel);
+      if (curated != null) {
+        weeks = [
+          for (var i = 0; i < curated.length; i++)
+            {
+              'week': i + 1,
+              'topic': curated[i].topic,
+              'objectives': curated[i].objectives.join('\n'),
+            },
+        ];
+      } else {
+        // AI fallback — requires internet.
+        if (!await PlatformHelper.isOnline()) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'No internet connection. This subject is not in the built-in '
+                  'list yet — connect to the internet to generate it.',
+                ),
+              ),
+            );
+          }
+          return;
+        }
+        if (mounted) {
+          showDialog<void>(
+            context: context,
+            barrierDismissible: false,
+            builder: (ctx) => const PopScope(
+              canPop: false,
+              child: AlertDialog(
+                content: Row(
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(width: 20),
+                    Expanded(child: Text('Creating your plan…')),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+        final aiService = AiService(db: db);
+        await aiService.checkDailyLimit(
+          school.subscriptionTier.isEmpty ? 'free' : school.subscriptionTier);
+        final prompt = PromptTemplates.schemeOfWork(
+          selection.subject, selection.classLevel, selection.termLabel);
+        final result = await aiService.generate(prompt);
+        weeks = parseSchemeWeeks(result);
+        if (mounted) Navigator.of(context, rootNavigator: true).pop();
+        await aiService.logGeneration(
+          teacherId: authState.currentTeacher?.localId.toString(),
+          schoolId: school.localId.toString(),
+          topic: 'SoW: ${selection.subject} ${selection.termLabel}',
+        );
+        if (weeks.isEmpty) throw Exception('AI returned no weeks');
+      }
+
+      // ── 2. Resolve teacher local id ──
+      final teacherServerId = authState.currentTeacher?.serverId;
+      final teacher = teacherServerId != null
+          ? await db.teachersDao.findByServerId(teacherServerId)
+          : null;
+      if (teacher == null) throw Exception('Teacher account not ready yet');
+
+      final service = SchemeOfWorkService(db);
+
+      // ── 3. Already have a plan? Warn before deleting + recreating ──
+      final existing = await service.findSchemes(
+        schoolId: school.localId,
+        teacherId: teacher.localId,
+        subject: selection.subject,
+        classLevel: selection.classLevel,
+        term: selection.termLabel,
+      );
+      if (existing.isNotEmpty) {
+        if (!mounted) return;
+        final recreate = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Replace your plan?'),
+            content: const Text(
+              'You already have a plan for this class and subject. '
+              'Creating again will delete your existing plan and its draft '
+              'lessons, then build a fresh one.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Theme.of(ctx).colorScheme.error,
+                  foregroundColor: Theme.of(ctx).colorScheme.onError,
+                ),
+                child: const Text('Create Again'),
+              ),
+            ],
+          ),
+        );
+        if (recreate != true || !mounted) return;
+      }
+
+      // ── 4. Write (and if needed replace) everything in one transaction ──
+      await service.saveScheme(
+        schoolId: school.localId,
+        teacherId: teacher.localId,
+        subject: selection.subject,
+        classLevel: selection.classLevel,
+        term: _termForStorage(selection.termLabel),
+        weeks: weeks,
+        deleteExistingFirst: existing.isNotEmpty,
+      );
+
+      ref.invalidate(lessonsListProvider);
+      await _loadSchemesForDisplay();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Your plan is ready! Tap a week to start writing.'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted && Navigator.of(context, rootNavigator: true).canPop()) {
+        // Dismiss any loading dialog that is still open on failure.
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not create plan: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _autoGenerating = false);
+    }
+  }
+
+  /// Maps the dialog's '1st Term' labels to the storage form ('First') used
+  /// by existing scheme rows.
+  String _termForStorage(String termLabel) {
+    switch (termLabel) {
+      case '2nd Term':
+        return 'Second';
+      case '3rd Term':
+        return 'Third';
+      default:
+        return 'First';
     }
   }
 
@@ -357,16 +441,6 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
     return '${lesson.classLevel} ($termLabel)$weekLabel';
   }
 
-  String _draftKey({
-    required String subject,
-    required String classLevel,
-    required String term,
-    required int weekNumber,
-  }) {
-    return '${subject.trim().toLowerCase()}|${classLevel.trim().toLowerCase()}|'
-        '${term.trim().toLowerCase()}|$weekNumber';
-  }
-
   String _normalizeTermLabel(String term) {
     final cleaned = term.trim();
     if (cleaned.isEmpty) return '';
@@ -381,59 +455,6 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
       return '3rd Term';
     }
     return cleaned;
-  }
-
-  String _displayTopicForScheme(SchemeOfWorkData scheme) {
-    final edited = scheme.adminEditedTopic?.trim();
-    if (edited != null && edited.isNotEmpty) {
-      return edited;
-    }
-    return scheme.topic;
-  }
-
-  String? _inferClassLevelForScheme({
-    required SchemeOfWorkData scheme,
-    required String subjectName,
-    required List<Lesson> lessons,
-    required List<Exam> exams,
-    required String? teacherServerId,
-  }) {
-    final schemeId = scheme.id.toString();
-    final linkedLessons = lessons.where((lesson) {
-      if (lesson.isDeleted) return false;
-      if (lesson.schemeOfWorkId != schemeId) return false;
-      if (teacherServerId != null && lesson.teacherServerId != teacherServerId) {
-        return false;
-      }
-      return true;
-    }).toList();
-    if (linkedLessons.isNotEmpty) {
-      return linkedLessons.first.classLevel;
-    }
-
-    final matchingLessons = lessons.where((lesson) {
-      if (lesson.isDeleted) return false;
-      if (teacherServerId != null && lesson.teacherServerId != teacherServerId) {
-        return false;
-      }
-      if (lesson.subject != subjectName) return false;
-      final lessonWeek = lesson.weekNumber ?? lesson.week;
-      return lessonWeek == scheme.weekNumber;
-    }).toList();
-    if (matchingLessons.isNotEmpty) {
-      return matchingLessons.first.classLevel;
-    }
-
-    final linkedExams = exams.where((exam) {
-      if (exam.isDeleted) return false;
-      final linkedSchemeId = int.tryParse(exam.schemeOfWorkId ?? '');
-      return linkedSchemeId == scheme.id;
-    }).toList();
-    if (linkedExams.isNotEmpty) {
-      return linkedExams.first.classLevel;
-    }
-
-    return null;
   }
 
   String _createLessonLocation({
@@ -470,32 +491,21 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
     final lessonsAsync = ref.watch(lessonsListProvider);
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
-    final canPop = Navigator.of(context).canPop();
 
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && mounted) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (Navigator.of(context).canPop()) {
-              Navigator.of(context).pop();
-            } else {
-              _showQuitConfirmation(context);
-            }
-          });
+          context.go('/');
         }
       },
       child: Scaffold(
         appBar: AppBar(
-          leading: canPop
-              ? IconButton(
-                  onPressed: () => WidgetsBinding.instance.addPostFrameCallback(
-                    (_) => Navigator.of(context).pop(),
-                  ),
-                  icon: const Icon(Icons.arrow_back_rounded),
-                  tooltip: 'Back',
-                )
-              : null,
+          leading: IconButton(
+            onPressed: () => context.go('/'),
+            icon: const Icon(Icons.arrow_back_rounded),
+            tooltip: 'Back to Home',
+          ),
           title: Text(
             'Lessons',
             style: theme.textTheme.titleLarge?.copyWith(
@@ -504,6 +514,20 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
             ),
           ),
             actions: [
+              if (ref.read(authProvider).currentTeacher?.role != 'admin') ...[
+                FilledButton.tonalIcon(
+                  onPressed: _autoGenerating ? null : _openAutoGenerateDialog,
+                  icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                  label: const Text('Plan My Term'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
               const SyncIndicator(),
               const SizedBox(width: 8),
               OfflineCreditCounter(visible: ref.watch(isOfflineProvider)),
@@ -589,6 +613,8 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
                     child: _LessonFiltersPanel(
                       cs: cs,
                       theme: theme,
+                      expanded: _filtersExpanded,
+                      onToggleExpanded: _toggleFiltersExpanded,
                       selectedStatusFilter: _selectedStatusFilter,
                       selectedTermFilter: _selectedTermFilter,
                       selectedClassFilter: _selectedClassFilter,
@@ -643,7 +669,8 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
                                     ),
                                     const SizedBox(height: 6),
                                     Text(
-                                      'Tap New Lesson to create one.',
+                                      'Tap "Plan My Term" to build your whole '
+                                      'term at once, or New Lesson for one lesson.',
                                       style: theme.textTheme.bodyMedium?.copyWith(
                                         color: cs.onSurfaceVariant,
                                       ),
@@ -915,6 +942,8 @@ class _LessonFiltersPanel extends StatelessWidget {
   const _LessonFiltersPanel({
     required this.cs,
     required this.theme,
+    required this.expanded,
+    required this.onToggleExpanded,
     required this.selectedStatusFilter,
     required this.selectedTermFilter,
     required this.selectedClassFilter,
@@ -931,6 +960,8 @@ class _LessonFiltersPanel extends StatelessWidget {
 
   final ColorScheme cs;
   final ThemeData theme;
+  final bool expanded;
+  final VoidCallback onToggleExpanded;
   final String selectedStatusFilter;
   final String selectedTermFilter;
   final String selectedClassFilter;
@@ -956,18 +987,33 @@ class _LessonFiltersPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.tune_rounded, size: 18, color: cs.primary),
-              const SizedBox(width: 8),
-              Text(
-                'Filters',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: cs.onSurface,
-                ),
+          InkWell(
+            onTap: onToggleExpanded,
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  Icon(Icons.tune_rounded, size: 18, color: cs.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Filters',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    expanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    size: 20,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
           const SizedBox(height: 12),
           SingleChildScrollView(
@@ -1003,43 +1049,45 @@ class _LessonFiltersPanel extends StatelessWidget {
               }).toList(),
             ),
           ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              SizedBox(
-                width: 220,
-                child: _FilterDropdownField(
-                  cs: cs,
-                  label: 'Term',
-                  value: selectedTermFilter,
-                  items: termFilters,
-                  onChanged: onTermChanged,
+          if (expanded) ...[
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                SizedBox(
+                  width: 220,
+                  child: _FilterDropdownField(
+                    cs: cs,
+                    label: 'Term',
+                    value: selectedTermFilter,
+                    items: termFilters,
+                    onChanged: onTermChanged,
+                  ),
                 ),
-              ),
-              SizedBox(
-                width: 220,
-                child: _FilterDropdownField(
-                  cs: cs,
-                  label: 'Class Level',
-                  value: selectedClassFilter,
-                  items: classFilters,
-                  onChanged: onClassChanged,
+                SizedBox(
+                  width: 220,
+                  child: _FilterDropdownField(
+                    cs: cs,
+                    label: 'Class Level',
+                    value: selectedClassFilter,
+                    items: classFilters,
+                    onChanged: onClassChanged,
+                  ),
                 ),
-              ),
-              SizedBox(
-                width: 220,
-                child: _FilterDropdownField(
-                  cs: cs,
-                  label: 'Subject',
-                  value: selectedSubjectFilter,
-                  items: subjectFilters,
-                  onChanged: onSubjectChanged,
+                SizedBox(
+                  width: 220,
+                  child: _FilterDropdownField(
+                    cs: cs,
+                    label: 'Subject',
+                    value: selectedSubjectFilter,
+                    items: subjectFilters,
+                    onChanged: onSubjectChanged,
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -1481,4 +1529,108 @@ class _LessonCardSkeleton extends StatelessWidget {
 
 String _formatDate(DateTime dt) {
   return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+}
+
+class _AutoGenerateSelection {
+  final String subject;
+  final String classLevel;
+  final String termLabel;
+
+  const _AutoGenerateSelection(this.subject, this.classLevel, this.termLabel);
+}
+
+class _AutoGenerateDialog extends StatefulWidget {
+  const _AutoGenerateDialog({
+    required this.subjectOptions,
+    required this.initialSubject,
+    required this.initialClassLevel,
+    required this.initialTerm,
+  });
+
+  final List<String> subjectOptions;
+  final String initialSubject;
+  final String initialClassLevel;
+  final String initialTerm;
+
+  @override
+  State<_AutoGenerateDialog> createState() => _AutoGenerateDialogState();
+}
+
+class _AutoGenerateDialogState extends State<_AutoGenerateDialog> {
+  static const _classes = ['JSS 1', 'JSS 2', 'JSS 3', 'SSS 1', 'SSS 2', 'SSS 3'];
+  static const _terms = ['1st Term', '2nd Term', '3rd Term'];
+
+  late String _subject;
+  late String _classLevel;
+  late String _term;
+
+  @override
+  void initState() {
+    super.initState();
+    _subject = widget.subjectOptions.contains(widget.initialSubject)
+        ? widget.initialSubject
+        : widget.subjectOptions.first;
+    _classLevel = _classes.contains(widget.initialClassLevel)
+        ? widget.initialClassLevel
+        : _classes.first;
+    _term = _terms.contains(widget.initialTerm) ? widget.initialTerm : _terms.first;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Plan My Term'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'This will create a complete scheme of work for '
+            '$_subject, $_classLevel, $_term with 13 weekly topics and '
+            'linked draft lessons. Ready?',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            initialValue: _subject,
+            decoration: const InputDecoration(labelText: 'Subject'),
+            items: widget.subjectOptions
+                .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                .toList(),
+            onChanged: (v) => setState(() => _subject = v ?? _subject),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _classLevel,
+            decoration: const InputDecoration(labelText: 'Class Level'),
+            items: _classes
+                .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                .toList(),
+            onChanged: (v) => setState(() => _classLevel = v ?? _classLevel),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _term,
+            decoration: const InputDecoration(labelText: 'Term'),
+            items: _terms
+                .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                .toList(),
+            onChanged: (v) => setState(() => _term = v ?? _term),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(
+            _AutoGenerateSelection(_subject, _classLevel, _term),
+          ),
+          child: const Text('Create'),
+        ),
+      ],
+    );
+  }
 }

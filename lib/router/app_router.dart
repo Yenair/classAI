@@ -86,11 +86,10 @@ final appRouter = GoRouter(
         location == '/exam-editor' ||
         location == '/full-term-exam';
     final isAdminRoute =
-        location == '/admin' || location.startsWith('/admin/teachers/');
+        location == '/admin' ||
+        location.startsWith('/admin/teachers/') ||
+        location == '/scheme-of-work';
     final isPaymentRoute = location == '/payment';
-
-    // Override: /scheme-of-work is accessible by both roles so skip redirect
-    if (location == '/scheme-of-work') return null;
 
     if (role == 'admin') {
       // Teacher-only routes — admins should never access these.
@@ -98,7 +97,9 @@ final appRouter = GoRouter(
       return null;
     }
 
-    // Non-admin users should never reach admin-only routes.
+    // Non-admin users should never reach admin-only routes. /scheme-of-work is
+    // admin-only now — teachers plan their term via "Plan My Term" on the
+    // Lessons list instead of the dedicated scheme screen.
     if (isAdminRoute) return '/';
 
     // Payment route is admin-only

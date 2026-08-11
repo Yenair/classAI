@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path/path.dart' as p;
 import 'package:sqlcipher_flutter_libs/sqlcipher_flutter_libs.dart';
 import 'package:sqlite3/open.dart';
@@ -13,6 +14,28 @@ import '../services/security_service.dart';
 /// `classai.db`) because the database file is replaced during conversion and
 /// therefore cannot be trusted to record its own migration progress.
 enum DbEncryptionState { pending, converting, complete }
+
+/// Result of probing an existing encrypted database with a given passphrase.
+///
+/// Used to distinguish a SQLCipher key mismatch (wrong/regenerated passphrase,
+/// which produces `SqliteException` result code 26 / "file is not a database"
+/// on the first read) from genuine corruption or file-lock contention, so the
+/// app only triggers the destructive recovery path for actual key mismatches.
+enum DbProbeResult { ok, keyMismatch, corrupted, locked, missing }
+
+/// Thrown when the existing encrypted database cannot be opened because the
+/// current passphrase no longer matches (a key mismatch). Carries the
+/// quarantine timestamp so the UI can later delete the quarantined files only
+/// after explicit user confirmation.
+class DbKeyMismatchException implements Exception {
+  final String quarantineTimestamp;
+  DbKeyMismatchException(this.quarantineTimestamp);
+
+  @override
+  String toString() =>
+      'DbKeyMismatchException: encrypted database passphrase mismatch '
+      '(quarantined at $quarantineTimestamp)';
+}
 
 /// Performs the one-time migration of an existing plaintext `classai.db` into
 /// a SQLCipher-encrypted database, with crash-safe, resumable semantics.
@@ -86,6 +109,30 @@ class DatabaseEncryptionBootstrap {
     final passphrase = await _security.getOrCreateDbEncryptionPassphrase();
     final dbPath = p.join(dbDirectory, _dbFileName);
 
+    // Detect a SQLCipher key mismatch up front: if an ENCRYPTED database file
+    // exists (i.e. it is NOT a plaintext, still-to-be-converted file) but cannot
+    // be decrypted with the CURRENT passphrase, quarantine it (rename, never
+    // delete) and signal recovery. This is the lifecycle bug where secure
+    // storage was cleared (e.g. logout) but the encrypted file survived, so a
+    // new passphrase was generated and no longer matches.
+    //
+    // IMPORTANT: the probe is gated on `!_isPlaintext`. Setting a key on a
+    // still-plaintext file (a device that hasn't been migrated to SQLCipher
+    // yet) and reading it also fails with "file is not a database", so probing
+    // it here would wrongly quarantine legitimate plaintext data. Plaintext
+    // files are instead handled by the normal conversion path below.
+    if (File(dbPath).existsSync() && !_isPlaintext(dbPath)) {
+      final probe = _probeDb(dbPath, passphrase);
+      if (probe == DbProbeResult.keyMismatch) {
+        final ts = _timestamp();
+        _quarantine(dbPath, dbDirectory, ts);
+        throw DbKeyMismatchException(ts);
+      }
+      // Genuine corruption or lock contention is NOT a key mismatch: leave the
+      // file untouched and let the normal open path surface the real error.
+      // corrupted / locked are deliberately not handled here.
+    }
+
     final state = _readState(dbDirectory);
     if (state == DbEncryptionState.converting) {
       await _recoverInterrupted(dbPath, dbDirectory, passphrase);
@@ -102,6 +149,78 @@ class DatabaseEncryptionBootstrap {
 
     return passphrase;
   }
+
+  /// Probe an existing database with [passphrase] to classify why it cannot be
+  /// opened. Distinguishes key mismatch from corruption and lock contention.
+  ///
+  /// Approach: open read-only, set the key, then issue a read. SQLCipher defers
+  /// the actual decryption (and its HMAC/page-cipher check) to the first read.
+  ///   - A WRONG passphrase fails that read with `SqliteException` result code
+  ///     26 (SQLITE_NOTADB / "file is not a database").
+  ///   - Lock contention surfaces as code 5 (SQLITE_BUSY), which is NOT a key
+  ///     mismatch.
+  ///   - Genuine corruption opens and integrity-check runs but returns a
+  ///     non-"ok" row, which is also NOT a key mismatch.
+  DbProbeResult _probeDb(String dbPath, String passphrase) {
+    sql.Database? db;
+    try {
+      db = sql.sqlite3.open(dbPath, mode: sql.OpenMode.readOnly);
+      db.execute("PRAGMA key = '$passphrase';");
+      db.select('SELECT count(*) FROM sqlite_master;');
+      return DbProbeResult.ok;
+    } on sql.SqliteException catch (e) {
+      final code = e.resultCode;
+      if (code == sql.SqlError.SQLITE_NOTADB) {
+        // Could not decrypt with this key -> likely a key mismatch.
+        return DbProbeResult.keyMismatch;
+      }
+      if (code == sql.SqlError.SQLITE_BUSY) {
+        return DbProbeResult.locked;
+      }
+      // Any other error opening/reading (including a genuinely corrupt or
+      // truncated file that fails differently) is treated as corruption.
+      return DbProbeResult.corrupted;
+    } catch (_) {
+      return DbProbeResult.corrupted;
+    } finally {
+      db?.dispose();
+    }
+  }
+
+  /// Rename [dbPath] and its SQLite sidecars (-wal/-shm) plus the encryption
+  /// state marker to dated quarantine names. Never deletes anything.
+  void _quarantine(String dbPath, String dbDirectory, String timestamp) {
+    for (final suffix in const ['', '-wal', '-shm']) {
+      final src = File(dbPath + suffix);
+      if (!src.existsSync()) continue;
+      final destName = '${_quarantineBaseName()}_${timestamp}$suffix.db';
+      final dest = File(p.join(dbDirectory, destName));
+      try {
+        src.renameSync(dest.path);
+      } catch (e) {
+        // Best-effort: a rename failure (e.g. transient lock) must not mask the
+        // underlying key-mismatch. The file stays in place and is still
+        // quarantined-eligible later if the user confirms.
+        debugPrint('[bootstrap] quarantine rename failed for ${src.path}: $e');
+      }
+    }
+    // Also preserve the encryption bootstrap state marker, so a later confirm
+    // (which re-initialises fresh) does not misread a stale `converting` state.
+    final stateFile = File(p.join(dbDirectory, _stateFileName));
+    if (stateFile.existsSync()) {
+      final dest = File(p.join(
+          dbDirectory, '${_quarantineBaseName()}_${timestamp}_state'));
+      try {
+        stateFile.renameSync(dest.path);
+      } catch (e) {
+        debugPrint('[bootstrap] quarantine state rename failed: $e');
+      }
+    }
+  }
+
+  /// Base name used for quarantined files, matching the dated-backup convention
+  /// used by the pre-encryption backup (`classai_preencryption_backup_...`).
+  String _quarantineBaseName() => 'classai_quarantined';
 
   /// Recovers from a conversion that was interrupted mid-way, based on the
   /// persisted [DbEncryptionState.converting] marker.
@@ -143,7 +262,6 @@ class DatabaseEncryptionBootstrap {
     // would be inconsistent.
     _checkpointPlaintext(dbPath);
 
-    final stateFile = File(p.join(dbDirectory, _stateFileName));
     _writeState(dbDirectory, DbEncryptionState.converting);
 
     final encryptedPath = p.join(dbDirectory, _encryptedTempName);

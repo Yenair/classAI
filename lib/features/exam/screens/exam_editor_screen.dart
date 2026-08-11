@@ -325,7 +325,17 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       final db = ref.read(databaseProvider);
       final exists = await db.schemeOfWorkDao.getById(_schemeOfWorkLocalId!) != null;
       if (mounted) {
-        setState(() => _sourceMissing = !exists);
+        setState(() {
+          _sourceMissing = !exists;
+          // Prevention: release the dead scheme link in-memory so the exam
+          // becomes fully editable (topic field) and the error banner clears.
+          // No DB row is modified until the user explicitly saves.
+          if (!exists) {
+            _schemeOfWorkLocalId = null;
+            _isFromSchemeOfWork = false;
+            _isManualTopicEntry = true;
+          }
+        });
       }
     } catch (_) {}
   }
@@ -1431,6 +1441,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
     final totalQuestions = _mcqs.length + _theoryQuestions.length + _subjectiveQuestions.length;
+    // True when there are no generated questions to regenerate. Guards the
+    // "Regenerate with AI" button so it is disabled for title-only exams.
+    final examBodyEmpty = totalQuestions == 0;
 
     return CallbackShortcuts(
       bindings: {
@@ -1442,14 +1455,15 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Navigation Drawer (tablet+) ──────────────────────────
-          _NavDrawer(
-            cs: cs,
-            theme: theme,
-            isOpen: _editorSidebarOpen,
-            onToggleSidebar: () => setState(
-                () => _editorSidebarOpen = !_editorSidebarOpen),
-          ),
+          // ── Navigation Drawer (tablet+; never on Android) ─────────
+          if (PlatformHelper.shouldShowSidebar(context))
+            _NavDrawer(
+              cs: cs,
+              theme: theme,
+              isOpen: _editorSidebarOpen,
+              onToggleSidebar: () => setState(
+                  () => _editorSidebarOpen = !_editorSidebarOpen),
+            ),
 
           // ── Main Content ─────────────────────────────────────────
           Expanded(
@@ -1533,6 +1547,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                           difficulty: _difficulty,
                                           isGenerating: _isGenerating,
                                           isRegenerating: _isRegenerating,
+                                          examBodyEmpty: examBodyEmpty,
                                           onRegenerate: _isUnlocked ? _handleRegenerate : null,
                                           reviewController: _reviewController,
                                           offlineCreditBalance: _offlineCreditBalance,
@@ -1620,6 +1635,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                         difficulty: _difficulty,
                                         isGenerating: _isGenerating,
                                         isRegenerating: _isRegenerating,
+                                        examBodyEmpty: examBodyEmpty,
                                         onRegenerate: _isUnlocked ? _handleRegenerate : null,
                                         reviewController: _reviewController,
                                         offlineCreditBalance: _offlineCreditBalance,
@@ -2069,6 +2085,7 @@ class _ConfigPanel extends StatelessWidget {
   final String difficulty;
   final bool isGenerating;
   final bool isRegenerating;
+  final bool examBodyEmpty;
   final int offlineCreditBalance;
   final List<String> subjects;
   final List<String> classLevels;
@@ -2106,6 +2123,7 @@ class _ConfigPanel extends StatelessWidget {
     required this.difficulty,
     required this.isGenerating,
     this.isRegenerating = false,
+    this.examBodyEmpty = false,
     required this.offlineCreditBalance,
     required this.subjects,
     required this.classLevels,
@@ -2630,7 +2648,9 @@ class _ConfigPanel extends StatelessWidget {
                         width: double.infinity,
                         height: AppTheme.touchTarget,
                         child: FilledButton.icon(
-                          onPressed: isRegenerating ? null : onRegenerate,
+                          onPressed: isRegenerating || examBodyEmpty
+                              ? null
+                              : onRegenerate,
                           style: FilledButton.styleFrom(
                             backgroundColor: cs.secondary,
                             foregroundColor: cs.onSecondary,

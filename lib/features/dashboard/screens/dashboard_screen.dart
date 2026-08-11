@@ -180,7 +180,10 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
       NavItem(icon: Icons.menu_book_rounded, label: 'Lessons', route: '/lessons'),
       NavItem(icon: Icons.quiz_rounded, label: 'Exams', route: '/exams'),
       // NavItem(icon: Icons.inventory_2_rounded, label: 'Vault', route: '/vault'), // Vault feature disabled
-      NavItem(icon: Icons.calendar_month_rounded, label: 'Scheme of Work', route: '/scheme-of-work'),
+      // Scheme of Work is admin-only — teachers plan their term via "Plan My
+      // Term" on the Lessons list.
+      if (isAdmin)
+        NavItem(icon: Icons.calendar_month_rounded, label: 'Scheme of Work', route: '/scheme-of-work'),
       if (isAdmin)
         NavItem(icon: Icons.admin_panel_settings_rounded, label: 'Admin', route: '/admin'),
     ];
@@ -1780,6 +1783,32 @@ class ReaderLayout extends ConsumerStatefulWidget {
 class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
   int _selectedIndex = 1; // Lessons is active by default in the HTML
 
+  /// Bottom-nav destinations. The Scheme of Work tab is admin-only — teachers
+  /// plan their term via "Plan My Term" on the Lessons list.
+  List<_ReaderNavSpec> get _navSpecs {
+    final isAdmin = ref.read(authProvider).currentTeacher?.role == 'admin';
+    final specs = <_ReaderNavSpec>[
+      const _ReaderNavSpec(icon: Icons.home_rounded, label: 'Home', route: 'home'),
+      const _ReaderNavSpec(
+          icon: Icons.menu_book_rounded, label: 'Lessons', route: '/lessons', isFilled: true),
+      const _ReaderNavSpec(icon: Icons.quiz_rounded, label: 'Exams', route: 'exams'),
+      if (isAdmin)
+        const _ReaderNavSpec(
+            icon: Icons.calendar_month_rounded, label: 'Scheme of Work', route: '/scheme-of-work'),
+      const _ReaderNavSpec(icon: Icons.more_horiz_rounded, label: 'More', route: '/settings'),
+    ];
+    for (var i = 0; i < specs.length; i++) {
+      specs[i] = _ReaderNavSpec(
+        icon: specs[i].icon,
+        label: specs[i].label,
+        route: specs[i].route,
+        isFilled: specs[i].isFilled,
+        index: i,
+      );
+    }
+    return specs;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -2195,28 +2224,29 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
         selectedIndex: _selectedIndex,
         cs: cs,
         theme: theme,
-        onTap: (index) {
-          setState(() => _selectedIndex = index);
-          _onNavDestination(context, index);
+        destinations: _navSpecs,
+        onTap: (spec) {
+          setState(() => _selectedIndex = spec.index);
+          _onNavDestination(context, spec.route);
         },
       ),
     );
   }
 
-  void _onNavDestination(BuildContext context, int index) {
-    switch (index) {
-      case 0:
+  void _onNavDestination(BuildContext context, String route) {
+    switch (route) {
+      case 'home':
         break; // Home (already here)
-      case 1:
+      case '/lessons':
         _goToLessonsDeferred(context);
         break;
-      case 2:
+      case 'exams':
         _showReaderExamPopup(context);
         break;
-      case 3:
+      case '/scheme-of-work':
         context.go('/scheme-of-work');
         break;
-      case 4:
+      case '/settings':
         context.go('/settings');
         break;
     }
@@ -2265,18 +2295,36 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
   }
 }
 
+class _ReaderNavSpec {
+  final IconData icon;
+  final String label;
+  final String route;
+  final bool isFilled;
+  final int index;
+
+  const _ReaderNavSpec({
+    required this.icon,
+    required this.label,
+    required this.route,
+    this.isFilled = false,
+    this.index = 0,
+  });
+}
+
 class _ReaderBottomNav extends StatelessWidget {
   const _ReaderBottomNav({
     required this.selectedIndex,
     required this.cs,
     required this.theme,
+    required this.destinations,
     required this.onTap,
   });
 
   final int selectedIndex;
   final ColorScheme cs;
   final ThemeData theme;
-  final ValueChanged<int> onTap;
+  final List<_ReaderNavSpec> destinations;
+  final ValueChanged<_ReaderNavSpec> onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -2299,51 +2347,16 @@ class _ReaderBottomNav extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Expanded(child: _BottomNavItem(
-            icon: Icons.home_rounded,
-            label: 'Home',
-            isActive: selectedIndex == 0,
-            isFilled: false,
-            cs: cs,
-            theme: theme,
-            onTap: () => onTap(0),
-          )),
-          Expanded(child: _BottomNavItem(
-            icon: Icons.menu_book_rounded,
-            label: 'Lessons',
-            isActive: selectedIndex == 1,
-            isFilled: true,
-            cs: cs,
-            theme: theme,
-            onTap: () => onTap(1),
-          )),
-          Expanded(child: _BottomNavItem(
-            icon: Icons.quiz_rounded,
-            label: 'Exams',
-            isActive: selectedIndex == 2,
-            isFilled: false,
-            cs: cs,
-            theme: theme,
-            onTap: () => onTap(2),
-          )),
-          Expanded(child: _BottomNavItem(
-            icon: Icons.calendar_month_rounded,
-            label: 'Scheme of Work',
-            isActive: selectedIndex == 3,
-            isFilled: false,
-            cs: cs,
-            theme: theme,
-            onTap: () => onTap(3),
-          )),
-          Expanded(child: _BottomNavItem(
-            icon: Icons.more_horiz_rounded,
-            label: 'More',
-            isActive: selectedIndex == 4,
-            isFilled: false,
-            cs: cs,
-            theme: theme,
-            onTap: () => onTap(4),
-          )),
+          for (final spec in destinations)
+            Expanded(child: _BottomNavItem(
+              icon: spec.icon,
+              label: spec.label,
+              isActive: selectedIndex == spec.index,
+              isFilled: spec.isFilled,
+              cs: cs,
+              theme: theme,
+              onTap: () => onTap(spec),
+            )),
         ],
       ),
     );

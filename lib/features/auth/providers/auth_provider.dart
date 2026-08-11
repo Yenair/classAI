@@ -915,7 +915,13 @@ class AuthNotifier extends Notifier<AuthStateData> {
       );
     }
 
-    await _securityService.clearAll();
+    // Clear auth credentials (JWT, session, password hash, last-login marker)
+    // but PRESERVE the SQLCipher database encryption passphrase. The encrypted
+    // classai.db file is intentionally kept (unsynced local rows are preserved
+    // by _clearTeacherLocalData below), so the passphrase must remain stable to
+    // avoid a key-mismatch on the next launch. Clearing it here would cause the
+    // next launch to generate a new passphrase and fail to decrypt the old file.
+    await _securityService.clearAuthCredentials();
 
     // Scope-delete the outgoing teacher's local data *after* clearing
     // secure storage but *before* resetting state (so currentTeacher is

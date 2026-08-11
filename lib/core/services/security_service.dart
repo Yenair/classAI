@@ -107,6 +107,34 @@ class SecurityService {
     await _secureStorage.delete(key: _lastLoggedInTeacherKey);
   }
 
+  /// Clear auth-related credentials (JWT, session key, password hash, cached
+  /// last-login marker) but PRESERVE the SQLCipher database encryption
+  /// passphrase (`db_encryption_key`).
+  ///
+  /// The passphrase is a device-scoped data key that must remain stable for as
+  /// long as the encrypted `classai.db` file exists on disk. Clearing it on
+  /// logout (as a blanket [clearAll] would) while leaving the encrypted file
+  /// behind would regenerate a NEW passphrase on the next launch and cause a
+  /// SQLCipher HMAC key-mismatch on the stale file. Auth credentials, by
+  /// contrast, are per-session and safe to wipe on logout.
+  Future<void> clearAuthCredentials() async {
+    await _secureStorage.delete(key: 'auth_token');
+    await _secureStorage.delete(key: 'session_key');
+    await _secureStorage.delete(key: 'session_key_expiry');
+    await _secureStorage.delete(key: 'password_hash');
+    await _secureStorage.delete(key: _lastLoggedInTeacherKey);
+  }
+
+  /// Delete ONLY the SQLCipher database encryption passphrase.
+  ///
+  /// Used by the key-mismatch recovery flow, AFTER the user explicitly
+  /// confirms, so a brand-new passphrase is generated next launch and matches
+  /// the freshly-created (or re-initialised) database. This must never be
+  /// called in the normal logout path (see [clearAuthCredentials]).
+  Future<void> clearDbEncryptionPassphrase() async {
+    await _secureStorage.delete(key: _dbEncryptionKey);
+  }
+
   /// Read the stored SQLCipher database encryption passphrase, or `null` if
   /// none has been generated yet.
   ///

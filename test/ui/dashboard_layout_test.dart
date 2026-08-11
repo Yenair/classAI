@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide AuthState;
+import 'package:classai/core/providers/config_provider.dart';
+import 'package:classai/core/services/config_service.dart';
 import 'package:classai/features/dashboard/screens/dashboard_screen.dart';
 
 /// Increase the test viewport so the dashboard content does not
@@ -25,7 +29,23 @@ Widget _wrapApp(Widget child) {
   );
 }
 
+class MockSupabaseClient extends Mock implements SupabaseClient {}
+class MockFunctionsClient extends Mock implements FunctionsClient {}
+
+/// Builds a mock Supabase client whose `get-config` function fails fast so
+/// [ConfigService.refresh] throws synchronously with no network I/O.
+MockSupabaseClient buildMockSupabase() {
+  final supabase = MockSupabaseClient();
+  final functions = MockFunctionsClient();
+  when(() => functions.invoke('get-config')).thenThrow(
+    FunctionException(status: 500),
+  );
+  when(() => supabase.functions).thenReturn(functions);
+  return supabase;
+}
+
 void main() {
+  final mockSupabase = buildMockSupabase();
   testWidgets('EditorLayout shows nav drawer and header', (tester) async {
     await ensureViewportHeight(tester);
     SharedPreferences.setMockInitialValues({
@@ -34,6 +54,11 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
+        overrides: [
+          configServiceProvider.overrideWithValue(
+            ConfigService(client: mockSupabase),
+          ),
+        ],
         child: _wrapApp(const EditorLayout()),
       ),
     );
@@ -47,15 +72,15 @@ void main() {
     expect(find.text('ClassAI'), findsWidgets);
 
     // Nav drawer labels should be present for a non-admin teacher.
+    // (Vault is disabled and Scheme of Work is admin-only, so the drawer
+    // has Home, Lessons, Exams only.)
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Lessons'), findsOneWidget);
     expect(find.text('Exams'), findsOneWidget);
-    expect(find.text('Vault'), findsOneWidget);
-    expect(find.text('Scheme of Work'), findsOneWidget);
-    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('Scheme of Work'), findsNothing);
   });
 
-  testWidgets('EditorLayout has 5 nav icons (non-admin)',
+  testWidgets('EditorLayout has 3 nav items (non-admin)',
       (tester) async {
     await ensureViewportHeight(tester);
     SharedPreferences.setMockInitialValues({
@@ -65,6 +90,11 @@ void main() {
     // pumpWidget with a fresh ProviderScope tree
     await tester.pumpWidget(
       ProviderScope(
+        overrides: [
+          configServiceProvider.overrideWithValue(
+            ConfigService(client: mockSupabase),
+          ),
+        ],
         child: _wrapApp(const EditorLayout()),
       ),
     );
@@ -83,11 +113,29 @@ void main() {
     );
     expect(sidebar, findsWidgets);
 
-    final sidebarNavItems = find.descendant(
-      of: sidebar.first,
-      matching: find.byType(InkWell),
+    // A non-admin teacher gets exactly 3 nav items: Home, Lessons, Exams.
+    // (Vault is disabled and Scheme of Work is admin-only.) The sidebar
+    // header/logo is a separate InkWell, so we assert on the item labels
+    // rather than an InkWell count.
+    const navLabels = ['Home', 'Lessons', 'Exams'];
+    for (final label in navLabels) {
+      expect(
+        find.descendant(of: sidebar.first, matching: find.text(label)),
+        findsOneWidget,
+      );
+    }
+    expect(
+      find.descendant(of: sidebar.first, matching: find.text('Vault')),
+      findsNothing,
     );
-    expect(sidebarNavItems, findsNWidgets(5));
+    expect(
+      find.descendant(of: sidebar.first, matching: find.text('Scheme of Work')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: sidebar.first, matching: find.text('Admin')),
+      findsNothing,
+    );
 
     // Admin icon should NOT be present for non-admin users
     expect(find.byIcon(Icons.admin_panel_settings_rounded), findsNothing);
