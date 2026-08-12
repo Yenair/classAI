@@ -2,7 +2,9 @@
 
 ## Build & Analysis
 - NEVER run `flutter clean` or `dart analyze`.
-- RUN `flutter analyze --no-pub` only on files changed, instead.
+- RUN `flutter analyze --no-pub ` with 120 seconds timeout for each script only on files changed, instead.
+
+try to run flutter test, as less often as possible, once confirmed a change, no need to run and re run it again, unless you implement a change. 
 
 ## File Modification Scope
 - ONLY modify files explicitly mentioned in the task, even after finding errors in them.
