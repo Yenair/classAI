@@ -60,7 +60,11 @@ class SyncQueueDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
-  Future<void> incrementAttempts(int id, {DateTime? lastAttemptAt}) async {
+  Future<void> incrementAttempts(
+    int id, {
+    DateTime? lastAttemptAt,
+    DateTime? nextRetryAt,
+  }) async {
     final rows = await (select(syncQueue)..where((t) => t.id.equals(id)))
         .get();
     if (rows.isEmpty) {
@@ -73,8 +77,46 @@ class SyncQueueDao extends DatabaseAccessor<AppDatabase>
       SyncQueueCompanion(
         attempts: Value(current.attempts + 1),
         lastAttemptAt: Value(lastAttemptAt ?? DateTime.now()),
+        nextRetryAt: nextRetryAt != null
+            ? Value(nextRetryAt)
+            : const Value.absent(),
       ),
       );
+  }
+
+  /// One-time recovery for legacy terminal rows that were dropped purely
+  /// because a retryable failure exhausted the old 5-attempt cap.
+  ///
+  /// Resets ONLY rows whose [lastError] carries the precise server signal for
+  /// this failure class (Postgres NOT NULL violation — the server returned
+  /// `retryable: true` with exactly this message while the INSERT was being
+  /// rejected). Rows terminal for any other reason are untouched.
+  ///
+  /// Idempotent: reset rows no longer match `is_terminal = true`, so a second
+  /// run returns 0. Returns the number of rows reset so callers can log it.
+  Future<int> recoverRetryableTerminalRows() async {
+    final matching = await (select(syncQueue)
+          ..where((t) =>
+              t.isTerminal.equals(true) &
+              t.lastError.isNotNull() &
+              t.lastError.cast<String>().like('%violates not-null constraint%')))
+        .get();
+    if (matching.isEmpty) {
+      return 0;
+    }
+    final now = DateTime.now();
+    final ids = matching.map((r) => r.id).toList();
+    await (update(syncQueue)..where((t) => t.id.isIn(ids))).write(
+      SyncQueueCompanion(
+        isTerminal: const Value(false),
+        attempts: const Value(0),
+        nextRetryAt: const Value(null),
+        failedAt: const Value(null),
+        lastAttemptAt: Value(now),
+        // last_error is deliberately kept for visibility.
+      ),
+    );
+    return matching.length;
   }
 
   Future<void> markTerminalFailure(

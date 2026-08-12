@@ -522,13 +522,22 @@ abstract class SyncRecordStore {
 
   Future<List<SyncQueueData>> loadPendingQueue();
 
-  Future<void> markQueueAttempt(int queueId, {DateTime? attemptedAt});
+  Future<void> markQueueAttempt(
+    int queueId, {
+    DateTime? attemptedAt,
+    DateTime? nextRetryAt,
+  });
 
   Future<void> markQueueTerminalFailure(
     int queueId, {
     String? lastError,
     DateTime? failedAt,
   });
+
+  /// One-time recovery for legacy terminal rows that were dropped only
+  /// because a retryable failure exhausted the old 5-attempt cap. Resets the
+  /// matching rows to pending and returns how many were reset (0 is a no-op).
+  Future<int> recoverRetryableTerminalRows();
 
   Future<void> removeQueueEntry(int queueId);
 
@@ -686,11 +695,21 @@ class DriftSyncRecordStore implements SyncRecordStore {
   }
 
   @override
-  Future<void> markQueueAttempt(int queueId, {DateTime? attemptedAt}) {
+  Future<void> markQueueAttempt(
+    int queueId, {
+    DateTime? attemptedAt,
+    DateTime? nextRetryAt,
+  }) {
     return db.syncQueueDao.incrementAttempts(
       queueId,
       lastAttemptAt: attemptedAt,
+      nextRetryAt: nextRetryAt,
     );
+  }
+
+  @override
+  Future<int> recoverRetryableTerminalRows() {
+    return db.syncQueueDao.recoverRetryableTerminalRows();
   }
 
   @override
@@ -762,6 +781,11 @@ class DriftSyncRecordStore implements SyncRecordStore {
 }
 
 class SyncService {
+  /// One-shot guard: the legacy terminal-row recovery (rows dropped only
+  /// because a retryable failure exhausted the old 5-attempt cap) runs once
+  /// per process, on the first push cycle.
+  static bool _legacyRetryRecoveryDone = false;
+
   final AppDatabase db;
   final String schoolId;
   final SecurityService securityService;
@@ -1273,6 +1297,21 @@ class SyncService {
   }
 
   Future<void> _pushChanges() async {
+    // ── One-time legacy recovery ────────────────────────────────────────
+    // Rows dropped only because a retryable failure exhausted the old
+    // 5-attempt cap are reset to pending once per process. Idempotent: a
+    // later run has nothing left to match and resets 0 rows. Runs BEFORE the
+    // pending guard so a queue that only contains dropped (terminal) rows is
+    // still recovered and pushed on the same cycle.
+    if (!_legacyRetryRecoveryDone) {
+      _legacyRetryRecoveryDone = true;
+      final recovered = await store.recoverRetryableTerminalRows();
+      if (recovered > 0) {
+        debugPrint(
+            '[SYNC-RECOVERY] Recovered $recovered terminal retryable rows');
+      }
+    }
+
     final pending = await store.loadPendingQueue();
     if (pending.isEmpty) {
       return;
@@ -1282,9 +1321,25 @@ class SyncService {
     final batches = <SyncPushBatch>[];
     final config = await store.loadSecurityConfig();
 
-    debugPrint('[PUSH-QUEUE] Pending sync entries: ${sorted.length}');
+    // ── Per-entry cooldown filter ───────────────────────────────────────
+    // Entries still in their retry cooldown (next_retry_at in the future)
+    // stay pending but are NOT pushed this cycle; they are automatically
+    // reconsidered on the next launch/manual sync once the cooldown elapses.
+    // If every pending entry is in cooldown, skip the remote push entirely.
+    final now = DateTime.now();
+    final toPush = sorted
+        .where((e) => e.nextRetryAt == null || !e.nextRetryAt!.isAfter(now))
+        .toList();
+    if (toPush.isEmpty) {
+      debugPrint('[PUSH-QUEUE] All ${sorted.length} pending entries are in '
+          'cooldown — skipping push');
+      return;
+    }
 
-    for (final entry in sorted) {
+    debugPrint('[PUSH-QUEUE] Pending sync entries: ${sorted.length} '
+        '(${toPush.length} due for push)');
+
+    for (final entry in toPush) {
       final payload = _decodePayload(entry.payload);
       debugPrint('[PUSH-QUEUE] Entry ${entry.id}: '
           'table=${entry.queueTable}, '
@@ -1358,12 +1413,32 @@ class SyncService {
       deviceId: config.currentDeviceId,
     );
 
-    final resultsByLocalId = {
-      for (final result in response.results) result.localId: result,
-    };
+    // Pair each server result to the entry that produced it BY INDEX: the
+    // sync-push edge function processes changes in order and returns exactly
+    // one result per change, so results[i] belongs to toPush[i]. Key by
+    // '<table>:<localId>' so numeric ids from different tables (subjects,
+    // lessons, exams, scheme_of_work each auto-increment independently) never
+    // collide — a bare local_id map silently assigned one table's result (and
+    // its server_id) to every entry sharing the same numeric id.
+    final resultsByTableAndLocalId = <String, SyncPushResult>{};
+    final paired = toPush.length < response.results.length
+        ? toPush.length
+        : response.results.length;
+    for (var i = 0; i < paired; i++) {
+      resultsByTableAndLocalId[
+          '${toPush[i].queueTable}:${toPush[i].recordLocalId}'] =
+          response.results[i];
+    }
+    if (response.results.length != toPush.length) {
+      debugPrint(
+        '[PUSH-RESULT] WARNING: result count ${response.results.length} '
+        '!= entry count ${toPush.length} — index pairing may be misaligned',
+      );
+    }
 
-    for (final entry in sorted) {
-      final result = resultsByLocalId[entry.recordLocalId];
+    for (final entry in toPush) {
+      final result = resultsByTableAndLocalId[
+          '${entry.queueTable}:${entry.recordLocalId}'];
 
       debugPrint('[PUSH-RESULT] Entry ID: ${entry.id}, '
           'Table: ${entry.queueTable}, Operation: ${entry.operation}, '
@@ -1371,32 +1446,19 @@ class SyncService {
 
       if (result == null) {
         // ── Defensive: no server result for this entry ──────────────
-        // This can happen when the server rejects an entry BEFORE extracting
-        // the local_id from the payload, e.g. admin-table guard or table-
-        // allowlist check that runs before local_id extraction.  The server
-        // returns local_id=0, which doesn't match any entry's recordLocalId.
-        //
-        // Without this fallback, such entries would only have their attempt
-        // counter incremented and NEVER reach the terminal logic, causing
-        // indefinite retries that jam the queue.
+        // The server can reject an entry before echoing local_id (returning
+        // local_id=0) or the response can be truncated. The failure cannot be
+        // classified, so it is NEVER marked terminal from the attempt count
+        // alone — increment attempts and schedule a retry cooldown instead.
         final nextAttempts = entry.attempts + 1;
         debugPrint('[PUSH-RESULT] No result returned from server for this entry'
-            ' (attempt $nextAttempts)');
-
-        if (nextAttempts >= 5) {
-          debugPrint(
-            '[PUSH-RESULT] Marking orphan queue entry terminal '
-            '(id=${entry.id}, table=${entry.queueTable}, '
-            'operation=${entry.operation}, attempts=$nextAttempts)',
-          );
-          await store.markQueueTerminalFailure(
-            entry.id,
-            lastError: 'No server result after $nextAttempts attempts — '
-                'likely rejected by admin-table guard with local_id=0',
-          );
-        } else {
-          await store.markQueueAttempt(entry.id);
-        }
+            ' (attempt $nextAttempts) — scheduling retry cooldown');
+        final backoffSeconds = _retryBackoffSeconds(nextAttempts);
+        await store.markQueueAttempt(
+          entry.id,
+          nextRetryAt: DateTime.now().add(Duration(seconds: backoffSeconds)),
+        );
+        _setState(SyncState.backoff);
         continue;
       }
 
@@ -1447,7 +1509,6 @@ class SyncService {
 
       debugPrint('[PUSH-RESULT] Entry ${entry.id} not successful — '
           'retryable=${result.retryable}, attempts=${entry.attempts}');
-      await store.markQueueAttempt(entry.id);
       final nextAttempts = entry.attempts + 1;
       final failureMessage = result.errorMessage ??
           'Sync push failed for ${entry.queueTable} ${entry.operation}';
@@ -1458,17 +1519,20 @@ class SyncService {
       // _applyCreditState() deletes only isEmergency==false rows, and
       // pendingEntries() filters isTerminal==false, so marking an emergency
       // entry terminal would silently drop it from the queue. Instead it
-      // falls through to backoff and stays pending.
+      // stays pending and is pushed again on the next cycle (no per-entry
+      // cooldown — emergency entries are urgent).
       if (entry.isEmergency) {
+        await store.markQueueAttempt(entry.id);
         debugPrint(
           '[PUSH-RESULT] Emergency entry ${entry.id} NOT marked terminal '
-          '(attempt $nextAttempts/5) — retained in pending queue',
+          '(attempt $nextAttempts) — retained in pending queue',
         );
         _setState(SyncState.backoff);
       } else if (!result.retryable) {
         // ── Non-retryable: server indicated this entry will NEVER succeed
         // (e.g. admin-table push from a non-admin user, or a non-syncable
         // table). Preserve it as terminal so the failure stays visible.
+        await store.markQueueAttempt(entry.id);
         debugPrint(
           '[PUSH-RESULT] Marking non-retryable queue entry terminal '
           '(id=${entry.id}, table=${entry.queueTable}, '
@@ -1478,25 +1542,33 @@ class SyncService {
           entry.id,
           lastError: failureMessage,
         );
-      } else if (nextAttempts >= 5) {
-        // ── Stuck item cleanup ──────────────────────────────────
-        // Retain exhausted retries as terminal rows so the failure remains
-        // visible instead of disappearing silently.
-        debugPrint(
-          '[PUSH-RESULT] Marking stuck queue entry terminal '
-          '(id=${entry.id}, table=${entry.queueTable}, '
-          'operation=${entry.operation}, attempts=$nextAttempts)',
-        );
-        await store.markQueueTerminalFailure(
-          entry.id,
-          lastError: failureMessage,
-        );
       } else {
+        // ── Retryable: NEVER terminal from the attempt count alone. Increment
+        // attempts, schedule next_retry_at with exponential backoff, and keep
+        // the entry pending — it is automatically reconsidered after the
+        // cooldown elapses on a later launch/manual sync.
+        final backoffSeconds = _retryBackoffSeconds(nextAttempts);
+        final nextRetryAt = DateTime.now().add(Duration(seconds: backoffSeconds));
+        await store.markQueueAttempt(
+          entry.id,
+          nextRetryAt: nextRetryAt,
+        );
         debugPrint('[PUSH-RESULT] Entry ${entry.id} is retryable '
-            '(attempt $nextAttempts/5), entering backoff');
+            '(attempt $nextAttempts) — next retry at $nextRetryAt, '
+            'entering backoff');
         _setState(SyncState.backoff);
       }
     }
+  }
+
+  /// Exponential retry backoff for a failed push attempt: 30s * 2^(n-1),
+  /// capped at 1 hour, where [attemptNumber] is the 1-based attempt count.
+  static int _retryBackoffSeconds(int attemptNumber) {
+    var exponent = attemptNumber - 1;
+    if (exponent < 0) exponent = 0;
+    if (exponent > 7) exponent = 7;
+    final seconds = 30 * (1 << exponent);
+    return seconds > 3600 ? 3600 : seconds;
   }
 
   /// Updates the [serverId] column on a local record after a successful push.

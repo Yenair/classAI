@@ -12,6 +12,7 @@ class SyncQueue extends Table {
   BoolColumn get isTerminal => boolean().withDefault(const Constant(false))();
   TextColumn get lastError => text().nullable()();
   DateTimeColumn get failedAt => dateTime().nullable()();
+  DateTimeColumn get nextRetryAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastAttemptAt => dateTime().nullable()();
 

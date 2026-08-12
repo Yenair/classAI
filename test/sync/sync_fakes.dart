@@ -173,8 +173,21 @@ class FakeSyncRecordStore implements SyncRecordStore {
   }
 
   @override
-  Future<void> markQueueAttempt(int queueId, {DateTime? attemptedAt}) {
-    return db.syncQueueDao.incrementAttempts(queueId, lastAttemptAt: attemptedAt);
+  Future<void> markQueueAttempt(
+    int queueId, {
+    DateTime? attemptedAt,
+    DateTime? nextRetryAt,
+  }) {
+    return db.syncQueueDao.incrementAttempts(
+      queueId,
+      lastAttemptAt: attemptedAt,
+      nextRetryAt: nextRetryAt,
+    );
+  }
+
+  @override
+  Future<int> recoverRetryableTerminalRows() {
+    return db.syncQueueDao.recoverRetryableTerminalRows();
   }
 
   @override

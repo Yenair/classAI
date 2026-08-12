@@ -100,7 +100,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => 25;
 
   static QueryExecutor _openConnection() {
     final security = SecurityService();
@@ -992,6 +992,21 @@ class AppDatabase extends _$AppDatabase {
                 recorded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
               )
             ''');
+          }
+          if (from < 25) {
+            // Per-entry retry cooldown: retryable push failures stay pending and
+            // are only reconsidered after next_retry_at. Idempotent ALTER that
+            // preserves all existing rows — no table rebuild.
+            final syncQueueCols = await customSelect(
+              "SELECT name FROM pragma_table_info('sync_queue')",
+            ).get();
+            final syncQueueColNames =
+                syncQueueCols.map((r) => r.read<String>('name')).toSet();
+            if (!syncQueueColNames.contains('next_retry_at')) {
+              await customStatement(
+                'ALTER TABLE sync_queue ADD COLUMN next_retry_at TEXT',
+              );
+            }
           }
         },
         beforeOpen: (details) async {

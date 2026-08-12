@@ -8477,6 +8477,12 @@ class $SyncQueueTable extends SyncQueue
   late final GeneratedColumn<DateTime> failedAt = GeneratedColumn<DateTime>(
       'failed_at', aliasedName, true,
       type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _nextRetryAtMeta =
+      const VerificationMeta('nextRetryAt');
+  @override
+  late final GeneratedColumn<DateTime> nextRetryAt = GeneratedColumn<DateTime>(
+      'next_retry_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -8503,6 +8509,7 @@ class $SyncQueueTable extends SyncQueue
         isTerminal,
         lastError,
         failedAt,
+        nextRetryAt,
         createdAt,
         lastAttemptAt
       ];
@@ -8571,6 +8578,12 @@ class $SyncQueueTable extends SyncQueue
       context.handle(_failedAtMeta,
           failedAt.isAcceptableOrUnknown(data['failed_at']!, _failedAtMeta));
     }
+    if (data.containsKey('next_retry_at')) {
+      context.handle(
+          _nextRetryAtMeta,
+          nextRetryAt.isAcceptableOrUnknown(
+              data['next_retry_at']!, _nextRetryAtMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -8610,6 +8623,8 @@ class $SyncQueueTable extends SyncQueue
           .read(DriftSqlType.string, data['${effectivePrefix}last_error']),
       failedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}failed_at']),
+      nextRetryAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}next_retry_at']),
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       lastAttemptAt: attachedDatabase.typeMapping.read(
@@ -8634,6 +8649,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
   final bool isTerminal;
   final String? lastError;
   final DateTime? failedAt;
+  final DateTime? nextRetryAt;
   final DateTime createdAt;
   final DateTime? lastAttemptAt;
   const SyncQueueData(
@@ -8647,6 +8663,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
       required this.isTerminal,
       this.lastError,
       this.failedAt,
+      this.nextRetryAt,
       required this.createdAt,
       this.lastAttemptAt});
   @override
@@ -8665,6 +8682,9 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
     }
     if (!nullToAbsent || failedAt != null) {
       map['failed_at'] = Variable<DateTime>(failedAt);
+    }
+    if (!nullToAbsent || nextRetryAt != null) {
+      map['next_retry_at'] = Variable<DateTime>(nextRetryAt);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || lastAttemptAt != null) {
@@ -8689,6 +8709,9 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
       failedAt: failedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(failedAt),
+      nextRetryAt: nextRetryAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nextRetryAt),
       createdAt: Value(createdAt),
       lastAttemptAt: lastAttemptAt == null && nullToAbsent
           ? const Value.absent()
@@ -8710,6 +8733,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
       isTerminal: serializer.fromJson<bool>(json['isTerminal']),
       lastError: serializer.fromJson<String?>(json['lastError']),
       failedAt: serializer.fromJson<DateTime?>(json['failedAt']),
+      nextRetryAt: serializer.fromJson<DateTime?>(json['nextRetryAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastAttemptAt: serializer.fromJson<DateTime?>(json['lastAttemptAt']),
     );
@@ -8728,6 +8752,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
       'isTerminal': serializer.toJson<bool>(isTerminal),
       'lastError': serializer.toJson<String?>(lastError),
       'failedAt': serializer.toJson<DateTime?>(failedAt),
+      'nextRetryAt': serializer.toJson<DateTime?>(nextRetryAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastAttemptAt': serializer.toJson<DateTime?>(lastAttemptAt),
     };
@@ -8744,6 +8769,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
           bool? isTerminal,
           Value<String?> lastError = const Value.absent(),
           Value<DateTime?> failedAt = const Value.absent(),
+          Value<DateTime?> nextRetryAt = const Value.absent(),
           DateTime? createdAt,
           Value<DateTime?> lastAttemptAt = const Value.absent()}) =>
       SyncQueueData(
@@ -8757,6 +8783,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
         isTerminal: isTerminal ?? this.isTerminal,
         lastError: lastError.present ? lastError.value : this.lastError,
         failedAt: failedAt.present ? failedAt.value : this.failedAt,
+        nextRetryAt: nextRetryAt.present ? nextRetryAt.value : this.nextRetryAt,
         createdAt: createdAt ?? this.createdAt,
         lastAttemptAt:
             lastAttemptAt.present ? lastAttemptAt.value : this.lastAttemptAt,
@@ -8778,6 +8805,8 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
           data.isTerminal.present ? data.isTerminal.value : this.isTerminal,
       lastError: data.lastError.present ? data.lastError.value : this.lastError,
       failedAt: data.failedAt.present ? data.failedAt.value : this.failedAt,
+      nextRetryAt:
+          data.nextRetryAt.present ? data.nextRetryAt.value : this.nextRetryAt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastAttemptAt: data.lastAttemptAt.present
           ? data.lastAttemptAt.value
@@ -8798,6 +8827,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
           ..write('isTerminal: $isTerminal, ')
           ..write('lastError: $lastError, ')
           ..write('failedAt: $failedAt, ')
+          ..write('nextRetryAt: $nextRetryAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastAttemptAt: $lastAttemptAt')
           ..write(')'))
@@ -8816,6 +8846,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
       isTerminal,
       lastError,
       failedAt,
+      nextRetryAt,
       createdAt,
       lastAttemptAt);
   @override
@@ -8832,6 +8863,7 @@ class SyncQueueData extends DataClass implements Insertable<SyncQueueData> {
           other.isTerminal == this.isTerminal &&
           other.lastError == this.lastError &&
           other.failedAt == this.failedAt &&
+          other.nextRetryAt == this.nextRetryAt &&
           other.createdAt == this.createdAt &&
           other.lastAttemptAt == this.lastAttemptAt);
 }
@@ -8847,6 +8879,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
   final Value<bool> isTerminal;
   final Value<String?> lastError;
   final Value<DateTime?> failedAt;
+  final Value<DateTime?> nextRetryAt;
   final Value<DateTime> createdAt;
   final Value<DateTime?> lastAttemptAt;
   const SyncQueueCompanion({
@@ -8860,6 +8893,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
     this.isTerminal = const Value.absent(),
     this.lastError = const Value.absent(),
     this.failedAt = const Value.absent(),
+    this.nextRetryAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastAttemptAt = const Value.absent(),
   });
@@ -8874,6 +8908,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
     this.isTerminal = const Value.absent(),
     this.lastError = const Value.absent(),
     this.failedAt = const Value.absent(),
+    this.nextRetryAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastAttemptAt = const Value.absent(),
   })  : queueTable = Value(queueTable),
@@ -8891,6 +8926,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
     Expression<bool>? isTerminal,
     Expression<String>? lastError,
     Expression<DateTime>? failedAt,
+    Expression<DateTime>? nextRetryAt,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastAttemptAt,
   }) {
@@ -8905,6 +8941,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
       if (isTerminal != null) 'is_terminal': isTerminal,
       if (lastError != null) 'last_error': lastError,
       if (failedAt != null) 'failed_at': failedAt,
+      if (nextRetryAt != null) 'next_retry_at': nextRetryAt,
       if (createdAt != null) 'created_at': createdAt,
       if (lastAttemptAt != null) 'last_attempt_at': lastAttemptAt,
     });
@@ -8921,6 +8958,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
       Value<bool>? isTerminal,
       Value<String?>? lastError,
       Value<DateTime?>? failedAt,
+      Value<DateTime?>? nextRetryAt,
       Value<DateTime>? createdAt,
       Value<DateTime?>? lastAttemptAt}) {
     return SyncQueueCompanion(
@@ -8934,6 +8972,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
       isTerminal: isTerminal ?? this.isTerminal,
       lastError: lastError ?? this.lastError,
       failedAt: failedAt ?? this.failedAt,
+      nextRetryAt: nextRetryAt ?? this.nextRetryAt,
       createdAt: createdAt ?? this.createdAt,
       lastAttemptAt: lastAttemptAt ?? this.lastAttemptAt,
     );
@@ -8972,6 +9011,9 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
     if (failedAt.present) {
       map['failed_at'] = Variable<DateTime>(failedAt.value);
     }
+    if (nextRetryAt.present) {
+      map['next_retry_at'] = Variable<DateTime>(nextRetryAt.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -8994,6 +9036,7 @@ class SyncQueueCompanion extends UpdateCompanion<SyncQueueData> {
           ..write('isTerminal: $isTerminal, ')
           ..write('lastError: $lastError, ')
           ..write('failedAt: $failedAt, ')
+          ..write('nextRetryAt: $nextRetryAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastAttemptAt: $lastAttemptAt')
           ..write(')'))
@@ -18404,6 +18447,7 @@ typedef $$SyncQueueTableCreateCompanionBuilder = SyncQueueCompanion Function({
   Value<bool> isTerminal,
   Value<String?> lastError,
   Value<DateTime?> failedAt,
+  Value<DateTime?> nextRetryAt,
   Value<DateTime> createdAt,
   Value<DateTime?> lastAttemptAt,
 });
@@ -18418,6 +18462,7 @@ typedef $$SyncQueueTableUpdateCompanionBuilder = SyncQueueCompanion Function({
   Value<bool> isTerminal,
   Value<String?> lastError,
   Value<DateTime?> failedAt,
+  Value<DateTime?> nextRetryAt,
   Value<DateTime> createdAt,
   Value<DateTime?> lastAttemptAt,
 });
@@ -18460,6 +18505,9 @@ class $$SyncQueueTableFilterComposer
 
   ColumnFilters<DateTime> get failedAt => $composableBuilder(
       column: $table.failedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get nextRetryAt => $composableBuilder(
+      column: $table.nextRetryAt, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
@@ -18508,6 +18556,9 @@ class $$SyncQueueTableOrderingComposer
   ColumnOrderings<DateTime> get failedAt => $composableBuilder(
       column: $table.failedAt, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<DateTime> get nextRetryAt => $composableBuilder(
+      column: $table.nextRetryAt, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 
@@ -18555,6 +18606,9 @@ class $$SyncQueueTableAnnotationComposer
   GeneratedColumn<DateTime> get failedAt =>
       $composableBuilder(column: $table.failedAt, builder: (column) => column);
 
+  GeneratedColumn<DateTime> get nextRetryAt => $composableBuilder(
+      column: $table.nextRetryAt, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -18598,6 +18652,7 @@ class $$SyncQueueTableTableManager extends RootTableManager<
             Value<bool> isTerminal = const Value.absent(),
             Value<String?> lastError = const Value.absent(),
             Value<DateTime?> failedAt = const Value.absent(),
+            Value<DateTime?> nextRetryAt = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> lastAttemptAt = const Value.absent(),
           }) =>
@@ -18612,6 +18667,7 @@ class $$SyncQueueTableTableManager extends RootTableManager<
             isTerminal: isTerminal,
             lastError: lastError,
             failedAt: failedAt,
+            nextRetryAt: nextRetryAt,
             createdAt: createdAt,
             lastAttemptAt: lastAttemptAt,
           ),
@@ -18626,6 +18682,7 @@ class $$SyncQueueTableTableManager extends RootTableManager<
             Value<bool> isTerminal = const Value.absent(),
             Value<String?> lastError = const Value.absent(),
             Value<DateTime?> failedAt = const Value.absent(),
+            Value<DateTime?> nextRetryAt = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> lastAttemptAt = const Value.absent(),
           }) =>
@@ -18640,6 +18697,7 @@ class $$SyncQueueTableTableManager extends RootTableManager<
             isTerminal: isTerminal,
             lastError: lastError,
             failedAt: failedAt,
+            nextRetryAt: nextRetryAt,
             createdAt: createdAt,
             lastAttemptAt: lastAttemptAt,
           ),
