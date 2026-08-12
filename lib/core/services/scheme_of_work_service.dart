@@ -292,7 +292,10 @@ class SchemeOfWorkService {
     required String subject,
   }) {
     for (final lesson in lessons) {
-      if (lesson.isDeleted || lesson.status != 'draft') continue;
+      if (lesson.isDeleted ||
+          (lesson.status != 'draft' && lesson.status != 'generated')) {
+        continue;
+      }
       if (weekId != null) {
         final existingSchemeId = int.tryParse(lesson.schemeOfWorkId ?? '');
         if (existingSchemeId == weekId) return lesson;
@@ -666,7 +669,13 @@ class SchemeOfWorkService {
 
       final orphanLessons = await db.lessonsDao.getAll();
       for (final lesson in orphanLessons) {
-        if (lesson.isDeleted || lesson.status != 'draft') continue;
+        // Generated lessons count as plan content too — they are deleted on a
+        // deliberate plan replace (the same way scheme-linked lessons of any
+        // status are), so a fresh plan is not blocked by leftover rows.
+        if (lesson.isDeleted ||
+            (lesson.status != 'draft' && lesson.status != 'generated')) {
+          continue;
+        }
         if (lesson.schemeOfWorkId != null && lesson.schemeOfWorkId!.isNotEmpty) {
           continue; // linked to a scheme row — handled above
         }

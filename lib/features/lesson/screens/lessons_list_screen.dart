@@ -52,7 +52,7 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
     _StatusFilterItem('Draft', Icons.edit_note_rounded),
     _StatusFilterItem('Completed', Icons.check_circle_rounded),
     _StatusFilterItem('Unlocked', Icons.lock_open_rounded),
-    _StatusFilterItem('Linked to Scheme', Icons.link_rounded),
+    _StatusFilterItem('Generated', Icons.auto_awesome_rounded),
     _StatusFilterItem('Needs Sync', Icons.sync_rounded),
   ];
 
@@ -64,18 +64,70 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
   bool _hasPlanForFilters = false;
   final Map<int, SchemeOfWorkData> _schemesById = {};
 
+  /// Cache of lesson id → "content is an empty placeholder" computed once per
+  /// loaded list (see [_rebuildContentEmptyCache]). Predicates read from this
+  /// instead of parsing every lesson's content JSON on each filter render.
+  Map<int, bool> _lessonContentEmptyById = {};
+
   static const _prefPrefix = 'lessons_filter_';
 
   @override
   void initState() {
     super.initState();
     _loadFilterPreferences();
+    // Rebuild the content-empty cache whenever the list reloads/refreshes so
+    // the filter predicates never parse content JSON per row per frame.
+    ref.listen(lessonsListProvider, (prev, next) {
+      next.whenData(_rebuildContentEmptyCache);
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(syncStatusProvider.notifier).refresh();
       ref.read(offlineCreditStateProvider.notifier).refresh();
       ref.read(unresolvedConflictsProvider.notifier).refresh();
       _loadSchemesForDisplay();
     });
+  }
+
+  void _rebuildContentEmptyCache(List<Lesson> lessons) {
+    final cache = <int, bool>{};
+    for (final lesson in lessons) {
+      cache[lesson.id] = _isLessonContentEmpty(lesson.content);
+    }
+    _lessonContentEmptyById = cache;
+  }
+
+  /// True when [content] is an empty placeholder (no populated sections), e.g.
+  /// the rows auto-created from a scheme of work. Same logic as the lesson
+  /// editor's helper, kept here so filter predicates can classify legacy rows.
+  bool _isLessonContentEmpty(String content) {
+    final trimmed = content.trim();
+    if (trimmed.isEmpty) return true;
+    try {
+      final decoded = jsonDecode(trimmed);
+      if (decoded is! Map<String, dynamic>) return true;
+      final objectives = decoded['objectives'];
+      final vocabulary = decoded['vocabulary'];
+      final materials = decoded['materials'];
+      final presentation = decoded['presentation'];
+      final assessment = decoded['assessment'];
+      final homework = decoded['homework'];
+      return _isEmptyListOrBlank(objectives) &&
+          _isEmptyListOrBlank(vocabulary) &&
+          _isEmptyListOrBlank(materials) &&
+          _isEmptyListOrBlank(presentation) &&
+          _isEmptyListOrBlank(assessment) &&
+          _isEmptyListOrBlank(homework);
+    } catch (_) {
+      // Non-JSON (e.g. encrypted) content counts as real content.
+      return false;
+    }
+  }
+
+  bool _isEmptyListOrBlank(dynamic value) {
+    if (value == null) return true;
+    if (value is List) return value.isEmpty;
+    if (value is String) return value.trim().isEmpty;
+    return false;
   }
 
   Future<void> _loadFilterPreferences() async {
@@ -459,15 +511,26 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
   }
 
   bool _matchesStatusFilter(Lesson lesson) {
+    final contentEmpty = _lessonContentEmptyById[lesson.id] ??
+        _isLessonContentEmpty(lesson.content);
     switch (_selectedStatusFilter) {
       case 'Draft':
-        return lesson.status == 'draft';
+        // Never generated: still 'draft', not unlocked, and content is an
+        // empty placeholder. Unlocked legacy rows and lessons with content
+        // are excluded from Draft.
+        return lesson.status == 'draft' &&
+            !lesson.isUnlocked &&
+            contentEmpty;
+      case 'Generated':
+        // New persisted status, plus legacy fallbacks: unlocking always
+        // follows generation, and any lesson with real content counts too.
+        return lesson.status == 'generated' ||
+            lesson.isUnlocked ||
+            !contentEmpty;
       case 'Completed':
         return lesson.status == 'completed';
       case 'Unlocked':
         return lesson.isUnlocked;
-      case 'Linked to Scheme':
-        return lesson.schemeOfWorkId != null;
       case 'Needs Sync':
         return lesson.serverId == null;
       default:
@@ -668,72 +731,6 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
               letterSpacing: -0.12,
             ),
           ),
-          actions: [
-            // Single "Create" flyout replaces the old "New Lesson" button and
-            // the "Plan My Term"/"Refresh Plan" button. Works for both teacher
-            // and admin roles. The sync/credit widgets live in a right-aligned
-            // body row so the actions never overflow on narrow screens.
-            PopupMenuButton<String>(
-              onSelected: (option) => _handleCreateOption(option),
-              tooltip: 'Create',
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'single',
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.add_rounded),
-                    title: Text('✏️  Add Single Lesson'),
-                    dense: true,
-                  ),
-                ),
-                const PopupMenuDivider(),
-                PopupMenuItem(
-                  value: 'offline',
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.auto_awesome_rounded),
-                    title: const Text('📋  Bulk Generate'),
-                    dense: true,
-                  ),
-                ),
-                if (_hasPlanForFilters)
-                  PopupMenuItem(
-                    value: 'refresh',
-                    child: ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.refresh_rounded),
-                      title: const Text('🔄  Refresh Plan'),
-                      dense: true,
-                    ),
-                  ),
-              ],
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.add_rounded, size: 20, color: cs.primary),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Create',
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: cs.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Icon(
-                      Icons.arrow_drop_down_rounded,
-                      color: cs.primary,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
           elevation: 0,
           backgroundColor: cs.surface,
           foregroundColor: cs.onSurface,
@@ -742,17 +739,71 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
         body: Column(
           children: [
             const ConflictBanner(),
+            // Primary action — full width, directly under the banner so it no
+            // longer competes with the AppBar title. Same flyout as before.
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  const SyncIndicator(),
-                  const SizedBox(width: 8),
-                  OfflineCreditCounter(
-                    visible: ref.watch(isOfflineProvider),
+              child: PopupMenuButton<String>(
+                onSelected: (option) => _handleCreateOption(option),
+                tooltip: 'Create',
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'single',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.add_rounded),
+                      title: Text('✏️  Add Single Lesson'),
+                      dense: true,
+                    ),
                   ),
+                  const PopupMenuDivider(),
+                  PopupMenuItem(
+                    value: 'offline',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.auto_awesome_rounded),
+                      title: const Text('📋  Bulk Generate'),
+                      dense: true,
+                    ),
+                  ),
+                  if (_hasPlanForFilters)
+                    PopupMenuItem(
+                      value: 'refresh',
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.refresh_rounded),
+                        title: const Text('🔄  Refresh Plan'),
+                        dense: true,
+                      ),
+                    ),
                 ],
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: cs.primary,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.add_rounded, size: 20, color: cs.onPrimary),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Create',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: cs.onPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.arrow_drop_down_rounded,
+                        color: cs.onPrimary,
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
             Expanded(
@@ -841,6 +892,16 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
                       onTermChanged: _setTermFilter,
                       onClassChanged: _setClassFilter,
                       onSubjectChanged: _setSubjectFilter,
+                      headerTrailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SyncIndicator(),
+                          const SizedBox(width: 4),
+                          OfflineCreditCounter(
+                            visible: ref.watch(isOfflineProvider),
+                          ),
+                        ],
+                      ),
                     ),
                   );
 
@@ -1132,6 +1193,7 @@ class _LessonFiltersPanel extends StatelessWidget {
     required this.onTermChanged,
     required this.onClassChanged,
     required this.onSubjectChanged,
+    this.headerTrailing,
   });
 
   final ColorScheme cs;
@@ -1150,6 +1212,10 @@ class _LessonFiltersPanel extends StatelessWidget {
   final ValueChanged<String> onTermChanged;
   final ValueChanged<String> onClassChanged;
   final ValueChanged<String> onSubjectChanged;
+
+  /// Compact status widgets (sync + offline credits) shown at the right of the
+  /// "Filters" header, before the expand chevron.
+  final Widget? headerTrailing;
 
   @override
   Widget build(BuildContext context) {
@@ -1180,6 +1246,10 @@ class _LessonFiltersPanel extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
+                  if (headerTrailing != null) ...[
+                    headerTrailing!,
+                    const SizedBox(width: 8),
+                  ],
                   Icon(
                     expanded
                         ? Icons.expand_less_rounded

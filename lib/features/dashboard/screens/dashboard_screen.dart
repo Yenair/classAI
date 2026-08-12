@@ -1203,7 +1203,9 @@ class _RecentLessonsSection extends ConsumerWidget {
                                         : lesson.subject,
                                     subtitle:
                                         '${lesson.classLevel} • ${lesson.subject}',
-                                    status: lesson.status == 'completed' ? 'Completed' : 'Draft',
+                                    status: lesson.status == 'completed'
+    ? 'Completed'
+    : (lesson.status == 'generated' ? 'Generated' : 'Draft'),
                                       statusColor: cs.primary,
                                       statusBg: cs.primary.withValues(alpha: 0.1),
                                       timeAgo: 'Updated ${_timeAgo(lesson.updatedAt)}',
@@ -1234,7 +1236,9 @@ class _RecentLessonsSection extends ConsumerWidget {
                                           : lesson.subject,
                                       subtitle:
                                           '${lesson.classLevel} • ${lesson.subject}',
-                                      status: lesson.status == 'completed' ? 'Completed' : 'Draft',
+                                      status: lesson.status == 'completed'
+    ? 'Completed'
+    : (lesson.status == 'generated' ? 'Generated' : 'Draft'),
                                       statusColor: cs.onSurfaceVariant,
                                       statusBg: cs.surfaceContainerHighest,
                                       timeAgo:
@@ -1265,7 +1269,9 @@ class _RecentLessonsSection extends ConsumerWidget {
                                   : lesson.subject,
                               subtitle:
                                   '${lesson.classLevel} • ${lesson.subject}',
-                              status: lesson.status == 'completed' ? 'Completed' : 'Draft',
+                              status: lesson.status == 'completed'
+    ? 'Completed'
+    : (lesson.status == 'generated' ? 'Generated' : 'Draft'),
                               statusColor: cs.primary,
                               statusBg: cs.primary.withValues(alpha: 0.1),
                               timeAgo: 'Updated ${_timeAgo(lesson.updatedAt)}',

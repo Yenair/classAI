@@ -795,6 +795,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             _homeworkController.text = _homeworkText;
             _diagramResults = generatedDiagrams;
             _hasGenerated = true;
+            if (_lessonStatus == 'draft') _lessonStatus = 'generated';
             _configExpanded = false;
             _isUnlocked = false;
             _isGenerating = false;
@@ -932,6 +933,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         _homeworkText = raw['homework'] as String? ?? '';
         _homeworkController.text = _homeworkText;
         _hasGenerated = true;
+        if (_lessonStatus == 'draft') _lessonStatus = 'generated';
         _configExpanded = false;
         _isRegenerating = false;
         _previewRevision++;
@@ -1091,6 +1093,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         teacherServerId: Value(_teacherId),
         schoolServerId: Value(_schoolId),
         isUnlocked: Value(_isUnlocked),
+        status: Value(_lessonStatus),
         schemeOfWorkId: schemeOfWorkIdStr != null
             ? Value(schemeOfWorkIdStr)
             : const Value.absent(),
@@ -1176,6 +1179,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           teacherServerId: Value(_teacherId),
           schoolServerId: Value(_schoolId),
           isUnlocked: Value(_isUnlocked),
+          status: Value(_lessonStatus),
           schemeOfWorkId: schemeOfWorkIdStr != null
               ? Value(schemeOfWorkIdStr)
               : const Value.absent(),
@@ -1223,7 +1227,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
 
   Future<void> _handleToggleComplete() async {
     if (_lessonId == null || _schoolId == null || _teacherId == null) return;
-    final newStatus = _lessonStatus == 'completed' ? 'draft' : 'completed';
+    final newStatus = _lessonStatus == 'completed' ? 'generated' : 'completed';
     try {
       final db = ref.read(databaseProvider);
       await db.lessonsDao.updateStatus(_lessonId!, newStatus);
@@ -3411,7 +3415,9 @@ class _PreviewColumn extends StatelessWidget {
                   FilledButton(
                     onPressed: lessonStatus == 'completed'
                         ? null
-                        : (isUnlocked && lessonStatus == 'draft'
+                        : (isUnlocked &&
+                                (lessonStatus == 'draft' ||
+                                    lessonStatus == 'generated')
                             ? onMarkCompleted ?? onSave
                             : onSave),
                     style: FilledButton.styleFrom(
@@ -3426,7 +3432,9 @@ class _PreviewColumn extends StatelessWidget {
                     ),
                     child: Text(lessonStatus == 'completed'
                         ? 'Completed'
-                        : (isUnlocked && lessonStatus == 'draft'
+                        : (isUnlocked &&
+                                (lessonStatus == 'draft' ||
+                                    lessonStatus == 'generated')
                             ? 'Mark Lesson as Completed'
                             : 'Save')),
                   ),

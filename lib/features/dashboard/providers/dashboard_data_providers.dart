@@ -56,7 +56,10 @@ final lessonCountProvider = FutureProvider<CountData>((ref) async {
     return const CountData(total: 0, draftCount: 0, secondaryCount: 0);
   }
   final lessons = await db.lessonsDao.getAllForTeacher(teacherId, schoolId);
-  final draftCount = lessons.where((l) => l.status == 'draft').length;
+  // Match the list screen's Draft semantics: a lesson is only a draft when it
+  // is still 'draft' AND not unlocked (unlocked legacy rows count as generated).
+  final draftCount =
+      lessons.where((l) => l.status == 'draft' && !l.isUnlocked).length;
   final completedCount = lessons.where((l) => l.status == 'completed').length;
   return CountData(
     total: lessons.length,

@@ -588,7 +588,10 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
           // Check for and create draft lesson
           final existingLessons = await db.lessonsDao.getAll();
           final lessonExists = existingLessons.any((l) {
-            if (l.isDeleted || l.status != 'draft') return false;
+            if (l.isDeleted ||
+                (l.status != 'draft' && l.status != 'generated')) {
+              return false;
+            }
             // Fallback: same scheme_of_work_id (resilient to subject being
             // wiped to '' by sync pull before the empty-remote guard fix).
             final existingSchemeId = int.tryParse(l.schemeOfWorkId ?? '');

@@ -37,7 +37,7 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
     _StatusFilterItem('Draft', Icons.edit_note_rounded),
     _StatusFilterItem('Completed', Icons.check_circle_rounded),
     _StatusFilterItem('Unlocked', Icons.lock_open_rounded),
-    _StatusFilterItem('Linked to Scheme', Icons.link_rounded),
+    _StatusFilterItem('Generated', Icons.auto_awesome_rounded),
     _StatusFilterItem('Needs Sync', Icons.sync_rounded),
   ];
 
@@ -225,8 +225,8 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
       case 'Completed':
       case 'Unlocked':
         return exam.isUnlocked;
-      case 'Linked to Scheme':
-        return exam.schemeOfWorkId != null;
+      case 'Generated':
+        return exam.isUnlocked;
       case 'Needs Sync':
         return exam.serverId == null;
       default:
@@ -505,17 +505,6 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
       body: Column(
         children: [
           const ConflictBanner(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                const SyncIndicator(),
-                const SizedBox(width: 8),
-                OfflineCreditCounter(visible: ref.watch(isOfflineProvider)),
-              ],
-            ),
-          ),
           Expanded(
             child: examsAsync.when(
               loading: () => ListView(
@@ -602,6 +591,16 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
                     onTermChanged: _setTermFilter,
                     onClassChanged: _setClassFilter,
                     onSubjectChanged: _setSubjectFilter,
+                    headerTrailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SyncIndicator(),
+                        const SizedBox(width: 4),
+                        OfflineCreditCounter(
+                          visible: ref.watch(isOfflineProvider),
+                        ),
+                      ],
+                    ),
                   ),
                 );
 
@@ -802,6 +801,7 @@ class _ExamFiltersPanel extends StatelessWidget {
     required this.onTermChanged,
     required this.onClassChanged,
     required this.onSubjectChanged,
+    this.headerTrailing,
   });
 
   final ColorScheme cs;
@@ -820,6 +820,10 @@ class _ExamFiltersPanel extends StatelessWidget {
   final ValueChanged<String> onTermChanged;
   final ValueChanged<String> onClassChanged;
   final ValueChanged<String> onSubjectChanged;
+
+  /// Compact status widgets (sync + offline credits) shown at the right of the
+  /// "Filters" header, before the expand chevron.
+  final Widget? headerTrailing;
 
   @override
   Widget build(BuildContext context) {
@@ -850,6 +854,10 @@ class _ExamFiltersPanel extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
+                  if (headerTrailing != null) ...[
+                    headerTrailing!,
+                    const SizedBox(width: 8),
+                  ],
                   Icon(
                     expanded
                         ? Icons.expand_less_rounded
