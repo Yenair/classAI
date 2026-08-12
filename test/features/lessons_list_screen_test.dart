@@ -91,7 +91,7 @@ Future<AuthFixture> _seedAuthFixture(
 }
 
 /// Seeds a plan (subject + one scheme_of_work week) for Mathematics / JSS 1
-/// / 1st Term so the Plan My Term button flips to "Refresh Plan".
+/// / 1st Term so the Create flyout offers "Refresh Plan".
 Future<void> _seedPlanFixture(AppDatabase db, AuthFixture fixture) async {
   final subjectId = await db.subjectsDao.insert(
     serverId: '00000000-0000-0000-0000-000000000a01',
@@ -143,6 +143,12 @@ Future<void> _pumpLessonsList(
   await tester.pumpAndSettle();
 }
 
+/// Opens the "Create" flyout menu and waits for it to settle.
+Future<void> _openCreateMenu(WidgetTester tester) async {
+  await tester.tap(find.text('Create'));
+  await tester.pumpAndSettle();
+}
+
 /// The term filter dropdown on the lessons list filter panel.
 Finder _termFilterDropdown() {
   return find.ancestor(
@@ -175,9 +181,9 @@ void main() {
     await db.close();
   });
 
-  group('LessonsListScreen Plan My Term button', () {
+  group('LessonsListScreen Create flyout', () {
     testWidgets(
-      'shows "Refresh Plan" with the refresh icon when a plan exists '
+      'offers "Refresh Plan" in the Create menu when a plan exists '
       'for the selected filters',
       (tester) async {
         fixture = await _seedAuthFixture(db, teacherRole: 'teacher');
@@ -185,20 +191,30 @@ void main() {
 
         await _pumpLessonsList(tester, db: db, fixture: fixture);
 
-        expect(find.text('Refresh Plan'), findsOneWidget);
+        // The compact "Create" flyout is the single AppBar action; menu
+        // items are only visible once the menu is open.
+        expect(find.text('Create'), findsOneWidget);
+        expect(find.text('✏️  Add Single Lesson'), findsNothing);
+        expect(find.text('📋  Bulk Generate'), findsNothing);
+        expect(find.text('🔄  Refresh Plan'), findsNothing);
+
+        await _openCreateMenu(tester);
+
+        expect(find.text('✏️  Add Single Lesson'), findsOneWidget);
+        expect(find.text('📋  Bulk Generate'), findsOneWidget);
+        expect(find.text('🔄  Refresh Plan'), findsOneWidget);
         expect(find.byIcon(Icons.refresh_rounded), findsWidgets);
-        expect(find.text('Plan My Term'), findsNothing);
       },
     );
 
     testWidgets(
-      'reverts to "Plan My Term" when the filter combo has no plan',
+      'hides "Refresh Plan" from the Create menu when the filter combo '
+      'has no plan',
       (tester) async {
         fixture = await _seedAuthFixture(db, teacherRole: 'teacher');
         await _seedPlanFixture(db, fixture);
 
         await _pumpLessonsList(tester, db: db, fixture: fixture);
-        expect(find.text('Refresh Plan'), findsOneWidget);
 
         // Change the term filter to one with no plan (2nd Term).
         await tester.tap(_termFilterDropdown());
@@ -206,8 +222,11 @@ void main() {
         await tester.tap(find.text('2nd Term').last);
         await tester.pumpAndSettle();
 
-        expect(find.text('Plan My Term'), findsOneWidget);
-        expect(find.text('Refresh Plan'), findsNothing);
+        await _openCreateMenu(tester);
+
+        expect(find.text('✏️  Add Single Lesson'), findsOneWidget);
+        expect(find.text('📋  Bulk Generate'), findsOneWidget);
+        expect(find.text('🔄  Refresh Plan'), findsNothing);
         expect(find.byIcon(Icons.auto_awesome_rounded), findsWidgets);
       },
     );
@@ -221,15 +240,19 @@ void main() {
 
         await _pumpLessonsList(tester, db: db, fixture: fixture);
 
-        // Open the choice dialog in refresh mode.
-        await tester.tap(find.text('Refresh Plan'));
+        // Open the Create menu and choose Refresh Plan.
+        await _openCreateMenu(tester);
+        await tester.tap(find.text('🔄  Refresh Plan'));
         await tester.pumpAndSettle();
-        expect(find.text('Use Built-in Topics'), findsOneWidget);
-        expect(find.text('Get New Topics Online'), findsOneWidget);
+
+        // The plan dialog opens in refresh mode with both generation options.
+        expect(find.text('Refresh Plan'), findsOneWidget);
+        expect(find.text('📋  Bulk Offline Generate'), findsOneWidget);
+        expect(find.text('🌐  Bulk Online Generate'), findsOneWidget);
         expect(find.text('Refresh your plan?'), findsNothing);
 
-        // Pick "Use Built-in Topics" → confirmation dialog with warning copy.
-        await tester.tap(find.text('Use Built-in Topics'));
+        // Pick offline → confirmation dialog with warning copy.
+        await tester.tap(find.text('📋  Bulk Offline Generate'));
         await tester.pumpAndSettle();
         expect(find.text('Refresh your plan?'), findsOneWidget);
         expect(
@@ -264,18 +287,19 @@ void main() {
     );
 
     testWidgets(
-      '"Get New Topics Online" proceeds when online — no offline SnackBar, '
+      '"Bulk Online Generate" proceeds when online — no offline SnackBar, '
       'no network call is made',
       (tester) async {
-        // No plan seeded → button is "Plan My Term".
+        // No plan seeded → dialog is in create mode.
         fixture = await _seedAuthFixture(db, teacherRole: 'teacher');
 
         await _pumpLessonsList(tester, db: db, fixture: fixture);
 
-        await tester.tap(find.text('Plan My Term'));
+        await _openCreateMenu(tester);
+        await tester.tap(find.text('📋  Bulk Generate'));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Get New Topics Online'));
+        await tester.tap(find.text('🌐  Bulk Online Generate'));
         // The guard resolves via the wifi connectivity fake (no DNS), then
         // the forced-AI path constructs AiService — which throws in tests
         // (Supabase uninitialized) and is caught by _runAutoGenerate. Use

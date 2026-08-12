@@ -497,12 +497,6 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
             letterSpacing: -0.12,
           ),
         ),
-          actions: [
-            const SyncIndicator(),
-            const SizedBox(width: 8),
-            OfflineCreditCounter(visible: ref.watch(isOfflineProvider)),
-            const SizedBox(width: 8),
-          ],
         elevation: 0,
         backgroundColor: cs.surface,
         foregroundColor: cs.onSurface,
@@ -511,6 +505,17 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
       body: Column(
         children: [
           const ConflictBanner(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                const SyncIndicator(),
+                const SizedBox(width: 8),
+                OfflineCreditCounter(visible: ref.watch(isOfflineProvider)),
+              ],
+            ),
+          ),
           Expanded(
             child: examsAsync.when(
               loading: () => ListView(
@@ -729,6 +734,7 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
                               padding: const EdgeInsets.only(bottom: 10),
                               child: _ExamCard(
                                 exam: exam,
+                                position: index + 1,
                                 classLevelLabel: _classLevelLabelForExam(exam),
                                 onTap: () => context.push('/exams/${exam.id}'),
                                 onEdit: () => context.push('/exams/${exam.id}'),
@@ -992,8 +998,50 @@ class _StatusFilterItem {
   final IconData icon;
 }
 
+/// Status-circle colors shared with the lessons list so the mapping stays
+/// consistent across both screens: Draft → grey, Unlocked → blue,
+/// linked to a scheme → orange border. (Green for "completed" only exists
+/// on the lessons list — exams have no completed state.)
+const _draftCircleColor = Color(0xFF9E9E9E);
+const _unlockedCircleColor = Color(0xFF2196F3);
+const _schemeLinkedCircleColor = Color(0xFFFF9800);
+
+/// Exam → circle color: Unlocked → blue, Draft → grey. Exams have no separate
+/// completed state today, so green (completed) only applies to lessons (see
+/// the lessons list's `_lessonStatusCircleColor`).
+Color _examStatusCircleColor(Exam exam) {
+  if (exam.isUnlocked) return _unlockedCircleColor;
+  return _draftCircleColor;
+}
+
+/// Small colored circle showing an item's state. An orange border is drawn
+/// when the item is linked to a scheme of work. Identical implementation on
+/// the lessons list so the two screens stay consistent.
+class _StatusCircle extends StatelessWidget {
+  const _StatusCircle({required this.color, required this.linked});
+
+  final Color color;
+  final bool linked;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 12,
+      height: 12,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color,
+        border: linked
+            ? Border.all(color: _schemeLinkedCircleColor, width: 2)
+            : null,
+      ),
+    );
+  }
+}
+
 class _ExamCard extends StatelessWidget {
   final Exam exam;
+  final int position;
   final String classLevelLabel;
   final VoidCallback onTap;
   final VoidCallback onEdit;
@@ -1001,6 +1049,7 @@ class _ExamCard extends StatelessWidget {
 
   const _ExamCard({
     required this.exam,
+    required this.position,
     required this.classLevelLabel,
     required this.onTap,
     required this.onEdit,
@@ -1033,6 +1082,23 @@ class _ExamCard extends StatelessWidget {
         ),
         child: Row(
           children: [
+            _StatusCircle(
+              color: _examStatusCircleColor(exam),
+              linked: exam.schemeOfWorkId != null,
+            ),
+            const SizedBox(width: 6),
+            SizedBox(
+              width: 18,
+              child: Text(
+                '$position',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
             Container(
               width: 46,
               height: 46,

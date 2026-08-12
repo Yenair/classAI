@@ -61,7 +61,6 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
   String _selectedClassFilter = 'All';
   String _selectedSubjectFilter = 'All';
   bool _filtersExpanded = true;
-  bool _autoGenerating = false;
   bool _hasPlanForFilters = false;
   final Map<int, SchemeOfWorkData> _schemesById = {};
 
@@ -286,7 +285,6 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
     bool forceAI = false,
     bool deleteExistingFirst = false,
   }) async {
-    if (mounted) setState(() => _autoGenerating = true);
     try {
       final db = ref.read(databaseProvider);
       final authState = ref.read(authProvider);
@@ -434,8 +432,6 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
         Navigator.of(context, rootNavigator: true).pop();
       }
       _showToast('Could not create plan: $e');
-    } finally {
-      if (mounted) setState(() => _autoGenerating = false);
     }
   }
 
@@ -675,80 +671,66 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
           actions: [
             // Single "Create" flyout replaces the old "New Lesson" button and
             // the "Plan My Term"/"Refresh Plan" button. Works for both teacher
-            // and admin roles. Wrapped in a horizontal scroll view so the
-            // actions never overflow on narrow screens.
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  PopupMenuButton<String>(
-                    onSelected: (option) => _handleCreateOption(option),
-                    tooltip: 'Create',
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'single',
-                        child: ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(Icons.add_rounded),
-                          title: Text('✏️  Add Single Lesson'),
-                          dense: true,
-                        ),
-                      ),
-                      const PopupMenuDivider(),
-                      PopupMenuItem(
-                        value: 'offline',
-                        child: ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.auto_awesome_rounded),
-                          title: const Text('📋  Bulk Generate'),
-                          dense: true,
-                        ),
-                      ),
-                      if (_hasPlanForFilters)
-                        PopupMenuItem(
-                          value: 'refresh',
-                          child: ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.refresh_rounded),
-                            title: const Text('🔄  Refresh Plan'),
-                            dense: true,
-                          ),
-                        ),
-                    ],
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.add_rounded, size: 20, color: cs.primary),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Create',
-                            style: theme.textTheme.labelLarge?.copyWith(
-                              color: cs.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.arrow_drop_down_rounded,
-                            color: cs.primary,
-                          ),
-                        ],
-                      ),
+            // and admin roles. The sync/credit widgets live in a right-aligned
+            // body row so the actions never overflow on narrow screens.
+            PopupMenuButton<String>(
+              onSelected: (option) => _handleCreateOption(option),
+              tooltip: 'Create',
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'single',
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.add_rounded),
+                    title: Text('✏️  Add Single Lesson'),
+                    dense: true,
+                  ),
+                ),
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'offline',
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.auto_awesome_rounded),
+                    title: const Text('📋  Bulk Generate'),
+                    dense: true,
+                  ),
+                ),
+                if (_hasPlanForFilters)
+                  PopupMenuItem(
+                    value: 'refresh',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.refresh_rounded),
+                      title: const Text('🔄  Refresh Plan'),
+                      dense: true,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  const SyncIndicator(),
-                  const SizedBox(width: 8),
-                  OfflineCreditCounter(
-                    visible: ref.watch(isOfflineProvider),
-                  ),
-                ],
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.add_rounded, size: 20, color: cs.primary),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Create',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: cs.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.arrow_drop_down_rounded,
+                      color: cs.primary,
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -760,6 +742,19 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
         body: Column(
           children: [
             const ConflictBanner(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  const SyncIndicator(),
+                  const SizedBox(width: 8),
+                  OfflineCreditCounter(
+                    visible: ref.watch(isOfflineProvider),
+                  ),
+                ],
+              ),
+            ),
             Expanded(
               child: lessonsAsync.when(
                 loading: () => ListView(
@@ -979,6 +974,7 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
                                 padding: const EdgeInsets.only(bottom: 10),
                                 child: _LessonCard(
                                   lesson: lesson,
+                                  position: index + 1,
                                   classLevelLabel: _classLevelLabelForLesson(lesson),
                                   onTap: () => context.push('/lessons/${lesson.id}'),
                                   onEdit: () => context.push('/lessons/${lesson.id}'),
@@ -1447,8 +1443,49 @@ Future<void> exportLessonPdf(
   }
 }
 
+/// Status-circle colors shared with the exams list so the mapping stays
+/// consistent across both screens: Draft → grey, Unlocked → blue,
+/// Completed → green, linked to a scheme → orange border.
+const _draftCircleColor = Color(0xFF9E9E9E);
+const _unlockedCircleColor = Color(0xFF2196F3);
+const _completedCircleColor = Color(0xFF4CAF50);
+const _schemeLinkedCircleColor = Color(0xFFFF9800);
+
+/// Lesson → circle color: Completed → green, Unlocked → blue, Draft → grey.
+Color _lessonStatusCircleColor(Lesson lesson) {
+  if (lesson.status == 'completed') return _completedCircleColor;
+  if (lesson.isUnlocked) return _unlockedCircleColor;
+  return _draftCircleColor;
+}
+
+/// Small colored circle showing an item's state. An orange border is drawn
+/// when the item is linked to a scheme of work. Identical implementation on
+/// the exams list so the two screens stay consistent.
+class _StatusCircle extends StatelessWidget {
+  const _StatusCircle({required this.color, required this.linked});
+
+  final Color color;
+  final bool linked;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 12,
+      height: 12,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color,
+        border: linked
+            ? Border.all(color: _schemeLinkedCircleColor, width: 2)
+            : null,
+      ),
+    );
+  }
+}
+
 class _LessonCard extends StatelessWidget {
   final Lesson lesson;
+  final int position;
   final String classLevelLabel;
   final VoidCallback onTap;
   final VoidCallback onEdit;
@@ -1457,6 +1494,7 @@ class _LessonCard extends StatelessWidget {
 
   const _LessonCard({
     required this.lesson,
+    required this.position,
     required this.classLevelLabel,
     required this.onTap,
     required this.onEdit,
@@ -1490,6 +1528,23 @@ class _LessonCard extends StatelessWidget {
         ),
         child: Row(
           children: [
+            _StatusCircle(
+              color: _lessonStatusCircleColor(lesson),
+              linked: lesson.schemeOfWorkId != null,
+            ),
+            const SizedBox(width: 6),
+            SizedBox(
+              width: 18,
+              child: Text(
+                '$position',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
             Container(
               width: 46,
               height: 46,
