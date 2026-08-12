@@ -18,6 +18,8 @@ import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
+import 'package:classai/features/dashboard/providers/dashboard_data_providers.dart'
+    show examsListProvider;
 import 'package:classai/main.dart' show databaseProvider;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -849,6 +851,10 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
 
       // Persist the unlock so it survives navigation away and back.
       await _saveExam(notify: false);
+
+      // Refresh the cached exam list so the "Unlocked" filter reflects the
+      // newly unlocked state immediately.
+      ref.invalidate(examsListProvider);
 
       ref.read(offlineCreditStateProvider.notifier).refresh();
 

@@ -999,6 +999,10 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       // Persist the unlock so it survives navigation away and back.
       await _saveLesson(notify: false);
 
+      // Refresh the cached lesson list so the "Unlocked" filter reflects the
+      // newly unlocked state immediately.
+      ref.invalidate(lessonsListProvider);
+
       ref.read(offlineCreditStateProvider.notifier).refresh();
 
       if (mounted) {
