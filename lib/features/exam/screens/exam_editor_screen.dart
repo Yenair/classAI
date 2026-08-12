@@ -847,6 +847,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         }
       });
 
+      // Persist the unlock so it survives navigation away and back.
+      await _saveExam(notify: false);
+
       ref.read(offlineCreditStateProvider.notifier).refresh();
 
       if (mounted) {

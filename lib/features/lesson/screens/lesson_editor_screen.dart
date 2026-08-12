@@ -525,6 +525,10 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             await _resolveLessonTermLabel(db, lesson, schoolLocalId);
         if (lessonTerm == null || lessonTerm.isEmpty) continue;
         if (_normalizeTermLabel(lessonTerm) == targetTerm) {
+          // A scheme-of-work placeholder has empty content. Only treat a
+          // lesson as an existing generated lesson (and block re-generation)
+          // when its content is actually populated.
+          if (_isLessonContentEmpty(lesson.content)) continue;
           return true;
         }
       }
@@ -532,6 +536,41 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     } catch (_) {
       return false;
     }
+  }
+
+  /// Returns true when the stored lesson content is an empty placeholder
+  /// (no populated objectives/vocabulary/materials/presentation/assessment/
+  /// homework), such as the rows auto-created from a scheme of work.
+  bool _isLessonContentEmpty(String content) {
+    final trimmed = content.trim();
+    if (trimmed.isEmpty) return true;
+    try {
+      final decoded = jsonDecode(trimmed);
+      if (decoded is! Map<String, dynamic>) return true;
+      final objectives = decoded['objectives'];
+      final vocabulary = decoded['vocabulary'];
+      final materials = decoded['materials'];
+      final presentation = decoded['presentation'];
+      final assessment = decoded['assessment'];
+      final homework = decoded['homework'];
+      return _isEmptyListOrBlank(objectives) &&
+          _isEmptyListOrBlank(vocabulary) &&
+          _isEmptyListOrBlank(materials) &&
+          _isEmptyListOrBlank(presentation) &&
+          _isEmptyListOrBlank(assessment) &&
+          _isEmptyListOrBlank(homework);
+    } catch (_) {
+      // If it is not valid JSON, treat it as content that should be
+      // preserved and therefore block generation (conservative).
+      return false;
+    }
+  }
+
+  bool _isEmptyListOrBlank(dynamic value) {
+    if (value == null) return true;
+    if (value is List) return value.isEmpty;
+    if (value is String) return value.trim().isEmpty;
+    return false;
   }
 
   void _showCenteredToast({
@@ -657,6 +696,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       );
 
       if (await _hasDuplicateLessonForGeneration(db)) {
+        setState(() => _isGenerating = false);
         if (mounted) {
           _showCenteredToast(
             context: context,
@@ -955,6 +995,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           _offlineCreditBalance = _offlineCreditBalance - 1;
         }
       });
+
+      // Persist the unlock so it survives navigation away and back.
+      await _saveLesson(notify: false);
 
       ref.read(offlineCreditStateProvider.notifier).refresh();
 
