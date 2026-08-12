@@ -1,6 +1,43 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { validateTokenVersion } from "../_shared/validate_token.ts";
 
+/** Tries to recover JSON from model output that is not strict JSON (e.g.
+ *  fenced with ```json or wrapped in prose). Returns null when nothing
+ *  parseable is found. */
+function extractJsonBlock(text: string): Record<string, unknown> | null {
+  const trimmed = text.trim();
+  const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const candidate = fence ? fence[1].trim() : trimmed;
+
+  const firstBrace = candidate.indexOf("{");
+  const lastBrace = candidate.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    try {
+      const parsed = JSON.parse(candidate.slice(firstBrace, lastBrace + 1));
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // not a JSON object — try an array below
+    }
+  }
+
+  const firstBracket = candidate.indexOf("[");
+  const lastBracket = candidate.lastIndexOf("]");
+  if (firstBracket !== -1 && lastBracket > firstBracket) {
+    try {
+      const parsed = JSON.parse(candidate.slice(firstBracket, lastBracket + 1));
+      if (Array.isArray(parsed)) {
+        // A bare weeks array — wrap it in the shape the app expects.
+        return { weeks: parsed };
+      }
+    } catch {
+      // not a JSON array either
+    }
+  }
+  return null;
+}
+
 serve(async (req) => {
   try {
     // ── Auth check: validate custom JWT ─────────────────────────────────
@@ -95,8 +132,9 @@ serve(async (req) => {
     try {
       generatedJson = JSON.parse(generatedText);
     } catch {
-      // If the response isn't valid JSON, return the raw text
-      generatedJson = { text: generatedText };
+      // If the response isn't valid JSON, recover an embedded JSON block
+      // (markdown fences / prose wrapping) before falling back to raw text.
+      generatedJson = extractJsonBlock(generatedText) ?? { text: generatedText };
     }
 
     return new Response(

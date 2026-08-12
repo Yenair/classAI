@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/constants/curriculum_types.dart' show nerdcSubjects;
@@ -189,8 +189,11 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
     final subjectOptions =
         <String>[...filterSubjects, ...nerdcSubjects].toSet().toList();
 
-    // Detect an existing plan for the effective subject/class/term so the
-    // dialog and button switch to "Refresh Plan" mode.
+    // Detect an existing plan for the pre-filled combo so the dialog can
+    // hint at refresh mode. This only drives the dialog title — the teacher
+    // may change subject/class/term inside the dialog, so the actual
+    // "Refresh your plan?" confirmation is decided from the FINAL selection
+    // below (and only fires when a plan exists for that exact combo).
     final db = ref.read(databaseProvider);
     final authState = ref.read(authProvider);
     final school = authState.currentSchool ?? await db.schoolsDao.get();
@@ -207,7 +210,6 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
             term: termLabel,
           )
         : const <SchemeOfWorkData>[];
-    final isRefresh = existingPlan.isNotEmpty;
 
     final selection = await showDialog<_AutoGenerateSelection>(
       context: context,
@@ -216,18 +218,14 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
         initialSubject: subject,
         initialClassLevel: classLevel,
         initialTerm: termLabel,
-        isRefresh: isRefresh,
+        isRefresh: existingPlan.isNotEmpty,
       ),
     );
     if (selection == null || !mounted) return;
 
     // "Get New Topics Online" requires internet — check before doing anything.
     if (selection.useAI && !await PlatformHelper.isOnline()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('This option needs an internet connection.'),
-        ),
-      );
+      _showToast('This option needs an internet connection.');
       return;
     }
 
@@ -236,15 +234,30 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
     await prefs.setString(_prefAutoGenerateTerm, selection.termLabel);
 
     // Refresh mode: confirm before atomically replacing the existing plan.
-    if (isRefresh && mounted) {
+    // The confirmation must ONLY appear when a plan actually exists for the
+    // subject/class/term the teacher finally selected in the dialog (they may
+    // have changed it from the pre-filled values) — a fresh subject/class/
+    // term goes straight to generation with no popup.
+    final hasExistingPlan = (school != null && teacher != null)
+        ? await SchemeOfWorkService(db).findSchemes(
+            schoolId: school.localId,
+            teacherId: teacher.localId,
+            subject: selection.subject,
+            classLevel: selection.classLevel,
+            term: selection.termLabel,
+          )
+        : const <SchemeOfWorkData>[];
+    if (hasExistingPlan.isNotEmpty && mounted) {
       final proceed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Refresh your plan?'),
           content: Text(
-            'This will replace your existing plan for $subject, $classLevel, '
-            '$termLabel with fresh topics. Your previously generated lesson '
-            'content will be kept, but topic titles may change. Continue?',
+            'This will replace your existing plan for '
+            '${selection.subject}, ${selection.classLevel}, '
+            '${selection.termLabel} with fresh topics. Your previously '
+            'generated lesson content will be kept, but topic titles may '
+            'change. Continue?',
           ),
           actions: [
             TextButton(
@@ -264,7 +277,7 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
     await _runAutoGenerate(
       selection,
       forceAI: selection.useAI,
-      deleteExistingFirst: isRefresh,
+      deleteExistingFirst: hasExistingPlan.isNotEmpty,
     );
   }
 
@@ -300,16 +313,10 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
       } else {
         // AI fallback — requires internet.
         if (!await PlatformHelper.isOnline()) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'No internet connection. This subject is not in the built-in '
-                  'list yet — connect to the internet to generate it.',
-                ),
-              ),
-            );
-          }
+          _showToast(
+            'No internet connection. This subject is not in the built-in '
+            'list yet — connect to the internet to generate it.',
+          );
           return;
         }
         if (mounted) {
@@ -336,6 +343,14 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
         final prompt = PromptTemplates.schemeOfWork(
           selection.subject, selection.classLevel, selection.termLabel);
         final result = await aiService.generate(prompt);
+        // TEMPORARY DEBUG (remove once the "AI returned no weeks" root cause
+        // is confirmed in the field): log the request context and the FULL
+        // raw AI response so we can see what the model actually returned.
+        debugPrint(
+          '[AUTOGEN-DEBUG] subject=${selection.subject} '
+          'classLevel=${selection.classLevel} term=${selection.termLabel} '
+          'raw=${jsonEncode(result['raw'] ?? result)}',
+        );
         weeks = parseSchemeWeeks(result);
         if (mounted) Navigator.of(context, rootNavigator: true).pop();
         await aiService.logGeneration(
@@ -343,7 +358,19 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
           schoolId: school.localId.toString(),
           topic: 'SoW: ${selection.subject} ${selection.termLabel}',
         );
-        if (weeks.isEmpty) throw Exception('AI returned no weeks');
+        if (weeks.isEmpty) {
+          // The model returned something we could not turn into a weeks list
+          // (error object, plain prose, or a malformed structure). Show a
+          // friendly message instead of the cryptic "AI returned no weeks".
+          if (mounted) {
+            _showToast(
+              "The AI didn't return a valid scheme of work for "
+              '${selection.subject}, ${selection.classLevel}, '
+              '${selection.termLabel}. Please try again.',
+            );
+          }
+          return;
+        }
       }
 
       // ── 2. Resolve teacher local id ──
@@ -408,23 +435,13 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
 
       ref.invalidate(lessonsListProvider);
       await _loadSchemesForDisplay();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Your plan is ready! Tap a week to start writing.'),
-          ),
-        );
-      }
+      _showToast('Your plan is ready! Tap a week to start writing.');
     } catch (e) {
       if (mounted && Navigator.of(context, rootNavigator: true).canPop()) {
         // Dismiss any loading dialog that is still open on failure.
         Navigator.of(context, rootNavigator: true).pop();
       }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not create plan: $e')),
-        );
-      }
+      _showToast('Could not create plan: $e');
     } finally {
       if (mounted) setState(() => _autoGenerating = false);
     }
@@ -478,7 +495,11 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
 
   bool _matchesClassFilter(Lesson lesson) {
     if (_selectedClassFilter == 'All') return true;
-    return lesson.classLevel == _selectedClassFilter;
+    // Compare normalized labels so a 'JSS3' filter matches lessons stored as
+    // 'JSS 3' (and vice versa) — otherwise freshly generated lessons can
+    // disappear from the list under the class filter that produced them.
+    return _normalizeClassLabel(lesson.classLevel) ==
+        _normalizeClassLabel(_selectedClassFilter);
   }
 
   bool _matchesSubjectFilter(Lesson lesson) {
@@ -596,11 +617,47 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
     );
   }
 
+  /// Handles the single "Create" flyout. [option] selects which action runs.
+  Future<void> _handleCreateOption(String option) async {
+    switch (option) {
+      case 'single':
+        _openNewLesson();
+        break;
+      case 'offline':
+        // Bulk generate — opens the plan dialog so the teacher can choose
+        // between curated offline topics and AI online generation. The
+        // existing internet check and curated-data check are preserved.
+        await _openAutoGenerateDialog();
+        break;
+      case 'refresh':
+        // Refresh re-runs generation against the existing plan selection.
+        // (Only offered when a plan exists for the current filters; the
+        // confirmation still gates on the combo finally chosen in the dialog.)
+        await _openAutoGenerateDialog();
+        break;
+    }
+  }
+
+  /// Shows a readable toast (dark background, white text) on this screen.
+  void _showToast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: const Color(0xFF323232),
+        content: Text(
+          message,
+          style: const TextStyle(color: Colors.white),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final lessonsAsync = ref.watch(lessonsListProvider);
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
+
 
     return PopScope(
       canPop: false,
@@ -623,33 +680,86 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
               letterSpacing: -0.12,
             ),
           ),
-            actions: [
-              if (ref.read(authProvider).currentTeacher?.role != 'admin') ...[
-                FilledButton.tonalIcon(
-                  onPressed: _autoGenerating ? null : _openAutoGenerateDialog,
-                  icon: Icon(
-                    _hasPlanForFilters
-                        ? Icons.refresh_rounded
-                        : Icons.auto_awesome_rounded,
-                    size: 18,
-                  ),
-                  label: Text(
-                    _hasPlanForFilters ? 'Refresh Plan' : 'Plan My Term',
-                  ),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+          actions: [
+            // Single "Create" flyout replaces the old "New Lesson" button and
+            // the "Plan My Term"/"Refresh Plan" button. Works for both teacher
+            // and admin roles. Wrapped in a horizontal scroll view so the
+            // actions never overflow on narrow screens.
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  PopupMenuButton<String>(
+                    onSelected: (option) => _handleCreateOption(option),
+                    tooltip: 'Create',
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'single',
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.add_rounded),
+                          title: Text('✏️  Add Single Lesson'),
+                          dense: true,
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: 'offline',
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.auto_awesome_rounded),
+                          title: const Text('📋  Bulk Generate'),
+                          dense: true,
+                        ),
+                      ),
+                      if (_hasPlanForFilters)
+                        PopupMenuItem(
+                          value: 'refresh',
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(Icons.refresh_rounded),
+                            title: const Text('🔄  Refresh Plan'),
+                            dense: true,
+                          ),
+                        ),
+                    ],
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.add_rounded, size: 20, color: cs.primary),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Create',
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: cs.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.arrow_drop_down_rounded,
+                            color: cs.primary,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-              ],
-              const SyncIndicator(),
-              const SizedBox(width: 8),
-              OfflineCreditCounter(visible: ref.watch(isOfflineProvider)),
-              const SizedBox(width: 8),
-            ],
+                  const SizedBox(width: 8),
+                  const SyncIndicator(),
+                  const SizedBox(width: 8),
+                  OfflineCreditCounter(
+                    visible: ref.watch(isOfflineProvider),
+                  ),
+                ],
+              ),
+            ),
+          ],
           elevation: 0,
           backgroundColor: cs.surface,
           foregroundColor: cs.onSurface,
@@ -786,8 +896,8 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
                                     ),
                                     const SizedBox(height: 6),
                                     Text(
-                                      'Tap "Plan My Term" to build your whole '
-                                      'term at once, or New Lesson for one lesson.',
+                                      'Tap "Create" to add a single lesson or '
+                                      'build your whole term at once.',
                                       style: theme.textTheme.bodyMedium?.copyWith(
                                         color: cs.onSurfaceVariant,
                                       ),
@@ -895,33 +1005,6 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
             ),
           ],
         ),
-        floatingActionButton: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: cs.primary.withValues(alpha: 0.30),
-                blurRadius: 14,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: FloatingActionButton.extended(
-            onPressed: _openNewLesson,
-            heroTag: 'newLesson',
-            backgroundColor: cs.primary,
-            foregroundColor: cs.onPrimary,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-            ),
-            icon: const Icon(Icons.add_rounded),
-            label: const Text(
-              'New Lesson',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -1015,17 +1098,9 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
           );
         }
         ref.invalidate(lessonsListProvider);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Lesson deleted')),
-          );
-        }
+        _showToast('Lesson deleted');
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to delete: $e')),
-          );
-        }
+        _showToast('Failed to delete: $e');
       }
     }
   }
@@ -1035,11 +1110,7 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
     final authState = ref.read(authProvider);
     final school = authState.currentSchool ?? await db.schoolsDao.get();
     if (school == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('School data not available')),
-        );
-      }
+      _showToast('School data not available');
       return;
     }
     final teacherId = authState.currentTeacher?.serverId;
@@ -1359,8 +1430,10 @@ Future<void> exportLessonPdf(
       if (context.mounted && e.remainingCount != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
+            backgroundColor: const Color(0xFF323232),
             content: Text(
               'PDF exported. ${e.remainingCount} export(s) remaining today.',
+              style: const TextStyle(color: Colors.white),
             ),
             duration: const Duration(seconds: 3),
           ),
@@ -1370,7 +1443,13 @@ Future<void> exportLessonPdf(
   } catch (e) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to export PDF: $e')),
+        SnackBar(
+          backgroundColor: const Color(0xFF323232),
+          content: Text(
+            'Failed to export PDF: $e',
+            style: const TextStyle(color: Colors.white),
+          ),
+        ),
       );
     }
   }
@@ -1648,6 +1727,18 @@ String _formatDate(DateTime dt) {
   return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
 }
 
+/// 'JSS3' / 'jss3' / 'JSS 3' → 'JSS 3' (likewise SSS). Keeps class values
+/// stored without a space (legacy/synced data) matching the canonical dialog
+/// and filter labels.
+String _normalizeClassLabel(String value) {
+  final compact = value.trim().toLowerCase().replaceAll(' ', '');
+  final match = RegExp(r'^(jss|sss)(\d)$').firstMatch(compact);
+  if (match != null) {
+    return '${match.group(1)!.toUpperCase()} ${match.group(2)}';
+  }
+  return value;
+}
+
 class _AutoGenerateSelection {
   final String subject;
   final String classLevel;
@@ -1695,14 +1786,37 @@ class _AutoGenerateDialogState extends State<_AutoGenerateDialog> {
     _subject = widget.subjectOptions.contains(widget.initialSubject)
         ? widget.initialSubject
         : widget.subjectOptions.first;
-    _classLevel = _classes.contains(widget.initialClassLevel)
-        ? widget.initialClassLevel
+    // Normalize so a filter value like 'JSS3' (no space) maps to the
+    // canonical 'JSS 3' instead of silently falling back to 'JSS 1' — which
+    // would generate the whole plan under the wrong class.
+    final normalizedClass = _normalizeClassLabel(widget.initialClassLevel);
+    _classLevel = _classes.contains(normalizedClass)
+        ? normalizedClass
         : _classes.first;
     _term = _terms.contains(widget.initialTerm) ? widget.initialTerm : _terms.first;
   }
 
   @override
   Widget build(BuildContext context) {
+    // Whether curated NERDC topics exist for the current subject/class/term.
+    // When missing, "Use Built-in Topics" is disabled with a tooltip.
+    final hasOffline = getNerdcTopics(_subject, _classLevel, _term) != null;
+
+    final offlineButton = hasOffline
+        ? FilledButton(
+            onPressed: () => Navigator.of(context).pop(
+              _AutoGenerateSelection(_subject, _classLevel, _term),
+            ),
+            child: const Text('📋  Bulk Offline Generate'),
+          )
+        : const Tooltip(
+            message: 'No offline topics available for this term.',
+            child: FilledButton(
+              onPressed: null,
+              child: Text('📋  Bulk Offline Generate'),
+            ),
+          );
+
     return AlertDialog(
       title: Text(widget.isRefresh ? 'Refresh Plan' : 'Plan My Term'),
       content: Column(
@@ -1757,14 +1871,9 @@ class _AutoGenerateDialogState extends State<_AutoGenerateDialog> {
           onPressed: () => Navigator.of(context).pop(
             _AutoGenerateSelection(_subject, _classLevel, _term, useAI: true),
           ),
-          child: const Text('Get New Topics Online'),
+          child: const Text('🌐  Bulk Online Generate'),
         ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(
-            _AutoGenerateSelection(_subject, _classLevel, _term),
-          ),
-          child: const Text('Use Built-in Topics'),
-        ),
+        offlineButton,
       ],
     );
   }
