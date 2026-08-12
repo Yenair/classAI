@@ -103,6 +103,83 @@ function getValue(rowData: Record<string, unknown>, ...keys: string[]): unknown 
 }
 
 /**
+ * Normalize a subject name for case/whitespace-insensitive matching:
+ * trims, collapses internal whitespace, lowercases.
+ */
+function normalizeName(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/**
+ * Normalize a class level for case/whitespace-insensitive matching:
+ * same as normalizeName, plus removes ALL spaces so "JSS 1" === "JSS1".
+ * null/undefined (missing class) normalize to "".
+ */
+function normalizeClass(value: string | null | undefined): string {
+  if (value == null) return "";
+  return value.trim().replace(/\s+/g, "").toLowerCase();
+}
+
+/**
+ * Resolve a subject's server UUID from its text name using NORMALIZED
+ * (case/whitespace-insensitive) matching.  All subjects for the school are
+ * fetched once and matched in memory, so "English Studies" matches
+ * "english  studies" and "JSS 1" matches "JSS1".
+ *
+ * Resolution order:
+ *   1. row with the same normalized name AND normalized class
+ *   2. row with the same normalized name and an empty class level
+ *      (client-created subjects have no class — the subjects handler below
+ *      inserts class_level = '')
+ *   3. any row with the same normalized name
+ *
+ * Returns the subject's server UUID or null when no row matches.
+ */
+async function lookupSubjectId(
+  supabase: ReturnType<typeof createClient>,
+  subjectName: string,
+  schoolId: string | undefined,
+  classLevel: string | null | undefined,
+): Promise<string | null> {
+  let query = supabase
+    .from("subjects")
+    .select("id, subject_name, class_level")
+    .limit(1000);
+  if (schoolId) {
+    query = query.eq("school_id", schoolId);
+  }
+  const { data: subjects } = await query;
+  const rows = (subjects ?? []) as Array<{
+    id: string;
+    subject_name: string;
+    class_level: string | null;
+  }>;
+
+  const nName = normalizeName(subjectName);
+  const nClass = normalizeClass(classLevel);
+
+  // 1. Same normalized name AND normalized class.
+  const byNameAndClass = rows.find(
+    (s) =>
+      normalizeName(s.subject_name) === nName &&
+      normalizeClass(s.class_level) === nClass
+  );
+  if (byNameAndClass) return byNameAndClass.id;
+
+  // 2. Same normalized name and an empty class (client-created subject).
+  const byNameEmptyClass = rows.find(
+    (s) =>
+      normalizeName(s.subject_name) === nName &&
+      normalizeClass(s.class_level) === ""
+  );
+  if (byNameEmptyClass) return byNameEmptyClass.id;
+
+  // 3. Any row with the same normalized name.
+  const byNameAny = rows.find((s) => normalizeName(s.subject_name) === nName);
+  return byNameAny?.id ?? null;
+}
+
+/**
  * Default values for columns the client's INSERT payload may omit.
  * The Supabase lessons/exams tables have NOT NULL columns that are not
  * sent directly by the client — they must be derived or defaulted.
@@ -193,30 +270,24 @@ async function resolveForeignKeys(
     }
 
     // ── 3. Subject text name → subject_id UUID lookup ────────────────
-    // The subjects table uses `subject_name`, scoped by school_id and class_level.
-    // If we have both a subject name AND a resolved school_id, use them.
+    // The subjects table uses `subject_name`, scoped by school_id and
+    // class_level.  Matching is NORMALIZED (case/whitespace-insensitive)
+    // because the client sends labels that may differ in case or spacing
+    // from the server rows ("english studies" vs "English Studies",
+    // "JSS1" vs "JSS 1").  See lookupSubjectId() for the fallback chain.
     if (rowData["subject"] && !rowData["subject_id"]) {
       const subjectName = rowData["subject"] as string;
       const schoolId = rowData["school_id"] as string | undefined;
       const classLevel = rowData["class_level"] as string | undefined;
 
-      let subjectQuery = supabase
-        .from("subjects")
-        .select("id")
-        .eq("subject_name", subjectName)
-        .maybeSingle();
-
-      // Narrow by school and class_level if available
-      if (schoolId) {
-        subjectQuery = subjectQuery.eq("school_id", schoolId);
-      }
-      if (classLevel) {
-        subjectQuery = subjectQuery.eq("class_level", classLevel);
-      }
-
-      const { data: subject } = await subjectQuery;
-      if (subject?.id) {
-        rowData["subject_id"] = subject.id;
+      const subjectId = await lookupSubjectId(
+        supabase,
+        subjectName,
+        schoolId,
+        classLevel
+      );
+      if (subjectId) {
+        rowData["subject_id"] = subjectId;
       } else {
         console.warn(
           `resolveForeignKeys: no subject found for name="${subjectName}" ` +
@@ -407,17 +478,29 @@ async function resolveForeignKeys(
     if (rowData["school_server_id"] && !rowData["school_id"]) {
       rowData["school_id"] = rowData["school_server_id"];
     }
-    // Map subject text name → subject_id if needed
+    // Map subject text name → subject_id if needed.  Same NORMALIZED
+    // matching as the lessons/exams lookup (see lookupSubjectId()).
     if (rowData["subject"] && !rowData["subject_id"]) {
       const subjectName = rowData["subject"] as string;
-      const { data: subject } = await supabase
-        .from("subjects")
-        .select("id")
-        .eq("subject_name", subjectName)
-        .maybeSingle();
-      if (subject?.id) {
-        rowData["subject_id"] = subject.id;
+      const schoolId = rowData["school_id"] as string | undefined;
+      const classLevel = rowData["class_level"] as string | undefined;
+      const subjectId = await lookupSubjectId(
+        supabase,
+        subjectName,
+        schoolId,
+        classLevel
+      );
+      if (subjectId) {
+        rowData["subject_id"] = subjectId;
+      } else {
+        console.warn(
+          `resolveForeignKeys: no subject found for name="${subjectName}" ` +
+          `school="${schoolId}" class="${classLevel}" — leaving vault_items.subject_id unset`
+        );
       }
+      // The server stores only subject_id — drop the text `subject` field
+      // (it is not a column on vault_items).
+      delete rowData["subject"];
     }
     // Map author_name → author_name (already correct field)
     // Apply defaults
@@ -464,6 +547,29 @@ async function resolveForeignKeys(
     }
     delete rowData["name"];
     delete rowData["local_id"];
+
+    // ── Fill NOT NULL columns the client payload omits ──────────────
+    // The server subjects table requires school_id, subject_name,
+    // curriculum and class_level (all NOT NULL, no defaults).  The client
+    // only sends subject_name + school_id (see _resolveOrInsertSubjectId
+    // in scheme_of_work_service.dart), so without these defaults the
+    // INSERT fails with "null value in column ... violates not-null
+    // constraint" and the subject never reaches other devices.
+    // curriculum: existing server rows use lowercase "nerdc".
+    // class_level: client-created subjects have no class — '' keeps the
+    //   row findable by the empty-class fallback in lookupSubjectId().
+    if (rowData["curriculum"] === undefined || rowData["curriculum"] === null) {
+      rowData["curriculum"] = "nerdc";
+    }
+    if (rowData["class_level"] === undefined || rowData["class_level"] === null) {
+      rowData["class_level"] = "";
+    }
+    // School must come from the JWT — never trust client-supplied values
+    // (same pattern as lessons/exams/scheme_of_work above).
+    const jwtSchoolId = jwtClaims["school_id"] as string | undefined;
+    if (jwtSchoolId) {
+      rowData["school_id"] = jwtSchoolId;
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════
