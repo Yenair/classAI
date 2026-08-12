@@ -556,26 +556,28 @@ class SchemeOfWorkService {
         updatedAt: Value(DateTime.now()),
       ),
     );
-    if (subjectServerId != null) {
-      await db.syncQueueDao.insertEntry(
-        queueTable: 'scheme_of_work',
-        recordLocalId: newId,
-        operation: 'INSERT',
-        payload: {
-          'teacher_server_id': teacherServerId,
-          'school_server_id': schoolServerId,
-          'subject_id': subjectServerId,
-          'term': term,
-          'week_number': weekNumber,
-          'topic': topic,
-          'objectives': objectives,
-          'status': 'draft',
-          'admin_edited_topic': null,
-          'admin_comment': null,
-          'class_level': classLevel,
-        },
-      );
-    }
+    // Always queue the INSERT sync entry, even when the subject is brand-new
+    // (subjectServerId == null) and has no server UUID yet. sync-push resolves
+    // the subject by name via subject_name when subject_id is not a valid UUID.
+    await db.syncQueueDao.insertEntry(
+      queueTable: 'scheme_of_work',
+      recordLocalId: newId,
+      operation: 'INSERT',
+      payload: {
+        'teacher_server_id': teacherServerId,
+        'school_server_id': schoolServerId,
+        'subject_id': subjectServerId,
+        'subject_name': subject,
+        'term': term,
+        'week_number': weekNumber,
+        'topic': topic,
+        'objectives': objectives,
+        'status': 'draft',
+        'admin_edited_topic': null,
+        'admin_comment': null,
+        'class_level': classLevel,
+      },
+    );
     return newId;
   }
 

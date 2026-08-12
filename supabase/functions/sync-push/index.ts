@@ -218,13 +218,35 @@ const SCHEME_OF_WORK_DEFAULTS: Record<string, unknown> = {
   term: "first",
 };
 
-const VAULT_ITEMS_DEFAULTS: Record<string, unknown> = {
-  min_tier: "free",
-  credit_cost: 0,
-  needs_approval: true,
-  approval_status: "pending",
-  is_deleted: false,
-};
+/**
+ * Push a results entry for a resolveForeignKeys() skip reason.
+ *
+ * Reasons prefixed with "RETRYABLE:" become status:"error" with
+ * retryable:true so the client keeps the entry pending and pushes it again
+ * on the next cycle (used when a foreign key may still be created later in
+ * the same batch, e.g. a brand-new subject whose INSERT has not been
+ * processed yet). Every other reason becomes a terminal status:"skipped"
+ * entry so the client removes it from the queue instead of retrying forever.
+ */
+function pushSkipResult(
+  results: Record<string, unknown>[],
+  localId: number | string,
+  serverId: string | null,
+  table: string,
+  op: string,
+  skipReason: string
+): void {
+  const retryable = skipReason.startsWith("RETRYABLE:");
+  const reason = retryable ? skipReason.slice("RETRYABLE:".length).trim() : skipReason;
+  console.warn(`sync-push: SKIP ${op} on "${table}" (local_id=${localId}): ${reason}`);
+  results.push({
+    local_id: localId,
+    server_id: serverId,
+    status: retryable ? "error" : "skipped",
+    retryable,
+    error: reason,
+  });
+}
 
 /**
  * Apply defaults and resolve text-based references to UUID foreign keys.
@@ -418,11 +440,42 @@ async function resolveForeignKeys(
     rowData["teacher_id"] = jwtTeacherId;
     rowData["teacher_server_id"] = jwtTeacherId;
 
-    // ── 3. Subject_id: validate UUID format —─────────────────────────
-    if (rowData["subject_id"]) {
-      const subId = rowData["subject_id"] as string;
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(subId)) {
-        delete rowData["subject_id"];
+    // ── 3. Subject_id: validate UUID format, else resolve by name ────
+    // A brand-new subject (e.g. "English Studies" created by Bulk Generate)
+    // has no server UUID yet, so the client sends subject_id: null plus
+    // subject_name. When subject_id is missing or not a valid UUID, resolve
+    // it by name via lookupSubjectId(). If the subject row has not been
+    // created yet, return a RETRYABLE error so the entry is pushed again
+    // after the subject INSERT is processed (the sync queue is topologically
+    // sorted: subjects are pushed before scheme_of_work).
+    const subjectName = rowData["subject_name"] as string | undefined;
+    // subject_name is a client-side hint only — never a column on scheme_of_work.
+    delete rowData["subject_name"];
+
+    const rawSubjectId = rowData["subject_id"];
+    const hasValidSubjectId =
+      typeof rawSubjectId === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawSubjectId);
+    if (!hasValidSubjectId) {
+      delete rowData["subject_id"];
+      if (subjectName) {
+        const schoolId = rowData["school_id"] as string | undefined;
+        const classLevel = rowData["class_level"] as string | undefined;
+        const subjectId = await lookupSubjectId(
+          supabase,
+          subjectName,
+          schoolId,
+          classLevel
+        );
+        if (subjectId) {
+          rowData["subject_id"] = subjectId;
+        } else {
+          console.warn(
+            `resolveForeignKeys: scheme_of_work subject "${subjectName}" not found ` +
+            `(school="${schoolId}" class="${classLevel}") — retrying after the subject INSERT is processed`
+          );
+          return `RETRYABLE: Foreign key could not be resolved for scheme_of_work: subject "${subjectName}" not found yet (subject INSERT may still be pending)`;
+        }
       }
     }
 
@@ -470,50 +523,22 @@ async function resolveForeignKeys(
   // vault_items handler
   // ═══════════════════════════════════════════════════════════════
   if (table === "vault_items") {
-    // Resolve teacher_server_id → teacher_id (UUID)
-    if (rowData["teacher_server_id"] && !rowData["teacher_id"]) {
-      rowData["teacher_id"] = rowData["teacher_server_id"];
-    }
-    // Resolve school_server_id → school_id (UUID)
-    if (rowData["school_server_id"] && !rowData["school_id"]) {
-      rowData["school_id"] = rowData["school_server_id"];
-    }
-    // Map subject text name → subject_id if needed.  Same NORMALIZED
-    // matching as the lessons/exams lookup (see lookupSubjectId()).
-    if (rowData["subject"] && !rowData["subject_id"]) {
-      const subjectName = rowData["subject"] as string;
-      const schoolId = rowData["school_id"] as string | undefined;
-      const classLevel = rowData["class_level"] as string | undefined;
-      const subjectId = await lookupSubjectId(
-        supabase,
-        subjectName,
-        schoolId,
-        classLevel
-      );
-      if (subjectId) {
-        rowData["subject_id"] = subjectId;
-      } else {
-        console.warn(
-          `resolveForeignKeys: no subject found for name="${subjectName}" ` +
-          `school="${schoolId}" class="${classLevel}" — leaving vault_items.subject_id unset`
-        );
-      }
-      // The server stores only subject_id — drop the text `subject` field
-      // (it is not a column on vault_items).
-      delete rowData["subject"];
-    }
-    // Map author_name → author_name (already correct field)
-    // Apply defaults
-    for (const [col, defaultVal] of Object.entries(VAULT_ITEMS_DEFAULTS)) {
-      if (rowData[col] === undefined || rowData[col] === null) {
-        rowData[col] = defaultVal;
-      }
-    }
-    // Remove local-only fields
-    delete rowData["teacher_server_id"];
-    delete rowData["school_server_id"];
-    delete rowData["local_id"];
-    delete rowData["encrypted"];
+    // The Vault feature is currently disabled, and the server-side
+    // vault_items table is missing several columns the client payload
+    // contains (teacher_id, author_name, curriculum, class_level, ...).
+    // Pushing INSERT/UPDATE payloads therefore fails permanently and the
+    // sync queue retries them endlessly, cluttering the queue.
+    //
+    // Safest minimal fix: skip every vault_items INSERT/UPDATE as a
+    // non-retryable "skipped" entry (the caller maps a skip reason to
+    // status:"skipped", retryable:false, which the client treats as
+    // terminal and removes from the queue). Local vault data is retained,
+    // and when the feature is re-enabled with an aligned server table this
+    // early return can simply be removed to resume pushing.
+    //
+    // DELETE operations never reach this handler (they are processed by
+    // server_id in the main loop) and keep working.
+    return "Vault items sync is disabled: the server vault_items table is missing client columns (teacher_id, author_name, curriculum, class_level)";
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -859,20 +884,6 @@ serve(async (req) => {
 
       const op = (operation as string).toUpperCase();
 
-      if (table === "subjects" && op === "DELETE" && !isAdmin) {
-        console.warn(
-          `sync-push: non-admin teacher ${jwtClaims.teacher_id} attempted DELETE on admin-only subjects table`,
-        );
-        results.push({
-          local_id: localId,
-          server_id: null,
-          status: "error",
-          retryable: false,
-          error: "Admin access required for this table",
-        });
-        continue;
-      }
-
       // ──────────────────────────────────────────────────────────────────
       // IMPORTANT: Decompress + extract local_id BEFORE any guard checks,
       // so that rejected entries still carry the correct local_id back to
@@ -895,6 +906,23 @@ serve(async (req) => {
       // Extract local_id early so we can echo it back even on failure.
       const localId = (fullRowData["local_id"] as number | string | undefined) ?? 0;
       console.log(`[SYNC-PUSH-DIAG] Entry ${idx}: localId=${localId}, server_id=${fullRowData["server_id"] ?? "null"}`);
+
+      // NOTE: localId is extracted above, BEFORE this guard, so the guard
+      // below can echo the real local_id back to the client (previously it
+      // referenced localId before declaration — a Temporal Dead Zone bug).
+      if (table === "subjects" && op === "DELETE" && !isAdmin) {
+        console.warn(
+          `sync-push: non-admin teacher ${jwtClaims.teacher_id} attempted DELETE on admin-only subjects table`,
+        );
+        results.push({
+          local_id: localId,
+          server_id: null,
+          status: "error",
+          retryable: false,
+          error: "Admin access required for this table",
+        });
+        continue;
+      }
 
       // ══════════════════════════════════════════════════════════════════
       // Fix 9a: Explicit table allowlist
@@ -946,14 +974,7 @@ serve(async (req) => {
           // ════════════════════════════════════════════════════════════
           const skipReason = await resolveForeignKeys(supabase, table, insertData, jwtClaims);
           if (skipReason) {
-            console.warn(`sync-push: SKIP INSERT on "${table}" (local_id=${localId}): ${skipReason}`);
-            results.push({
-              local_id: localId,
-              server_id: null,
-              status: "skipped",
-              retryable: false,
-              error: skipReason,
-            });
+            pushSkipResult(results, localId, null, table, "INSERT", skipReason);
             continue;
           }
 
@@ -1019,14 +1040,7 @@ serve(async (req) => {
           const { local_id: _lid, localId: _lid2, server_id: _sid, serverId: _sid2, id: _id, school_server_id: _ssid, teacher_server_id: _tsid, ...updateData } = fullRowData;
           const updateSkipReason = await resolveForeignKeys(supabase, table, updateData, jwtClaims);
           if (updateSkipReason) {
-            console.warn(`sync-push: SKIP UPDATE on "${table}" (local_id=${localId}): ${updateSkipReason}`);
-            results.push({
-              local_id: localId,
-              server_id: serverId as string,
-              status: "skipped",
-              retryable: false,
-              error: updateSkipReason,
-            });
+            pushSkipResult(results, localId, serverId as string, table, "UPDATE", updateSkipReason);
             continue;
           }
           // Bump updated_at server-side: client payloads never include it and

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/constants/curriculum_types.dart' show nerdcSubjects;
@@ -343,14 +343,6 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
         final prompt = PromptTemplates.schemeOfWork(
           selection.subject, selection.classLevel, selection.termLabel);
         final result = await aiService.generate(prompt);
-        // TEMPORARY DEBUG (remove once the "AI returned no weeks" root cause
-        // is confirmed in the field): log the request context and the FULL
-        // raw AI response so we can see what the model actually returned.
-        debugPrint(
-          '[AUTOGEN-DEBUG] subject=${selection.subject} '
-          'classLevel=${selection.classLevel} term=${selection.termLabel} '
-          'raw=${jsonEncode(result['raw'] ?? result)}',
-        );
         weeks = parseSchemeWeeks(result);
         if (mounted) Navigator.of(context, rootNavigator: true).pop();
         await aiService.logGeneration(
