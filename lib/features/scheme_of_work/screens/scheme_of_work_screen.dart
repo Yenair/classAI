@@ -63,7 +63,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
   String _adminFilterTerm = '';
 
   final List<String> _terms = ['First', 'Second', 'Third'];
-  final Set<String> _expandedTerms = {'First', 'Second', 'Third'};
+  final Set<String> _expandedTerms = {'first', 'second', 'third'};
 
   String _friendlyTerm(String t) {
     switch (t.trim().toLowerCase()) {
@@ -79,6 +79,24 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       default:
         return t;
     }
+  }
+
+  /// 'First' / '1st term' / 'first' → '1st' (likewise 2nd/3rd) so internal
+  /// term comparisons stay stable regardless of casing. The DB stores the
+  /// lowercase value after the v27 migration; the UI dropdown still shows the
+  /// title-case labels.
+  String _normalizeTermKey(String term) {
+    final lower = term.trim().toLowerCase();
+    if (lower == '1' || lower.startsWith('1st') || lower.contains('first')) {
+      return '1st';
+    }
+    if (lower == '2' || lower.startsWith('2nd') || lower.contains('second')) {
+      return '2nd';
+    }
+    if (lower == '3' || lower.startsWith('3rd') || lower.contains('third')) {
+      return '3rd';
+    }
+    return lower;
   }
   final List<String> _classLevels = [
     'JSS 1', 'JSS 2', 'JSS 3',
@@ -236,7 +254,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
         final matching = allSchoolRecords.where((r) =>
             r.teacherId == _teacherId &&
             r.subjectId == _subjectId &&
-            r.term == _term &&
+            _normalizeTermKey(r.term) == _normalizeTermKey(_term) &&
             !r.isDeleted).toList()
           ..sort((a, b) => a.weekNumber.compareTo(b.weekNumber));
 
@@ -490,7 +508,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
                 'teacher_server_id': teacherServerId,
                 'school_server_id': schoolServerId,
                 'subject_id': subjectServerId,
-                'term': _term,
+                'term': normalizeSowTermForServer(_term),
                 'week_number': sowRecord.weekNumber,
                 'topic': sowRecord.topic,
                 'objectives': sowRecord.objectives,
@@ -567,7 +585,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
                 'teacher_server_id': teacherServerId,
                 'school_server_id': schoolServerId,
                 'subject_id': subjectServerId,
-                'term': schemeWeek.term,
+                'term': normalizeSowTermForServer(schemeWeek.term),
                 'week_number': schemeWeek.weekNumber,
                 'topic': schemeWeek.topic,
                 'objectives': schemeWeek.objectives,
@@ -1409,7 +1427,10 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
         if (_adminFilterSubject != subjectName) return false;
       }
       // Term filter
-      if (_adminFilterTerm.isNotEmpty && _adminFilterTerm != r.term) return false;
+      if (_adminFilterTerm.isNotEmpty &&
+          _normalizeTermKey(_adminFilterTerm) != _normalizeTermKey(r.term)) {
+        return false;
+      }
       return true;
     }).toList();
 
@@ -1454,7 +1475,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       grouped[term]!.add(r);
     }
     // Ensure consistent term order
-    final termOrder = ['First', 'Second', 'Third'];
+    final termOrder = ['first', 'second', 'third'];
     grouped.forEach((key, value) {
       value.sort((a, b) => a.weekNumber.compareTo(b.weekNumber));
     });

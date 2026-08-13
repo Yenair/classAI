@@ -85,7 +85,7 @@ class SchemeOfWorkService {
                   'teacher_server_id': teacherServerId,
                   'school_server_id': schoolServerId,
                   'subject_id': subjectServerId,
-                  'term': term,
+                  'term': normalizeSowTermForServer(term),
                   'week_number': weekNumber,
                   'topic': topicText,
                   'objectives': objectivesText,
@@ -549,7 +549,7 @@ class SchemeOfWorkService {
         schoolId: Value(schoolId),
         teacherId: Value(teacherId),
         subjectId: Value(subjectId),
-        term: Value(term),
+        term: Value(normalizeSowTermForServer(term)),
         classLevel: Value(classLevel),
         weekNumber: Value(weekNumber),
         topic: Value(topic),
@@ -571,7 +571,7 @@ class SchemeOfWorkService {
         'school_server_id': schoolServerId,
         'subject_id': subjectServerId,
         'subject_name': subject,
-        'term': term,
+        'term': normalizeSowTermForServer(term),
         'week_number': weekNumber,
         'topic': topic,
         'objectives': objectives,
@@ -743,6 +743,30 @@ class SchemeOfWorkService {
     if (lower == '2' || lower.startsWith('2nd') || lower.contains('second')) return '2nd';
     if (lower == '3' || lower.startsWith('3rd') || lower.contains('third')) return '3rd';
     return lower;
+  }
+}
+
+/// Normalises a scheme-of-work term to the lowercase value the server CHECK
+/// constraint (`scheme_of_work_term_check`) accepts: 'first' / 'second' /
+/// 'third'. The client historically queued title-case terms ('First'), which
+/// the constraint rejects, so every scheme_of_work sync payload normalises
+/// through here before it is queued.
+String normalizeSowTermForServer(String term) {
+  switch (term.trim().toLowerCase()) {
+    case 'first':
+    case '1st':
+    case '1st term':
+      return 'first';
+    case 'second':
+    case '2nd':
+    case '2nd term':
+      return 'second';
+    case 'third':
+    case '3rd':
+    case '3rd term':
+      return 'third';
+    default:
+      return term.trim().toLowerCase();
   }
 }
 

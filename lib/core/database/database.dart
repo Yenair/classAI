@@ -105,7 +105,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 26;
+  int get schemaVersion => 27;
 
   static QueryExecutor _openConnection() {
     final security = SecurityService();
@@ -1018,6 +1018,23 @@ class AppDatabase extends _$AppDatabase {
             // (plans/sync_full_table_reconciliation.md): stop-limit (Fix 6)
             // and progress_logs one-shot (Fix 1). Additive — safe on-device.
             await m.createTable(syncReconcileState);
+          }
+          if (from < 27) {
+            // Normalise scheme_of_work term values to the lowercase values the
+            // server CHECK constraint (scheme_of_work_term_check) accepts
+            // ('first' / 'second' / 'third'). The client historically stored
+            // title-case terms ('First'), which the server rejects, and the
+            // merge term comparison is case-sensitive. Idempotent UPDATE —
+            // preserves all rows, no table rebuild.
+            await customStatement('''
+              UPDATE scheme_of_work
+              SET term = CASE
+                WHEN LOWER(TRIM(term)) IN ('first', '1st', '1st term') THEN 'first'
+                WHEN LOWER(TRIM(term)) IN ('second', '2nd', '2nd term') THEN 'second'
+                WHEN LOWER(TRIM(term)) IN ('third', '3rd', '3rd term') THEN 'third'
+                ELSE LOWER(TRIM(term))
+              END
+            ''');
           }
         },
         beforeOpen: (details) async {

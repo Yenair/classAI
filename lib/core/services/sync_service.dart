@@ -10,6 +10,7 @@ import 'package:classai/core/database/database.dart';
 import 'package:classai/core/services/merge_engine.dart';
 import 'package:classai/core/services/merge_strategies.dart';
 import 'package:classai/core/services/security_service.dart';
+import 'package:classai/core/services/scheme_of_work_service.dart';
 import 'package:classai/core/utils/payload_compressor.dart';
 
 /// Thrown when the server reports that the current session has been invalidated
@@ -1141,6 +1142,15 @@ class SyncService {
       await debugDumpReconcileIssues();
     }
 
+    // ── Permanent cooldown reset for existing server subjects ─────────────
+    // Runs once per successful pull, after both reconciliation passes: clears
+    // the stale retry cooldown on pending scheme_of_work / lessons / exams
+    // entries whose subject already exists server-side, so dependents of
+    // long-settled subjects (server_id present) become due for push instead
+    // of sitting in cooldown forever. Idempotent; no-op when no entry is in
+    // cooldown or no local subject has a server_id yet.
+    await _resetCooldownsForExistingServerSubjects();
+
     await _flushDeferredTeachers();
 
     // Check subscription expiry using server time after a successful pull.
@@ -1328,6 +1338,11 @@ class SyncService {
     var repaired = 0;
     // One INSERT per normalized name, even if duplicate local rows exist.
     final queuedNames = <String>{};
+    // Local subject names whose server-side dependency was just healed or
+    // adopted — dependent queue entries (scheme_of_work / lessons / exams)
+    // referencing them carry stale retry cooldowns that must be cleared
+    // after the loop (see _resetCooldownsForSubjectDependents).
+    final healedNames = <String>{};
 
     for (final local in localSubjects) {
       final name = local.name.trim();
@@ -1353,6 +1368,9 @@ class SyncService {
             '[SYNC-SUBJECT-HEAL] Adopted server_id $serverId for subject '
             '"${local.name}" (localId=${local.id})',
           );
+          // The subject now resolves server-side — dependents that were
+          // failing because it didn't are unblocked; clear their cooldowns.
+          healedNames.add(name);
         }
         // Never re-push a subject the server already has.
         for (final entry in pending) {
@@ -1377,6 +1395,9 @@ class SyncService {
       }
 
       // ── Case: subject entirely absent server-side -> repair ──────────
+      // Whether the INSERT is queued below or already pending, the subject
+      // is missing and queued for INSERT — dependents' cooldowns are stale.
+      healedNames.add(name);
       if (local.serverId != null) {
         await (db.update(db.subjects)
               ..where((t) => t.id.equals(local.id)))
@@ -1409,6 +1430,134 @@ class SyncService {
 
     if (repaired > 0) {
       debugPrint('[SYNC-SUBJECT-HEAL] Repaired $repaired subject(s)');
+    }
+
+    // After healing/adopting, clear the retry cooldown on dependent queue
+    // entries referencing each subject so they become due for push instead
+    // of being skipped by the cooldown filter for up to an hour.
+    for (final healedName in healedNames) {
+      await _resetCooldownsForSubjectDependents(healedName);
+    }
+  }
+
+  /// Clears the retry cooldown on pending sync_queue entries whose payload
+  /// references [subjectName] — scheme_of_work (payload['subject_name']) and
+  /// lessons / exams (payload['subject']) — immediately after the subject was
+  /// healed or adopted by [_reconcileLocalSubjects].
+  ///
+  /// Entries that failed only because the subject did not exist server-side
+  /// carry a stale next_retry_at that keeps them out of the push batch even
+  /// though the dependency is now repaired. Resetting their retry state
+  /// (next_retry_at = NULL, attempts = 0, last_attempt_at = NULL) makes them
+  /// due for push on the next cycle; is_terminal is never touched so they
+  /// stay pending.
+  ///
+  /// Idempotent: entries already out of cooldown are simply reset again.
+  Future<void> _resetCooldownsForSubjectDependents(String subjectName) async {
+    final needle = _normalizeSubjectName(subjectName);
+    if (needle.isEmpty) return;
+
+    final pending = await store.loadPendingQueue();
+    var resetCount = 0;
+    for (final entry in pending) {
+      final table = entry.queueTable;
+      if (table != 'scheme_of_work' &&
+          table != 'lessons' &&
+          table != 'exams') {
+        continue;
+      }
+      final payload = _decodePayload(entry.payload);
+      final rawSubject = table == 'scheme_of_work'
+          ? payload['subject_name']
+          : payload['subject'];
+      if (rawSubject == null) continue;
+      final raw = rawSubject.toString().trim();
+      if (raw.isEmpty || _normalizeSubjectName(raw) != needle) continue;
+
+      await db.syncQueueDao.resetRetryState(entry.id);
+      resetCount++;
+    }
+
+    if (resetCount > 0) {
+      debugPrint('[SYNC-HEAL] Reset cooldown for $resetCount dependent '
+          'entries for subject "$subjectName"');
+    }
+  }
+
+  /// Broad, permanent cooldown reset for dependent queue entries
+  /// (scheme_of_work / lessons / exams) referencing subjects that already
+  /// exist server-side.
+  ///
+  /// The per-cycle heal/adopt path in [_reconcileLocalSubjects] only clears
+  /// cooldowns for subjects it actually healed or adopted in the CURRENT
+  /// cycle. Once a subject carries a correct server_id (the steady state),
+  /// that branch never runs — so dependent entries that re-entered cooldown
+  /// after a transient failure stay stuck (next_retry_at in the future) even
+  /// though their subject dependency is fully resolved. This method closes
+  /// that gap on every successful pull.
+  ///
+  /// Loads the current school's local subjects that already have a non-empty
+  /// server_id, then for each pending dependent entry whose payload subject
+  /// name matches (via [_normalizeSubjectName]; scheme_of_work uses
+  /// payload['subject_name'], lessons/exams use payload['subject']) resets
+  /// its retry state (next_retry_at = NULL, attempts = 0, last_attempt_at =
+  /// NULL) so it becomes due for push on the next cycle. is_terminal is
+  /// never touched — pending entries stay pending.
+  ///
+  /// Idempotent: entries already out of cooldown are reset again harmlessly;
+  /// a dependent that fails again for a different reason simply re-enters
+  /// cooldown (the normal retry backoff still governs the actual push
+  /// attempt), and the next pull resets it only if its subject still exists
+  /// server-side.
+  Future<void> _resetCooldownsForExistingServerSubjects() async {
+    // (a) Current school's local subjects that already exist server-side
+    // (non-empty server_id).
+    final localSubjects = await (db.select(db.subjects)
+          ..where((t) => t.schoolId.equals(schoolId)))
+        .get();
+    final serverSubjectNames = <String>{};
+    for (final subject in localSubjects) {
+      final sid = subject.serverId;
+      if (sid == null || sid.isEmpty) continue;
+      final normalized = _normalizeSubjectName(subject.name);
+      if (normalized.isNotEmpty) serverSubjectNames.add(normalized);
+    }
+    if (serverSubjectNames.isEmpty) return;
+
+    // (b) All pending queue entries.
+    final pending = await store.loadPendingQueue();
+    var resetCount = 0;
+
+    for (final entry in pending) {
+      final table = entry.queueTable;
+      if (table != 'scheme_of_work' &&
+          table != 'lessons' &&
+          table != 'exams') {
+        continue;
+      }
+      // (d) Only entries currently in cooldown need a reset.
+      if (entry.nextRetryAt == null) continue;
+
+      // (c) Decode the payload and match by subject name.
+      final payload = _decodePayload(entry.payload);
+      final rawSubject = table == 'scheme_of_work'
+          ? payload['subject_name']
+          : payload['subject'];
+      if (rawSubject == null) continue;
+      final raw = rawSubject.toString().trim();
+      if (raw.isEmpty ||
+          !serverSubjectNames.contains(_normalizeSubjectName(raw))) {
+        continue;
+      }
+
+      await db.syncQueueDao.resetRetryState(entry.id);
+      resetCount++;
+    }
+
+    // (e) Summary line; (f) is_terminal is never touched by resetRetryState.
+    if (resetCount > 0) {
+      debugPrint('[SYNC-HEAL] Reset cooldown for $resetCount dependent '
+          'entries for existing server subjects');
     }
   }
 
@@ -2074,7 +2223,7 @@ class SyncService {
       'school_server_id': effectiveSchoolId,
       'subject_id': subjectServerId,
       'subject_name': subject?.name,
-      'term': r.term,
+      'term': normalizeSowTermForServer(r.term),
       'week_number': r.weekNumber,
       'topic': r.topic,
       'objectives': r.objectives,
@@ -2103,6 +2252,75 @@ class SyncService {
       'teacher_id': teacherServerId,
       'school_id': effectiveSchoolId,
     };
+  }
+
+  /// Builds a clean INSERT payload for an UPDATE queue entry whose local row
+  /// never received a server_id, reusing the EXACT payload builders the
+  /// full-table reconciliation uses for that table. The converted entry is
+  /// pushable and idempotent with the sync-push check-before-insert guard
+  /// (a re-push lands on the existing server row as "updated" instead of
+  /// duplicating). Returns null when the local row is gone or a required FK
+  /// cannot be resolved — the builder logs the reason and the caller leaves
+  /// the entry unchanged.
+  Future<Map<String, dynamic>?> _buildInsertPayloadForQueuedUpdate(
+    SyncQueueData entry, {
+    required String effectiveSchoolId,
+  }) async {
+    switch (entry.queueTable) {
+      case 'lessons':
+        final row = await (db.select(db.lessons)
+              ..where((t) => t.id.equals(entry.recordLocalId)))
+            .getSingleOrNull();
+        if (row == null) return null;
+        return _buildLessonInsertPayload(row);
+      case 'exams':
+        final row = await (db.select(db.exams)
+              ..where((t) => t.id.equals(entry.recordLocalId)))
+            .getSingleOrNull();
+        if (row == null) return null;
+        return _buildExamInsertPayload(row);
+      case 'scheme_of_work':
+        final row = await (db.select(db.schemeOfWork)
+              ..where((t) => t.id.equals(entry.recordLocalId)))
+            .getSingleOrNull();
+        if (row == null) return null;
+        final teacher = await (db.select(db.teachers)
+              ..where((t) => t.localId.equals(row.teacherId)))
+            .getSingleOrNull();
+        final subject = await (db.select(db.subjects)
+              ..where((t) => t.id.equals(row.subjectId)))
+            .getSingleOrNull();
+        return _buildSchemeOfWorkInsertPayload(
+          row,
+          effectiveSchoolId: effectiveSchoolId,
+          teacherServerIdByLocalId: {
+            if (teacher != null && teacher.serverId != null)
+              row.teacherId: teacher.serverId!,
+          },
+          subjectServerIdByLocalId: {
+            if (subject != null && subject.serverId != null)
+              row.subjectId: subject.serverId!,
+          },
+        );
+      case 'progress_logs':
+        final row = await (db.select(db.progressLogs)
+              ..where((t) => t.id.equals(entry.recordLocalId)))
+            .getSingleOrNull();
+        if (row == null) return null;
+        final teacher = await (db.select(db.teachers)
+              ..where((t) => t.localId.equals(row.teacherId)))
+            .getSingleOrNull();
+        return _buildProgressLogInsertPayload(
+          row,
+          effectiveSchoolId: effectiveSchoolId,
+          teacherServerIdByLocalId: {
+            if (teacher != null && teacher.serverId != null)
+              row.teacherId: teacher.serverId!,
+          },
+        );
+      default:
+        return null;
+    }
   }
 
   /// Fix 7: surfaces every tracked reconcile-state row (with its attempt
@@ -2282,8 +2500,34 @@ class SyncService {
       return;
     }
 
+    // ── Permanent diagnostics: pending scheme_of_work visibility ────────
+    // Logs how many scheme_of_work entries are pending and how many are due
+    // (out of cooldown) so a stuck push ("All N pending entries are in
+    // cooldown — skipping push") is diagnosable from the logs alone.
+    // Logging only — no behavior change.
+    final sowPending = pending
+        .where((e) => e.queueTable == 'scheme_of_work')
+        .toList();
+    if (sowPending.isNotEmpty) {
+      final sowNow = DateTime.now();
+      final sowDue = sowPending
+          .where((e) =>
+              e.nextRetryAt == null || !e.nextRetryAt!.isAfter(sowNow))
+          .length;
+      debugPrint('[SOW-PUSH] pending scheme_of_work entries: '
+          '${sowPending.length}, due: $sowDue');
+    }
+
     final sorted = [...pending]..sort(_compareQueueEntries);
     final batches = <SyncPushBatch>[];
+    // Entries actually sent. Entries resolved client-side (an UPDATE
+    // superseded by a pending INSERT, or a DELETE with no server row) are
+    // marked terminal and excluded, keeping batches and results aligned.
+    final sentEntries = <SyncQueueData>[];
+    // Payload actually sent for each entry (after server_id injection,
+    // UPDATE→INSERT conversion, self-heal, and local_id injection) so the
+    // [SOW-PUSH-FAIL] diagnostics can log the exact bytes that went out.
+    final sentPayloads = <int, Map<String, dynamic>>{};
     final config = await store.loadSecurityConfig();
 
     // ── Per-entry cooldown filter ───────────────────────────────────────
@@ -2305,7 +2549,7 @@ class SyncService {
         '(${toPush.length} due for push)');
 
     for (final entry in toPush) {
-      final payload = _decodePayload(entry.payload);
+      var payload = _decodePayload(entry.payload);
       debugPrint('[PUSH-QUEUE] Entry ${entry.id}: '
           'table=${entry.queueTable}, '
           'operation=${entry.operation}, '
@@ -2349,6 +2593,71 @@ class SyncService {
           payload['server_id'] = serverId;
         }
       }
+      // ── Client-side dead-ends: UPDATE/DELETE with no local server_id ────
+      // A local row that never received a server_id can never be UPDATEd or
+      // DELETEd server-side: the server's UPDATE branch rejects entries
+      // without server_id ("missing server_id") and they retry forever — the
+      // stuck production case (lessons localId=62, attempts=8, retryable).
+      // Resolve these BEFORE the batch is built:
+      //   * DELETE → nothing exists server-side; mark terminal.
+      //   * UPDATE + pending INSERT for the same row → the INSERT will own
+      //     the server row; the UPDATE is superseded; mark terminal.
+      //   * UPDATE, no pending INSERT → convert to a clean INSERT using the
+      //     same payload builder the full-table reconciliation uses, so the
+      //     entry becomes pushable and idempotent with the sync-push
+      //     check-before-insert guard.
+      if (payload['server_id'] == null &&
+          (effectiveOperation == 'UPDATE' || effectiveOperation == 'DELETE')) {
+        if (effectiveOperation == 'DELETE') {
+          await store.markQueueTerminalFailure(
+            entry.id,
+            lastError: 'DELETE skipped — local row has no server_id; '
+                'nothing to delete server-side',
+          );
+          debugPrint('[PUSH-QUEUE] Entry ${entry.id}: DELETE for '
+              '${entry.queueTable} localId=${entry.recordLocalId} has no '
+              'server_id — marked terminal (nothing to delete server-side)');
+          continue;
+        }
+        // ── UPDATE ──
+        final hasPendingInsert = await db.syncQueueDao.hasPendingInsertFor(
+          entry.queueTable,
+          entry.recordLocalId,
+        );
+        if (hasPendingInsert) {
+          await store.markQueueTerminalFailure(
+            entry.id,
+            lastError: 'UPDATE superseded by pending INSERT — '
+                'server_id not yet assigned',
+          );
+          debugPrint('[PUSH-QUEUE] Entry ${entry.id}: UPDATE for '
+              '${entry.queueTable} localId=${entry.recordLocalId} has no '
+              'server_id and a pending INSERT exists — marked terminal '
+              '(the INSERT will create the server row)');
+          continue;
+        }
+        final insertPayload = await _buildInsertPayloadForQueuedUpdate(
+          entry,
+          effectiveSchoolId: schoolId,
+        );
+        if (insertPayload != null) {
+          // Persist the converted payload so a retry pushes the INSERT and
+          // the success-path version snapshot matches what was sent.
+          await db.syncQueueDao.updateEntryPayload(entry.id, insertPayload);
+          payload = insertPayload;
+          effectiveOperation = 'INSERT';
+          debugPrint('[PUSH-QUEUE] Entry ${entry.id}: converted UPDATE → '
+              'INSERT for ${entry.queueTable} '
+              'localId=${entry.recordLocalId} (local row has no server_id '
+              'and no pending INSERT) — clean INSERT is idempotent with the '
+              'sync-push check-before-insert guard');
+        } else {
+          debugPrint('[PUSH-QUEUE] Entry ${entry.id}: UPDATE for '
+              '${entry.queueTable} localId=${entry.recordLocalId} has no '
+              'server_id and no clean INSERT payload could be built (local '
+              'row missing or FK unresolvable) — leaving unchanged');
+        }
+      }
       // ── Self-heal: progress_logs INSERTs must carry event_date ────────
       // Older queue entries (created before the payload included event_date)
       // fail server-side with "null value in column \"event_date\" ...
@@ -2372,6 +2681,26 @@ class SyncService {
       }
       // ───────────────────────────────────────────────────────────────────
 
+      // ── Self-heal: scheme_of_work term must be lowercase ──────────────
+      // The server CHECK constraint scheme_of_work_term_check accepts only
+      // 'first' / 'second' / 'third'. Older queue entries queued with
+      // title-case terms ('First') are rejected with "violates check
+      // constraint" and retry forever. Normalise the term in the payload AND
+      // persist the fix so this push succeeds and any retry pushes the
+      // corrected value (fixes already-pending entries on the next sync).
+      if (entry.queueTable == 'scheme_of_work' &&
+          payload.containsKey('term')) {
+        final rawTerm = payload['term'];
+        if (rawTerm is String) {
+          final normalised = normalizeSowTermForServer(rawTerm);
+          if (normalised != rawTerm) {
+            payload['term'] = normalised;
+            await db.syncQueueDao.updateEntryPayload(entry.id, payload);
+            debugPrint('[SOW-PUSH] Normalised term from "$rawTerm" to '
+                '"$normalised" for entry ${entry.id}');
+          }
+        }
+      }
       // Inject local_id so the server can echo it back in the results
       // array, enabling the client to match responses to entries.
       payload['local_id'] = entry.recordLocalId;
@@ -2392,6 +2721,14 @@ class SyncService {
           record: compressed,
         ),
       );
+      sentEntries.add(entry);
+      sentPayloads[entry.id] = payload;
+    }
+
+    // Every pending entry may have been resolved client-side (superseded
+    // UPDATEs, DELETEs with no server row) — nothing left to send.
+    if (batches.isEmpty) {
+      return;
     }
 
     final response = await remoteApi.pushChanges(
@@ -2401,28 +2738,29 @@ class SyncService {
 
     // Pair each server result to the entry that produced it BY INDEX: the
     // sync-push edge function processes changes in order and returns exactly
-    // one result per change, so results[i] belongs to toPush[i]. Key by
+    // one result per change, so results[i] belongs to sentEntries[i]. Key by
     // '<table>:<localId>' so numeric ids from different tables (subjects,
     // lessons, exams, scheme_of_work each auto-increment independently) never
     // collide — a bare local_id map silently assigned one table's result (and
     // its server_id) to every entry sharing the same numeric id.
     final resultsByTableAndLocalId = <String, SyncPushResult>{};
-    final paired = toPush.length < response.results.length
-        ? toPush.length
+    final paired = sentEntries.length < response.results.length
+        ? sentEntries.length
         : response.results.length;
     for (var i = 0; i < paired; i++) {
       resultsByTableAndLocalId[
-          '${toPush[i].queueTable}:${toPush[i].recordLocalId}'] =
+          '${sentEntries[i].queueTable}:${sentEntries[i].recordLocalId}'] =
           response.results[i];
     }
-    if (response.results.length != toPush.length) {
+    if (response.results.length != sentEntries.length) {
       debugPrint(
         '[PUSH-RESULT] WARNING: result count ${response.results.length} '
-        '!= entry count ${toPush.length} — index pairing may be misaligned',
+        '!= entry count ${sentEntries.length} — index pairing may be '
+        'misaligned',
       );
     }
 
-    for (final entry in toPush) {
+    for (final entry in sentEntries) {
       final result = resultsByTableAndLocalId[
           '${entry.queueTable}:${entry.recordLocalId}'];
 
@@ -2491,6 +2829,29 @@ class SyncService {
         // ───────────────────────────────────────────────────────────
         await store.removeQueueEntry(entry.id);
         continue;
+      }
+
+      // ── Permanent diagnostics: scheme_of_work push failures ──────────
+      // Logs the raw server response for every failed scheme_of_work push
+      // (status not created/updated/deleted/skipped) so stuck entries can
+      // be diagnosed from the logs alone. Logging only — the
+      // retry/cooldown flow below is untouched.
+      if (entry.queueTable == 'scheme_of_work') {
+        final errorMessageText = result.errorMessage == null
+            ? ''
+            : ', errorMessage="${result.errorMessage}"';
+        debugPrint('[SOW-PUSH-FAIL] Entry id=${entry.id}, '
+            'operation=${entry.operation}, '
+            'localId=${entry.recordLocalId}, '
+            'attempts=${entry.attempts}, '
+            'nextRetryAt=${entry.nextRetryAt}');
+        debugPrint('[SOW-PUSH-FAIL] Sent payload: '
+            '${sentPayloads[entry.id]}');
+        debugPrint('[SOW-PUSH-FAIL] Server result: '
+            'local_id=${result.localId}, '
+            'server_id=${result.serverId}, '
+            'status="${result.status}", '
+            'retryable=${result.retryable}$errorMessageText');
       }
 
       debugPrint('[PUSH-RESULT] Entry ${entry.id} not successful — '
@@ -3986,7 +4347,7 @@ class SyncService {
         schoolId: Value(resolvedSchoolId),
         teacherId: Value(resolvedTeacherId),
         subjectId: Value(resolvedSubjectId),
-        term: Value(term),
+        term: Value(normalizeSowTermForServer(term)),
         weekNumber: Value(weekNumber),
         topic: Value(topic),
         objectives: Value(objectives),
@@ -4013,7 +4374,7 @@ class SyncService {
               schoolId: Value(resolvedSchoolId),
               teacherId: Value(resolvedTeacherId),
               subjectId: Value(resolvedSubjectId),
-              term: Value(term),
+              term: Value(normalizeSowTermForServer(term)),
               weekNumber: Value(weekNumber),
               topic: Value(topic),
               objectives: Value(objectives),

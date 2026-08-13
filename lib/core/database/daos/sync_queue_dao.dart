@@ -84,6 +84,22 @@ class SyncQueueDao extends DatabaseAccessor<AppDatabase>
       );
   }
 
+  /// Resets a single pending entry's retry state after its dependency was
+  /// repaired (e.g. a missing subject healed by the subject self-heal):
+  /// next_retry_at = NULL (clears the cooldown), attempts = 0, and
+  /// last_attempt_at = NULL. is_terminal is not touched — callers only pass
+  /// pending rows, which stay pending and become due for push on the next
+  /// cycle. Idempotent: re-running on an already-reset row is a no-op.
+  Future<void> resetRetryState(int entryId) async {
+    await (update(syncQueue)..where((t) => t.id.equals(entryId))).write(
+      SyncQueueCompanion(
+        nextRetryAt: const Value(null),
+        attempts: const Value(0),
+        lastAttemptAt: const Value(null),
+      ),
+    );
+  }
+
   /// One-time recovery for legacy terminal rows that were dropped purely
   /// because a retryable failure exhausted the old 5-attempt cap.
   ///
@@ -160,5 +176,30 @@ class SyncQueueDao extends DatabaseAccessor<AppDatabase>
               t.isTerminal.equals(false)))
         .get();
     return rows.length;
+  }
+
+  /// True when a non-terminal INSERT entry for (table, localId) is already
+  /// pending. Used by the push engine to detect an UPDATE that is superseded
+  /// by a pending INSERT for the same local row (the INSERT will create the
+  /// server row, so the UPDATE can never apply).
+  Future<bool> hasPendingInsertFor(String table, int localId) async {
+    final rows = await (select(syncQueue)
+          ..where((t) =>
+              t.isTerminal.equals(false) &
+              t.queueTable.equals(table) &
+              t.recordLocalId.equals(localId) &
+              t.operation.equals('INSERT'))
+          ..limit(1))
+        .get();
+    return rows.isNotEmpty;
+  }
+
+  /// Replaces a queue entry's stored payload — e.g. an UPDATE converted to a
+  /// clean INSERT payload by the push engine — so a retry pushes the new
+  /// payload and the success-path version snapshot matches what was sent.
+  Future<void> updateEntryPayload(int id, Map<String, dynamic> payload) async {
+    await (update(syncQueue)..where((t) => t.id.equals(id))).write(
+      SyncQueueCompanion(payload: Value(jsonEncode(payload))),
+    );
   }
 }
