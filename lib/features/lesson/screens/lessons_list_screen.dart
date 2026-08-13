@@ -75,11 +75,6 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
   void initState() {
     super.initState();
     _loadFilterPreferences();
-    // Rebuild the content-empty cache whenever the list reloads/refreshes so
-    // the filter predicates never parse content JSON per row per frame.
-    ref.listen(lessonsListProvider, (prev, next) {
-      next.whenData(_rebuildContentEmptyCache);
-    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(syncStatusProvider.notifier).refresh();
       ref.read(offlineCreditStateProvider.notifier).refresh();
@@ -705,6 +700,12 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Rebuild the content-empty cache whenever the list reloads/refreshes so
+    // the filter predicates never parse content JSON per row per frame.
+    ref.listen(lessonsListProvider, (prev, next) {
+      next.whenData(_rebuildContentEmptyCache);
+    });
+
     final lessonsAsync = ref.watch(lessonsListProvider);
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
