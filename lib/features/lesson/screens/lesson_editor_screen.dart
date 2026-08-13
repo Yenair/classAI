@@ -1239,12 +1239,14 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       // Resolve teacher's localId from the String serverId
       final teacher = await db.teachersDao.findByServerId(_teacherId!);
       final teacherLocalId = teacher?.localId ?? 0;
+      final now = DateTime.now();
       final logId = await db.progressLogsDao.insert(
         ProgressLogsCompanion.insert(
           eventType: newStatus == 'completed' ? 'lesson_completed' : 'lesson_reopened',
           lessonId: Value(_lessonId!),
           teacherId: Value(teacherLocalId),
           schoolId: Value(school?.localId ?? 0),
+          eventDate: Value(now),
         ),
       );
       await db.syncQueueDao.insertEntry(
@@ -1253,6 +1255,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         operation: 'INSERT',
         payload: {
           'event_type': newStatus == 'completed' ? 'lesson_completed' : 'lesson_reopened',
+          'event_date': now.toUtc().toIso8601String(),
           'lesson_id': _lessonId,
           'teacher_id': _teacherId,
           'school_id': _schoolId,
@@ -1278,12 +1281,14 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       final school = await db.schoolsDao.getByServerId(_schoolId!);
       final teacher = await db.teachersDao.findByServerId(_teacherId!);
       final teacherLocalId = teacher?.localId ?? 0;
+      final now = DateTime.now();
       final logId = await db.progressLogsDao.insert(
         ProgressLogsCompanion.insert(
           eventType: 'lesson_completed',
           lessonId: Value(_lessonId!),
           teacherId: Value(teacherLocalId),
           schoolId: Value(school?.localId ?? 0),
+          eventDate: Value(now),
         ),
       );
       await db.syncQueueDao.insertEntry(
@@ -1292,6 +1297,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         operation: 'INSERT',
         payload: {
           'event_type': 'lesson_completed',
+          'event_date': now.toUtc().toIso8601String(),
           'lesson_id': _lessonId,
           'teacher_id': _teacherId,
           'school_id': _schoolId,

@@ -16,6 +16,7 @@ import 'tables/vault_items.dart';
 import 'tables/security_config.dart';
 import 'tables/sync_queue.dart';
 import 'tables/sync_queue_snapshot.dart';
+import 'tables/sync_reconcile_state.dart';
 import 'tables/version_hashes.dart';
 import 'tables/conflicts.dart';
 import 'tables/payment_events.dart';
@@ -33,6 +34,7 @@ import '../services/security_service.dart';
 import 'database_encryption_bootstrap.dart';
 import 'daos/security_config_dao.dart';
 import 'daos/sync_queue_dao.dart';
+import 'daos/sync_reconcile_state_dao.dart';
 import 'daos/payment_events_dao.dart';
 import 'daos/vault_items_dao.dart';
 import 'daos/pdf_cache_dao.dart';
@@ -63,6 +65,7 @@ part 'database.g.dart'; // generated
   SecurityConfig,
   SyncQueue,
   SyncQueueSnapshot,
+  SyncReconcileState,
   VersionHashes,
   Conflicts,
   PaymentEvents,
@@ -79,6 +82,8 @@ part 'database.g.dart'; // generated
 class AppDatabase extends _$AppDatabase {
   SecurityConfigDao get securityConfigDao => SecurityConfigDao(this);
   SyncQueueDao get syncQueueDao => SyncQueueDao(this);
+  SyncReconcileStateDao get syncReconcileStateDao =>
+      SyncReconcileStateDao(this);
   PaymentEventsDao get paymentEventsDao => PaymentEventsDao(this);
   VaultItemsDao get vaultItemsDao => VaultItemsDao(this);
   PdfCacheDao get pdfCacheDao => PdfCacheDao(this);
@@ -100,7 +105,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 25;
+  int get schemaVersion => 26;
 
   static QueryExecutor _openConnection() {
     final security = SecurityService();
@@ -1007,6 +1012,12 @@ class AppDatabase extends _$AppDatabase {
                 'ALTER TABLE sync_queue ADD COLUMN next_retry_at TEXT',
               );
             }
+          }
+          if (from < 26) {
+            // Reconcile-state tracking for the full-table sync reconciliation
+            // (plans/sync_full_table_reconciliation.md): stop-limit (Fix 6)
+            // and progress_logs one-shot (Fix 1). Additive — safe on-device.
+            await m.createTable(syncReconcileState);
           }
         },
         beforeOpen: (details) async {

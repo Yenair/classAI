@@ -180,6 +180,178 @@ async function lookupSubjectId(
 }
 
 /**
+ * Check-before-insert guard (Fix 5): before a FIRST-TIME INSERT (no
+ * server_id), look up an existing ACTIVE row by the table's natural key. If
+ * one exists, the INSERT is idempotently converted to an UPDATE on that row
+ * (returning its id) instead of creating a duplicate.
+ *
+ * This closes the duplicate window for re-pushed INSERTs — reconciliation
+ * re-queues and network retries of a committed-but-lost-response INSERT — for
+ * scheme_of_work, lessons, exams, and subjects. Keys mirror the app's own
+ * identity rules and the partial unique indexes created in the
+ * 20260813 natural-key migration.
+ */
+async function findExistingByNaturalKey(
+  supabase: ReturnType<typeof createClient>,
+  table: string,
+  rowData: Record<string, unknown>
+): Promise<string | null> {
+  if (table === "scheme_of_work") {
+    const schoolId = rowData["school_id"];
+    const subjectId = rowData["subject_id"];
+    const term = rowData["term"];
+    const weekNumber = rowData["week_number"];
+    if (!schoolId || !subjectId || term === undefined || weekNumber === undefined) {
+      return null;
+    }
+    const { data } = await supabase
+      .from("scheme_of_work")
+      .select("id")
+      .eq("school_id", schoolId)
+      .eq("subject_id", subjectId)
+      .eq("term", String(term))
+      .eq("week_number", Number(weekNumber))
+      .eq("is_deleted", false)
+      .limit(1);
+    return data && data.length > 0 ? (data[0].id as string) : null;
+  }
+  if (table === "lessons") {
+    const schoolId = rowData["school_id"];
+    const teacherId = rowData["teacher_id"];
+    const subjectId = rowData["subject_id"];
+    const classLevel = rowData["class_level"] ?? "";
+    const week = rowData["week"] ?? rowData["week_number"];
+    const term = rowData["term"];
+    if (!schoolId || !teacherId || !subjectId || week === undefined) {
+      return null;
+    }
+    let query = supabase
+      .from("lessons")
+      .select("id")
+      .eq("school_id", schoolId)
+      .eq("teacher_id", teacherId)
+      .eq("subject_id", subjectId)
+      .eq("class_level", String(classLevel))
+      .eq("week", Number(week))
+      .eq("is_deleted", false);
+    // Mirror COALESCE(term,'') from the unique index: NULL and '' are the same key.
+    query =
+      term === undefined || term === null || term === ""
+        ? query.or("term.is.null,term.eq.")
+        : query.eq("term", String(term));
+    const { data } = await query.limit(1);
+    return data && data.length > 0 ? (data[0].id as string) : null;
+  }
+  if (table === "exams") {
+    const schoolId = rowData["school_id"];
+    const teacherId = rowData["teacher_id"];
+    const subjectId = rowData["subject_id"];
+    const classLevel = rowData["class_level"] ?? "";
+    const weekNumber = rowData["week_number"];
+    const term = rowData["term"];
+    const topic = rowData["topic"] ?? "";
+    if (!schoolId || !teacherId || !subjectId || weekNumber === undefined) {
+      return null;
+    }
+    let query = supabase
+      .from("exams")
+      .select("id")
+      .eq("school_id", schoolId)
+      .eq("teacher_id", teacherId)
+      .eq("subject_id", subjectId)
+      .eq("class_level", String(classLevel))
+      .eq("week_number", Number(weekNumber))
+      .eq("topic", String(topic))
+      .eq("is_deleted", false);
+    query =
+      term === undefined || term === null || term === ""
+        ? query.or("term.is.null,term.eq.")
+        : query.eq("term", String(term));
+    const { data } = await query.limit(1);
+    return data && data.length > 0 ? (data[0].id as string) : null;
+  }
+  if (table === "subjects") {
+    const name = (rowData["subject_name"] ?? rowData["name"]) as string | undefined;
+    const schoolId = rowData["school_id"] as string | undefined;
+    const classLevel = rowData["class_level"] as string | undefined;
+    if (!name || !schoolId) return null;
+    // Same normalized name+class → empty-class → any-name chain as
+    // lookupSubjectId(), so a retried INSERT lands on the row the app would
+    // have resolved anyway.
+    return lookupSubjectId(supabase, name, schoolId, classLevel);
+  }
+  return null;
+}
+
+/**
+ * Strips local-only fields from a resolved INSERT payload and updates the
+ * given server row, pushing a "updated" result. Returns true on success so
+ * the caller can count it as processed. Used by the check-before-insert path
+ * (natural-key match before insert, and the duplicate-key race backstop).
+ */
+async function updateExistingRowAndReport(
+  supabase: ReturnType<typeof createClient>,
+  results: Record<string, unknown>[],
+  table: string,
+  localId: number | string,
+  serverId: string,
+  insertData: Record<string, unknown>,
+  reason: string
+): Promise<boolean> {
+  const {
+    local_id: _l1,
+    localId: _l2,
+    server_id: _s1,
+    serverId: _s2,
+    id: _id,
+    school_server_id: _ss,
+    teacher_server_id: _ts,
+    ...updateData
+  } = insertData;
+  if (updateData["updated_at"] === undefined) {
+    updateData["updated_at"] = new Date().toISOString();
+  }
+  const { error } = await supabase
+    .from(table)
+    .update(updateData)
+    .eq("id", serverId);
+  if (error) {
+    console.warn(
+      `sync-push: check-before-insert UPDATE error on "${table}" ` +
+        `(local_id=${localId}): ${error.message}`
+    );
+    results.push({
+      local_id: localId,
+      server_id: serverId,
+      status: "error",
+      retryable: true,
+      error: error.message,
+    });
+    return false;
+  }
+  console.log(
+    `[SYNC-PUSH-DIAG] check-before-insert: ${reason} — converted INSERT to ` +
+      `UPDATE on id=${serverId} (local_id=${localId}, table=${table})`
+  );
+  results.push({
+    local_id: localId,
+    server_id: serverId,
+    status: "updated",
+    retryable: false,
+  });
+  return true;
+}
+
+/** PostgREST duplicate-key signal (unique index violation). */
+function isDuplicateKeyError(error: { message?: string; code?: string }): boolean {
+  return (
+    error?.code === "23505" ||
+    (typeof error?.message === "string" &&
+      error.message.includes("duplicate key value violates unique constraint"))
+  );
+}
+
+/**
  * Default values for columns the client's INSERT payload may omit.
  * The Supabase lessons/exams tables have NOT NULL columns that are not
  * sent directly by the client — they must be derived or defaulted.
@@ -1006,14 +1178,62 @@ serve(async (req) => {
             });
             processed++;
           } else {
-            // First-time INSERT — no server_id, no conflict possible.
-            // The UNIQUE constraint on server_id is the last-line defence.
+            // First-time INSERT — no server_id. Fix 5 check-before-insert:
+            // if an active row already exists under this table's natural key
+            // (a re-pushed INSERT — reconciliation re-queue or a network
+            // retry after the server committed but the response was lost),
+            // convert to an UPDATE on that row instead of inserting a
+            // duplicate. The partial unique indexes are the atomic backstop
+            // for the SELECT→INSERT race between two devices.
             console.log(`[SYNC-PUSH-DIAG] INSERT (no server_id) on table=${table}, local_id=${localId}`);
+            const existingId = await findExistingByNaturalKey(
+              supabase,
+              table,
+              insertData
+            );
+            if (existingId) {
+              if (await updateExistingRowAndReport(
+                supabase,
+                results,
+                table,
+                localId,
+                existingId,
+                insertData,
+                "natural-key match before insert"
+              )) {
+                processed++;
+              }
+              continue;
+            }
             const { data: insertData_, error } = await supabase
               .from(table)
               .insert(insertData)
               .select("id");
             if (error) {
+              if (isDuplicateKeyError(error)) {
+                // Race: another push inserted the same natural key between
+                // our SELECT and INSERT. Convert to an UPDATE on the winning
+                // row so the entry never retries forever (Fix 5 backstop).
+                const winnerId = await findExistingByNaturalKey(
+                  supabase,
+                  table,
+                  insertData
+                );
+                if (winnerId) {
+                  if (await updateExistingRowAndReport(
+                    supabase,
+                    results,
+                    table,
+                    localId,
+                    winnerId,
+                    insertData,
+                    "duplicate-key race"
+                  )) {
+                    processed++;
+                  }
+                  continue;
+                }
+              }
               console.warn(`sync-push: INSERT error on "${table}" (local_id=${localId}): ${error.message}`);
               console.warn(`sync-push: INSERT data was: ${JSON.stringify(insertData)}`);
               results.push({ local_id: localId, server_id: null, status: "error", retryable: true, error: error.message });

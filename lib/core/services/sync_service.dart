@@ -71,11 +71,29 @@ class SyncPullPage {
   /// (Issue 3).
   final List<SyncChange>? pendingTeachers;
 
+  /// Full school-scoped subject catalog returned by the server (id,
+  /// subject_name, school_id, is_active, deleted_at), independent of the
+  /// incremental cursor. Null when the pull failed (so the subject self-heal
+  /// is skipped); a possibly-empty list when the pull succeeded but the
+  /// school has no subjects.
+  final List<Map<String, dynamic>>? subjectCatalog;
+
+  /// Identity catalogs for the full-table reconciliation, keyed by table
+  /// name ('lessons', 'exams', 'scheme_of_work', 'progress_logs'), each an
+  /// array of minimal-column rows (see sync-pull CATALOG_PROJECTIONS).
+  /// Independent of the incremental cursor; returned on every page. Null when
+  /// the pull failed (so reconciliation is skipped); a possibly-empty map
+  /// when the pull succeeded but the server did not return catalogs (older
+  /// sync-pull — reconciliation degrades to a no-op).
+  final Map<String, List<Map<String, dynamic>>>? tableCatalogs;
+
   const SyncPullPage({
     required this.changes,
     required this.nextCursor,
     this.activeTeacherIds,
     this.pendingTeachers,
+    this.subjectCatalog,
+    this.tableCatalogs,
   });
 
   factory SyncPullPage.fromJson(Map<String, dynamic> json) {
@@ -97,6 +115,21 @@ class SyncPullPage {
                     row: Map<String, dynamic>.from(item as Map),
                   ))
               .toList()
+          : null,
+      subjectCatalog: json['subject_catalog'] is List
+          ? (json['subject_catalog'] as List)
+              .map((item) =>
+                  Map<String, dynamic>.from(item as Map))
+              .toList()
+          : null,
+      tableCatalogs: json['catalogs'] is Map
+          ? (json['catalogs'] as Map).map((key, value) => MapEntry(
+                key as String,
+                (value as List)
+                    .map((item) =>
+                        Map<String, dynamic>.from(item as Map))
+                    .toList(),
+              ))
           : null,
     );
   }
@@ -279,6 +312,8 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
           'lastSyncTimestamp': cursor ?? '',
           'tables': _syncableTables,
           'school_id': schoolId,
+          // Identity catalogs for the full-table reconciliation (Fix 5).
+          'catalogs': ['lessons', 'exams', 'scheme_of_work', 'progress_logs'],
         },
       );
       final data = response.data as Map<String, dynamic>?;
@@ -959,6 +994,12 @@ class SyncService {
     // Collect reconciliation metadata across all pages (Issues 1 & 3)
     Set<String>? activeTeacherIds;
     List<SyncChange>? pendingTeachers;
+    // Full subject catalog (returned on every page; captured from the last
+    // page that carried one) for the subject self-heal reconciliation below.
+    List<Map<String, dynamic>>? subjectCatalog;
+    // Identity catalogs for the full-table reconciliation (same capture
+    // semantics: last page that carried one).
+    Map<String, List<Map<String, dynamic>>>? tableCatalogs;
     int totalTeacherChanges = 0;
 
     while (true) {
@@ -1013,6 +1054,12 @@ class SyncService {
       if (page.pendingTeachers != null && page.pendingTeachers!.isNotEmpty) {
         pendingTeachers = page.pendingTeachers;
       }
+      if (page.subjectCatalog != null) {
+        subjectCatalog = page.subjectCatalog;
+      }
+      if (page.tableCatalogs != null) {
+        tableCatalogs = page.tableCatalogs;
+      }
 
       cursor = page.nextCursor;
       await store.updateSecurityConfig(
@@ -1063,6 +1110,35 @@ class SyncService {
       for (final change in pendingTeachers) {
         await _upsertTeacherFromSync(change.row);
       }
+    }
+
+    // ── Subject self-heal ─────────────────────────────────────────────
+    // Reconcile local subjects against the full server subject catalog so
+    // subjects that never reached the server (or carry a stale server_id
+    // from the old cross-table local_id collision) are healed permanently
+    // and idempotently. Runs only when the pull succeeded (catalog present).
+    if (subjectCatalog != null) {
+      await _reconcileLocalSubjects(
+        subjectCatalog!,
+        effectiveSchoolId: effectiveSchoolId,
+      );
+    }
+
+    // ── Full-table reconciliation ────────────────────────────────────────
+    // Generalizes the subject self-heal to lessons, exams, scheme_of_work,
+    // and progress_logs using the server-provided identity catalogs. Runs
+    // only when the pull succeeded AND an active school is known (strict
+    // school scoping — a null effectiveSchoolId skips everything). Rows are
+    // matched by server id, then by natural key, then re-queued as clean
+    // INSERTs when genuinely missing — with the stop-limit (Fix 6) and the
+    // progress_logs one-shot (Fix 1) guarding against infinite re-queues.
+    if (tableCatalogs != null && effectiveSchoolId.isNotEmpty) {
+      await _reconcileMissingLocalRows(
+        tableCatalogs!,
+        effectiveSchoolId: effectiveSchoolId,
+      );
+      // Fix 7: surface over-threshold rows and last-cycle counts in the log.
+      await debugDumpReconcileIssues();
     }
 
     await _flushDeferredTeachers();
@@ -1168,6 +1244,895 @@ class SyncService {
         }
       }
     }
+  }
+
+  /// Normalizes a subject name the same way the sync-push edge function does:
+  /// trim, collapse internal whitespace, lowercase. Used so local names like
+  /// "english  studies" match server rows like "English Studies".
+  String _normalizeSubjectName(String name) {
+    return name.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+  }
+
+  /// Permanent, automatic subject-sync self-heal.
+  ///
+  /// Reconciles the local [subjects] table against the full server subject
+  /// catalog for the current school (fetched by sync-pull independently of
+  /// the incremental cursor):
+  ///
+  ///  * Subject entirely absent server-side -> clear a stale/wrong local
+  ///    `server_id` and queue a clean subjects INSERT (unless one is already
+  ///    pending). Repairs rows that were dropped from the sync queue by the
+  ///    old cross-table local_id collision (wrong server_id stored locally,
+  ///    entry silently removed as "updated" against a non-subject UUID).
+  ///  * Active matching subject exists server-side -> adopt the correct
+  ///    server id and drop any pending INSERT so a subject the server already
+  ///    has is never re-pushed.
+  ///  * Only a soft-deleted/inactive matching subject exists -> leave the
+  ///    local row unchanged and log a warning (never re-create a deliberately
+  ///    removed subject).
+  ///
+  /// Idempotent: after healing, the next catalog contains the subject, so a
+  /// later cycle matches by name and makes no further changes. School-scoped
+  /// via [effectiveSchoolId]; teacher-safe (only touches the local subjects
+  /// table and the local sync queue).
+  Future<void> _reconcileLocalSubjects(
+    List<Map<String, dynamic>> serverSubjects, {
+    required String effectiveSchoolId,
+  }) async {
+    // Active server rows (ignoring soft-deleted / inactive) grouped by
+    // normalized name. The catalog is already school-scoped server-side.
+    final activeByName = <String, List<Map<String, dynamic>>>{};
+    // Normalized names that exist on the server only as soft-deleted or
+    // inactive rows — these must NOT be re-pushed.
+    final inactiveOnlyNames = <String>{};
+
+    for (final row in serverSubjects) {
+      final rawName = (row['subject_name'] as String? ?? '').trim();
+      if (rawName.isEmpty) continue;
+      final normalized = _normalizeSubjectName(rawName);
+      final deletedAt = row['deleted_at'];
+      final isDeleted = deletedAt != null && deletedAt.toString().isNotEmpty;
+      final isActive = row['is_active'] == null ||
+          row['is_active'] == true ||
+          row['is_active'] == 'true';
+      if (isDeleted || !isActive) {
+        inactiveOnlyNames.add(normalized);
+      } else {
+        activeByName.putIfAbsent(normalized, () => []).add(row);
+      }
+    }
+
+    // Pending queue state so we never queue a duplicate INSERT.
+    final pending = await store.loadPendingQueue();
+    final pendingSubjectsForLocalId = <int>{};
+    final pendingSubjectNames = <String>{};
+    for (final entry in pending) {
+      if (entry.queueTable != 'subjects') continue;
+      pendingSubjectsForLocalId.add(entry.recordLocalId);
+      if (entry.operation == 'INSERT') {
+        final name = _decodePayload(entry.payload)['name'] as String?;
+        if (name != null && name.isNotEmpty) {
+          pendingSubjectNames.add(_normalizeSubjectName(name));
+        }
+      }
+    }
+
+    // Local subjects belonging to the current school. STRICT school scoping
+    // (Fix 4): a null schoolId is never treated as "this school" when more
+    // than one school could exist locally — unscoped rows are simply not
+    // reconciled (surfaced by the caller as `unscoped`).
+    final localSubjects = await (db.select(db.subjects)
+          ..where((t) => t.schoolId.equals(effectiveSchoolId)))
+        .get();
+
+    var repaired = 0;
+    // One INSERT per normalized name, even if duplicate local rows exist.
+    final queuedNames = <String>{};
+
+    for (final local in localSubjects) {
+      final name = local.name.trim();
+      if (name.isEmpty) continue;
+      final normalized = _normalizeSubjectName(name);
+
+      final activeMatches = activeByName[normalized] ?? const [];
+
+      // ── Case: an active server subject with this name exists ─────────
+      if (activeMatches.isNotEmpty) {
+        final serverRow = activeMatches.first;
+        final serverId = serverRow['id'] as String?;
+        if (serverId != null &&
+            serverId.isNotEmpty &&
+            (local.serverId == null || local.serverId != serverId)) {
+          await (db.update(db.subjects)
+                ..where((t) => t.id.equals(local.id)))
+              .write(SubjectsCompanion(
+            serverId: Value(serverId),
+            updatedAt: Value(DateTime.now()),
+          ));
+          debugPrint(
+            '[SYNC-SUBJECT-HEAL] Adopted server_id $serverId for subject '
+            '"${local.name}" (localId=${local.id})',
+          );
+        }
+        // Never re-push a subject the server already has.
+        for (final entry in pending) {
+          if (entry.queueTable == 'subjects' &&
+              entry.recordLocalId == local.id) {
+            await store.removeQueueEntry(entry.id);
+          }
+        }
+        continue;
+      }
+
+      // ── Case: name exists only as soft-deleted / inactive ────────────
+      // Never re-create a deliberately removed subject; warn and leave the
+      // local row untouched.
+      if (inactiveOnlyNames.contains(normalized)) {
+        debugPrint(
+          '[SYNC-SUBJECT-HEAL] Subject "${local.name}" exists on the server '
+          'but is soft-deleted/inactive — leaving local row unchanged '
+          '(localId=${local.id})',
+        );
+        continue;
+      }
+
+      // ── Case: subject entirely absent server-side -> repair ──────────
+      if (local.serverId != null) {
+        await (db.update(db.subjects)
+              ..where((t) => t.id.equals(local.id)))
+            .write(SubjectsCompanion(
+          serverId: const Value(null),
+          updatedAt: Value(DateTime.now()),
+        ));
+        debugPrint(
+          '[SYNC-SUBJECT-HEAL] Cleared stale server_id for subject '
+          '"${local.name}" (localId=${local.id})',
+        );
+      }
+      if (pendingSubjectsForLocalId.contains(local.id)) {
+        continue; // an INSERT for this row is already pending
+      }
+      if (pendingSubjectNames.contains(normalized)) {
+        continue; // an INSERT with this name is already pending
+      }
+      if (!queuedNames.add(normalized)) {
+        continue; // another local row with this name is being re-pushed
+      }
+      await db.syncQueueDao.insertEntry(
+        queueTable: 'subjects',
+        recordLocalId: local.id,
+        operation: 'INSERT',
+        payload: {'name': local.name, 'school_id': effectiveSchoolId},
+      );
+      repaired++;
+    }
+
+    if (repaired > 0) {
+      debugPrint('[SYNC-SUBJECT-HEAL] Repaired $repaired subject(s)');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Full-table reconciliation (generalizes the subject self-heal to lessons,
+  // exams, scheme_of_work, and progress_logs). See
+  // plans/sync_full_table_reconciliation.md — Fixes 1-4, 6-7.
+  // ═══════════════════════════════════════════════════════════════════════
+
+  /// Stop-limit (Fix 6): a missing row is re-queued at most this many times
+  /// before it is flagged for manual review. progress_logs uses 1 (one-shot,
+  /// Fix 1) so an append-only event is never auto-requeued twice.
+  static const int _reconcileMaxAttemptsLessonsExamsSow = 3;
+  static const int _reconcileMaxAttemptsProgressLogs = 1;
+
+  /// Last-cycle per-table counters (repaired/adopted/inactive/unscoped/
+  /// flagged) so [debugDumpReconcileIssues] can surface unscoped/ambiguous
+  /// counts without a UI (Fix 7).
+  final Map<String, Map<String, int>> _lastReconcileCounts = {};
+
+  String _normKey(String value) =>
+      value.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+
+  int? _toInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString());
+  }
+
+  int? _toUtcMs(dynamic value) {
+    if (value == null) return null;
+    final parsed = value is DateTime ? value : DateTime.tryParse(value.toString());
+    return parsed?.toUtc().millisecondsSinceEpoch;
+  }
+
+  /// A catalog row counts as inactive when it is soft-deleted (`is_deleted`)
+  /// or has a non-empty `deleted_at`.
+  bool _isInactiveCatalogRow(Map<String, dynamic> row) {
+    final deletedAt = row['deleted_at'];
+    final hasDeletedAt = deletedAt != null && deletedAt.toString().isNotEmpty;
+    final raw = row['is_deleted'];
+    final softDeleted = raw == true || raw == 'true' || raw == 1;
+    return softDeleted || hasDeletedAt;
+  }
+
+  /// Dispatcher: loads the local FK resolution maps once, then reconciles
+  /// each table whose catalog was returned. Skipped entirely when the pull
+  /// failed (catalog map null) or no active school is known.
+  Future<void> _reconcileMissingLocalRows(
+    Map<String, List<Map<String, dynamic>>> catalogs, {
+    required String effectiveSchoolId,
+  }) async {
+    final teachers = await (db.select(db.teachers)).get();
+    final subjects = await (db.select(db.subjects)).get();
+    final teacherServerIdByLocalId = <int, String>{};
+    final subjectServerIdByLocalId = <int, String>{};
+    final subjectServerIdByNormName = <String, String>{};
+    for (final t in teachers) {
+      final sid = t.serverId;
+      if (sid != null && sid.isNotEmpty) {
+        teacherServerIdByLocalId[t.localId] = sid;
+      }
+    }
+    for (final s in subjects) {
+      final sid = s.serverId;
+      if (sid != null && sid.isNotEmpty) {
+        subjectServerIdByLocalId[s.id] = sid;
+        subjectServerIdByNormName.putIfAbsent(_normKey(s.name), () => sid);
+      }
+    }
+
+    final lessons = catalogs['lessons'];
+    if (lessons != null) {
+      await _reconcileLocalLessons(
+        lessons,
+        effectiveSchoolId: effectiveSchoolId,
+        subjectServerIdByNormName: subjectServerIdByNormName,
+      );
+    }
+    final exams = catalogs['exams'];
+    if (exams != null) {
+      await _reconcileLocalExams(
+        exams,
+        effectiveSchoolId: effectiveSchoolId,
+        subjectServerIdByNormName: subjectServerIdByNormName,
+      );
+    }
+    final sow = catalogs['scheme_of_work'];
+    if (sow != null) {
+      await _reconcileLocalSchemeOfWork(
+        sow,
+        effectiveSchoolId: effectiveSchoolId,
+        teacherServerIdByLocalId: teacherServerIdByLocalId,
+        subjectServerIdByLocalId: subjectServerIdByLocalId,
+      );
+    }
+    final progress = catalogs['progress_logs'];
+    if (progress != null) {
+      await _reconcileLocalProgressLogs(
+        progress,
+        effectiveSchoolId: effectiveSchoolId,
+        teacherServerIdByLocalId: teacherServerIdByLocalId,
+      );
+    }
+  }
+
+  /// Removes pending INSERT queue entries for (table, localId) — used when a
+  /// row matched the server at Tier 1/2 so a stale INSERT can never re-create
+  /// a row the server already has.
+  Future<void> _dropPendingInserts(
+    List<SyncQueueData> pending,
+    String table,
+    int localId,
+  ) async {
+    for (final entry in pending) {
+      if (entry.queueTable == table &&
+          entry.recordLocalId == localId &&
+          entry.operation == 'INSERT') {
+        await store.removeQueueEntry(entry.id);
+      }
+    }
+  }
+
+  /// Deletes any TERMINAL INSERT entry for (table, localId) so a freshly
+  /// re-queued clean INSERT never sits next to a dead twin.
+  Future<void> _deleteTerminalInsertTwin(String table, int localId) async {
+    final twins = await (db.select(db.syncQueue)
+          ..where((t) =>
+              t.isTerminal.equals(true) &
+              t.queueTable.equals(table) &
+              t.recordLocalId.equals(localId) &
+              t.operation.equals('INSERT')))
+        .get();
+    for (final twin in twins) {
+      await db.syncQueueDao.deleteById(twin.id);
+    }
+  }
+
+  /// The generalized per-table reconciliation core. Implements the tiered
+  /// matching of C.2 exactly: strict school scope (applied by the caller via
+  /// [scopedRows]/[unscopedCount]), Tier 1 (server_id), Tier 2 (natural key,
+  /// Fix 3 safe rule), inactive-only warn, then missing → repair with the
+  /// stop-limit (Fix 6) / one-shot (Fix 1). Logs one summary line per table.
+  Future<void> _reconcileTableRows<T>({
+    required String table,
+    required List<Map<String, dynamic>> catalog,
+    required int maxAttempts,
+    required int unscopedCount,
+    required List<T> scopedRows,
+    required int Function(T row) localIdOf,
+    required String? Function(T row) serverIdOf,
+    required String? Function(Map<String, dynamic> catalogRow)
+        naturalKeyFromCatalog,
+    required String? Function(T row) naturalKeyOf,
+    required Future<void> Function(T row, String serverId) adoptServerId,
+    required Future<void> Function(T row) clearServerId,
+    required Future<Map<String, dynamic>?> Function(T row) buildPayload,
+    required String Function(T row) logLabel,
+  }) async {
+    final activeById = <String, Map<String, dynamic>>{};
+    final inactiveById = <String, Map<String, dynamic>>{};
+    final activeByKey = <String, List<Map<String, dynamic>>>{};
+    final inactiveKeys = <String>{};
+    for (final row in catalog) {
+      final id = row['id'] as String?;
+      if (id == null || id.isEmpty) continue;
+      final key = naturalKeyFromCatalog(row);
+      if (_isInactiveCatalogRow(row)) {
+        inactiveById[id] = row;
+        if (key != null) inactiveKeys.add(key);
+        continue;
+      }
+      activeById[id] = row;
+      if (key != null) {
+        activeByKey.putIfAbsent(key, () => []).add(row);
+      }
+    }
+
+    final pending = await store.loadPendingQueue();
+    final pendingInserts = <int>{};
+    for (final entry in pending) {
+      if (entry.queueTable == table && entry.operation == 'INSERT') {
+        pendingInserts.add(entry.recordLocalId);
+      }
+    }
+
+    var repaired = 0, adopted = 0, inactiveWarned = 0, flagged = 0;
+
+    for (final local in scopedRows) {
+      final localId = localIdOf(local);
+      final label = logLabel(local);
+      final serverId = serverIdOf(local);
+      final key = naturalKeyOf(local);
+
+      // ── Tier 1 — server_id match ──────────────────────────────────────
+      if (serverId != null && serverId.isNotEmpty) {
+        if (activeById.containsKey(serverId)) {
+          await _dropPendingInserts(pending, table, localId);
+          await db.syncReconcileStateDao.clearFor(table, localId);
+          continue;
+        }
+        // The existing id references a REAL row of this table (inactive) —
+        // never rebind it, even if the natural key diverges (Fix 3 case 2).
+        if (inactiveById.containsKey(serverId)) {
+          inactiveWarned++;
+          debugPrint('[SYNC-HEAL] $label: server row $serverId exists but is '
+              'soft-deleted/inactive — leaving local row unchanged');
+          continue;
+        }
+      }
+
+      // ── Tier 2 — natural-key match (Fix 3 safe rule) ──────────────────
+      final matches = key != null
+          ? (activeByKey[key] ?? const <Map<String, dynamic>>[])
+          : const <Map<String, dynamic>>[];
+      if (matches.isNotEmpty) {
+        if (matches.length > 1) {
+          // Ambiguous natural key (Fix 2 defensive rule): adopt nothing,
+          // re-queue nothing.
+          flagged++;
+          debugPrint('[SYNC-HEAL] $label: natural key matches '
+              '${matches.length} active server rows — ambiguous, needs '
+              'manual review');
+          continue;
+        }
+        final matchId = matches.first['id'] as String?;
+        if (matchId == null || matchId.isEmpty) continue;
+        if (serverId != null && serverId.isNotEmpty) {
+          // serverId is provably absent from the entire catalog — not a row
+          // of this table in this school (e.g. the old cross-table collision
+          // id). Adopt with an explicit reason (Fix 3 case 3).
+          debugPrint('[SYNC-HEAL] $label: server_id $serverId is not a row of '
+              'table $table in this school\'s catalog — adopting $matchId '
+              'via natural key');
+        }
+        await adoptServerId(local, matchId);
+        await _dropPendingInserts(pending, table, localId);
+        await db.syncReconcileStateDao.clearFor(table, localId);
+        adopted++;
+        continue;
+      }
+
+      // ── Only inactive server rows exist for this key — never re-create ─
+      if (key != null && inactiveKeys.contains(key)) {
+        inactiveWarned++;
+        debugPrint('[SYNC-HEAL] $label: soft-deleted/inactive on server — '
+            'leaving local row unchanged');
+        continue;
+      }
+
+      // ── Missing → repair (stop-limit / one-shot first) ────────────────
+      final attempts =
+          (await db.syncReconcileStateDao.getFor(table, localId))?.attempts ??
+              0;
+      if (attempts >= maxAttempts) {
+        flagged++;
+        debugPrint('[SYNC-HEAL] $label: no server match after $attempts '
+            'cycle(s) — needs manual review, not re-queued');
+        continue;
+      }
+      if (serverId != null && serverId.isNotEmpty) {
+        await clearServerId(local);
+        debugPrint('[SYNC-HEAL] $label: cleared stale server_id $serverId');
+      }
+      if (pendingInserts.contains(localId)) {
+        continue; // an INSERT for this row is already pending
+      }
+      await _deleteTerminalInsertTwin(table, localId);
+      final payload = await buildPayload(local);
+      if (payload == null) {
+        flagged++; // reason already logged by the builder
+        continue;
+      }
+      await db.syncQueueDao.insertEntry(
+        queueTable: table,
+        recordLocalId: localId,
+        operation: 'INSERT',
+        payload: payload,
+      );
+      await db.syncReconcileStateDao.recordAttempt(table, localId);
+      repaired++;
+    }
+
+    _lastReconcileCounts[table] = {
+      'repaired': repaired,
+      'adopted': adopted,
+      'inactive': inactiveWarned,
+      'unscoped': unscopedCount,
+      'flagged': flagged,
+    };
+    debugPrint('[SYNC-HEAL] $table: $repaired repaired, $adopted adopted, '
+        '$inactiveWarned inactive, $unscopedCount unscoped, '
+        '$flagged flagged');
+  }
+
+  // ── Natural-key builders ────────────────────────────────────────────────
+
+  String? _lessonKeyFromCatalog(Map<String, dynamic> row) {
+    final teacherId = row['teacher_id'] as String?;
+    final subjectId = row['subject_id'] as String?;
+    if (teacherId == null || teacherId.isEmpty) return null;
+    if (subjectId == null || subjectId.isEmpty) return null;
+    final week = _toInt(row['week']) ?? 0;
+    return 'l|${_normKey(row['school_id'] as String? ?? '')}|'
+        '${_normKey(teacherId)}|${_normKey(subjectId)}|'
+        '${_normKey(row['class_level'] as String? ?? '')}|$week|'
+        '${_normKey(row['term'] as String? ?? '')}';
+  }
+
+  String? _lessonKeyFromLocal(
+    Lesson r,
+    Map<String, String> subjectServerIdByNormName,
+  ) {
+    final teacherId = r.teacherServerId;
+    final subjectId = subjectServerIdByNormName[_normKey(r.subject)];
+    if (teacherId == null || teacherId.isEmpty) return null;
+    if (subjectId == null || subjectId.isEmpty) return null;
+    return 'l|${_normKey(r.schoolServerId ?? '')}|${_normKey(teacherId)}|'
+        '${_normKey(subjectId)}|${_normKey(r.classLevel)}|${r.week}|'
+        '${_normKey(r.term ?? '')}';
+  }
+
+  String? _examKeyFromCatalog(Map<String, dynamic> row) {
+    final teacherId = row['teacher_id'] as String?;
+    final subjectId = row['subject_id'] as String?;
+    if (teacherId == null || teacherId.isEmpty) return null;
+    if (subjectId == null || subjectId.isEmpty) return null;
+    final weekNumber = _toInt(row['week_number']) ?? 0;
+    return 'e|${_normKey(row['school_id'] as String? ?? '')}|'
+        '${_normKey(teacherId)}|${_normKey(subjectId)}|'
+        '${_normKey(row['class_level'] as String? ?? '')}|$weekNumber|'
+        '${_normKey(row['term'] as String? ?? '')}|'
+        '${_normKey(row['topic'] as String? ?? '')}';
+  }
+
+  String? _examKeyFromLocal(
+    Exam r,
+    Map<String, String> subjectServerIdByNormName,
+  ) {
+    final teacherId = r.teacherServerId;
+    final subjectId = subjectServerIdByNormName[_normKey(r.subject)];
+    if (teacherId == null || teacherId.isEmpty) return null;
+    if (subjectId == null || subjectId.isEmpty) return null;
+    return 'e|${_normKey(r.schoolServerId ?? '')}|${_normKey(teacherId)}|'
+        '${_normKey(subjectId)}|${_normKey(r.classLevel)}|${r.weekNumber ?? 0}|'
+        '${_normKey(r.term ?? '')}|${_normKey(r.topic)}';
+  }
+
+  String? _sowKeyFromCatalog(Map<String, dynamic> row) {
+    final subjectId = row['subject_id'] as String?;
+    if (subjectId == null || subjectId.isEmpty) return null;
+    final weekNumber = _toInt(row['week_number']) ?? 0;
+    return 's|${_normKey(row['school_id'] as String? ?? '')}|'
+        '${_normKey(subjectId)}|${_normKey(row['term'] as String? ?? '')}|'
+        '$weekNumber';
+  }
+
+  String? _sowKeyFromLocal(
+    SchemeOfWorkData r,
+    Map<int, String> subjectServerIdByLocalId,
+    String effectiveSchoolId,
+  ) {
+    final subjectId = subjectServerIdByLocalId[r.subjectId];
+    if (subjectId == null || subjectId.isEmpty) return null;
+    return 's|${_normKey(effectiveSchoolId)}|${_normKey(subjectId)}|'
+        '${_normKey(r.term)}|${r.weekNumber}';
+  }
+
+  String? _progressKeyFromCatalog(Map<String, dynamic> row) {
+    final teacherId = row['teacher_id'] as String?;
+    if (teacherId == null || teacherId.isEmpty) return null;
+    final eventDateMs = _toUtcMs(row['event_date']);
+    if (eventDateMs == null) return null;
+    return 'p|${_normKey(row['school_id'] as String? ?? '')}|'
+        '${_normKey(teacherId)}|'
+        '${_normKey(row['event_type'] as String? ?? '')}|$eventDateMs';
+  }
+
+  String? _progressKeyFromLocal(
+    ProgressLog r,
+    Map<int, String> teacherServerIdByLocalId,
+    String effectiveSchoolId,
+  ) {
+    final teacherId = teacherServerIdByLocalId[r.teacherId];
+    if (teacherId == null || teacherId.isEmpty) return null;
+    return 'p|${_normKey(effectiveSchoolId)}|${_normKey(teacherId)}|'
+        '${_normKey(r.eventType)}|'
+        '${r.eventDate.toUtc().millisecondsSinceEpoch}';
+  }
+
+  // ── Per-table wrappers (school scope + payloads) ────────────────────────
+
+  Future<void> _reconcileLocalLessons(
+    List<Map<String, dynamic>> catalog, {
+    required String effectiveSchoolId,
+    required Map<String, String> subjectServerIdByNormName,
+  }) async {
+    final localRows = await (db.select(db.lessons)
+          ..where((t) => t.isDeleted.equals(false)))
+        .get();
+    var unscoped = 0;
+    final scoped = <Lesson>[];
+    for (final row in localRows) {
+      if (row.schoolServerId == effectiveSchoolId) {
+        scoped.add(row);
+      } else {
+        unscoped++;
+      }
+    }
+    await _reconcileTableRows(
+      table: 'lessons',
+      catalog: catalog,
+      maxAttempts: _reconcileMaxAttemptsLessonsExamsSow,
+      unscopedCount: unscoped,
+      scopedRows: scoped,
+      localIdOf: (r) => r.id,
+      serverIdOf: (r) => r.serverId,
+      naturalKeyFromCatalog: _lessonKeyFromCatalog,
+      naturalKeyOf: (r) =>
+          _lessonKeyFromLocal(r, subjectServerIdByNormName),
+      adoptServerId: (r, sid) async => (db.update(db.lessons)
+            ..where((t) => t.id.equals(r.id)))
+          .write(LessonsCompanion(
+        serverId: Value(sid),
+        updatedAt: Value(DateTime.now()),
+      )),
+      clearServerId: (r) async => (db.update(db.lessons)
+            ..where((t) => t.id.equals(r.id)))
+          .write(LessonsCompanion(
+        serverId: const Value(null),
+        updatedAt: Value(DateTime.now()),
+      )),
+      buildPayload: (r) async => _buildLessonInsertPayload(r),
+      logLabel: (r) => 'lessons#${r.id} (${r.subject}/${r.topic})',
+    );
+  }
+
+  Future<void> _reconcileLocalExams(
+    List<Map<String, dynamic>> catalog, {
+    required String effectiveSchoolId,
+    required Map<String, String> subjectServerIdByNormName,
+  }) async {
+    final localRows = await (db.select(db.exams)
+          ..where((t) => t.isDeleted.equals(false)))
+        .get();
+    var unscoped = 0;
+    final scoped = <Exam>[];
+    for (final row in localRows) {
+      if (row.schoolServerId == effectiveSchoolId) {
+        scoped.add(row);
+      } else {
+        unscoped++;
+      }
+    }
+    await _reconcileTableRows(
+      table: 'exams',
+      catalog: catalog,
+      maxAttempts: _reconcileMaxAttemptsLessonsExamsSow,
+      unscopedCount: unscoped,
+      scopedRows: scoped,
+      localIdOf: (r) => r.id,
+      serverIdOf: (r) => r.serverId,
+      naturalKeyFromCatalog: _examKeyFromCatalog,
+      naturalKeyOf: (r) => _examKeyFromLocal(r, subjectServerIdByNormName),
+      adoptServerId: (r, sid) async => (db.update(db.exams)
+            ..where((t) => t.id.equals(r.id)))
+          .write(ExamsCompanion(
+        serverId: Value(sid),
+        updatedAt: Value(DateTime.now()),
+      )),
+      clearServerId: (r) async => (db.update(db.exams)
+            ..where((t) => t.id.equals(r.id)))
+          .write(ExamsCompanion(
+        serverId: const Value(null),
+        updatedAt: Value(DateTime.now()),
+      )),
+      buildPayload: (r) async => _buildExamInsertPayload(r),
+      logLabel: (r) => 'exams#${r.id} (${r.subject}/${r.topic})',
+    );
+  }
+
+  Future<void> _reconcileLocalSchemeOfWork(
+    List<Map<String, dynamic>> catalog, {
+    required String effectiveSchoolId,
+    required Map<int, String> teacherServerIdByLocalId,
+    required Map<int, String> subjectServerIdByLocalId,
+  }) async {
+    final school = await db.schoolsDao.getByServerId(effectiveSchoolId);
+    final localRows = await (db.select(db.schemeOfWork)
+          ..where((t) => t.isDeleted.equals(false)))
+        .get();
+    var unscoped = 0;
+    final scoped = <SchemeOfWorkData>[];
+    for (final row in localRows) {
+      if (school != null && row.schoolId == school.localId) {
+        scoped.add(row);
+      } else {
+        unscoped++;
+      }
+    }
+    await _reconcileTableRows(
+      table: 'scheme_of_work',
+      catalog: catalog,
+      maxAttempts: _reconcileMaxAttemptsLessonsExamsSow,
+      unscopedCount: unscoped,
+      scopedRows: scoped,
+      localIdOf: (r) => r.id,
+      serverIdOf: (r) => r.serverId,
+      naturalKeyFromCatalog: _sowKeyFromCatalog,
+      naturalKeyOf: (r) =>
+          _sowKeyFromLocal(r, subjectServerIdByLocalId, effectiveSchoolId),
+      adoptServerId: (r, sid) async => (db.update(db.schemeOfWork)
+            ..where((t) => t.id.equals(r.id)))
+          .write(SchemeOfWorkCompanion(
+        serverId: Value(sid),
+        updatedAt: Value(DateTime.now()),
+      )),
+      clearServerId: (r) async => (db.update(db.schemeOfWork)
+            ..where((t) => t.id.equals(r.id)))
+          .write(SchemeOfWorkCompanion(
+        serverId: const Value(null),
+        updatedAt: Value(DateTime.now()),
+      )),
+      buildPayload: (r) => _buildSchemeOfWorkInsertPayload(
+        r,
+        effectiveSchoolId: effectiveSchoolId,
+        teacherServerIdByLocalId: teacherServerIdByLocalId,
+        subjectServerIdByLocalId: subjectServerIdByLocalId,
+      ),
+      logLabel: (r) =>
+          'scheme_of_work#${r.id} (term=${r.term} week=${r.weekNumber})',
+    );
+  }
+
+  Future<void> _reconcileLocalProgressLogs(
+    List<Map<String, dynamic>> catalog, {
+    required String effectiveSchoolId,
+    required Map<int, String> teacherServerIdByLocalId,
+  }) async {
+    final school = await db.schoolsDao.getByServerId(effectiveSchoolId);
+    final localRows = await (db.select(db.progressLogs)
+          ..where((t) => t.isDeleted.equals(false)))
+        .get();
+    var unscoped = 0;
+    final scoped = <ProgressLog>[];
+    for (final row in localRows) {
+      if (school != null && row.schoolId == school.localId) {
+        scoped.add(row);
+      } else {
+        unscoped++;
+      }
+    }
+    await _reconcileTableRows(
+      table: 'progress_logs',
+      catalog: catalog,
+      maxAttempts: _reconcileMaxAttemptsProgressLogs,
+      unscopedCount: unscoped,
+      scopedRows: scoped,
+      localIdOf: (r) => r.id,
+      serverIdOf: (r) => r.serverId,
+      naturalKeyFromCatalog: _progressKeyFromCatalog,
+      naturalKeyOf: (r) =>
+          _progressKeyFromLocal(r, teacherServerIdByLocalId, effectiveSchoolId),
+      adoptServerId: (r, sid) async => (db.update(db.progressLogs)
+            ..where((t) => t.id.equals(r.id)))
+          .write(ProgressLogsCompanion(
+        serverId: Value(sid),
+        updatedAt: Value(DateTime.now()),
+      )),
+      clearServerId: (r) async => (db.update(db.progressLogs)
+            ..where((t) => t.id.equals(r.id)))
+          .write(ProgressLogsCompanion(
+        serverId: const Value(null),
+        updatedAt: Value(DateTime.now()),
+      )),
+      buildPayload: (r) => _buildProgressLogInsertPayload(
+        r,
+        effectiveSchoolId: effectiveSchoolId,
+        teacherServerIdByLocalId: teacherServerIdByLocalId,
+      ),
+      logLabel: (r) =>
+          'progress_logs#${r.id} (${r.eventType} @ ${r.eventDate.toIso8601String()})',
+    );
+  }
+
+  // ── Payload builders (byte-identical to the current queue sites) ────────
+
+  Map<String, dynamic>? _buildLessonInsertPayload(Lesson r) {
+    final teacherServerId = r.teacherServerId;
+    if (teacherServerId == null || teacherServerId.isEmpty) {
+      debugPrint('[SYNC-HEAL] lessons#${r.id}: cannot resolve teacher server '
+          'id — skipping re-push');
+      return null;
+    }
+    return {
+      'subject': r.subject,
+      'classLevel': r.classLevel,
+      'week': r.week,
+      'topic': r.topic,
+      'difficulty': r.difficulty,
+      'bloomsVerbs': r.bloomsVerbs,
+      'curriculum': r.curriculum,
+      'teacher_server_id': teacherServerId,
+      'school_server_id': r.schoolServerId,
+      'content': r.content,
+      'content_hash': r.contentHash ?? r.content.hashCode.toString(),
+      'is_unlocked': r.isUnlocked,
+      'status': r.status,
+      if (r.schemeOfWorkId != null && r.schemeOfWorkId!.isNotEmpty)
+        'scheme_of_work_id': r.schemeOfWorkId,
+      'week_number': r.weekNumber ?? r.week,
+      if (r.term != null && r.term!.isNotEmpty) 'term': r.term,
+    };
+  }
+
+  Map<String, dynamic>? _buildExamInsertPayload(Exam r) {
+    final teacherServerId = r.teacherServerId;
+    if (teacherServerId == null || teacherServerId.isEmpty) {
+      debugPrint('[SYNC-HEAL] exams#${r.id}: cannot resolve teacher server '
+          'id — skipping re-push');
+      return null;
+    }
+    return {
+      'subject': r.subject,
+      'classLevel': r.classLevel,
+      'topic': r.topic,
+      'difficulty': r.difficulty,
+      'curriculum': r.curriculum,
+      'teacher_server_id': teacherServerId,
+      'school_server_id': r.schoolServerId,
+      'content': r.content,
+      'is_unlocked': r.isUnlocked,
+      if (r.schemeOfWorkId != null && r.schemeOfWorkId!.isNotEmpty)
+        'scheme_of_work_id': r.schemeOfWorkId,
+      'week_number': r.weekNumber ?? 0,
+      if (r.term != null && r.term!.isNotEmpty) 'term': r.term,
+    };
+  }
+
+  Future<Map<String, dynamic>?> _buildSchemeOfWorkInsertPayload(
+    SchemeOfWorkData r, {
+    required String effectiveSchoolId,
+    required Map<int, String> teacherServerIdByLocalId,
+    required Map<int, String> subjectServerIdByLocalId,
+  }) async {
+    final teacherServerId = teacherServerIdByLocalId[r.teacherId];
+    if (teacherServerId == null || teacherServerId.isEmpty) {
+      debugPrint('[SYNC-HEAL] scheme_of_work#${r.id}: cannot resolve teacher '
+          'server id (local teacherId=${r.teacherId}) — skipping re-push');
+      return null;
+    }
+    final subjectServerId = subjectServerIdByLocalId[r.subjectId];
+    final subject = await db.subjectsDao.getById(r.subjectId);
+    if (subjectServerId == null &&
+        (subject == null || subject.name.trim().isEmpty)) {
+      debugPrint('[SYNC-HEAL] scheme_of_work#${r.id}: no subject id or name '
+          'resolvable — skipping re-push');
+      return null;
+    }
+    return {
+      'teacher_server_id': teacherServerId,
+      'school_server_id': effectiveSchoolId,
+      'subject_id': subjectServerId,
+      'subject_name': subject?.name,
+      'term': r.term,
+      'week_number': r.weekNumber,
+      'topic': r.topic,
+      'objectives': r.objectives,
+      'status': r.status,
+      'admin_edited_topic': r.adminEditedTopic,
+      'admin_comment': r.adminComment,
+      'class_level': r.classLevel,
+    };
+  }
+
+  Future<Map<String, dynamic>?> _buildProgressLogInsertPayload(
+    ProgressLog r, {
+    required String effectiveSchoolId,
+    required Map<int, String> teacherServerIdByLocalId,
+  }) async {
+    final teacherServerId = teacherServerIdByLocalId[r.teacherId];
+    if (teacherServerId == null || teacherServerId.isEmpty) {
+      debugPrint('[SYNC-HEAL] progress_logs#${r.id}: cannot resolve teacher '
+          'server id (local teacherId=${r.teacherId}) — skipping re-push');
+      return null;
+    }
+    return {
+      'event_type': r.eventType,
+      'event_date': r.eventDate.toUtc().toIso8601String(),
+      'lesson_id': r.lessonId,
+      'teacher_id': teacherServerId,
+      'school_id': effectiveSchoolId,
+    };
+  }
+
+  /// Fix 7: surfaces every tracked reconcile-state row (with its attempt
+  /// count and whether it is over threshold) plus the last cycle's per-table
+  /// unscoped/ambiguous counts, so flagged rows reach a person. Runs at the
+  /// end of each successful pull (see [_pullChanges]) and is callable
+  /// manually. No UI — the output lands in the app log stream filtered on
+  /// `SYNC-HEAL`, and the lines are returned so tests can assert on them.
+  Future<List<String>> debugDumpReconcileIssues() async {
+    final lines = <String>[];
+    final all = await db.syncReconcileStateDao.getAll();
+    lines.add('[SYNC-HEAL] debugDumpReconcileIssues: ${all.length} tracked '
+        'row(s)');
+    for (final state in all) {
+      final maxA = state.recordTable == 'progress_logs'
+          ? _reconcileMaxAttemptsProgressLogs
+          : _reconcileMaxAttemptsLessonsExamsSow;
+      final over = state.attempts >= maxA;
+      lines.add('[SYNC-HEAL]   ${state.recordTable} localId=${state.localId} '
+          'attempts=${state.attempts}/$maxA '
+          'lastAttemptedAt=${state.lastAttemptedAt}'
+          '${over ? ' — OVER THRESHOLD, needs manual review' : ''}');
+    }
+    _lastReconcileCounts.forEach((table, counts) {
+      lines.add('[SYNC-HEAL]   $table last-cycle counts: $counts');
+    });
+    for (final line in lines) {
+      debugPrint(line);
+    }
+    return lines;
   }
 
   Future<MergeResult> _threeWayMerge(
@@ -1382,6 +2347,27 @@ class SyncService {
         final serverId = await _getServerIdForQueueEntry(db, entry);
         if (serverId != null && serverId.isNotEmpty) {
           payload['server_id'] = serverId;
+        }
+      }
+      // ── Self-heal: progress_logs INSERTs must carry event_date ────────
+      // Older queue entries (created before the payload included event_date)
+      // fail server-side with "null value in column \"event_date\" ...
+      // violates not-null constraint" and retry forever. Inject the ACTUAL
+      // local row's eventDate so the entry succeeds without any server
+      // schema change. Only INSERTs need this — UPDATEs never touch
+      // event_date so the original server value is preserved.
+      if (entry.queueTable == 'progress_logs' &&
+          effectiveOperation == 'INSERT' &&
+          !payload.containsKey('event_date')) {
+        final row = await (db.select(db.progressLogs)
+              ..where((t) => t.id.equals(entry.recordLocalId)))
+            .getSingleOrNull();
+        if (row != null) {
+          payload['event_date'] = row.eventDate.toUtc().toIso8601String();
+          debugPrint(
+            '[PUSH-DIAG] Injected event_date=${payload['event_date']} for '
+            'progress_logs entry ${entry.id} (localId=${entry.recordLocalId})',
+          );
         }
       }
       // ───────────────────────────────────────────────────────────────────

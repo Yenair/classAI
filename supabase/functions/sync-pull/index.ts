@@ -67,7 +67,7 @@ serve(async (req) => {
     }
 
     // ── 2. Process sync-pull request ───────────────────────────────────────
-    const { lastSyncTimestamp, tables, school_id } = await req.json();
+    const { lastSyncTimestamp, tables, school_id, catalogs } = await req.json();
 
     if (!Array.isArray(tables) || tables.length === 0) {
       return new Response(
@@ -166,6 +166,77 @@ serve(async (req) => {
       nextCursor = (lastChange.row.updated_at as string) ?? null;
     }
 
+    // ── 2c. Full subject catalog for client-side subject self-heal ────────────
+    // Return the school's ENTIRE subjects list (independent of the
+    // incremental cursor) so the client can reconcile local subjects that
+    // never reached the server (e.g. a stale server_id assigned by the old
+    // cross-table local_id collision) and permanently self-heal them. The
+    // catalog is small (one row per subject) and is returned on every page.
+    let subjectCatalog: Record<string, unknown>[] = [];
+    try {
+      if (school_id) {
+        const { data: subjectData, error: subjectError } = await supabase
+          .from("subjects")
+          .select("id, subject_name, school_id, is_active, deleted_at")
+          .eq("school_id", school_id);
+        if (subjectError) {
+          console.warn(
+            "[sync-pull] error fetching subject catalog:", subjectError.message
+          );
+        } else if (subjectData && subjectData.length > 0) {
+          subjectCatalog = subjectData;
+        }
+      }
+    } catch (e) {
+      console.warn(
+        "[sync-pull] error fetching subject catalog:",
+        e instanceof Error ? e.message : e
+      );
+    }
+
+    // ── 2d. Identity catalogs for full-table reconciliation ───────────────────
+    // Minimal identity columns per table so the client can reconcile local rows
+    // against the server (match by server id, then by natural key) — the same
+    // pattern as subject_catalog above. Returned on every page; the client
+    // captures the last page's value. Volume is tiny for small schools.
+    const CATALOG_PROJECTIONS: Record<string, string> = {
+      lessons:
+        "id, school_id, teacher_id, subject_id, subject, class_level, week, week_number, term, topic, is_deleted, deleted_at, updated_at",
+      exams:
+        "id, school_id, teacher_id, subject_id, subject, class_level, week_number, term, topic, is_deleted, deleted_at, updated_at",
+      scheme_of_work:
+        "id, school_id, teacher_id, subject_id, term, week_number, topic, class_level, status, is_deleted, deleted_at, updated_at",
+      progress_logs:
+        "id, school_id, teacher_id, lesson_id, exam_id, event_type, event_date, notes, is_deleted, deleted_at, updated_at",
+    };
+    const catalogsResponse: Record<string, Record<string, unknown>[]> = {};
+    if (Array.isArray(catalogs)) {
+      for (const table of catalogs) {
+        const projection = CATALOG_PROJECTIONS[table as string];
+        if (!projection) continue;
+        try {
+          let query = supabase.from(table as string).select(projection);
+          if (school_id) {
+            query = query.eq("school_id", school_id);
+          }
+          const { data, error } = await query;
+          if (error) {
+            console.warn(
+              `[sync-pull] error fetching catalog for "${table}": ${error.message}`
+            );
+            continue;
+          }
+          catalogsResponse[table as string] =
+            (data ?? []) as Record<string, unknown>[];
+        } catch (e) {
+          console.warn(
+            `[sync-pull] error fetching catalog for "${table}":`,
+            e instanceof Error ? e.message : e
+          );
+        }
+      }
+    }
+
     // ── 3. Fetch teacher metadata for client-side reconciliation ──────────────
     // Return the set of all active teacher IDs so the client can delete local
     // records for teachers that were hard-deleted from the server (Issue 1).
@@ -224,6 +295,8 @@ serve(async (req) => {
         next_cursor: nextCursor,
         active_teacher_ids: activeTeacherIds,
         pending_teachers: pendingTeachers,
+        subject_catalog: subjectCatalog,
+        catalogs: catalogsResponse,
       }),
       { headers: { "Content-Type": "application/json" } }
     );

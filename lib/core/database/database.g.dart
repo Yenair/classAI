@@ -9270,6 +9270,358 @@ class SyncQueueSnapshotCompanion
   }
 }
 
+class $SyncReconcileStateTable extends SyncReconcileState
+    with TableInfo<$SyncReconcileStateTable, SyncReconcileStateData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncReconcileStateTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _recordTableMeta =
+      const VerificationMeta('recordTable');
+  @override
+  late final GeneratedColumn<String> recordTable = GeneratedColumn<String>(
+      'record_table', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _localIdMeta =
+      const VerificationMeta('localId');
+  @override
+  late final GeneratedColumn<int> localId = GeneratedColumn<int>(
+      'local_id', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _attemptsMeta =
+      const VerificationMeta('attempts');
+  @override
+  late final GeneratedColumn<int> attempts = GeneratedColumn<int>(
+      'attempts', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _lastAttemptedAtMeta =
+      const VerificationMeta('lastAttemptedAt');
+  @override
+  late final GeneratedColumn<DateTime> lastAttemptedAt =
+      GeneratedColumn<DateTime>('last_attempted_at', aliasedName, true,
+          type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, recordTable, localId, attempts, lastAttemptedAt, updatedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sync_reconcile_state';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<SyncReconcileStateData> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('record_table')) {
+      context.handle(
+          _recordTableMeta,
+          recordTable.isAcceptableOrUnknown(
+              data['record_table']!, _recordTableMeta));
+    } else if (isInserting) {
+      context.missing(_recordTableMeta);
+    }
+    if (data.containsKey('local_id')) {
+      context.handle(_localIdMeta,
+          localId.isAcceptableOrUnknown(data['local_id']!, _localIdMeta));
+    } else if (isInserting) {
+      context.missing(_localIdMeta);
+    }
+    if (data.containsKey('attempts')) {
+      context.handle(_attemptsMeta,
+          attempts.isAcceptableOrUnknown(data['attempts']!, _attemptsMeta));
+    }
+    if (data.containsKey('last_attempted_at')) {
+      context.handle(
+          _lastAttemptedAtMeta,
+          lastAttemptedAt.isAcceptableOrUnknown(
+              data['last_attempted_at']!, _lastAttemptedAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+        {recordTable, localId},
+      ];
+  @override
+  SyncReconcileStateData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncReconcileStateData(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      recordTable: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}record_table'])!,
+      localId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}local_id'])!,
+      attempts: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}attempts'])!,
+      lastAttemptedAt: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime, data['${effectivePrefix}last_attempted_at']),
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+    );
+  }
+
+  @override
+  $SyncReconcileStateTable createAlias(String alias) {
+    return $SyncReconcileStateTable(attachedDatabase, alias);
+  }
+}
+
+class SyncReconcileStateData extends DataClass
+    implements Insertable<SyncReconcileStateData> {
+  final int id;
+  final String recordTable;
+  final int localId;
+  final int attempts;
+  final DateTime? lastAttemptedAt;
+  final DateTime updatedAt;
+  const SyncReconcileStateData(
+      {required this.id,
+      required this.recordTable,
+      required this.localId,
+      required this.attempts,
+      this.lastAttemptedAt,
+      required this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['record_table'] = Variable<String>(recordTable);
+    map['local_id'] = Variable<int>(localId);
+    map['attempts'] = Variable<int>(attempts);
+    if (!nullToAbsent || lastAttemptedAt != null) {
+      map['last_attempted_at'] = Variable<DateTime>(lastAttemptedAt);
+    }
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  SyncReconcileStateCompanion toCompanion(bool nullToAbsent) {
+    return SyncReconcileStateCompanion(
+      id: Value(id),
+      recordTable: Value(recordTable),
+      localId: Value(localId),
+      attempts: Value(attempts),
+      lastAttemptedAt: lastAttemptedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastAttemptedAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory SyncReconcileStateData.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncReconcileStateData(
+      id: serializer.fromJson<int>(json['id']),
+      recordTable: serializer.fromJson<String>(json['recordTable']),
+      localId: serializer.fromJson<int>(json['localId']),
+      attempts: serializer.fromJson<int>(json['attempts']),
+      lastAttemptedAt: serializer.fromJson<DateTime?>(json['lastAttemptedAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'recordTable': serializer.toJson<String>(recordTable),
+      'localId': serializer.toJson<int>(localId),
+      'attempts': serializer.toJson<int>(attempts),
+      'lastAttemptedAt': serializer.toJson<DateTime?>(lastAttemptedAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  SyncReconcileStateData copyWith(
+          {int? id,
+          String? recordTable,
+          int? localId,
+          int? attempts,
+          Value<DateTime?> lastAttemptedAt = const Value.absent(),
+          DateTime? updatedAt}) =>
+      SyncReconcileStateData(
+        id: id ?? this.id,
+        recordTable: recordTable ?? this.recordTable,
+        localId: localId ?? this.localId,
+        attempts: attempts ?? this.attempts,
+        lastAttemptedAt: lastAttemptedAt.present
+            ? lastAttemptedAt.value
+            : this.lastAttemptedAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  SyncReconcileStateData copyWithCompanion(SyncReconcileStateCompanion data) {
+    return SyncReconcileStateData(
+      id: data.id.present ? data.id.value : this.id,
+      recordTable:
+          data.recordTable.present ? data.recordTable.value : this.recordTable,
+      localId: data.localId.present ? data.localId.value : this.localId,
+      attempts: data.attempts.present ? data.attempts.value : this.attempts,
+      lastAttemptedAt: data.lastAttemptedAt.present
+          ? data.lastAttemptedAt.value
+          : this.lastAttemptedAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncReconcileStateData(')
+          ..write('id: $id, ')
+          ..write('recordTable: $recordTable, ')
+          ..write('localId: $localId, ')
+          ..write('attempts: $attempts, ')
+          ..write('lastAttemptedAt: $lastAttemptedAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id, recordTable, localId, attempts, lastAttemptedAt, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncReconcileStateData &&
+          other.id == this.id &&
+          other.recordTable == this.recordTable &&
+          other.localId == this.localId &&
+          other.attempts == this.attempts &&
+          other.lastAttemptedAt == this.lastAttemptedAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class SyncReconcileStateCompanion
+    extends UpdateCompanion<SyncReconcileStateData> {
+  final Value<int> id;
+  final Value<String> recordTable;
+  final Value<int> localId;
+  final Value<int> attempts;
+  final Value<DateTime?> lastAttemptedAt;
+  final Value<DateTime> updatedAt;
+  const SyncReconcileStateCompanion({
+    this.id = const Value.absent(),
+    this.recordTable = const Value.absent(),
+    this.localId = const Value.absent(),
+    this.attempts = const Value.absent(),
+    this.lastAttemptedAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  SyncReconcileStateCompanion.insert({
+    this.id = const Value.absent(),
+    required String recordTable,
+    required int localId,
+    this.attempts = const Value.absent(),
+    this.lastAttemptedAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  })  : recordTable = Value(recordTable),
+        localId = Value(localId);
+  static Insertable<SyncReconcileStateData> custom({
+    Expression<int>? id,
+    Expression<String>? recordTable,
+    Expression<int>? localId,
+    Expression<int>? attempts,
+    Expression<DateTime>? lastAttemptedAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (recordTable != null) 'record_table': recordTable,
+      if (localId != null) 'local_id': localId,
+      if (attempts != null) 'attempts': attempts,
+      if (lastAttemptedAt != null) 'last_attempted_at': lastAttemptedAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  SyncReconcileStateCompanion copyWith(
+      {Value<int>? id,
+      Value<String>? recordTable,
+      Value<int>? localId,
+      Value<int>? attempts,
+      Value<DateTime?>? lastAttemptedAt,
+      Value<DateTime>? updatedAt}) {
+    return SyncReconcileStateCompanion(
+      id: id ?? this.id,
+      recordTable: recordTable ?? this.recordTable,
+      localId: localId ?? this.localId,
+      attempts: attempts ?? this.attempts,
+      lastAttemptedAt: lastAttemptedAt ?? this.lastAttemptedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (recordTable.present) {
+      map['record_table'] = Variable<String>(recordTable.value);
+    }
+    if (localId.present) {
+      map['local_id'] = Variable<int>(localId.value);
+    }
+    if (attempts.present) {
+      map['attempts'] = Variable<int>(attempts.value);
+    }
+    if (lastAttemptedAt.present) {
+      map['last_attempted_at'] = Variable<DateTime>(lastAttemptedAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncReconcileStateCompanion(')
+          ..write('id: $id, ')
+          ..write('recordTable: $recordTable, ')
+          ..write('localId: $localId, ')
+          ..write('attempts: $attempts, ')
+          ..write('lastAttemptedAt: $lastAttemptedAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $VersionHashesTable extends VersionHashes
     with TableInfo<$VersionHashesTable, VersionHashe> {
   @override
@@ -14178,6 +14530,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SyncQueueTable syncQueue = $SyncQueueTable(this);
   late final $SyncQueueSnapshotTable syncQueueSnapshot =
       $SyncQueueSnapshotTable(this);
+  late final $SyncReconcileStateTable syncReconcileState =
+      $SyncReconcileStateTable(this);
   late final $VersionHashesTable versionHashes = $VersionHashesTable(this);
   late final $ConflictsTable conflicts = $ConflictsTable(this);
   late final $PaymentEventsTable paymentEvents = $PaymentEventsTable(this);
@@ -14210,6 +14564,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         securityConfig,
         syncQueue,
         syncQueueSnapshot,
+        syncReconcileState,
         versionHashes,
         conflicts,
         paymentEvents,
@@ -18865,6 +19220,194 @@ typedef $$SyncQueueSnapshotTableProcessedTableManager = ProcessedTableManager<
     ),
     SyncQueueSnapshotData,
     PrefetchHooks Function()>;
+typedef $$SyncReconcileStateTableCreateCompanionBuilder
+    = SyncReconcileStateCompanion Function({
+  Value<int> id,
+  required String recordTable,
+  required int localId,
+  Value<int> attempts,
+  Value<DateTime?> lastAttemptedAt,
+  Value<DateTime> updatedAt,
+});
+typedef $$SyncReconcileStateTableUpdateCompanionBuilder
+    = SyncReconcileStateCompanion Function({
+  Value<int> id,
+  Value<String> recordTable,
+  Value<int> localId,
+  Value<int> attempts,
+  Value<DateTime?> lastAttemptedAt,
+  Value<DateTime> updatedAt,
+});
+
+class $$SyncReconcileStateTableFilterComposer
+    extends Composer<_$AppDatabase, $SyncReconcileStateTable> {
+  $$SyncReconcileStateTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get recordTable => $composableBuilder(
+      column: $table.recordTable, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get localId => $composableBuilder(
+      column: $table.localId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get attempts => $composableBuilder(
+      column: $table.attempts, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get lastAttemptedAt => $composableBuilder(
+      column: $table.lastAttemptedAt,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$SyncReconcileStateTableOrderingComposer
+    extends Composer<_$AppDatabase, $SyncReconcileStateTable> {
+  $$SyncReconcileStateTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get recordTable => $composableBuilder(
+      column: $table.recordTable, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get localId => $composableBuilder(
+      column: $table.localId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get attempts => $composableBuilder(
+      column: $table.attempts, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get lastAttemptedAt => $composableBuilder(
+      column: $table.lastAttemptedAt,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$SyncReconcileStateTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SyncReconcileStateTable> {
+  $$SyncReconcileStateTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get recordTable => $composableBuilder(
+      column: $table.recordTable, builder: (column) => column);
+
+  GeneratedColumn<int> get localId =>
+      $composableBuilder(column: $table.localId, builder: (column) => column);
+
+  GeneratedColumn<int> get attempts =>
+      $composableBuilder(column: $table.attempts, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastAttemptedAt => $composableBuilder(
+      column: $table.lastAttemptedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$SyncReconcileStateTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $SyncReconcileStateTable,
+    SyncReconcileStateData,
+    $$SyncReconcileStateTableFilterComposer,
+    $$SyncReconcileStateTableOrderingComposer,
+    $$SyncReconcileStateTableAnnotationComposer,
+    $$SyncReconcileStateTableCreateCompanionBuilder,
+    $$SyncReconcileStateTableUpdateCompanionBuilder,
+    (
+      SyncReconcileStateData,
+      BaseReferences<_$AppDatabase, $SyncReconcileStateTable,
+          SyncReconcileStateData>
+    ),
+    SyncReconcileStateData,
+    PrefetchHooks Function()> {
+  $$SyncReconcileStateTableTableManager(
+      _$AppDatabase db, $SyncReconcileStateTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncReconcileStateTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncReconcileStateTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SyncReconcileStateTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<String> recordTable = const Value.absent(),
+            Value<int> localId = const Value.absent(),
+            Value<int> attempts = const Value.absent(),
+            Value<DateTime?> lastAttemptedAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+          }) =>
+              SyncReconcileStateCompanion(
+            id: id,
+            recordTable: recordTable,
+            localId: localId,
+            attempts: attempts,
+            lastAttemptedAt: lastAttemptedAt,
+            updatedAt: updatedAt,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required String recordTable,
+            required int localId,
+            Value<int> attempts = const Value.absent(),
+            Value<DateTime?> lastAttemptedAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+          }) =>
+              SyncReconcileStateCompanion.insert(
+            id: id,
+            recordTable: recordTable,
+            localId: localId,
+            attempts: attempts,
+            lastAttemptedAt: lastAttemptedAt,
+            updatedAt: updatedAt,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$SyncReconcileStateTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $SyncReconcileStateTable,
+    SyncReconcileStateData,
+    $$SyncReconcileStateTableFilterComposer,
+    $$SyncReconcileStateTableOrderingComposer,
+    $$SyncReconcileStateTableAnnotationComposer,
+    $$SyncReconcileStateTableCreateCompanionBuilder,
+    $$SyncReconcileStateTableUpdateCompanionBuilder,
+    (
+      SyncReconcileStateData,
+      BaseReferences<_$AppDatabase, $SyncReconcileStateTable,
+          SyncReconcileStateData>
+    ),
+    SyncReconcileStateData,
+    PrefetchHooks Function()>;
 typedef $$VersionHashesTableCreateCompanionBuilder = VersionHashesCompanion
     Function({
   Value<int> id,
@@ -21937,6 +22480,8 @@ class $AppDatabaseManager {
       $$SyncQueueTableTableManager(_db, _db.syncQueue);
   $$SyncQueueSnapshotTableTableManager get syncQueueSnapshot =>
       $$SyncQueueSnapshotTableTableManager(_db, _db.syncQueueSnapshot);
+  $$SyncReconcileStateTableTableManager get syncReconcileState =>
+      $$SyncReconcileStateTableTableManager(_db, _db.syncReconcileState);
   $$VersionHashesTableTableManager get versionHashes =>
       $$VersionHashesTableTableManager(_db, _db.versionHashes);
   $$ConflictsTableTableManager get conflicts =>
