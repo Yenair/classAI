@@ -81,20 +81,20 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     }
   }
 
-  /// 'First' / '1st term' / 'first' → '1st' (likewise 2nd/3rd) so internal
-  /// term comparisons stay stable regardless of casing. The DB stores the
-  /// lowercase value after the v27 migration; the UI dropdown still shows the
-  /// title-case labels.
+  /// 'First' / '1st term' / 'first' → 'first' (likewise second/third) so
+  /// internal term comparisons, admin filtering, and admin grouping stay
+  /// stable regardless of casing. The DB stores the lowercase value after the
+  /// v27 migration; the UI dropdown still shows the title-case labels.
   String _normalizeTermKey(String term) {
     final lower = term.trim().toLowerCase();
     if (lower == '1' || lower.startsWith('1st') || lower.contains('first')) {
-      return '1st';
+      return 'first';
     }
     if (lower == '2' || lower.startsWith('2nd') || lower.contains('second')) {
-      return '2nd';
+      return 'second';
     }
     if (lower == '3' || lower.startsWith('3rd') || lower.contains('third')) {
-      return '3rd';
+      return 'third';
     }
     return lower;
   }
@@ -1467,10 +1467,12 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       );
     }
 
-    // Group filtered records by term
+    // Group filtered records by the normalized lowercase term key so
+    // title-case rows (e.g. legacy 'First' or freshly seeded drafts) land in
+    // the same sections as migrated lowercase ('first') rows.
     final grouped = <String, List<SchemeOfWorkData>>{};
     for (final r in filtered) {
-      final term = r.term;
+      final term = _normalizeTermKey(r.term);
       grouped.putIfAbsent(term, () => []);
       grouped[term]!.add(r);
     }
@@ -1522,7 +1524,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    '$term Term (${records.length})',
+                    '${_friendlyTerm(term)} (${records.length})',
                     style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                   ),
                   const Spacer(),
