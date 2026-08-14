@@ -238,29 +238,12 @@ Future<void> _expectLessonQueueEntry(
   expect(insertedLesson.term, '1st Term');
 }
 
-Future<void> _expectExamQueueEntry(
-  AppDatabase db, {
-  required int schemeWeekId,
-}) async {
+Future<void> _expectNoExamQueueEntry(AppDatabase db) async {
   final queueRow = await _queueRow(db, queueTable: 'exams');
-  expect(queueRow, matcher.isNotNull, reason: 'Expected an exams sync_queue row');
-  final row = queueRow!;
-
-  final payload = _decodePayload(row.payload);
-  expect(row.recordLocalId, greaterThan(0));
-  expect(payload['scheme_of_work_id'], schemeWeekId.toString());
-  expect(payload['week_number'], 1);
-  expect(payload['term'], '1st Term');
-  expect(payload['teacher_server_id'], matcher.isNotNull);
-  expect(payload['school_server_id'], matcher.isNotNull);
-  expect(payload['content'], isA<String>());
-  expect((payload['content'] as String).isNotEmpty, isTrue);
-
-  final insertedExam = await db.examsDao.getById(row.recordLocalId);
-  expect(insertedExam, matcher.isNotNull, reason: 'Inserted exam should exist');
-  expect(insertedExam!.schemeOfWorkId, schemeWeekId.toString());
-  expect(insertedExam.weekNumber, 1);
-  expect(insertedExam.term, '1st Term');
+  expect(queueRow, matcher.isNull,
+      reason: 'Scheme save must never queue an exams sync entry');
+  expect(await db.examsDao.getAll(), isEmpty,
+      reason: 'Scheme save must never create draft exams');
 }
 
 void main() {
@@ -323,7 +306,7 @@ void main() {
     );
 
     testWidgets(
-      '_saveScheme() draft-exam path enqueues an exams sync_queue row',
+      '_saveScheme() no longer creates draft exams or queues exams sync entries',
       (tester) async {
         final fixture = await _seedTeacherSchemeFixture(db, teacherRole: 'teacher');
         final authState = AuthStateData(
@@ -340,7 +323,10 @@ void main() {
         await tester.tap(find.widgetWithText(OutlinedButton, 'Save Scheme'));
         await tester.pump(const Duration(seconds: 1));
 
-        await _expectExamQueueEntry(db, schemeWeekId: fixture.schemeWeekId);
+        // The linked draft lesson is still created...
+        await _expectLessonQueueEntry(db, schemeWeekId: fixture.schemeWeekId);
+        // ...but no draft exam is.
+        await _expectNoExamQueueEntry(db);
       },
     );
 
@@ -367,7 +353,7 @@ void main() {
     );
 
     testWidgets(
-      '_adminApprove() draft-exam path enqueues an exams sync_queue row',
+      '_adminApprove() no longer creates draft exams or queues exams sync entries',
       (tester) async {
         final fixture = await _seedTeacherSchemeFixture(db, teacherRole: 'admin');
         final authState = AuthStateData(
@@ -384,7 +370,10 @@ void main() {
         await tester.tap(find.widgetWithText(TextButton, 'Approve'));
         await tester.pump(const Duration(seconds: 1));
 
-        await _expectExamQueueEntry(db, schemeWeekId: fixture.schemeWeekId);
+        // The linked draft lesson is still created...
+        await _expectLessonQueueEntry(db, schemeWeekId: fixture.schemeWeekId);
+        // ...but no draft exam is.
+        await _expectNoExamQueueEntry(db);
       },
     );
   });

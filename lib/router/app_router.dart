@@ -15,7 +15,6 @@ import 'package:classai/features/lesson/screens/lesson_editor_screen.dart';
 import 'package:classai/features/lesson/screens/lessons_list_screen.dart';
 import 'package:classai/features/exam/screens/exam_editor_screen.dart';
 import 'package:classai/features/exam/screens/exams_list_screen.dart';
-import 'package:classai/features/exam/screens/full_term_exam_screen.dart';
 import 'package:classai/features/admin/screens/admin_dashboard_screen.dart';
 import 'package:classai/features/admin/screens/teacher_detail_screen.dart';
 // import 'package:classai/features/vault/screens/vault_browser_screen.dart'; // Vault feature disabled
@@ -67,6 +66,14 @@ final appRouter = GoRouter(
     final authData = container.read(authProvider);
     final location = state.uri.path;
 
+    // ── Legacy route redirect ───────────────────────────────────────
+    // The standalone Full-Term Exam screen was removed in the exams
+    // redesign — the Term Exam builder now lives inside the exam editor.
+    // Redirect the old route there (in Term Exam mode).
+    if (location == '/full-term-exam') {
+      return '/exam-editor?compilationType=termExam';
+    }
+
     // ── Guest redirect ──────────────────────────────────────────────
     // If there is no teacher identity, the user is a guest and must be
     // redirected to the login screen.  The only exception is the /login
@@ -83,8 +90,7 @@ final appRouter = GoRouter(
         location == '/lesson-editor' ||
         location == '/exams' ||
         location.startsWith('/exams/') ||
-        location == '/exam-editor' ||
-        location == '/full-term-exam';
+        location == '/exam-editor';
     final isAdminRoute =
         location == '/admin' ||
         location.startsWith('/admin/teachers/') ||
@@ -217,11 +223,6 @@ final appRouter = GoRouter(
       path: '/insufficient-offline-credit',
       name: 'insufficient-offline-credit',
       builder: (context, state) => const InsufficientOfflineCreditScreen(),
-    ),
-    _route(
-      path: '/full-term-exam',
-      name: 'full-term-exam',
-      builder: (context, state) => const FullTermExamScreen(),
     ),
     _route(
       path: '/scheme-of-work',

@@ -10,6 +10,7 @@ import 'package:classai/core/database/database.dart';
 import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/core/services/ai_service.dart';
 import 'package:classai/core/services/credit_service.dart';
+import 'package:classai/core/services/exam_generation_service.dart';
 import 'package:classai/core/constants/prompt_templates.dart';
 import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/core/widgets/app_toast.dart';
@@ -83,6 +84,15 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   int? _selectedLessonId;
   bool _isManualTopicEntry = true;
   bool _routeDefaultsApplied = false;
+
+  /// When non-null, the editor opens in combined-exam mode ('termExam' or
+  /// 'caTest') instead of the single-topic form. Set from the
+  /// `compilationType` query parameter (the only way this mode is reached).
+  String? _compilationMode;
+
+  /// Term label for the combined-exam flow ('1st Term' etc.), set from the
+  /// `term` query parameter when provided.
+  String _termLabel = '1st Term';
 
   // Multi-select question types and their counts
   final Set<String> _selectedQuestionTypes = {'MCQ', 'Theory'};
@@ -189,12 +199,20 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     final query = GoRouterState.of(context).uri.queryParameters;
     final subject = query['subject']?.trim();
     final classLevel = query['classLevel']?.trim();
+    final compilationType = query['compilationType']?.trim();
+    final term = query['term']?.trim();
 
     if (subject != null && subject.isNotEmpty) {
       _subject = subject;
     }
     if (classLevel != null && classLevel.isNotEmpty) {
       _classLevel = classLevel;
+    }
+    if (compilationType == 'termExam' || compilationType == 'caTest') {
+      _compilationMode = compilationType;
+    }
+    if (term != null && term.isNotEmpty) {
+      _termLabel = _normalizeTermLabel(term);
     }
     if (subject != null && subject.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1447,6 +1465,20 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Combined-exam mode (Term Exam / CA Test) renders a dedicated flow
+    // instead of the single-topic editor form. It is only reached via the
+    // `compilationType` query parameter.
+    if (_compilationMode != null) {
+      return _CombinedExamPanel(
+        initialMode: _compilationMode!,
+        initialSubject: _subject,
+        initialClassLevel: _classLevel,
+        initialTerm: _termLabel,
+        subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
+        classLevels: _classLevels,
+      );
+    }
+
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
     final totalQuestions = _mcqs.length + _theoryQuestions.length + _subjectiveQuestions.length;
@@ -4021,6 +4053,906 @@ class _ExamSchemeContextBanner extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Combined Exam flow (Term Exam / CA Test)
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Dedicated flow shown inside the exam editor when it is opened with a
+/// `compilationType` query parameter ('termExam' or 'caTest'). Replaces the
+/// old standalone Full-Term Exam screen:
+///
+/// - One simple mode choice: **Term Exam** (all term topics, pre-selected
+///   with per-topic question counts) or **CA Test** (tick only the topics
+///   taught so far).
+/// - Subject / Class / Term pickers.
+/// - ONE combined exam generated via the multi-topic
+///   [PromptTemplates.examQuestions] prompt and saved as a single exam row.
+class _CombinedExamPanel extends ConsumerStatefulWidget {
+  const _CombinedExamPanel({
+    required this.initialMode,
+    required this.initialSubject,
+    required this.initialClassLevel,
+    required this.initialTerm,
+    required this.subjects,
+    required this.classLevels,
+  });
+
+  /// 'termExam' or 'caTest' — the initial selection of the mode cards.
+  final String initialMode;
+  final String initialSubject;
+  final String initialClassLevel;
+  final String initialTerm;
+  final List<String> subjects;
+  final List<String> classLevels;
+
+  @override
+  ConsumerState<_CombinedExamPanel> createState() => _CombinedExamPanelState();
+}
+
+class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
+  static const _terms = ['1st Term', '2nd Term', '3rd Term'];
+  static const _defaultQuestionsPerTopic = 5;
+
+  late String _mode;
+  late String _subject;
+  late String _classLevel;
+  late String _term;
+
+  List<TermTopic> _topics = [];
+  List<int> _questionCounts = [];
+  Set<int> _selectedIndexes = {};
+  bool _isLoadingTopics = true;
+  String? _topicsError;
+  bool _isGenerating = false;
+  final _totalQuestionsController = TextEditingController(text: '30');
+
+  @override
+  void initState() {
+    super.initState();
+    _mode = widget.initialMode == 'caTest' ? 'caTest' : 'termExam';
+    _subject = widget.initialSubject;
+    _classLevel = widget.initialClassLevel;
+    _term = _terms.contains(widget.initialTerm) ? widget.initialTerm : _terms.first;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadTopics());
+  }
+
+  @override
+  void dispose() {
+    _totalQuestionsController.dispose();
+    super.dispose();
+  }
+
+  /// AI fallback used only when no matching scheme rows or curated NERDC
+  /// topics exist for the selected subject/class/term.
+  Future<Map<String, dynamic>> _aiGenerate(String prompt) async {
+    if (!await PlatformHelper.isOnline()) {
+      throw const ExamTopicsUnavailableException();
+    }
+    final db = ref.read(databaseProvider);
+    return AiService(db: db).generate(prompt);
+  }
+
+  Future<void> _loadTopics() async {
+    setState(() {
+      _isLoadingTopics = true;
+      _topicsError = null;
+    });
+    try {
+      final db = ref.read(databaseProvider);
+      final authState = ref.read(authProvider);
+      final school = authState.currentSchool ?? await db.schoolsDao.get();
+      final teacherServerId = authState.currentTeacher?.serverId;
+      if (school == null || teacherServerId == null) {
+        if (!mounted) return;
+        setState(() {
+          _topicsError = 'Teacher or school data not available.';
+          _isLoadingTopics = false;
+        });
+        return;
+      }
+      final teacher = await db.teachersDao.findByServerId(teacherServerId);
+      if (teacher == null) {
+        if (!mounted) return;
+        setState(() {
+          _topicsError = 'Teacher account not ready yet.';
+          _isLoadingTopics = false;
+        });
+        return;
+      }
+
+      final service = ExamGenerationService(db);
+      final topics = await service.loadTermTopics(
+        schoolId: school.localId,
+        teacherId: teacher.localId,
+        subject: _subject,
+        classLevel: _classLevel,
+        termLabel: _term,
+        aiGenerate: _aiGenerate,
+      );
+      if (!mounted) return;
+      setState(() {
+        if (topics == null || topics.isEmpty) {
+          _topicsError = 'No topics found for $_subject, $_classLevel, '
+              '$_term. Try a different combination or check your internet '
+              'connection.';
+        } else {
+          _topics = topics;
+          _questionCounts = List.filled(topics.length, _defaultQuestionsPerTopic);
+          // Term Exam pre-selects every topic; CA Test starts empty.
+          _selectedIndexes = _mode == 'caTest'
+              ? <int>{}
+              : {for (var i = 0; i < topics.length; i++) i};
+        }
+        _isLoadingTopics = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _topicsError = 'Failed to load topics: $e';
+        _isLoadingTopics = false;
+      });
+    }
+  }
+
+  void _switchMode(String mode) {
+    setState(() {
+      _mode = mode;
+      _selectedIndexes = mode == 'caTest'
+          ? <int>{}
+          : {for (var i = 0; i < _topics.length; i++) i};
+    });
+  }
+
+  void _autoDistribute() {
+    final totalText = _totalQuestionsController.text.trim();
+    final total = int.tryParse(totalText);
+    if (total == null || total <= 0) {
+      showErrorToast(context: context, message: 'Enter a valid total question count.');
+      return;
+    }
+    if (_topics.isEmpty) return;
+
+    final base = total ~/ _topics.length;
+    var remainder = total % _topics.length;
+    setState(() {
+      for (var i = 0; i < _topics.length; i++) {
+        _questionCounts[i] = base + (i < remainder ? 1 : 0);
+      }
+    });
+    showInfoToast(
+      context: context,
+      message: 'Distributed $total questions across ${_topics.length} topics.',
+    );
+  }
+
+  Future<void> _showUpgradeRequired() async {
+    if (!mounted) return;
+    final role = ref.read(authProvider).currentTeacher?.role;
+    if (role == 'admin') {
+      if (mounted) context.push('/payment');
+      return;
+    }
+    await showUpgradeRequestDialog(context, ref, requestedTier: 'elite');
+  }
+
+  Future<void> _generate() async {
+    // Build the selected topic list (Term Exam: every topic with a count > 0;
+    // CA Test: only the ticked topics).
+    final selectedTopics = <TermTopic>[];
+    final selectedCounts = <int>[];
+    if (_mode == 'termExam') {
+      for (var i = 0; i < _topics.length; i++) {
+        if (_questionCounts[i] > 0) {
+          selectedTopics.add(_topics[i]);
+          selectedCounts.add(_questionCounts[i]);
+        }
+      }
+    } else {
+      final indexes = _selectedIndexes.toList()..sort();
+      for (final index in indexes) {
+        selectedTopics.add(_topics[index]);
+        selectedCounts.add(_defaultQuestionsPerTopic);
+      }
+    }
+    if (selectedTopics.isEmpty) {
+      showErrorToast(
+        context: context,
+        message: 'Select at least one topic to generate.',
+      );
+      return;
+    }
+
+    // Tier gate — same as the single-topic editor.
+    final authTier =
+        ref.read(authProvider).currentSchool?.subscriptionTier.toLowerCase() ??
+            '';
+    final config = ref.read(configServiceProvider);
+    if (!config.examGenerationAllowedTiers.contains(authTier)) {
+      await _showUpgradeRequired();
+      return;
+    }
+
+    if (!await PlatformHelper.isOnline()) {
+      showErrorToast(
+        context: context,
+        message: 'Generation requires internet — try again when connected.',
+      );
+      return;
+    }
+
+    setState(() => _isGenerating = true);
+    try {
+      final db = ref.read(databaseProvider);
+      final authState = ref.read(authProvider);
+      final teacher = authState.currentTeacher;
+      final school = authState.currentSchool;
+      if (teacher == null || school == null || teacher.serverId == null) {
+        showErrorToast(
+          context: context,
+          message: 'Authentication data not available.',
+        );
+        setState(() => _isGenerating = false);
+        return;
+      }
+
+      final service = ExamGenerationService(db);
+      final topicTitle = _mode == 'termExam'
+          ? 'Term Exam (${selectedTopics.length} topics)'
+          : 'CA Test (${selectedTopics.length} topics)';
+      final examId = await service.generateCombinedExam(
+        subject: _subject,
+        classLevel: _classLevel,
+        termLabel: _term,
+        teacherServerId: teacher.serverId!,
+        schoolServerId: school.serverId,
+        subscriptionTier: school.subscriptionTier.toLowerCase(),
+        lessonStorageLimits:
+            ref.read(configServiceProvider).lessonStorageLimits,
+        difficulty: 'medium',
+        topics: selectedTopics,
+        questionCounts: selectedCounts,
+        topicTitle: topicTitle,
+        aiGenerate: _aiGenerate,
+        teacherName: teacher.teacherName,
+        schoolName: school.schoolName,
+      );
+
+      if (!mounted) return;
+      setState(() => _isGenerating = false);
+      showInfoToast(
+        context: context,
+        message: _mode == 'termExam'
+            ? 'Term exam created as draft!'
+            : 'CA Test created as draft!',
+      );
+      context.pushReplacement('/exams/$examId');
+    } on ExamStorageLimitExceededException {
+      if (!mounted) return;
+      setState(() => _isGenerating = false);
+      showInfoToast(
+        context: context,
+        message: 'Exam storage limit reached. Upgrade your school plan to '
+            'create more exams.',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isGenerating = false);
+      showErrorToast(context: context, message: 'Failed to generate exam: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final canPop = Navigator.of(context).canPop();
+    final hasSelection = _mode == 'caTest'
+        ? _selectedIndexes.isNotEmpty
+        : _questionCounts.any((c) => c > 0);
+    final canGenerate = !_isLoadingTopics &&
+        _topicsError == null &&
+        !_isGenerating &&
+        hasSelection;
+
+    return Scaffold(
+      backgroundColor: cs.surface,
+      appBar: AppBar(
+        leading: canPop
+            ? IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.arrow_back_rounded),
+                tooltip: 'Back',
+              )
+            : null,
+        title: Text(
+          'Term Exam / CA Test',
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.12,
+          ),
+        ),
+        elevation: 0,
+        backgroundColor: cs.surface,
+        foregroundColor: cs.onSurface,
+        surfaceTintColor: cs.surface,
+      ),
+      body: Column(
+        children: [
+          // ── Mode choice (Term Exam vs CA Test) ──────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _CombinedModeCard(
+                    cs: cs,
+                    theme: theme,
+                    selected: _mode == 'termExam',
+                    title: 'Term Exam',
+                    subtitle: 'All topics in this term',
+                    icon: Icons.assignment_rounded,
+                    onTap: () => _switchMode('termExam'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _CombinedModeCard(
+                    cs: cs,
+                    theme: theme,
+                    selected: _mode == 'caTest',
+                    title: 'CA Test',
+                    subtitle: 'Only topics you tick',
+                    icon: Icons.checklist_rounded,
+                    onTap: () => _switchMode('caTest'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // ── Subject / Class / Term pickers ──────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                SizedBox(
+                  width: 220,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _subject,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'Subject',
+                      filled: true,
+                      fillColor: cs.surfaceContainerLow,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(color: cs.outlineVariant),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(color: cs.outlineVariant),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                    ),
+                    // Always include the current value — the pre-filled
+                    // subject (e.g. from the Exams list filter) may not be in
+                    // the loaded list on the very first frame.
+                    items: [
+                      ...widget.subjects
+                          .map((s) => DropdownMenuItem(value: s, child: Text(s))),
+                      if (!widget.subjects.contains(_subject))
+                        DropdownMenuItem(value: _subject, child: Text(_subject)),
+                    ],
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setState(() => _subject = v);
+                      _loadTopics();
+                    },
+                  ),
+                ),
+                SizedBox(
+                  width: 220,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _classLevel,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'Class Level',
+                      filled: true,
+                      fillColor: cs.surfaceContainerLow,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(color: cs.outlineVariant),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(color: cs.outlineVariant),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                    ),
+                    // Always include the current value (a filter class like
+                    // 'JSS3' without a space must not crash the dropdown).
+                    items: [
+                      ...widget.classLevels
+                          .map((c) => DropdownMenuItem(value: c, child: Text(c))),
+                      if (!widget.classLevels.contains(_classLevel))
+                        DropdownMenuItem(
+                          value: _classLevel,
+                          child: Text(_classLevel),
+                        ),
+                    ],
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setState(() => _classLevel = v);
+                      _loadTopics();
+                    },
+                  ),
+                ),
+                SizedBox(
+                  width: 220,
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _term,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'Term',
+                      filled: true,
+                      fillColor: cs.surfaceContainerLow,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(color: cs.outlineVariant),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(color: cs.outlineVariant),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                    ),
+                    items: _terms
+                        .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setState(() => _term = v);
+                      _loadTopics();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // ── Topic list ──────────────────────────────────────────────
+          Expanded(child: _buildTopics(cs, theme)),
+          // ── Bottom action bar ───────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            decoration: BoxDecoration(
+              color: cs.surface,
+              border: Border(
+                top: BorderSide(
+                  color: cs.outlineVariant.withValues(alpha: 0.5),
+                ),
+              ),
+            ),
+            child: SafeArea(
+              top: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_mode == 'termExam') ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _totalQuestionsController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              labelText: 'Total Questions',
+                              filled: true,
+                              fillColor: cs.surfaceContainerLow,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                borderSide: BorderSide(color: cs.outlineVariant),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        FilledButton.tonalIcon(
+                          onPressed: _autoDistribute,
+                          icon: const Icon(Icons.shuffle_rounded, size: 20),
+                          label: const Text('Auto-Distribute'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: canGenerate ? _generate : null,
+                      icon: _isGenerating
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.auto_awesome_rounded),
+                      label: Text(
+                        _isGenerating
+                            ? 'Generating...'
+                            : _mode == 'termExam'
+                                ? 'Generate Exam'
+                                : 'Generate CA Test',
+                      ),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopics(ColorScheme cs, ThemeData theme) {
+    if (_isLoadingTopics) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_topicsError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: cs.errorContainer,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Icon(
+                  Icons.error_outline,
+                  size: 34,
+                  color: cs.onErrorContainer,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _topicsError!,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: _loadTopics,
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (_topics.isEmpty) {
+      return const Center(child: Text('No topics found.'));
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      itemCount: _topics.length,
+      itemBuilder: (context, index) {
+        final topic = _topics[index];
+        if (_mode == 'caTest') {
+          final selected = _selectedIndexes.contains(index);
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: InkWell(
+              onTap: () => setState(() {
+                if (selected) {
+                  _selectedIndexes.remove(index);
+                } else {
+                  _selectedIndexes.add(index);
+                }
+              }),
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: selected
+                        ? cs.primary.withValues(alpha: 0.6)
+                        : cs.outlineVariant.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Checkbox(
+                      value: selected,
+                      onChanged: (_) => setState(() {
+                        if (selected) {
+                          _selectedIndexes.remove(index);
+                        } else {
+                          _selectedIndexes.add(index);
+                        }
+                      }),
+                    ),
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: cs.primaryContainer.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                      ),
+                      child: Center(
+                        child: Text(
+                          'W${topic.weekNumber}',
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: cs.onPrimaryContainer,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        topic.topic,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _CombinedTopicCard(
+            weekNumber: topic.weekNumber,
+            topicName: topic.topic,
+            questionCount: _questionCounts[index],
+            onQuestionCountChanged: (value) {
+              setState(() => _questionCounts[index] = value);
+            },
+            cs: cs,
+            theme: theme,
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// One of the two mode-choice cards (Term Exam / CA Test).
+class _CombinedModeCard extends StatelessWidget {
+  const _CombinedModeCard({
+    required this.cs,
+    required this.theme,
+    required this.selected,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final ColorScheme cs;
+  final ThemeData theme;
+  final bool selected;
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final background =
+        selected ? cs.primaryContainer.withValues(alpha: 0.45) : cs.surfaceContainerLow;
+    final borderColor = selected
+        ? cs.primary.withValues(alpha: 0.55)
+        : cs.outlineVariant.withValues(alpha: 0.3);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          border: Border.all(color: borderColor),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              icon,
+              size: 22,
+              color: selected ? cs.primary : cs.onSurfaceVariant,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: selected ? cs.primary : cs.onSurface,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Topic row for Term Exam mode: week badge + topic + per-topic question count.
+class _CombinedTopicCard extends StatefulWidget {
+  const _CombinedTopicCard({
+    required this.weekNumber,
+    required this.topicName,
+    required this.questionCount,
+    required this.onQuestionCountChanged,
+    required this.cs,
+    required this.theme,
+  });
+
+  final int weekNumber;
+  final String topicName;
+  final int questionCount;
+  final ValueChanged<int> onQuestionCountChanged;
+  final ColorScheme cs;
+  final ThemeData theme;
+
+  @override
+  State<_CombinedTopicCard> createState() => _CombinedTopicCardState();
+}
+
+class _CombinedTopicCardState extends State<_CombinedTopicCard> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.questionCount.toString());
+  }
+
+  @override
+  void didUpdateWidget(_CombinedTopicCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Reflect external changes (e.g. Auto-Distribute) unless the teacher is
+    // actively typing in this field.
+    if (widget.questionCount != oldWidget.questionCount &&
+        _controller.text != widget.questionCount.toString()) {
+      _controller.text = widget.questionCount.toString();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = widget.cs;
+    final theme = widget.theme;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: cs.primaryContainer.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+            ),
+            child: Center(
+              child: Text(
+                'W${widget.weekNumber}',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: cs.onPrimaryContainer,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              widget.topicName,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: cs.onSurface,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 72,
+            child: TextField(
+              controller: _controller,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: cs.surfaceContainer,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: cs.outlineVariant),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 10,
+                ),
+                isDense: true,
+                labelText: 'Q',
+                labelStyle: theme.textTheme.labelSmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+              onChanged: (value) {
+                final count = int.tryParse(value);
+                if (count != null && count >= 0) {
+                  widget.onQuestionCountChanged(count);
+                }
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

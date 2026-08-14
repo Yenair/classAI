@@ -682,66 +682,6 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
               },
             );
           }
-
-          // Check for and create draft exam
-          final existingExams = await db.examsDao.getAll();
-          final examExists = existingExams.any((e) {
-            if (e.isDeleted) return false;
-            final existingSchemeId = int.tryParse(e.schemeOfWorkId ?? '');
-            if (existingSchemeId == schemeWeekId) return true;
-            return e.teacherServerId == teacherServerId &&
-                e.classLevel == classLevel &&
-                (e.term ?? '') == termLabel &&
-                e.weekNumber == weekNumber;
-          });
-          if (!examExists) {
-            final examId = await db.examsDao.insertExam(
-              ExamsCompanion.insert(
-                subject: subjectName,
-                classLevel: classLevel,
-                topic: topic,
-                difficulty: 'medium',
-                curriculum: 'NERDC',
-                content: jsonEncode({
-                  'mcqs': [],
-                  'theory': [],
-                  'subjective': [],
-                }),
-                teacherServerId: Value(teacherServerId),
-                schoolServerId: schoolServerId != null
-                    ? Value(schoolServerId)
-                    : const Value.absent(),
-                isUnlocked: const Value(false),
-                schemeOfWorkId: Value(schemeWeekId.toString()),
-                weekNumber: Value(weekNumber),
-                term: Value(termLabel),
-              ),
-            );
-            final examContent = jsonEncode({
-              'mcqs': [],
-              'theory': [],
-              'subjective': [],
-            });
-            await db.syncQueueDao.insertEntry(
-              queueTable: 'exams',
-              recordLocalId: examId,
-              operation: 'INSERT',
-              payload: {
-                'subject': subjectName,
-                'classLevel': classLevel,
-                'topic': topic,
-                'difficulty': 'medium',
-                'curriculum': 'NERDC',
-                'teacher_server_id': teacherServerId,
-                'school_server_id': schoolServerId,
-                'content': examContent,
-                'is_unlocked': false,
-                'scheme_of_work_id': schemeWeekId.toString(),
-                'week_number': weekNumber,
-                'term': termLabel,
-              },
-            );
-          }
         }
       }
 

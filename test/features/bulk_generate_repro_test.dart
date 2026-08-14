@@ -225,9 +225,10 @@ void main() {
     /// Seeds the reported leftover state for English Studies JSS 1 1st Term:
     /// a partial plan (scheme rows for weeks 1-6) plus orphan draft
     /// lessons/exams for weeks 1-6 whose schemeOfWorkId was cleared by the
-    /// orphaned-link repair. These orphans survive the scheme-linked delete
-    /// and would block the old duplicate-guard (weeks 1-6 skipped → only
-    /// weeks 7-13 appear).
+    /// orphaned-link repair. Orphan lessons block the old duplicate-guard
+    /// (weeks 1-6 skipped → only weeks 7-13 appear). Orphan exams are seeded
+    /// for parity but must now survive untouched — saveScheme no longer
+    /// creates or deletes exams.
     Future<void> seedOrphanBlockers(
       AppDatabase db, {
       required int schoolId,
@@ -311,7 +312,11 @@ void main() {
       expect(schemeRows.length, 13, reason: 'All 13 scheme weeks must exist');
       expect(lessons.length, 13,
           reason: 'All 13 lessons must exist (old skip-guard dropped 1-6)');
-      expect(exams.length, 13, reason: 'All 13 exams must exist');
+      expect(exams.length, 6,
+          reason: 'saveScheme never creates exams — only the 6 seeded '
+              'orphan exams may exist');
+      expect(exams.every((e) => e.topic.startsWith('Stale topic')), isTrue,
+          reason: 'Orphan exams must be untouched by plan generation');
 
       final curated = getNerdcTopics('English Studies', 'JSS 1', '1st Term')!;
       final lessonsByWeek = {

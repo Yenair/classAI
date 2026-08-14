@@ -4,14 +4,17 @@ import 'package:drift/drift.dart' show Value;
 import 'package:classai/core/database/database.dart';
 
 /// Shared persistence for Scheme-of-Work rows and their linked draft
-/// lessons/exams. Used by both the admin SchemeOfWorkScreen and the
-/// teacher "Plan My Term" auto-generate flow so they never drift apart.
+/// lessons. Used by both the admin SchemeOfWorkScreen and the teacher
+/// "Plan My Term" auto-generate flow so they never drift apart. Exam
+/// creation lives in ExamGenerationService — never here.
 class SchemeOfWorkService {
   final AppDatabase db;
   SchemeOfWorkService(this.db);
 
   /// Writes one scheme_of_work row per week and auto-creates a linked draft
-  /// lesson and exam for each week. Everything runs inside a single database
+  /// lesson for each week. Exams are NEVER created here — exam creation is
+  /// exclusively explicit (the Exams list "Generate Weekly Exams" and
+  /// "Term Exam / CA Test" flows). Everything runs inside a single database
   /// transaction — a partial failure rolls the whole plan back.
   ///
   /// When [deleteExistingFirst] is true, any existing saved plan for the same
@@ -199,74 +202,6 @@ class SchemeOfWorkService {
               schoolServerId: schoolServerId,
             );
           }
-
-          // Auto-create draft exam if not already existing
-          final existingExams = await db.examsDao.getAll();
-          final existingExam = _findWeekExamBlocker(
-            existingExams,
-            weekId: weekId,
-            teacherServerId: teacherServerId,
-            classLevel: classLevel,
-            termLabel: termLabel,
-            weekNumber: weekNumber,
-            subject: subject,
-          );
-          if (existingExam == null) {
-            final examContent = jsonEncode({
-              'mcqs': [],
-              'theory': [],
-              'subjective': [],
-            });
-            final examId = await db.examsDao.insertExam(
-              ExamsCompanion.insert(
-                subject: subject,
-                classLevel: classLevel,
-                topic: topicText,
-                difficulty: 'medium',
-                curriculum: 'NERDC',
-                content: examContent,
-                teacherServerId: Value(teacherServerId),
-                schoolServerId: schoolServerId != null
-                    ? Value(schoolServerId)
-                    : const Value.absent(),
-                isUnlocked: const Value(false),
-                schemeOfWorkId: Value(weekId.toString()),
-                weekNumber: Value(weekNumber),
-                term: Value(termLabel),
-              ),
-            );
-            await db.syncQueueDao.insertEntry(
-              queueTable: 'exams',
-              recordLocalId: examId,
-              operation: 'INSERT',
-              payload: {
-                'subject': subject,
-                'classLevel': classLevel,
-                'topic': topicText,
-                'difficulty': 'medium',
-                'curriculum': 'NERDC',
-                'teacher_server_id': teacherServerId,
-                'school_server_id': schoolServerId,
-                'content': examContent,
-                'is_unlocked': false,
-                'scheme_of_work_id': weekId.toString(),
-                'week_number': weekNumber,
-                'term': termLabel,
-              },
-            );
-          } else {
-            await _updateDraftExamInPlace(
-              exam: existingExam,
-              weekId: weekId,
-              subject: subject,
-              classLevel: classLevel,
-              weekNumber: weekNumber,
-              topic: topicText,
-              termLabel: termLabel,
-              teacherServerId: teacherServerId,
-              schoolServerId: schoolServerId,
-            );
-          }
         }
       }
       return weekRecordIds;
@@ -311,34 +246,7 @@ class SchemeOfWorkService {
     return null;
   }
 
-  /// Exam analogue of [_findWeekDraftBlocker] (exams have no status column).
-  Exam? _findWeekExamBlocker(
-    List<Exam> exams, {
-    required int? weekId,
-    required String teacherServerId,
-    required String classLevel,
-    required String termLabel,
-    required int weekNumber,
-    required String subject,
-  }) {
-    for (final exam in exams) {
-      if (exam.isDeleted) continue;
-      if (weekId != null) {
-        final existingSchemeId = int.tryParse(exam.schemeOfWorkId ?? '');
-        if (existingSchemeId == weekId) return exam;
-      }
-      if (exam.teacherServerId == teacherServerId &&
-          exam.classLevel == classLevel &&
-          (exam.term ?? '') == termLabel &&
-          exam.weekNumber == weekNumber &&
-          _matchesSubject(exam.subject, subject)) {
-        return exam;
-      }
-    }
-    return null;
-  }
-
-  /// True when the stored lesson/exam subject matches the plan's subject
+  /// True when the stored lesson subject matches the plan's subject
   /// (case-insensitive), or is empty — sync-pull can wipe subject to '' on
   /// rows pushed before the subject→subject_id resolution, and such rows
   /// still occupy the teacher/class/term/week slot.
@@ -422,58 +330,6 @@ class SchemeOfWorkService {
         },
       );
     }
-  }
-
-  /// Exam analogue of [_updateDraftLessonInPlace].
-  Future<void> _updateDraftExamInPlace({
-    required Exam exam,
-    required int? weekId,
-    required String subject,
-    required String classLevel,
-    required int weekNumber,
-    required String topic,
-    required String termLabel,
-    required String teacherServerId,
-    required String? schoolServerId,
-  }) async {
-    final schemeOfWorkId = weekId?.toString();
-    await db.examsDao.updateExam(
-      exam.id,
-      ExamsCompanion(
-        subject: Value(subject),
-        classLevel: Value(classLevel),
-        topic: Value(topic),
-        schemeOfWorkId: schemeOfWorkId != null
-            ? Value(schemeOfWorkId)
-            : const Value(null),
-        weekNumber: Value(weekNumber),
-        term: Value(termLabel),
-        updatedAt: Value(DateTime.now()),
-      ),
-    );
-
-    final payload = <String, dynamic>{
-      'subject': subject,
-      'classLevel': classLevel,
-      'topic': topic,
-      'difficulty': exam.difficulty,
-      'curriculum': exam.curriculum,
-      'teacher_server_id': teacherServerId,
-      'school_server_id': schoolServerId,
-      'content': exam.content,
-      'is_unlocked': exam.isUnlocked,
-      if (schemeOfWorkId != null) 'scheme_of_work_id': schemeOfWorkId,
-      'week_number': weekNumber,
-      'term': termLabel,
-    };
-
-    final hasServerId = exam.serverId != null && exam.serverId!.isNotEmpty;
-    await db.syncQueueDao.insertEntry(
-      queueTable: 'exams',
-      recordLocalId: exam.id,
-      operation: hasServerId ? 'UPDATE' : 'INSERT',
-      payload: payload,
-    );
   }
 
   /// Finds an existing saved plan for the same subject/class/term.
@@ -586,17 +442,18 @@ class SchemeOfWorkService {
 
   /// Deletes an existing plan for the same subject/class/term: scheme rows
   /// are hard-deleted locally (with a sync DELETE queued for server-synced
-  /// rows); linked draft lessons/exams are soft-deleted via the existing DAO
+  /// rows); linked draft lessons are soft-deleted via the existing DAO
   /// methods (isDeleted=true) with a sync DELETE queued when the row has a
-  /// server id. Runs inside the caller's transaction.
+  /// server id. Exams are NEVER created or deleted here — they are no longer
+  /// tied to the plan lifecycle. Runs inside the caller's transaction.
   ///
-  /// Also soft-deletes ORPHAN draft lessons/exams for the same teacher,
-  /// subject, class and term whose `schemeOfWorkId` is null/empty. Those rows
-  /// are not linked to any scheme row (e.g. leftovers of a crashed partial
-  /// generation whose links were cleared by the orphaned-link repair) so the
-  /// scheme-linked loop above leaves them behind — and they would otherwise
-  /// match the duplicate-guard in saveScheme and block the fresh plan from
-  /// filling every week.
+  /// Also soft-deletes ORPHAN draft lessons for the same teacher, subject,
+  /// class and term whose `schemeOfWorkId` is null/empty. Those rows are not
+  /// linked to any scheme row (e.g. leftovers of a crashed partial generation
+  /// whose links were cleared by the orphaned-link repair) so the scheme-
+  /// linked loop above leaves them behind — and they would otherwise match
+  /// the duplicate-guard in saveScheme and block the fresh plan from filling
+  /// every week.
   Future<void> _deleteExistingPlan({
     required int schoolId,
     required int teacherId,
@@ -629,20 +486,6 @@ class SchemeOfWorkService {
           );
         }
       }
-      final exams = await db.examsDao.getAll();
-      for (final exam in exams) {
-        if (exam.isDeleted) continue;
-        if (exam.schemeOfWorkId != row.id.toString()) continue;
-        await db.examsDao.deleteExam(exam.id);
-        if (exam.serverId != null && exam.serverId!.isNotEmpty) {
-          await db.syncQueueDao.insertEntry(
-            queueTable: 'exams',
-            recordLocalId: exam.id,
-            operation: 'DELETE',
-            payload: {'id': exam.id, 'server_id': exam.serverId},
-          );
-        }
-      }
       if (row.serverId != null && row.serverId!.isNotEmpty) {
         await db.syncQueueDao.insertEntry(
           queueTable: 'scheme_of_work',
@@ -655,8 +498,8 @@ class SchemeOfWorkService {
     }
 
     // ── Orphan draft cleanup ─────────────────────────────────────────────
-    // Draft lessons/exams for this teacher/class/term that are NOT linked to
-    // any scheme row (schemeOfWorkId null/empty) survive the scheme-linked
+    // Draft lessons for this teacher/class/term that are NOT linked to any
+    // scheme row (schemeOfWorkId null/empty) survive the scheme-linked
     // deletion above. They would otherwise match the duplicate-guard in
     // saveScheme (same teacher/class/term/week) and block the fresh plan, so
     // a replace would only ever fill the weeks that had no leftover draft.
@@ -692,27 +535,6 @@ class SchemeOfWorkService {
             recordLocalId: lesson.id,
             operation: 'DELETE',
             payload: {'id': lesson.id, 'server_id': lesson.serverId},
-          );
-        }
-      }
-
-      final orphanExams = await db.examsDao.getAll();
-      for (final exam in orphanExams) {
-        if (exam.isDeleted) continue;
-        if (exam.schemeOfWorkId != null && exam.schemeOfWorkId!.isNotEmpty) {
-          continue; // linked to a scheme row — handled above
-        }
-        if (exam.teacherServerId != teacherServerId) continue;
-        if (_normalizeClassKey(exam.classLevel) != normalizedClass) continue;
-        if (_normalizeTermLabelForDraft(exam.term ?? '') != termLabel) continue;
-        if (!_matchesSubject(exam.subject, subject)) continue;
-        await db.examsDao.deleteExam(exam.id);
-        if (exam.serverId != null && exam.serverId!.isNotEmpty) {
-          await db.syncQueueDao.insertEntry(
-            queueTable: 'exams',
-            recordLocalId: exam.id,
-            operation: 'DELETE',
-            payload: {'id': exam.id, 'server_id': exam.serverId},
           );
         }
       }

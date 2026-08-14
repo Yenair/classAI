@@ -1,8 +1,11 @@
-import 'dart:convert';
 import 'dart:io' show Platform;
 
-import 'package:drift/drift.dart' hide Column;
+import 'package:classai/core/constants/curriculum_types.dart' show nerdcSubjects;
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/providers/config_provider.dart';
+import 'package:classai/core/services/ai_service.dart';
+import 'package:classai/core/services/exam_generation_service.dart';
+import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/core/widgets/conflict_banner.dart';
 import 'package:classai/core/widgets/credit_counter.dart';
 import 'package:classai/core/widgets/sync_indicator.dart';
@@ -46,10 +49,14 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
   String _selectedClassFilter = 'All';
   String _selectedSubjectFilter = 'All';
   bool _filtersExpanded = true;
-  bool _schemeDraftsBootstrapped = false;
+  bool _schemesLoaded = false;
+  bool _isGeneratingWeekly = false;
   final Map<int, SchemeOfWorkData> _schemesById = {};
 
   static const _prefPrefix = 'exams_filter_';
+  static const _prefWeeklySubject = 'weekly_exams_subject';
+  static const _prefWeeklyClass = 'weekly_exams_class';
+  static const _prefWeeklyTerm = 'weekly_exams_term';
 
   @override
   void initState() {
@@ -59,7 +66,7 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
       ref.read(syncStatusProvider.notifier).refresh();
       ref.read(offlineCreditStateProvider.notifier).refresh();
       ref.read(unresolvedConflictsProvider.notifier).refresh();
-      _bootstrapSchemeDrafts();
+      _loadSchemesForDisplay();
     });
   }
 
@@ -80,9 +87,13 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
     await prefs.setBool('exams_filters_expanded', _filtersExpanded);
   }
 
-  Future<void> _bootstrapSchemeDrafts() async {
-    if (_schemeDraftsBootstrapped) return;
-    _schemeDraftsBootstrapped = true;
+  /// Populates the scheme lookup used to display term labels on exam cards.
+  /// Does NOT create exams — exam creation is now exclusively explicit
+  /// ("Generate Weekly Exams" and "Term Exam / CA Test"); the old silent
+  /// draft-exam seeding from saved schemes was removed.
+  Future<void> _loadSchemesForDisplay() async {
+    if (_schemesLoaded) return;
+    _schemesLoaded = true;
 
     try {
       final db = ref.read(databaseProvider);
@@ -93,16 +104,6 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
       final schemes = (await db.schemeOfWorkDao.getSaved())
           .where((scheme) => scheme.schoolId == school.localId)
           .toList();
-      if (schemes.isEmpty) return;
-
-      final subjects = await db.subjectsDao.getAll();
-      final subjectNamesById = <int, String>{
-        for (final subject in subjects) subject.id: subject.name,
-      };
-      final lessons = await db.lessonsDao.getAll();
-      final exams = await db.examsDao.getAll();
-      final teacherServerId = authState.currentTeacher?.serverId;
-
       final schemeMap = <int, SchemeOfWorkData>{
         for (final scheme in schemes) scheme.id: scheme,
       };
@@ -117,94 +118,8 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
           ..clear()
           ..addAll(schemeMap);
       }
-
-      final existingDraftKeys = <String>{};
-      for (final exam in exams) {
-        final termLabel = _termLabelForExam(exam);
-        if (termLabel == null || exam.weekNumber == null) continue;
-        existingDraftKeys.add(
-          _draftKey(
-            subject: exam.subject,
-            classLevel: exam.classLevel,
-            term: termLabel,
-            weekNumber: exam.weekNumber!,
-          ),
-        );
-      }
-
-      var insertedCount = 0;
-      for (final scheme in schemes) {
-        final subjectName = subjectNamesById[scheme.subjectId];
-        if (subjectName == null || subjectName.isEmpty) continue;
-
-        final classLevel = _inferClassLevelForScheme(
-          scheme: scheme,
-          subjectName: subjectName,
-          lessons: lessons,
-          exams: exams,
-          teacherServerId: teacherServerId,
-        );
-        if (classLevel == null || classLevel.isEmpty) continue;
-
-        final termLabel = _normalizeTermLabel(scheme.term);
-        if (termLabel.isEmpty) continue;
-
-        final key = _draftKey(
-          subject: subjectName,
-          classLevel: classLevel,
-          term: termLabel,
-          weekNumber: scheme.weekNumber,
-        );
-        if (existingDraftKeys.contains(key)) continue;
-
-        final existingForScheme = exams.any((exam) {
-          final linkedSchemeId = int.tryParse(exam.schemeOfWorkId ?? '');
-          return linkedSchemeId == scheme.id &&
-              exam.subject == subjectName &&
-              exam.classLevel == classLevel &&
-              exam.weekNumber == scheme.weekNumber &&
-              !exam.isDeleted;
-        });
-        if (existingForScheme) {
-          existingDraftKeys.add(key);
-          continue;
-        }
-
-        await db.examsDao.insertExam(
-          ExamsCompanion.insert(
-            subject: subjectName,
-            classLevel: classLevel,
-            topic: scheme.adminEditedTopic ?? scheme.topic,
-            difficulty: 'medium',
-            curriculum: 'NERDC',
-            content: jsonEncode({
-              'mcqs': const [],
-              'theory': const [],
-              'subjective': const [],
-            }),
-            teacherServerId: teacherServerId != null
-                ? Value(teacherServerId)
-                : const Value.absent(),
-            schoolServerId: school.serverId != null
-                ? Value(school.serverId)
-                : const Value.absent(),
-            isUnlocked: const Value(false),
-            schemeOfWorkId: Value(scheme.id.toString()),
-            weekNumber: Value(scheme.weekNumber),
-            createdAt: Value(DateTime.now()),
-            updatedAt: Value(DateTime.now()),
-            isDeleted: const Value(false),
-          ),
-        );
-        existingDraftKeys.add(key);
-        insertedCount++;
-      }
-
-      if (insertedCount > 0 && mounted) {
-        ref.invalidate(examsListProvider);
-      }
     } catch (_) {
-      // Keep the screen silent if draft seeding fails.
+      // Display-only; failure is not worth interrupting the screen.
     }
   }
 
@@ -312,16 +227,6 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
     return '${exam.classLevel} ($termLabel)$weekLabel';
   }
 
-  String _draftKey({
-    required String subject,
-    required String classLevel,
-    required String term,
-    required int weekNumber,
-  }) {
-    return '${subject.trim().toLowerCase()}|${classLevel.trim().toLowerCase()}|'
-        '${term.trim().toLowerCase()}|$weekNumber';
-  }
-
   String _normalizeTermLabel(String term) {
     final cleaned = term.trim();
     if (cleaned.isEmpty) return '';
@@ -338,76 +243,139 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
     return cleaned;
   }
 
-  String? _inferClassLevelForScheme({
-    required SchemeOfWorkData scheme,
-    required String subjectName,
-    required List<Lesson> lessons,
-    required List<Exam> exams,
-    required String? teacherServerId,
-  }) {
-    final schemeId = scheme.id.toString();
-    final linkedLessons = lessons.where((lesson) {
-      if (lesson.isDeleted) return false;
-      if (lesson.schemeOfWorkId != schemeId) return false;
-      if (teacherServerId != null && lesson.teacherServerId != teacherServerId) {
-        return false;
-      }
-      return true;
-    }).toList();
-    if (linkedLessons.isNotEmpty) {
-      return linkedLessons.first.classLevel;
-    }
-
-    final matchingLessons = lessons.where((lesson) {
-      if (lesson.isDeleted) return false;
-      if (teacherServerId != null && lesson.teacherServerId != teacherServerId) {
-        return false;
-      }
-      if (lesson.subject != subjectName) return false;
-      final lessonWeek = lesson.weekNumber ?? lesson.week;
-      return lessonWeek == scheme.weekNumber;
-    }).toList();
-    if (matchingLessons.isNotEmpty) {
-      return matchingLessons.first.classLevel;
-    }
-
-    final linkedExams = exams.where((exam) {
-      if (exam.isDeleted) return false;
-      final linkedSchemeId = int.tryParse(exam.schemeOfWorkId ?? '');
-      return linkedSchemeId == scheme.id;
-    }).toList();
-    if (linkedExams.isNotEmpty) {
-      return linkedExams.first.classLevel;
-    }
-
-    return null;
-  }
-
-  String _createExamLocation({
-    required String subject,
-    required String classLevel,
-    required String term,
-  }) {
-    final queryParameters = <String, String>{};
-    if (subject.isNotEmpty) queryParameters['subject'] = subject;
-    if (classLevel.isNotEmpty) queryParameters['classLevel'] = classLevel;
-    if (term.isNotEmpty) queryParameters['term'] = term;
-    return Uri(
-      path: '/exam-editor',
-      queryParameters: queryParameters.isEmpty ? null : queryParameters,
-    ).toString();
-  }
-
-  void _openNewExam() {
+  /// Opens the normal exam editor in the combined-exam mode. The teacher then
+  /// picks Term Exam or CA Test inside the editor. Pre-fills subject/class/
+  /// term from the active filters when they are set.
+  void _openCombinedExam() {
     final subject = _selectedSubjectFilter == 'All' ? '' : _selectedSubjectFilter;
     final classLevel =
         _selectedClassFilter == 'All' ? '' : _selectedClassFilter;
     final term = _selectedTermFilter == 'All' ? '' : _selectedTermFilter;
+    final queryParameters = <String, String>{
+      'compilationType': 'termExam',
+      if (subject.isNotEmpty) 'subject': subject,
+      if (classLevel.isNotEmpty) 'classLevel': classLevel,
+      if (term.isNotEmpty) 'term': term,
+    };
     context.push(
-      _createExamLocation(
-        subject: subject,
-        classLevel: classLevel,
-        term: term,
+      Uri(
+        path: '/exam-editor',
+        queryParameters: queryParameters,
+      ).toString(),
+    );
+  }
+
+  /// Opens the "Generate Weekly Exams" dialog, pre-filled from the active
+  /// filters or last-used values, then runs the generation.
+  Future<void> _openGenerateWeeklyExams() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedSubject = prefs.getString(_prefWeeklySubject) ?? 'Mathematics';
+    final savedClass = prefs.getString(_prefWeeklyClass) ?? 'JSS 1';
+    final savedTerm = prefs.getString(_prefWeeklyTerm) ?? '1st Term';
+
+    final subject =
+        _selectedSubjectFilter != 'All' ? _selectedSubjectFilter : savedSubject;
+    final classLevel =
+        _selectedClassFilter != 'All' ? _selectedClassFilter : savedClass;
+    final termLabel =
+        _selectedTermFilter != 'All' ? _selectedTermFilter : savedTerm;
+
+    // Subject options = any subject the teacher filters on + the curated
+    // subjects, so a filter like "French" stays selected instead of silently
+    // falling back to Mathematics.
+    final filterSubjects = _selectedSubjectFilter != 'All'
+        ? [_selectedSubjectFilter]
+        : const <String>[];
+    final subjectOptions =
+        <String>[...filterSubjects, ...nerdcSubjects].toSet().toList();
+
+    final selection = await showDialog<_WeeklyExamsSelection>(
+      context: context,
+      builder: (ctx) => _WeeklyExamsDialog(
+        subjectOptions: subjectOptions,
+        initialSubject: subject,
+        initialClassLevel: classLevel,
+        initialTerm: termLabel,
+      ),
+    );
+    if (selection == null || !mounted) return;
+
+    await prefs.setString(_prefWeeklySubject, selection.subject);
+    await prefs.setString(_prefWeeklyClass, selection.classLevel);
+    await prefs.setString(_prefWeeklyTerm, selection.termLabel);
+
+    await _runGenerateWeeklyExams(selection);
+  }
+
+  Future<void> _runGenerateWeeklyExams(_WeeklyExamsSelection selection) async {
+    setState(() => _isGeneratingWeekly = true);
+    try {
+      final db = ref.read(databaseProvider);
+      final authState = ref.read(authProvider);
+      final school = authState.currentSchool ?? await db.schoolsDao.get();
+      final teacherServerId = authState.currentTeacher?.serverId;
+      if (school == null || teacherServerId == null) {
+        _showToast('Teacher or school data not available.');
+        return;
+      }
+      final teacher = await db.teachersDao.findByServerId(teacherServerId);
+      if (teacher == null) {
+        _showToast('Teacher account not ready yet.');
+        return;
+      }
+
+      final service = ExamGenerationService(db);
+      await service.generateWeeklyExams(
+        schoolId: school.localId,
+        teacherId: teacher.localId,
+        teacherServerId: teacherServerId,
+        schoolServerId: school.serverId,
+        subject: selection.subject,
+        classLevel: selection.classLevel,
+        termLabel: selection.termLabel,
+        subscriptionTier: school.subscriptionTier.toLowerCase(),
+        lessonStorageLimits:
+            ref.read(configServiceProvider).lessonStorageLimits,
+        aiGenerate: (prompt) async {
+          // AI fallback is only reached when no scheme/NERDC topics exist;
+          // generation requires internet for that path.
+          if (!await PlatformHelper.isOnline()) {
+            throw const ExamTopicsUnavailableException();
+          }
+          return AiService(db: db).generate(prompt);
+        },
+      );
+
+      ref.invalidate(examsListProvider);
+      _showToast('13 weekly exams created. Tap any week to add questions.');
+    } on ExamTopicsUnavailableException {
+      _showToast(
+        'No topics available for ${selection.subject}, '
+        '${selection.classLevel}, ${selection.termLabel}. '
+        'Check your internet connection and try again.',
+      );
+    } on ExamStorageLimitExceededException {
+      _showToast(
+        'Exam storage limit reached. Upgrade your school plan to create '
+        'more exams.',
+      );
+    } catch (e) {
+      _showToast('Could not create exams: $e');
+    } finally {
+      if (mounted) setState(() => _isGeneratingWeekly = false);
+    }
+  }
+
+  /// Shows a readable toast (dark background, white text) on this screen.
+  void _showToast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: const Color(0xFF323232),
+        content: Text(
+          message,
+          style: const TextStyle(color: Colors.white),
+        ),
       ),
     );
   }
@@ -505,6 +473,30 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
       body: Column(
         children: [
           const ConflictBanner(),
+          // Primary actions — full width, directly under the banner. Same
+          // clean full-width button style as the Lessons list.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: _FullWidthActionButton(
+              cs: cs,
+              theme: theme,
+              label: 'Generate Weekly Exams',
+              icon: Icons.calendar_view_week_rounded,
+              busy: _isGeneratingWeekly,
+              onTap: _openGenerateWeeklyExams,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+            child: _FullWidthActionButton(
+              cs: cs,
+              theme: theme,
+              label: 'Term Exam / CA Test',
+              icon: Icons.assignment_rounded,
+              tonal: true,
+              onTap: _openCombinedExam,
+            ),
+          ),
           Expanded(
             child: examsAsync.when(
               loading: () => ListView(
@@ -643,7 +635,8 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    'Tap New Exam to create one.',
+                                    'Tap Generate Weekly Exams or Term Exam / '
+                                    'CA Test to create exams.',
                                     style: theme.textTheme.bodyMedium?.copyWith(
                                       color: cs.onSurfaceVariant,
                                     ),
@@ -750,33 +743,6 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
             ),
           ),
         ],
-      ),
-      floatingActionButton: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: cs.primary.withValues(alpha: 0.30),
-              blurRadius: 14,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: FloatingActionButton.extended(
-          onPressed: _openNewExam,
-          heroTag: 'newExam',
-          backgroundColor: cs.primary,
-          foregroundColor: cs.onPrimary,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-          icon: const Icon(Icons.add_rounded),
-          label: const Text(
-            'New Exam',
-            style: TextStyle(fontWeight: FontWeight.w600),
-          ),
-        ),
       ),
       ),
     );
@@ -1311,4 +1277,179 @@ class _ExamCardSkeleton extends StatelessWidget {
 
 String _formatDate(DateTime dt) {
   return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+}
+
+/// Full-width primary/tonal action button in the same clean style as the
+/// Lessons list "Create" button (rounded 14, full width, centered icon+label).
+class _FullWidthActionButton extends StatelessWidget {
+  const _FullWidthActionButton({
+    required this.cs,
+    required this.theme,
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    this.tonal = false,
+    this.busy = false,
+  });
+
+  final ColorScheme cs;
+  final ThemeData theme;
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool tonal;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final background = tonal ? cs.secondaryContainer : cs.primary;
+    final foreground = tonal ? cs.onSecondaryContainer : cs.onPrimary;
+    return InkWell(
+      onTap: busy ? null : onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (busy)
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: foreground,
+                ),
+              )
+            else
+              Icon(icon, size: 20, color: foreground),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: foreground,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WeeklyExamsSelection {
+  const _WeeklyExamsSelection(
+    this.subject,
+    this.classLevel,
+    this.termLabel,
+  );
+
+  final String subject;
+  final String classLevel;
+  final String termLabel;
+}
+
+/// Small confirmation dialog for "Generate Weekly Exams": subject/class/term
+/// pre-filled from the Exams list filters (or last-used values). Copy makes
+/// explicit that lessons and the scheme of work are NOT touched.
+class _WeeklyExamsDialog extends StatefulWidget {
+  const _WeeklyExamsDialog({
+    required this.subjectOptions,
+    required this.initialSubject,
+    required this.initialClassLevel,
+    required this.initialTerm,
+  });
+
+  final List<String> subjectOptions;
+  final String initialSubject;
+  final String initialClassLevel;
+  final String initialTerm;
+
+  @override
+  State<_WeeklyExamsDialog> createState() => _WeeklyExamsDialogState();
+}
+
+class _WeeklyExamsDialogState extends State<_WeeklyExamsDialog> {
+  static const _classes = ['JSS 1', 'JSS 2', 'JSS 3', 'SSS 1', 'SSS 2', 'SSS 3'];
+  static const _terms = ['1st Term', '2nd Term', '3rd Term'];
+
+  late String _subject;
+  late String _classLevel;
+  late String _term;
+
+  @override
+  void initState() {
+    super.initState();
+    _subject = widget.subjectOptions.contains(widget.initialSubject)
+        ? widget.initialSubject
+        : widget.subjectOptions.first;
+    _classLevel = _classes.contains(widget.initialClassLevel)
+        ? widget.initialClassLevel
+        : _classes.first;
+    _term = _terms.contains(widget.initialTerm) ? widget.initialTerm : _terms.first;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('Generate Weekly Exams'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Create 13 weekly exam drafts for $_subject, $_classLevel, '
+            '$_term. Lessons and scheme of work will NOT be changed.',
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            initialValue: _subject,
+            decoration: const InputDecoration(labelText: 'Subject'),
+            items: widget.subjectOptions
+                .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                .toList(),
+            onChanged: (v) => setState(() => _subject = v ?? _subject),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _classLevel,
+            decoration: const InputDecoration(labelText: 'Class Level'),
+            items: _classes
+                .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                .toList(),
+            onChanged: (v) => setState(() => _classLevel = v ?? _classLevel),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _term,
+            decoration: const InputDecoration(labelText: 'Term'),
+            items: _terms
+                .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                .toList(),
+            onChanged: (v) => setState(() => _term = v ?? _term),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(
+            _WeeklyExamsSelection(_subject, _classLevel, _term),
+          ),
+          child: const Text('Generate'),
+        ),
+      ],
+    );
+  }
 }

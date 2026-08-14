@@ -1,0 +1,609 @@
+// lib/core/services/exam_generation_service.dart
+import 'dart:convert';
+
+import 'package:drift/drift.dart' show Value;
+import 'package:classai/core/constants/prompt_templates.dart';
+import 'package:classai/core/data/nerdc_curriculum.dart';
+import 'package:classai/core/database/database.dart';
+import 'package:classai/core/services/scheme_of_work_service.dart';
+
+/// Thrown when no weekly topics can be resolved for a subject/class/term
+/// (no matching scheme rows, no curated NERDC topics, and the AI fallback
+/// was unavailable or returned nothing).
+class ExamTopicsUnavailableException implements Exception {
+  const ExamTopicsUnavailableException();
+
+  @override
+  String toString() =>
+      'No topics are available for this subject, class and term. '
+      'Check your internet connection and try again.';
+}
+
+/// Thrown when a combined exam has no topics/questions to generate.
+class ExamGenerationEmptySelectionException implements Exception {
+  const ExamGenerationEmptySelectionException();
+
+  @override
+  String toString() => 'Select at least one topic to generate.';
+}
+
+/// Thrown when creating exams would exceed the school's per-tier exam storage
+/// limit — the same `lesson_storage_limits` rule the exam editor enforces in
+/// `_saveExam` before inserting a new exam. Nothing is created or queued when
+/// this is thrown.
+class ExamStorageLimitExceededException implements Exception {
+  const ExamStorageLimitExceededException();
+
+  @override
+  String toString() =>
+      'Exam storage limit reached. Upgrade your school plan to create more '
+      'exams.';
+}
+
+/// One week's topic for a term exam / weekly exam generation.
+class TermTopic {
+  final int weekNumber;
+  final String topic;
+
+  /// Local scheme_of_work row id, set only when a matching saved plan exists.
+  final int? schemeOfWorkId;
+
+  const TermTopic({
+    required this.weekNumber,
+    required this.topic,
+    this.schemeOfWorkId,
+  });
+}
+
+/// Shared persistence + generation for the explicit exam-creation flows:
+///
+/// 1. `generateWeeklyExams` — 13 empty weekly draft exams (no lessons, no
+///    scheme rows are created or changed).
+/// 2. `loadTermTopics` + `generateCombinedExam` — ONE combined exam from all
+///    term topics (Term Exam) or only the ticked topics (CA Test).
+///
+/// This service is the single place that creates exam rows on behalf of the
+/// Exams list and the exam editor's combined mode, so there is exactly one
+/// payload shape for the `exams` sync queue (mirroring the editor save path).
+class ExamGenerationService {
+  final AppDatabase db;
+  ExamGenerationService(this.db);
+
+  /// Resolves the topics for a subject/class/term in priority order:
+  ///
+  /// 1. Matching local scheme of work rows (week order) when a saved plan
+  ///    exists for the combo — their week topics are used as-is and the
+  ///    returned [TermTopic]s carry the scheme row id so created exams can be
+  ///    linked.
+  /// 2. Curated NERDC topics via [getNerdcTopics] when the combo is covered.
+  /// 3. AI fallback via [PromptTemplates.schemeOfWork] +
+  ///    [parseSchemeWeeks] when [aiGenerate] is provided.
+  ///
+  /// Returns null only when all three sources fail (the caller then shows a
+  /// clear message and does nothing).
+  Future<List<TermTopic>?> loadTermTopics({
+    required int schoolId,
+    required int teacherId,
+    required String subject,
+    required String classLevel,
+    required String termLabel,
+    Future<Map<String, dynamic>> Function(String prompt)? aiGenerate,
+  }) async {
+    // 1. Matching local scheme rows, in week order.
+    final schemes = await SchemeOfWorkService(db).findSchemes(
+      schoolId: schoolId,
+      teacherId: teacherId,
+      subject: subject,
+      classLevel: classLevel,
+      term: termLabel,
+    );
+    if (schemes.isNotEmpty) {
+      final sorted = List<SchemeOfWorkData>.from(schemes)
+        ..sort((a, b) => a.weekNumber.compareTo(b.weekNumber));
+      return [
+        for (final scheme in sorted)
+          TermTopic(
+            weekNumber: scheme.weekNumber,
+            topic: scheme.adminEditedTopic ?? scheme.topic,
+            schemeOfWorkId: scheme.id,
+          ),
+      ];
+    }
+
+    // 2. Curated NERDC topics (13 weeks, week = index + 1).
+    final curated = getNerdcTopics(subject, classLevel, termLabel);
+    if (curated != null && curated.isNotEmpty) {
+      return [
+        for (var i = 0; i < curated.length; i++)
+          TermTopic(weekNumber: i + 1, topic: curated[i].topic),
+      ];
+    }
+
+    // 3. AI fallback (scheme topics only — never creates scheme rows).
+    if (aiGenerate != null) {
+      final prompt = PromptTemplates.schemeOfWork(subject, classLevel, termLabel);
+      final result = await aiGenerate(prompt);
+      final weeks = parseSchemeWeeks(result);
+      if (weeks.isNotEmpty) {
+        return [
+          for (var i = 0; i < weeks.length; i++)
+            TermTopic(
+              weekNumber: (weeks[i]['week'] as int?) ?? (i + 1),
+              topic: weeks[i]['topic']?.toString().trim() ?? '',
+            ),
+        ];
+      }
+    }
+
+    return null;
+  }
+
+  /// Creates ONE empty draft exam per resolved week topic for
+  /// subject/class/term. Runs inside a single Drift transaction — a partial
+  /// failure rolls the whole run back.
+  ///
+  /// Duplicate protection: before inserting a weekly draft, an existing
+  /// non-deleted exam occupying the same subject/class/term/week slot (or
+  /// linked to the same scheme row) is updated/reused in place instead of
+  /// duplicated — its topic/link is refreshed but any content the teacher
+  /// already wrote is preserved.
+  ///
+  /// Does NOT create lessons or scheme rows. Each created/updated draft queues
+  /// an `exams` sync entry using the same payload shape as the exam editor
+  /// save path.
+  ///
+  /// Returns the number of weeks written (one exam per week).
+  Future<int> generateWeeklyExams({
+    required int schoolId,
+    required int teacherId,
+    required String teacherServerId,
+    required String? schoolServerId,
+
+    /// The school's subscription tier (lowercase) and the remote
+    /// `lesson_storage_limits` map used to enforce the per-tier exam storage
+    /// quota — the same inputs the exam editor's `_saveExam` guard reads.
+    required String subscriptionTier,
+    required Map<String, dynamic> lessonStorageLimits,
+
+    required String subject,
+    required String classLevel,
+    required String termLabel,
+    Future<Map<String, dynamic>> Function(String prompt)? aiGenerate,
+  }) async {
+    final topics = await loadTermTopics(
+      schoolId: schoolId,
+      teacherId: teacherId,
+      subject: subject,
+      classLevel: classLevel,
+      termLabel: termLabel,
+      aiGenerate: aiGenerate,
+    );
+    if (topics == null || topics.isEmpty) {
+      throw const ExamTopicsUnavailableException();
+    }
+
+    final termLabelStored = _normalizeTermLabelForDraft(termLabel);
+
+    return db.transaction(() async {
+      final existingExams = await db.examsDao.getAll();
+
+      // Storage quota guard — the same per-tier `lesson_storage_limits` rule
+      // the exam editor enforces before inserting a new exam. Count the weeks
+      // that would create NEW rows (a slot with an existing exam is reused in
+      // place and adds nothing), then fail before ANY row is written or
+      // queued when the run would push the school past its limit.
+      final quotaWeeks = <int>{};
+      var newRowCount = 0;
+      for (final topic in topics) {
+        if (quotaWeeks.contains(topic.weekNumber)) continue;
+        final blocker = _findWeekExamBlocker(
+          existingExams,
+          weekId: topic.schemeOfWorkId,
+          teacherServerId: teacherServerId,
+          classLevel: classLevel,
+          termLabel: termLabelStored,
+          weekNumber: topic.weekNumber,
+          subject: subject,
+        );
+        if (blocker == null) newRowCount++;
+        quotaWeeks.add(topic.weekNumber);
+      }
+      await _ensureWithinStorageLimit(
+        schoolServerId: schoolServerId,
+        subscriptionTier: subscriptionTier,
+        lessonStorageLimits: lessonStorageLimits,
+        newRowCount: newRowCount,
+      );
+
+      // Weeks already handled in THIS run — prevents a second run (or two
+      // topics sharing a week) from duplicating a slot.
+      final handledWeeks = <int>{};
+
+      var created = 0;
+      for (final topic in topics) {
+        if (handledWeeks.contains(topic.weekNumber)) continue;
+
+        final existingExam = _findWeekExamBlocker(
+          existingExams,
+          weekId: topic.schemeOfWorkId,
+          teacherServerId: teacherServerId,
+          classLevel: classLevel,
+          termLabel: termLabelStored,
+          weekNumber: topic.weekNumber,
+          subject: subject,
+        );
+
+        if (existingExam == null) {
+          final examContent = jsonEncode({
+            'mcqs': const [],
+            'theory': const [],
+            'subjective': const [],
+          });
+          final examId = await db.examsDao.insertExam(
+            ExamsCompanion.insert(
+              subject: subject,
+              classLevel: classLevel,
+              topic: topic.topic,
+              difficulty: 'medium',
+              curriculum: 'NERDC',
+              content: examContent,
+              teacherServerId: Value(teacherServerId),
+              schoolServerId: schoolServerId != null
+                  ? Value(schoolServerId)
+                  : const Value.absent(),
+              isUnlocked: const Value(false),
+              schemeOfWorkId: topic.schemeOfWorkId != null
+                  ? Value(topic.schemeOfWorkId.toString())
+                  : const Value.absent(),
+              weekNumber: Value(topic.weekNumber),
+              term: Value(termLabelStored),
+            ),
+          );
+          await db.syncQueueDao.insertEntry(
+            queueTable: 'exams',
+            recordLocalId: examId,
+            operation: 'INSERT',
+            payload: {
+              'subject': subject,
+              'classLevel': classLevel,
+              'topic': topic.topic,
+              'difficulty': 'medium',
+              'curriculum': 'NERDC',
+              'teacher_server_id': teacherServerId,
+              'school_server_id': schoolServerId,
+              'content': examContent,
+              'is_unlocked': false,
+              if (topic.schemeOfWorkId != null)
+                'scheme_of_work_id': topic.schemeOfWorkId.toString(),
+              'week_number': topic.weekNumber,
+              'term': termLabelStored,
+            },
+          );
+        } else {
+          await _updateDraftExamInPlace(
+            exam: existingExam,
+            weekId: topic.schemeOfWorkId,
+            subject: subject,
+            classLevel: classLevel,
+            weekNumber: topic.weekNumber,
+            topic: topic.topic,
+            termLabel: termLabelStored,
+            teacherServerId: teacherServerId,
+            schoolServerId: schoolServerId,
+          );
+        }
+
+        handledWeeks.add(topic.weekNumber);
+        created++;
+      }
+      return created;
+    });
+  }
+
+  /// Generates ONE combined exam from [topics] with the parallel
+  /// [questionCounts] (entries with count <= 0 are skipped), using the
+  /// multi-topic [PromptTemplates.examQuestions] prompt via [aiGenerate].
+  ///
+  /// The prompt/parse/save logic is moved from the old Full-Term Exam screen:
+  /// question totals are distributed across MCQ (50%), Theory (30%) and
+  /// Subjective (the remainder), the AI result is parsed into the exam
+  /// content shape (`mcqs`/`theory`/`subjective`), and ONE exam row is
+  /// inserted with a single `exams` INSERT sync entry.
+  ///
+  /// [topicTitle] is the exam's display topic, e.g. "Term Exam (13 topics)".
+  /// Returns the new exam's local id.
+  Future<int> generateCombinedExam({
+    required String subject,
+    required String classLevel,
+    required String termLabel,
+    required String teacherServerId,
+    required String? schoolServerId,
+
+    /// The school's subscription tier (lowercase) and the remote
+    /// `lesson_storage_limits` map used to enforce the per-tier exam storage
+    /// quota — the same inputs the exam editor's `_saveExam` guard reads.
+    required String subscriptionTier,
+    required Map<String, dynamic> lessonStorageLimits,
+
+    required String difficulty,
+    required List<TermTopic> topics,
+    required List<int> questionCounts,
+    required String topicTitle,
+    required Future<Map<String, dynamic>> Function(String prompt) aiGenerate,
+    String teacherName = 'Teacher',
+    String schoolName = 'School',
+  }) async {
+    if (topics.isEmpty) {
+      throw const ExamGenerationEmptySelectionException();
+    }
+
+    // Storage quota guard — the same per-tier `lesson_storage_limits` rule the
+    // exam editor enforces before inserting a new exam. ONE row is created, so
+    // fail before the AI call when the school is already at its limit.
+    await _ensureWithinStorageLimit(
+      schoolServerId: schoolServerId,
+      subscriptionTier: subscriptionTier,
+      lessonStorageLimits: lessonStorageLimits,
+      newRowCount: 1,
+    );
+
+    // Build the multi-topic prompt + distribute counts across question types.
+    final topicParts = <String>[];
+    var totalMcq = 0;
+    var totalTheory = 0;
+    var totalSubjective = 0;
+    for (var i = 0; i < topics.length; i++) {
+      final count = questionCounts[i];
+      if (count <= 0) continue;
+      topicParts.add(
+        '- Week ${topics[i].weekNumber}: "${topics[i].topic}" '
+        '($count questions)',
+      );
+      final mcq = (count * 0.5).round();
+      final theory = (count * 0.3).round();
+      final subjective = count - mcq - theory;
+      totalMcq += mcq;
+      totalTheory += theory;
+      totalSubjective += subjective;
+    }
+    if (topicParts.isEmpty) {
+      throw const ExamGenerationEmptySelectionException();
+    }
+
+    final typeCounts = <String, int>{
+      'MCQ': totalMcq,
+      'Theory': totalTheory,
+      'Subjective': totalSubjective,
+    };
+
+    final prompt = PromptTemplates.examQuestions(
+      subject,
+      classLevel,
+      topicParts.join('\n'),
+      difficulty,
+      typeCounts,
+      teacherName: teacherName,
+      schoolName: schoolName,
+    );
+
+    final result = await aiGenerate(prompt);
+
+    // Parse the AI result into the exam content shape.
+    Map<String, dynamic> content;
+    if (result.containsKey('encryptedContent')) {
+      content = Map<String, dynamic>.from(result['raw'] as Map);
+    } else {
+      content = result;
+    }
+    final examContent = {
+      'mcqs': (content['mcq'] as List<dynamic>?)
+              ?.cast<Map<String, dynamic>>() ??
+          (content['mcqs'] as List<dynamic>?)
+              ?.cast<Map<String, dynamic>>() ??
+          (content['questions'] as List<dynamic>?)
+              ?.cast<Map<String, dynamic>>() ??
+          <Map<String, dynamic>>[],
+      'theory': (content['theory'] as List<dynamic>?)
+              ?.cast<Map<String, dynamic>>() ??
+          <Map<String, dynamic>>[],
+      'subjective': (content['subjective'] as List<dynamic>?)
+              ?.cast<Map<String, dynamic>>() ??
+          <Map<String, dynamic>>[],
+    };
+
+    final termLabelStored = _normalizeTermLabelForDraft(termLabel);
+    final weekNumber = topics.first.weekNumber;
+    final contentJson = jsonEncode(examContent);
+
+    final examId = await db.examsDao.insertExam(
+      ExamsCompanion.insert(
+        subject: subject,
+        classLevel: classLevel,
+        topic: topicTitle,
+        difficulty: difficulty,
+        curriculum: 'NERDC',
+        content: contentJson,
+        teacherServerId: Value(teacherServerId),
+        schoolServerId: schoolServerId != null
+            ? Value(schoolServerId)
+            : const Value.absent(),
+        isUnlocked: const Value(false),
+        weekNumber: Value(weekNumber),
+        term: Value(termLabelStored),
+      ),
+    );
+
+    await db.syncQueueDao.insertEntry(
+      queueTable: 'exams',
+      recordLocalId: examId,
+      operation: 'INSERT',
+      payload: {
+        'subject': subject,
+        'classLevel': classLevel,
+        'topic': topicTitle,
+        'difficulty': difficulty,
+        'curriculum': 'NERDC',
+        'teacher_server_id': teacherServerId,
+        'school_server_id': schoolServerId,
+        'content': contentJson,
+        'is_unlocked': false,
+        'week_number': weekNumber,
+        'term': termLabelStored,
+      },
+    );
+
+    return examId;
+  }
+
+  /// Finds the non-deleted exam that occupies [weekNumber] for the same
+  /// teacher/class/term — the duplicate guard for weekly generation. An exam
+  /// linked to the same scheme row always counts regardless of subject text
+  /// (which may have been wiped to '' by sync pull); otherwise the
+  /// teacher/class/term/week slot must also share the subject name
+  /// (case-insensitive, or empty) so a different subject's exam is never
+  /// adopted or clobbered.
+  Exam? _findWeekExamBlocker(
+    List<Exam> exams, {
+    required int? weekId,
+    required String teacherServerId,
+    required String classLevel,
+    required String termLabel,
+    required int weekNumber,
+    required String subject,
+  }) {
+    for (final exam in exams) {
+      if (exam.isDeleted) continue;
+      if (weekId != null) {
+        final existingSchemeId = int.tryParse(exam.schemeOfWorkId ?? '');
+        if (existingSchemeId == weekId) return exam;
+      }
+      if (exam.teacherServerId == teacherServerId &&
+          exam.classLevel == classLevel &&
+          (exam.term ?? '') == termLabel &&
+          exam.weekNumber == weekNumber &&
+          _matchesSubject(exam.subject, subject)) {
+        return exam;
+      }
+    }
+    return null;
+  }
+
+  /// True when the stored exam subject matches the target subject
+  /// (case-insensitive), or is empty — sync-pull can wipe subject to '' and
+  /// such rows still occupy the teacher/class/term/week slot.
+  bool _matchesSubject(String? storedSubject, String subject) {
+    final a = (storedSubject ?? '').trim().toLowerCase();
+    final b = subject.trim().toLowerCase();
+    return a.isEmpty || a == b;
+  }
+
+  /// Same per-tier fallback the exam editor uses (`_defaultStorageLimit` in
+  /// `exam_editor_screen.dart`) when the remote `lesson_storage_limits` map
+  /// has no entry for a tier.
+  int _defaultStorageLimit(String tier) {
+    switch (tier) {
+      case 'free':
+        return 10;
+      case 'basic':
+        return 20;
+      case 'standard':
+        return 50;
+      case 'elite':
+        return -1;
+      default:
+        return 10;
+    }
+  }
+
+  /// Enforces the school's per-tier exam storage quota using the exact rule
+  /// the exam editor applies in `_saveExam` before inserting a new exam:
+  /// `limit = lessonStorageLimits[tier] ?? default`, `-1` = unlimited, and the
+  /// school's non-deleted exam count must stay within the limit once
+  /// [newRowCount] new rows are added. Throws
+  /// [ExamStorageLimitExceededException] before anything is created or queued.
+  Future<void> _ensureWithinStorageLimit({
+    required String? schoolServerId,
+    required String subscriptionTier,
+    required Map<String, dynamic> lessonStorageLimits,
+    required int newRowCount,
+  }) async {
+    final limit = lessonStorageLimits[subscriptionTier] as int? ??
+        _defaultStorageLimit(subscriptionTier);
+    if (limit < 0) return; // elite: unlimited
+    final currentCount =
+        await db.examsDao.countNonDeletedBySchool(schoolServerId ?? '');
+    if (currentCount + newRowCount > limit) {
+      throw const ExamStorageLimitExceededException();
+    }
+  }
+
+  /// Re-adopts an existing draft exam into a weekly generation: refreshes
+  /// topic/link in place and queues the sync write instead of duplicating.
+  /// Content the teacher already wrote is preserved.
+  Future<void> _updateDraftExamInPlace({
+    required Exam exam,
+    required int? weekId,
+    required String subject,
+    required String classLevel,
+    required int weekNumber,
+    required String topic,
+    required String termLabel,
+    required String teacherServerId,
+    required String? schoolServerId,
+  }) async {
+    final schemeOfWorkId = weekId?.toString();
+    await db.examsDao.updateExam(
+      exam.id,
+      ExamsCompanion(
+        subject: Value(subject),
+        classLevel: Value(classLevel),
+        topic: Value(topic),
+        schemeOfWorkId: schemeOfWorkId != null
+            ? Value(schemeOfWorkId)
+            : const Value(null),
+        weekNumber: Value(weekNumber),
+        term: Value(termLabel),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+
+    final payload = <String, dynamic>{
+      'subject': subject,
+      'classLevel': classLevel,
+      'topic': topic,
+      'difficulty': exam.difficulty,
+      'curriculum': exam.curriculum,
+      'teacher_server_id': teacherServerId,
+      'school_server_id': schoolServerId,
+      'content': exam.content,
+      'is_unlocked': exam.isUnlocked,
+      if (schemeOfWorkId != null) 'scheme_of_work_id': schemeOfWorkId,
+      'week_number': weekNumber,
+      'term': termLabel,
+    };
+
+    final hasServerId = exam.serverId != null && exam.serverId!.isNotEmpty;
+    await db.syncQueueDao.insertEntry(
+      queueTable: 'exams',
+      recordLocalId: exam.id,
+      operation: hasServerId ? 'UPDATE' : 'INSERT',
+      payload: payload,
+    );
+  }
+
+  /// 'First' / '1st' / '1' → '1st Term' (likewise 2nd/3rd) — the display
+  /// label stored on exam rows.
+  String _normalizeTermLabelForDraft(String term) {
+    final lower = term.trim().toLowerCase();
+    if (lower == '1' || lower.startsWith('1st') || lower.contains('first')) {
+      return '1st Term';
+    }
+    if (lower == '2' || lower.startsWith('2nd') || lower.contains('second')) {
+      return '2nd Term';
+    }
+    if (lower == '3' || lower.startsWith('3rd') || lower.contains('third')) {
+      return '3rd Term';
+    }
+    return term.trim();
+  }
+}

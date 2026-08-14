@@ -10,7 +10,9 @@
 //                                   resolve the subject even though it has no
 //                                   server UUID yet)
 //   3. `lessons` INSERTs
-//   4. `exams` INSERTs
+//
+// Exams are NOT queued — since the exams-generation redesign (Phase 1),
+// `saveScheme` never creates or deletes exams.
 //
 // This test verifies:
 //   - the scheme_of_work entry is queued WITH a `subject_name` field,
@@ -135,13 +137,15 @@ void main() {
       ],
     );
 
-    // Queue now holds subjects + scheme_of_work + lessons + exams INSERTs.
+    // Queue now holds subjects + scheme_of_work + lessons INSERTs — never
+    // exams (saveScheme no longer creates exams).
     final pending = await store.loadPendingQueue();
     final tables = pending.map((e) => e.queueTable).toSet();
     expect(tables, contains('subjects'));
     expect(tables, contains('scheme_of_work'));
     expect(tables, contains('lessons'));
-    expect(tables, contains('exams'));
+    expect(tables, isNot(contains('exams')),
+        reason: 'saveScheme must never queue exam creation');
 
     // The scheme_of_work INSERT must carry a subject_name field so sync-push
     // can resolve the subject even though subject_id is not a valid UUID yet.

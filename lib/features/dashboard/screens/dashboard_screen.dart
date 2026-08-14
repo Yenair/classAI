@@ -259,7 +259,7 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                 Navigator.of(ctx).pop();
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (context.mounted) {
-                    context.push('/full-term-exam');
+                    context.push('/exams');
                   }
                 });
               },
@@ -293,6 +293,54 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
     final theme = Theme.of(context);
     final authData = ref.watch(authProvider);
     final themeMode = ref.watch(themeProvider);
+
+    // Quick Actions header pieces — hoisted so the LayoutBuilder below can
+    // stack them on narrow content widths without duplicating the widgets.
+    final greeting = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          _greeting(authData.currentTeacher?.teacherName),
+          style: theme.textTheme.headlineMedium?.copyWith(
+            color: cs.primary,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          "Here's your academic overview for today.",
+          style: theme.textTheme.bodyLarge?.copyWith(
+            color: cs.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+
+    // Teacher-only action buttons — hidden for admins (the redirect already
+    // blocks admins from this screen, this is defense-in-depth).
+    final quickActions = authData.currentTeacher?.role != 'admin'
+        ? Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            children: [
+              _ActionButton(
+                icon: Icons.add_rounded,
+                label: 'Create Lesson',
+                isPrimary: true,
+                cs: cs,
+                theme: theme,
+                onTap: () => context.push('/lesson-editor'),
+              ),
+              _ActionButton(
+                icon: Icons.assignment_rounded,
+                label: 'Generate Exam',
+                isPrimary: false,
+                cs: cs,
+                theme: theme,
+                onTap: () => context.push('/exam-editor'),
+              ),
+            ],
+          )
+        : null;
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -678,64 +726,34 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             // Quick Actions Header
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: Column(
+                            LayoutBuilder(
+                              builder: (context, constraints) {
+                                // When the content area is too narrow to fit
+                                // the action buttons beside the greeting (e.g.
+                                // narrow viewports), stack them underneath
+                                // instead of overflowing the Row.
+                                if (constraints.maxWidth < 560) {
+                                  return Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        _greeting(authData.currentTeacher?.teacherName),
-                                        style: theme
-                                            .textTheme.headlineMedium
-                                            ?.copyWith(
-                                              color: cs.primary,
-                                            ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        "Here's your academic overview for today.",
-                                        style: theme
-                                            .textTheme.bodyLarge
-                                            ?.copyWith(
-                                              color: cs.onSurfaceVariant,
-                                            ),
-                                      ),
+                                      greeting,
+                                      if (quickActions != null) ...[
+                                        const SizedBox(height: 16),
+                                        quickActions,
+                                      ],
                                     ],
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                // Teacher-only action buttons — hidden for admins
-                                // (redirect already blocks admins from this screen,
-                                //  this is defense-in-depth)
-                                if (authData.currentTeacher?.role != 'admin')
-                                  Wrap(
-                                    spacing: 12,
-                                    runSpacing: 8,
-                                    children: [
-                                      _ActionButton(
-                                        icon: Icons.add_rounded,
-                                        label: 'Create Lesson',
-                                        isPrimary: true,
-                                        cs: cs,
-                                        theme: theme,
-                                        onTap: () =>
-                                            context.push('/lesson-editor'),
-                                      ),
-                                      _ActionButton(
-                                        icon: Icons.assignment_rounded,
-                                        label: 'Generate Exam',
-                                        isPrimary: false,
-                                        cs: cs,
-                                        theme: theme,
-                                        onTap: () =>
-                                            context.push('/exam-editor'),
-                                      ),
-                                    ],
-                                  ),
-                              ],
+                                  );
+                                }
+                                return Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(child: greeting),
+                                    const SizedBox(width: 16),
+                                    if (quickActions != null) quickActions,
+                                  ],
+                                );
+                              },
                             ),
 
                             const SizedBox(height: 24),
@@ -1633,24 +1651,34 @@ class _RightColumn extends ConsumerWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'LESSONS CREATED'.toUpperCase(),
-                          style: theme.textTheme.labelMedium?.copyWith(
-                            color: cs.onPrimary.withValues(alpha: 0.7),
-                            letterSpacing: 0.5,
+                    Flexible(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'LESSONS CREATED'.toUpperCase(),
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: cs.onPrimary.withValues(alpha: 0.7),
+                              letterSpacing: 0.5,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          lessonCountAsync.isLoading ? '...' : lessonCountLabel,
-                          style: theme.textTheme.headlineMedium?.copyWith(
-                            color: cs.onPrimary,
+                          const SizedBox(height: 4),
+                          // Scale the count down (never ellipsize) so long
+                          // labels like "0 (0 completed)" fit the card width.
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              lessonCountAsync.isLoading
+                                  ? '...'
+                                  : lessonCountLabel,
+                              style: theme.textTheme.headlineMedium?.copyWith(
+                                color: cs.onPrimary,
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -1661,24 +1689,32 @@ class _RightColumn extends ConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'EXAMS GENERATED'.toUpperCase(),
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: cs.onPrimary.withValues(alpha: 0.7),
-                          letterSpacing: 0.5,
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'EXAMS GENERATED'.toUpperCase(),
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: cs.onPrimary.withValues(alpha: 0.7),
+                            letterSpacing: 0.5,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        examCountAsync.isLoading ? '...' : examCountLabel,
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          color: cs.onPrimary,
+                        const SizedBox(height: 4),
+                        // Scale the count down (never ellipsize) so long
+                        // labels like "0 (0 unlocked)" fit the card width.
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            examCountAsync.isLoading ? '...' : examCountLabel,
+                            style: theme.textTheme.headlineMedium?.copyWith(
+                              color: cs.onPrimary,
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -2285,7 +2321,7 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
               subtitle: const Text('Combine multiple topics into one exam'),
               onTap: () {
                 Navigator.of(ctx).pop();
-                context.push('/full-term-exam');
+                context.push('/exams');
               },
             ),
           ],
