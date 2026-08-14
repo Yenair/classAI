@@ -11,6 +11,7 @@ import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/core/services/ai_service.dart';
 import 'package:classai/core/services/credit_service.dart';
 import 'package:classai/core/services/emergency_flush_service.dart';
+import 'package:classai/core/services/question_validation.dart';
 import 'package:classai/core/constants/prompt_templates.dart';
 import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/core/widgets/app_toast.dart';
@@ -85,7 +86,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   bool _sidebarInitialized = false;
   int _offlineCreditBalance = 0;
   int _remainingDailyPreviews = 10;
-  String? _encryptedContent;
   String? _teacherId;
   String? _schoolId;
   String _subscriptionTier = 'free';
@@ -109,6 +109,11 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   String _presentationText = '';
   String _assessmentText = '';
   String _homeworkText = '';
+
+  // Structured assessment questions (Phase 2) — same shape as exam content.
+  List<Map<String, dynamic>> _mcqs = [];
+  List<Map<String, dynamic>> _theoryQuestions = [];
+  List<Map<String, dynamic>> _subjectiveQuestions = [];
 
   final List<String> _subjects = [
     'Mathematics',
@@ -327,7 +332,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           _isFromSchemeOfWork = _schemeOfWorkLocalId != null;
           _sourceMissing = sourceMissing;
           _isUnlocked = lesson.isUnlocked;
-          _encryptedContent = rawContent;
           if (parsedContent != null) {
             _objectivesText = _formatList(parsedContent['objectives']);
             _objectivesController.text = _objectivesText;
@@ -342,6 +346,16 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             _homeworkText = parsedContent['homework'] as String? ?? '';
             _homeworkController.text = _homeworkText;
             _hasGenerated = true;
+            // Restore structured questions if present in stored content.
+            // Older lessons without the `questions` key load normally.
+            final storedQuestions =
+                parsedContent['questions'] as Map<String, dynamic>?;
+            if (storedQuestions != null) {
+              _mcqs = _castQuestionList(storedQuestions['mcqs']);
+              _theoryQuestions = _castQuestionList(storedQuestions['theory']);
+              _subjectiveQuestions =
+                  _castQuestionList(storedQuestions['subjective']);
+            }
             // Restore diagram results if present in stored content
             final storedDiagrams = parsedContent['diagrams'] as List<dynamic>?;
             if (storedDiagrams != null && storedDiagrams.isNotEmpty) {
@@ -707,12 +721,41 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         return;
       }
 
+      // ── Structured assessment questions (Phase 2) ────────────────
+      // The agreed tier gate (assessment_generation_allowed_tiers, default
+      // ["standard","elite"]) gates ONLY the questions call — lower tiers
+      // still generate lessons exactly as before.
+      final config = ref.read(configServiceProvider);
+      final questionsEnabled =
+          config.assessmentGenerationAllowedTiers.contains(authTier);
+      final questionsPrompt = questionsEnabled
+          ? PromptTemplates.lessonQuestions(
+              _subject,
+              _classLevel,
+              topic,
+              _difficulty,
+              bloomsStr,
+              _questionCountsForFormat(_assessmentFormat),
+              teacherName: _teacherName,
+              schoolName: _schoolName,
+            )
+          : null;
+
       // Generate via callback or fallback to AiService
       // NOTE: No credit is spent on AI generation - credit is spent on unlock
       Map<String, dynamic> result;
+      Map<String, dynamic>? questionsResult;
       if (widget.generateCallback != null) {
         // Test / external callback path – skip AiService setup
         result = await widget.generateCallback!(prompt);
+        if (questionsPrompt != null) {
+          try {
+            questionsResult = await widget.generateCallback!(questionsPrompt);
+          } catch (_) {
+            // Questions failed — the lesson still saves without them.
+            questionsResult = null;
+          }
+        }
         // Increment preview counter only after successful test generation
         await db.securityConfigDao
             .checkAndIncrementDailyPreviews(tier: _subscriptionTier);
@@ -731,7 +774,20 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           return;
         }
 
-        result = await aiService.generate(prompt);
+        // Fire the lesson and questions calls concurrently. The lesson call
+        // is authoritative: if IT fails, the whole action fails and nothing
+        // is saved (no partial data). A questions failure only means the
+        // lesson saves without structured questions.
+        final lessonFuture = aiService.generate(prompt);
+        final questionsFuture = questionsPrompt != null
+            ? aiService
+                  .generate(questionsPrompt)
+                  .then<Map<String, dynamic>?>((r) => r)
+                  .catchError((Object _) => null)
+            : Future<Map<String, dynamic>?>.value(null);
+
+        result = await lessonFuture;
+        questionsResult = await questionsFuture;
 
         // Increment preview counter only after successful generation
         await db.securityConfigDao
@@ -750,7 +806,35 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       // warm-up frame that Flutter schedules when setState is called
       // from an async continuation.
       final parsedRaw = result['raw'] as Map<String, dynamic>? ?? result;
-      final parsedEncrypted = result['encryptedContent'] as String?;
+
+      // Parse + validate the structured questions (best-effort). Invalid
+      // items are dropped; a failed/empty questions result never blocks the
+      // lesson from saving.
+      Map<String, List<Map<String, dynamic>>>? parsedQuestions;
+      var droppedQuestionCount = 0;
+      if (questionsResult != null) {
+        try {
+          final questionsRaw =
+              questionsResult['raw'] as Map<String, dynamic>? ??
+                  questionsResult;
+          final rawMcqs =
+              (questionsRaw['mcq'] ?? questionsRaw['mcqs']) as List<dynamic>? ??
+                  const [];
+          final rawTheory = questionsRaw['theory'] as List<dynamic>? ?? const [];
+          final rawSubjective =
+              questionsRaw['subjective'] as List<dynamic>? ?? const [];
+          parsedQuestions = parseLessonQuestions(questionsRaw);
+          final validCount = parsedQuestions['mcqs']!.length +
+              parsedQuestions['theory']!.length +
+              parsedQuestions['subjective']!.length;
+          droppedQuestionCount =
+              rawMcqs.length + rawTheory.length + rawSubjective.length -
+                  validCount;
+        } catch (_) {
+          parsedQuestions = null;
+        }
+      }
+      final questionsFailed = questionsResult == null || parsedQuestions == null;
 
       List<Map<String, dynamic>> generatedDiagrams = [];
       final diagramsRaw = parsedRaw['diagrams'] as List<dynamic>?;
@@ -780,7 +864,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           setState(() {
-            _encryptedContent = parsedEncrypted;
             _objectivesText = _formatList(parsedRaw['objectives']);
             _objectivesController.text = _objectivesText;
             _vocabularyText = _formatList(parsedRaw['vocabulary']);
@@ -793,6 +876,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             _assessmentController.text = _assessmentText;
             _homeworkText = _formatList(parsedRaw['homework']);
             _homeworkController.text = _homeworkText;
+            _mcqs = parsedQuestions?['mcqs'] ?? const [];
+            _theoryQuestions = parsedQuestions?['theory'] ?? const [];
+            _subjectiveQuestions = parsedQuestions?['subjective'] ?? const [];
             _diagramResults = generatedDiagrams;
             _hasGenerated = true;
             if (_lessonStatus == 'draft') _lessonStatus = 'generated';
@@ -803,8 +889,28 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           });
           _saveLesson(notify: false);
           if (mounted) {
-            showInfoToast(
-                context: context, message: 'Lesson generated successfully!');
+            if (!questionsEnabled) {
+              showInfoToast(
+                context: context,
+                message: 'Assessment questions require Standard or Elite — '
+                    'upgrade to include them.',
+              );
+            } else if (questionsFailed) {
+              showInfoToast(
+                context: context,
+                message: 'Lesson saved — assessment questions could not be '
+                    'generated.',
+              );
+            } else if (droppedQuestionCount > 0) {
+              showInfoToast(
+                context: context,
+                message: 'Lesson saved — $droppedQuestionCount question(s) '
+                    'were invalid and skipped.',
+              );
+            } else {
+              showInfoToast(
+                  context: context, message: 'Lesson generated successfully!');
+            }
             if (_includeDiagrams &&
                 _subscriptionTier.toLowerCase() == 'elite' &&
                 _diagramResults.isNotEmpty) {
@@ -903,23 +1009,93 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           ? basePrompt
           : '$basePrompt\n\nTeacher feedback: $review';
 
+      // Structured assessment questions (Phase 2) — same tier gate as
+      // generation; the feedback suffix applies to both prompts.
+      final authTier =
+          (ref.read(authProvider).currentSchool?.subscriptionTier ??
+                  _subscriptionTier)
+              .toLowerCase();
+      final questionsEnabled =
+          ref
+              .read(configServiceProvider)
+              .assessmentGenerationAllowedTiers
+              .contains(authTier);
+      final baseQuestionsPrompt = questionsEnabled
+          ? PromptTemplates.lessonQuestions(
+              _subject,
+              _classLevel,
+              topic,
+              _difficulty,
+              bloomsStr,
+              _questionCountsForFormat(_assessmentFormat),
+              teacherName: _teacherName,
+              schoolName: _schoolName,
+            )
+          : null;
+      final questionsPrompt =
+          (baseQuestionsPrompt == null || review.isEmpty)
+              ? baseQuestionsPrompt
+              : '$baseQuestionsPrompt\n\nTeacher feedback: $review';
+
       // Generate via callback or fallback to AiService
       Map<String, dynamic> result;
+      Map<String, dynamic>? questionsResult;
       if (widget.generateCallback != null) {
         result = await widget.generateCallback!(regeneratedPrompt);
+        if (questionsPrompt != null) {
+          try {
+            questionsResult = await widget.generateCallback!(questionsPrompt);
+          } catch (_) {
+            questionsResult = null;
+          }
+        }
       } else {
-        result = await aiService.generate(regeneratedPrompt);
+        final lessonFuture = aiService.generate(regeneratedPrompt);
+        final questionsFuture = questionsPrompt != null
+            ? aiService
+                  .generate(questionsPrompt)
+                  .then<Map<String, dynamic>?>((r) => r)
+                  .catchError((Object _) => null)
+            : Future<Map<String, dynamic>?>.value(null);
+        result = await lessonFuture;
+        questionsResult = await questionsFuture;
       }
 
       // Parse the generated JSON
       final raw = result['raw'] as Map<String, dynamic>? ?? result;
+
+      // Parse + validate the structured questions (best-effort).
+      Map<String, List<Map<String, dynamic>>>? parsedQuestions;
+      var droppedQuestionCount = 0;
+      if (questionsResult != null) {
+        try {
+          final questionsRaw =
+              questionsResult['raw'] as Map<String, dynamic>? ??
+                  questionsResult;
+          final rawMcqs =
+              (questionsRaw['mcq'] ?? questionsRaw['mcqs']) as List<dynamic>? ??
+                  const [];
+          final rawTheory = questionsRaw['theory'] as List<dynamic>? ?? const [];
+          final rawSubjective =
+              questionsRaw['subjective'] as List<dynamic>? ?? const [];
+          parsedQuestions = parseLessonQuestions(questionsRaw);
+          final validCount = parsedQuestions['mcqs']!.length +
+              parsedQuestions['theory']!.length +
+              parsedQuestions['subjective']!.length;
+          droppedQuestionCount =
+              rawMcqs.length + rawTheory.length + rawSubjective.length -
+                  validCount;
+        } catch (_) {
+          parsedQuestions = null;
+        }
+      }
+      final questionsFailed = questionsResult == null || parsedQuestions == null;
       // Defer ALL setState to a normal vsync frame to avoid scheduleWarmUpFrame
       // and the mouse_tracker assertion during device update.
       WidgetsBinding.instance.scheduleFrame();
       WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       setState(() {
-        _encryptedContent = result['encryptedContent'] as String?;
         _objectivesText = _formatList(raw['objectives']);
         _objectivesController.text = _objectivesText;
         _vocabularyText = _formatList(raw['vocabulary']);
@@ -932,6 +1108,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         _assessmentController.text = _assessmentText;
         _homeworkText = raw['homework'] as String? ?? '';
         _homeworkController.text = _homeworkText;
+        _mcqs = parsedQuestions?['mcqs'] ?? const [];
+        _theoryQuestions = parsedQuestions?['theory'] ?? const [];
+        _subjectiveQuestions = parsedQuestions?['subjective'] ?? const [];
         _hasGenerated = true;
         if (_lessonStatus == 'draft') _lessonStatus = 'generated';
         _configExpanded = false;
@@ -944,8 +1123,28 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       _reviewController.clear();
 
       if (mounted) {
-        showInfoToast(
-            context: context, message: 'Lesson regenerated successfully!');
+        if (!questionsEnabled) {
+          showInfoToast(
+            context: context,
+            message: 'Assessment questions require Standard or Elite — '
+                'upgrade to include them.',
+          );
+        } else if (questionsFailed) {
+          showInfoToast(
+            context: context,
+            message: 'Lesson saved — assessment questions could not be '
+                'generated.',
+          );
+        } else if (droppedQuestionCount > 0) {
+          showInfoToast(
+            context: context,
+            message: 'Lesson saved — $droppedQuestionCount question(s) '
+                'were invalid and skipped.',
+          );
+        } else {
+          showInfoToast(
+              context: context, message: 'Lesson regenerated successfully!');
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -1053,6 +1252,29 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     return items.toString();
   }
 
+  /// Maps the existing Assessment Format dropdown (MCQ / Theory / Both) to
+  /// per-type question counts — giving the control a real effect.
+  Map<String, int> _questionCountsForFormat(String format) {
+    switch (format) {
+      case 'MCQ':
+        return {'MCQ': 5, 'Theory': 0, 'Subjective': 0};
+      case 'Theory':
+        return {'MCQ': 0, 'Theory': 5, 'Subjective': 0};
+      default: // 'Both'
+        return {'MCQ': 5, 'Theory': 5, 'Subjective': 0};
+    }
+  }
+
+  /// Casts a stored questions list (from lesson content) to a list of maps,
+  /// tolerating null/malformed entries so older lessons load safely.
+  List<Map<String, dynamic>> _castQuestionList(dynamic list) {
+    if (list is! List) return [];
+    return list
+        .whereType<Map>()
+        .map((m) => Map<String, dynamic>.from(m))
+        .toList();
+  }
+
   String _formatJson(dynamic obj) {
     if (obj == null) return '';
     if (obj is Map) {
@@ -1070,6 +1292,14 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         'presentation': _presentationText,
         'assessment': _assessmentText,
         'homework': _homeworkText,
+        if (_mcqs.isNotEmpty ||
+            _theoryQuestions.isNotEmpty ||
+            _subjectiveQuestions.isNotEmpty)
+          'questions': {
+            'mcqs': _mcqs,
+            'theory': _theoryQuestions,
+            'subjective': _subjectiveQuestions,
+          },
         if (_diagramResults.isNotEmpty) 'diagrams': _diagramResults,
       };
       final topic = _topicController.text.trim();
@@ -1089,7 +1319,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         difficulty: Value(_difficulty),
         bloomsVerbs: Value(_selectedBlooms.join(', ')),
         curriculum: Value('NERDC'),
-        content: Value(_encryptedContent ?? jsonEncode(content)),
+        content: Value(jsonEncode(content)),
         teacherServerId: Value(_teacherId),
         schoolServerId: Value(_schoolId),
         isUnlocked: Value(_isUnlocked),
@@ -1119,7 +1349,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           await db.lessonsDao.updateLesson(id, companion);
 
           // Queue UPDATE sync entry
-          final lessonContent = _encryptedContent ?? jsonEncode(content);
+          final lessonContent = jsonEncode(content);
           await db.syncQueueDao.insertEntry(
             queueTable: 'lessons',
             recordLocalId: id,
@@ -1175,7 +1405,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           difficulty: _difficulty,
           bloomsVerbs: _selectedBlooms.join(', '),
           curriculum: 'NERDC',
-          content: _encryptedContent ?? jsonEncode(content),
+          content: jsonEncode(content),
           teacherServerId: Value(_teacherId),
           schoolServerId: Value(_schoolId),
           isUnlocked: Value(_isUnlocked),
@@ -1189,7 +1419,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       );
 
       // Queue sync entry
-      final lessonContent = _encryptedContent ?? jsonEncode(content);
+      final lessonContent = jsonEncode(content);
       await db.syncQueueDao.insertEntry(
         queueTable: 'lessons',
         recordLocalId: id,
@@ -1454,7 +1684,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       _presentationText = '';
       _assessmentText = '';
       _homeworkText = '';
-      _encryptedContent = null;
+      _mcqs = [];
+      _theoryQuestions = [];
+      _subjectiveQuestions = [];
       _hasGenerated = false;
       _schemeOfWorkLocalId = null;
       _isFromSchemeOfWork = false;
@@ -1572,6 +1804,15 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
+
+    // Read-only summary of the stored structured assessment questions.
+    final questionSummary =
+        (_mcqs.isNotEmpty ||
+                _theoryQuestions.isNotEmpty ||
+                _subjectiveQuestions.isNotEmpty)
+            ? '${_mcqs.length} MCQ · ${_theoryQuestions.length} '
+                'Theory · ${_subjectiveQuestions.length} Subjective'
+            : null;
 
     return CallbackShortcuts(
       bindings: {
@@ -1753,6 +1994,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                               presentationController: _presentationController,
                                               assessmentController: _assessmentController,
                                               homeworkController: _homeworkController,
+                                              questionSummary: questionSummary,
                                               reviewController: _reviewController,
                                               undoController: _undoController,
                                               onUnlock: _handleUnlock,
@@ -1847,6 +2089,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                             presentationController: _presentationController,
                                             assessmentController: _assessmentController,
                                             homeworkController: _homeworkController,
+                                            questionSummary: questionSummary,
                                             reviewController: _reviewController,
                                             undoController: _undoController,
                                             onUnlock: _handleUnlock,
@@ -2780,6 +3023,7 @@ class _PreviewColumn extends StatelessWidget {
   final TextEditingController presentationController;
   final TextEditingController assessmentController;
   final TextEditingController homeworkController;
+  final String? questionSummary;
   final TextEditingController? reviewController;
   final UndoHistoryController undoController;
   final VoidCallback onUnlock;
@@ -2812,6 +3056,7 @@ class _PreviewColumn extends StatelessWidget {
     required this.presentationController,
     required this.assessmentController,
     required this.homeworkController,
+    this.questionSummary,
     this.reviewController,
     required this.undoController,
     required this.onUnlock,
@@ -3079,6 +3324,16 @@ class _PreviewColumn extends StatelessWidget {
                   _buildPreviewCard('Assessment', assessmentController,
                     readOnly: !isUnlocked,
                   ),
+                  if (questionSummary != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        questionSummary!,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
                   const SizedBox(height: 12),
                   _buildPreviewCard('Homework', homeworkController,
                     readOnly: !isUnlocked,

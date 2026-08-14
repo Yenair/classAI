@@ -11,6 +11,7 @@ import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/core/services/ai_service.dart';
 import 'package:classai/core/services/credit_service.dart';
 import 'package:classai/core/services/exam_generation_service.dart';
+import 'package:classai/core/services/question_validation.dart';
 import 'package:classai/core/constants/prompt_templates.dart';
 import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/core/widgets/app_toast.dart';
@@ -28,10 +29,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 ///
 /// Generates MCQ, Theory, and/or Subjective questions. Preview as editable list of question cards.
 /// Save inserts into `exams` table.
-typedef _QuestionValidationResult = ({
-  List<Map<String, dynamic>> validQuestions,
-  List<String> invalidLabels,
-});
 
 class ExamEditorScreen extends ConsumerStatefulWidget {
   /// Callback invoked with the generated prompt; returns parsed JSON map.
@@ -460,7 +457,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
             .map((q) => Map<String, dynamic>.from(q as Map))
             .toList();
         _subjectiveQuestions = subjective
-            .map((q) => _normalizeWrittenQuestion(
+            .map((q) => normalizeWrittenQuestion(
                 Map<String, dynamic>.from(q as Map)))
             .toList();
         _selectedQuestionTypes
@@ -726,7 +723,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         mcqs = await _generateValidatedQuestions(
           prompt: mcqPrompt,
           aiService: aiService,
-          validator: _validateMcqs,
+          validator: validateMcqs,
         );
       }
 
@@ -741,7 +738,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         theoryQuestions = await _generateValidatedQuestions(
           prompt: theoryPrompt,
           aiService: aiService,
-          validator: _validateWrittenQuestions,
+          validator: validateWrittenQuestions,
         );
       }
 
@@ -756,7 +753,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         subjectiveQuestions = await _generateValidatedQuestions(
           prompt: subjectivePrompt,
           aiService: aiService,
-          validator: _validateWrittenQuestions,
+          validator: validateWrittenQuestions,
         );
       }
 
@@ -953,7 +950,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         mcqs = await _generateValidatedQuestions(
           prompt: mcqPrompt,
           aiService: aiService,
-          validator: _validateMcqs,
+          validator: validateMcqs,
         );
       }
 
@@ -972,7 +969,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         theoryQuestions = await _generateValidatedQuestions(
           prompt: theoryPrompt,
           aiService: aiService,
-          validator: _validateWrittenQuestions,
+          validator: validateWrittenQuestions,
         );
       }
 
@@ -991,7 +988,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         subjectiveQuestions = await _generateValidatedQuestions(
           prompt: subjectivePrompt,
           aiService: aiService,
-          validator: _validateWrittenQuestions,
+          validator: validateWrittenQuestions,
         );
       }
 
@@ -1041,122 +1038,10 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     return questions;
   }
 
-  String _questionLabel(Map<String, dynamic> question) {
-    final questionText = question['question']?.toString().trim();
-    if (questionText != null && questionText.isNotEmpty) {
-      return questionText;
-    }
-    final topic = question['topic']?.toString().trim();
-    if (topic != null && topic.isNotEmpty) {
-      return topic;
-    }
-    return 'untitled question';
-  }
-
-  Map<String, dynamic> _normalizeWrittenQuestion(
-    Map<String, dynamic> question,
-  ) {
-    final normalized = Map<String, dynamic>.from(question);
-    final modelAnswer = normalized['modelAnswer']?.toString().trim();
-    final answer = normalized['answer']?.toString().trim();
-    if (modelAnswer == null || modelAnswer.isEmpty) {
-      if (answer != null && answer.isNotEmpty) {
-        normalized['modelAnswer'] = answer;
-      }
-    } else {
-      normalized['modelAnswer'] = modelAnswer;
-    }
-    return normalized;
-  }
-
-  _QuestionValidationResult _validateMcqs(
-    List<Map<String, dynamic>> questions,
-  ) {
-    final validQuestions = <Map<String, dynamic>>[];
-    final invalidLabels = <String>[];
-
-    for (final question in questions) {
-      final normalized = Map<String, dynamic>.from(question);
-      final optionsRaw = normalized['options'];
-      if (optionsRaw is! Map) {
-        invalidLabels.add(_questionLabel(normalized));
-        continue;
-      }
-
-      final options = <String, dynamic>{};
-      for (final entry in optionsRaw.entries) {
-        final key = entry.key.toString().trim();
-        if (key.isNotEmpty) {
-          options[key] = entry.value;
-        }
-      }
-
-      if (options.isEmpty) {
-        invalidLabels.add(_questionLabel(normalized));
-        continue;
-      }
-
-      final correctRaw = normalized['correct']?.toString().trim();
-      if (correctRaw == null || correctRaw.isEmpty) {
-        invalidLabels.add(_questionLabel(normalized));
-        continue;
-      }
-
-      String? matchedKey;
-      for (final key in options.keys) {
-        if (key.toLowerCase() == correctRaw.toLowerCase()) {
-          matchedKey = key;
-          break;
-        }
-      }
-
-      if (matchedKey == null) {
-        invalidLabels.add(_questionLabel(normalized));
-        continue;
-      }
-
-      normalized['options'] = options;
-      normalized['correct'] = matchedKey;
-      validQuestions.add(normalized);
-    }
-
-    return (
-      validQuestions: validQuestions,
-      invalidLabels: invalidLabels,
-    );
-  }
-
-  _QuestionValidationResult _validateWrittenQuestions(
-    List<Map<String, dynamic>> questions,
-  ) {
-    final validQuestions = <Map<String, dynamic>>[];
-    final invalidLabels = <String>[];
-
-    for (final question in questions) {
-      final normalized = _normalizeWrittenQuestion(question);
-      final answer = normalized['modelAnswer']?.toString().trim();
-      if (answer == null || answer.length < 10) {
-        invalidLabels.add(_questionLabel(normalized));
-        continue;
-      }
-
-      normalized['modelAnswer'] = answer;
-      if (normalized.containsKey('answer')) {
-        normalized['answer'] = answer;
-      }
-      validQuestions.add(normalized);
-    }
-
-    return (
-      validQuestions: validQuestions,
-      invalidLabels: invalidLabels,
-    );
-  }
-
   Future<List<Map<String, dynamic>>> _generateValidatedQuestions({
     required String prompt,
     required AiService aiService,
-    required _QuestionValidationResult Function(List<Map<String, dynamic>>)
+    required QuestionValidationResult Function(List<Map<String, dynamic>>)
         validator,
   }) async {
     final initialQuestions = await _fetchQuestionList(prompt, aiService);

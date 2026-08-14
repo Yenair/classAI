@@ -137,6 +137,15 @@ class ConfigService {
   List<String> get examGenerationAllowedTiers =>
       getJsonList('exam_generation_allowed_tiers');
 
+  /// Allowed tiers for lesson assessment-question generation (Phase 2).
+  /// Defaults to standard + elite when the key is absent/unseeded so a
+  /// missing remote key never silently locks everyone out.
+  List<String> get assessmentGenerationAllowedTiers {
+    final tiers = getJsonList('assessment_generation_allowed_tiers');
+    if (tiers.isEmpty) return ['standard', 'elite'];
+    return tiers;
+  }
+
   /// Allowed tiers for bulk PDF export feature: e.g. ["standard", "elite"]
   List<String> get bulkPdfExportAllowedTiers =>
       getJsonList('bulk_pdf_export_allowed_tiers');

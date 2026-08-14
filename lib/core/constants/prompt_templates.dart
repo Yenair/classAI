@@ -31,7 +31,9 @@ class PromptTemplates {
   static String examQuestions(
       String subject, String classLevel, String topic, String difficulty,
       Map<String, int> typeCounts,
-      {String teacherName = 'Teacher', String schoolName = 'School'}) {
+      {String teacherName = 'Teacher',
+      String schoolName = 'School',
+      String bloomsVerbs = ''}) {
     final attribution =
         '— Generated for $teacherName, $schoolName. Not for redistribution.';
 
@@ -58,7 +60,11 @@ class PromptTemplates {
           '"subjective":[{"question":"...","answer":"...","rubric":"..."}]');
     }
 
-    return 'Generate $typeDescription for $subject, $classLevel, "$topic". Difficulty: $difficulty. '
+    final cognitive = bloomsVerbs.trim().isEmpty
+        ? ''
+        : ' Target cognitive levels: $bloomsVerbs.';
+    return 'Generate $typeDescription for $subject, $classLevel, "$topic". '
+        'Difficulty: $difficulty.$cognitive '
         'Use the following clear section headings in the output:\n'
         '## MCQ Questions\n'
         '## Theory Questions\n'
@@ -67,6 +73,27 @@ class PromptTemplates {
         'Return ONLY valid JSON: '
         '{$jsonStructure,"attribution":"$attribution"} '
         '$_selfCheckInstruction';
+  }
+
+  /// Generates the structured assessment questions embedded in a lesson
+  /// (Phase 2). Delegates to [examQuestions] with the lesson's Bloom's
+  /// levels injected, so there is exactly one combined-question prompt
+  /// contract. Returns `{"mcq":[...],"theory":[...],"subjective":[...],
+  /// "attribution":...}`.
+  static String lessonQuestions(
+      String subject, String classLevel, String topic, String difficulty,
+      String bloomsVerbs, Map<String, int> typeCounts,
+      {String teacherName = 'Teacher', String schoolName = 'School'}) {
+    return examQuestions(
+      subject,
+      classLevel,
+      topic,
+      difficulty,
+      typeCounts,
+      teacherName: teacherName,
+      schoolName: schoolName,
+      bloomsVerbs: bloomsVerbs,
+    );
   }
 
   static String mcqs(
