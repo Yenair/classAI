@@ -1120,7 +1120,7 @@ class SyncService {
     // and idempotently. Runs only when the pull succeeded (catalog present).
     if (subjectCatalog != null) {
       await _reconcileLocalSubjects(
-        subjectCatalog!,
+        subjectCatalog,
         effectiveSchoolId: effectiveSchoolId,
       );
     }
@@ -1135,7 +1135,7 @@ class SyncService {
     // progress_logs one-shot (Fix 1) guarding against infinite re-queues.
     if (tableCatalogs != null && effectiveSchoolId.isNotEmpty) {
       await _reconcileMissingLocalRows(
-        tableCatalogs!,
+        tableCatalogs,
         effectiveSchoolId: effectiveSchoolId,
       );
       // Fix 7: surface over-threshold rows and last-cycle counts in the log.
@@ -4200,7 +4200,7 @@ class SyncService {
             serverId: Value(serverId),
             name: Value(name),
             alias: alias != null ? Value(alias) : const Value.absent(),
-            schoolId: schoolId != null ? Value(schoolId) : const Value.absent(),
+            schoolId: Value(schoolId),
             sortOrder: Value(sortOrder),
             updatedAt: Value(updatedAt),
           ));

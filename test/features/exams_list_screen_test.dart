@@ -146,6 +146,73 @@ AuthStateData _authState(_AuthFixture fixture) {
   );
 }
 
+/// Seeds one CA Test exam and one weekly exam so the type tabs and badges
+/// can be exercised.
+Future<void> _seedExams(AppDatabase db, _AuthFixture fixture) async {
+  await db.examsDao.insertExam(
+    ExamsCompanion.insert(
+      subject: 'Mathematics',
+      classLevel: 'JSS 1',
+      topic: 'CA Test (2 topics)',
+      difficulty: 'medium',
+      curriculum: 'NERDC',
+      content: '{"mcqs":[],"theory":[],"subjective":[]}',
+      teacherServerId: Value(fixture.teacher.serverId),
+      schoolServerId: Value(fixture.school.serverId),
+      isUnlocked: const Value(false),
+      weekNumber: const Value(2),
+      term: const Value('1st Term'),
+    ),
+  );
+  await db.examsDao.insertExam(
+    ExamsCompanion.insert(
+      subject: 'Mathematics',
+      classLevel: 'JSS 1',
+      topic: 'Algebraic Expressions',
+      difficulty: 'medium',
+      curriculum: 'NERDC',
+      content: '{"mcqs":[],"theory":[],"subjective":[]}',
+      teacherServerId: Value(fixture.teacher.serverId),
+      schoolServerId: Value(fixture.school.serverId),
+      isUnlocked: const Value(false),
+      weekNumber: const Value(1),
+      term: const Value('1st Term'),
+      schemeOfWorkId: const Value('99'),
+    ),
+  );
+}
+
+/// Pumps the full router app (MaterialApp.router with [appRouter]) so route
+/// navigation from the choice screen can be exercised.
+Future<void> _pumpRouterApp(
+  WidgetTester tester, {
+  required AppDatabase db,
+  required _AuthFixture fixture,
+}) async {
+  tester.view.physicalSize = const Size(1600, 1200);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
+
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        authProvider.overrideWith(
+          () => FixedAuthNotifier(_authState(fixture)),
+        ),
+        configServiceProvider.overrideWithValue(
+          ConfigService(client: buildMockSupabase()),
+        ),
+      ],
+      child: MaterialApp.router(routerConfig: appRouter),
+    ),
+  );
+  // Explicit pumps — the dashboard's async providers never fully settle
+  // in isolation, so pumpAndSettle would time out.
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 100));
+}
+
 Future<void> _pumpExamsList(
   WidgetTester tester, {
   required AppDatabase db,
@@ -202,9 +269,14 @@ void main() {
       expect(queue.where((e) => e.queueTable == 'exams'), isEmpty,
           reason: 'no exam creation may be queued by opening the list');
 
-      // The two explicit creation actions are visible.
-      expect(find.text('Generate Weekly Exams'), findsOneWidget);
-      expect(find.text('Term Exam / CA Test'), findsOneWidget);
+      // The zero state repeats the /exams creation cards: the two primary
+      // cards plus the Weekly Exams disclosure link.
+      expect(find.text('No exams yet'), findsOneWidget);
+      expect(find.text('Term Exam'), findsOneWidget);
+      expect(find.text('CA Test (Class Test)'), findsOneWidget);
+      expect(find.text('More ways to make a test ▾'), findsOneWidget);
+      expect(find.text('Weekly Exams').hitTestable(), findsNothing,
+          reason: 'Weekly Exams is hidden behind the disclosure link');
       expect(find.text('New Exam'), findsNothing,
           reason: 'the old single-exam FAB is gone');
     },
@@ -216,9 +288,12 @@ void main() {
       await _pumpExamsList(tester, db: db, fixture: fixture);
 
       expect(await db.examsDao.getAll(), isEmpty);
-      expect(find.text('Generate Weekly Exams'), findsOneWidget);
-      expect(find.text('Term Exam / CA Test'), findsOneWidget);
       expect(find.text('No exams yet'), findsOneWidget);
+      expect(find.text('Term Exam'), findsOneWidget);
+      expect(find.text('CA Test (Class Test)'), findsOneWidget);
+      expect(find.text('More ways to make a test ▾'), findsOneWidget);
+      expect(find.text('Weekly Exams').hitTestable(), findsNothing,
+          reason: 'Weekly Exams is hidden behind the disclosure link');
     },
   );
 
@@ -230,6 +305,10 @@ void main() {
     expect(paths, isNot(contains('/full-term-exam')),
         reason: 'the old Full-Term Exam screen must not be a route anymore');
     expect(paths, contains('/exam-editor'));
+    expect(paths, contains('/exams/list'),
+        reason: 'the list-only screen must be reachable at /exams/list');
+    expect(paths, contains('/weekly-exams-setup'),
+        reason: 'Weekly Exams setup must be a route');
   });
 
   testWidgets('/full-term-exam redirects to the exam editor in Term Exam mode',
@@ -270,5 +349,116 @@ void main() {
         reason: '/full-term-exam must land in the exam editor');
     expect(uri.queryParameters['compilationType'], 'termExam',
         reason: 'the redirected editor must open in Term Exam mode');
+  });
+
+  testWidgets('the /exams choice screen shows primary cards, disclosure, '
+      'and View my exams', (tester) async {
+    await _pumpRouterApp(tester, db: db, fixture: fixture);
+    appRouter.go('/exams');
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(find.text('What do you want to make?'), findsOneWidget);
+    expect(find.text('Term Exam'), findsOneWidget);
+    expect(find.text('CA Test (Class Test)'), findsOneWidget);
+    expect(find.text('More ways to make a test ▾'), findsOneWidget);
+    expect(find.text('View my exams'), findsOneWidget);
+    // Weekly Exams is hidden until the disclosure link is expanded. The card
+    // stays in the tree inside AnimatedCrossFade, so visibility is asserted
+    // via hit-testability (invisible children ignore pointers).
+    expect(find.text('Weekly Exams').hitTestable(), findsNothing);
+
+    // Expanding the disclosure reveals the Weekly Exams card inline.
+    await tester.tap(find.text('More ways to make a test ▾'));
+    await tester.pumpAndSettle();
+    expect(find.text('Weekly Exams').hitTestable(), findsOneWidget);
+    expect(find.text('More ways to make a test ▴'), findsOneWidget);
+
+    // The disclosure stays on screen and can be toggled back.
+    await tester.tap(find.text('More ways to make a test ▴'));
+    await tester.pumpAndSettle();
+    expect(find.text('Weekly Exams').hitTestable(), findsNothing);
+  });
+
+  testWidgets('View my exams on the choice screen routes to /exams/list',
+      (tester) async {
+    await _pumpRouterApp(tester, db: db, fixture: fixture);
+    appRouter.go('/exams');
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    await tester.tap(find.text('View my exams'));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    // The button uses `push`, which go_router treats as an imperative
+    // navigation: `routeInformationProvider.value.uri` deliberately stays at
+    // the base location ('/exams') unless `optionURLReflectsImperativeAPIs`
+    // is enabled. The pushed page's own state is the source of truth, so
+    // assert against the route state of the ExamsListScreen that got pushed.
+    final pushedState = GoRouterState.of(
+      tester.element(find.byType(ExamsListScreen)),
+    );
+    expect(pushedState.uri.path, '/exams/list',
+        reason: 'View my exams must open the list-only screen');
+    expect(find.text('No exams yet'), findsOneWidget);
+  });
+
+  testWidgets('the list shows type tabs and badges, and tabs filter the list',
+      (tester) async {
+    await _seedExams(db, fixture);
+    await _pumpExamsList(tester, db: db, fixture: fixture);
+
+    // All four tabs are visible; the active tab is 'All'. ('All' is scoped
+    // to the tabs row because the status filter chips also contain 'All'.)
+    final tabsRow = find.byType(SingleChildScrollView).first;
+    Finder typeTab(String label) =>
+        find.descendant(of: tabsRow, matching: find.text(label));
+
+    expect(typeTab('All'), findsOneWidget);
+    expect(typeTab('CA Test (Class Test)'), findsOneWidget);
+    expect(typeTab('Term Exam'), findsOneWidget);
+    // 'Weekly Exams' appears twice: the tab plus the weekly exam's badge.
+    expect(find.text('Weekly Exams'), findsNWidgets(2));
+    // The CA exam card shows its badge regardless of the active tab.
+    expect(find.text('CA Test'), findsOneWidget);
+
+    // Tapping the CA Test tab filters to only the CA exam.
+    await tester.tap(typeTab('CA Test (Class Test)'));
+    await tester.pumpAndSettle();
+    expect(find.text('CA Test'), findsOneWidget);
+    expect(find.text('Weekly Exams'), findsOneWidget,
+        reason: 'only the tab remains — the weekly exam card is filtered out');
+
+    // Back to All restores both cards.
+    await tester.tap(typeTab('All'));
+    await tester.pumpAndSettle();
+    expect(find.text('Weekly Exams'), findsNWidgets(2));
+  });
+
+  testWidgets('deleting an exam offers Undo and restores the row',
+      (tester) async {
+    await _seedExams(db, fixture);
+    await _pumpExamsList(tester, db: db, fixture: fixture);
+
+    expect(find.byTooltip('Delete'), findsNWidgets(2));
+    await tester.tap(find.byTooltip('Delete').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Delete Exam'), findsOneWidget);
+
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Exam deleted'), findsOneWidget);
+    expect(find.text('Undo'), findsOneWidget);
+    expect((await db.examsDao.getAll()).length, 1,
+        reason: 'one exam is soft-deleted');
+
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect((await db.examsDao.getAll()).length, 2,
+        reason: 'Undo restores the deleted exam');
   });
 }

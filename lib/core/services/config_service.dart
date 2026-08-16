@@ -133,9 +133,15 @@ class ConfigService {
   List<String> get aiDiagramsAllowedTiers =>
       getJsonList('ai_diagrams_allowed_tiers');
 
-  /// Allowed tiers for exam generation feature: e.g. ["basic", "standard", "elite"]
-  List<String> get examGenerationAllowedTiers =>
-      getJsonList('exam_generation_allowed_tiers');
+  /// Allowed tiers for exam generation feature: e.g. ["standard", "elite"].
+  /// Defaults to standard + elite when the key is absent/unseeded so a
+  /// missing remote key never silently locks everyone out — and never
+  /// re-opens the gate to free/basic.
+  List<String> get examGenerationAllowedTiers {
+    final tiers = getJsonList('exam_generation_allowed_tiers');
+    if (tiers.isEmpty) return ['standard', 'elite'];
+    return tiers;
+  }
 
   /// Allowed tiers for lesson assessment-question generation (Phase 2).
   /// Defaults to standard + elite when the key is absent/unseeded so a

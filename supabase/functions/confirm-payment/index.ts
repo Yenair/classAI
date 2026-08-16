@@ -8,6 +8,18 @@ const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_PREFIX = "CLA";
 const DEFAULT_DURATION_DAYS = 365;
 
+// Tier rank order — free is the implicit baseline. Higher rank = better plan.
+const TIER_RANKS: Record<string, number> = {
+  free: 0,
+  basic: 1,
+  standard: 2,
+  elite: 3,
+};
+
+function tierRank(tier: string): number {
+  return TIER_RANKS[tier.toLowerCase()] ?? -1;
+}
+
 function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -199,7 +211,35 @@ serve(async (req) => {
       );
     }
 
-    // ── 6. MARK-FIRST: insert activation code with used: true immediately ──
+    // ── 6. DOWNGRADE GUARD: never downgrade a higher tier ────────────────
+    // An old unconfirmed payment can be replayed (by _resumePendingPayments or
+    // a duplicate confirm-payment call) with a plan that is LOWER than the
+    // school's current tier. Reject before writing anything: no activation
+    // code, no school update, no email. Same-tier renewals and upgrades pass.
+    const { data: currentSchoolRow } = await supabase
+      .from("schools")
+      .select("subscription_tier")
+      .eq("id", jwtSchoolId)
+      .maybeSingle();
+
+    const currentTier = typeof currentSchoolRow?.subscription_tier === "string"
+      ? currentSchoolRow.subscription_tier.toLowerCase()
+      : "free";
+    const currentRank = tierRank(currentTier);
+    const incomingRank = tierRank(tier);
+
+    if (incomingRank < currentRank) {
+      return jsonResponse(
+        {
+          error: `Cannot downgrade subscription from ${currentTier} to ${tier}. Your current ${currentTier} plan remains active.`,
+          code: "DOWNGRADE_REJECTED",
+          current_subscription_tier: currentTier,
+        },
+        409,
+      );
+    }
+
+    // ── 7. MARK-FIRST: insert activation code with used: true immediately ──
     const now = new Date();
     const expiryDate = new Date(
       now.getTime() + DEFAULT_DURATION_DAYS * 24 * 60 * 60 * 1000,
@@ -271,7 +311,7 @@ serve(async (req) => {
       );
     }
 
-    // ── 7. Update school record ────────────────────────────────────
+    // ── 8. Update school record ────────────────────────────────────
     const { error: updateError } = await supabase
       .from("schools")
       .update({
@@ -295,7 +335,7 @@ serve(async (req) => {
       );
     }
 
-    // ── 8. Send activation email (best-effort) ─────────────────────
+    // ── 9. Send activation email (best-effort) ─────────────────────
     // Fetch admin email for notification
     const { data: adminTeacher } = await supabase
       .from("teachers")

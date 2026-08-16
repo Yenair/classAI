@@ -4,6 +4,18 @@ import { validateTokenVersion } from "../_shared/validate_token.ts";
 
 const CODE_PATTERN = /^CLA-[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/i;
 
+// Tier rank order — free is the implicit baseline. Higher rank = better plan.
+const TIER_RANKS: Record<string, number> = {
+  free: 0,
+  basic: 1,
+  standard: 2,
+  elite: 3,
+};
+
+function tierRank(tier: string): number {
+  return TIER_RANKS[tier.toLowerCase()] ?? -1;
+}
+
 function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -107,7 +119,37 @@ serve(async (req) => {
       );
     }
 
-    // ── 6. MARK-FIRST: mark code used, then update school ──────────
+    // ── 6. DOWNGRADE GUARD: never downgrade a higher tier ──────────
+    // An old lower-tier activation code (e.g., Basic) redeemed on a school
+    // that already has a higher tier (e.g., Elite) must not overwrite it.
+    // Reject before writing anything: no code marked used, no school update,
+    // no email. Same-tier renewals/extensions and upgrades still pass.
+    const { data: currentSchoolRow } = await supabase
+      .from("schools")
+      .select("subscription_tier")
+      .eq("id", activationRow.school_id)
+      .maybeSingle();
+
+    const currentTier = typeof currentSchoolRow?.subscription_tier === "string"
+      ? currentSchoolRow.subscription_tier.toLowerCase()
+      : "free";
+    const currentRank = tierRank(currentTier);
+    const incomingRank = typeof activationRow.tier === "string"
+      ? tierRank(activationRow.tier)
+      : -1;
+
+    if (incomingRank < currentRank) {
+      return jsonResponse(
+        {
+          error: `Cannot downgrade subscription from ${currentTier} to ${activationRow.tier}. Your current ${currentTier} plan remains active.`,
+          code: "DOWNGRADE_REJECTED",
+          current_subscription_tier: currentTier,
+        },
+        409,
+      );
+    }
+
+    // ── 7. MARK-FIRST: mark code used, then update school ──────────
     const durationDays = activationRow.duration_days ?? 365;
     const expiryDate = new Date(
       now.getTime() + durationDays * 24 * 60 * 60 * 1000,

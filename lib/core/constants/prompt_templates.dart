@@ -98,10 +98,12 @@ class PromptTemplates {
 
   static String mcqs(
       String subject, String classLevel, String topic, String difficulty,
-      {String teacherName = 'Teacher', String schoolName = 'School'}) {
+      {int count = 10,
+      String teacherName = 'Teacher',
+      String schoolName = 'School'}) {
     final attribution =
         '— Generated for $teacherName, $schoolName. Not for redistribution.';
-    return 'Generate 10 MCQs for $subject, $classLevel, "$topic". Difficulty: $difficulty. '
+    return 'Generate $count MCQs for $subject, $classLevel, "$topic". Difficulty: $difficulty. '
         'Use the following clear section heading in the output:\n'
         '## MCQ Questions\n'
         'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
@@ -111,10 +113,12 @@ class PromptTemplates {
   }
 
   static String theoryQuestions(String subject, String classLevel, String topic,
-      {String teacherName = 'Teacher', String schoolName = 'School'}) {
+      {int count = 5,
+      String teacherName = 'Teacher',
+      String schoolName = 'School'}) {
     final attribution =
         '— Generated for $teacherName, $schoolName. Not for redistribution.';
-    return 'Generate 5 theory questions for $subject, $classLevel, "$topic". '
+    return 'Generate $count theory questions for $subject, $classLevel, "$topic". '
         'Use the following clear section heading in the output:\n'
         '## Theory Questions\n'
         'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
@@ -125,16 +129,31 @@ class PromptTemplates {
 
   static String subjectiveQuestions(
       String subject, String classLevel, String topic,
-      {String teacherName = 'Teacher', String schoolName = 'School'}) {
+      {int count = 5,
+      String teacherName = 'Teacher',
+      String schoolName = 'School'}) {
     final attribution =
         '— Generated for $teacherName, $schoolName. Not for redistribution.';
-    return 'Generate 5 subjective questions for $subject, $classLevel, "$topic". '
+    return 'Generate $count subjective questions for $subject, $classLevel, "$topic". '
         'Use the following clear section heading in the output:\n'
         '## Subjective Questions\n'
         'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
         'Include a correct answer and marking rubric. Return ONLY valid JSON: '
         '{"questions":[{"question":"...","answer":"...","rubric":"..."}],"attribution":"$attribution"} '
         '$_selfCheckInstruction';
+  }
+
+  /// Appended to a generation prompt when saved lesson questions are already
+  /// part of the exam (Phase 3 hybrid) so the AI does not regenerate them.
+  /// Returns '' when [questionTexts] is empty so callers can concatenate
+  /// unconditionally.
+  static String doNotRepeatInstruction(
+      String type, List<String> questionTexts) {
+    if (questionTexts.isEmpty) return '';
+    final list = questionTexts.map((q) => '- $q').join('\n');
+    return '\n\nThe following $type questions are ALREADY included in this '
+        'exam from saved lesson notes — do NOT repeat or rephrase any of '
+        'them:\n$list';
   }
 
   /// Generate a Scheme of Work for a NERDC subject across a full term.

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' show min;
 import 'package:drift/drift.dart' hide Column;
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
@@ -80,6 +81,11 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   List<Lesson> _teacherLessons = [];
   int? _selectedLessonId;
   bool _isManualTopicEntry = true;
+
+  // Phase 3 hybrid: reuse the selected week's saved lesson questions when
+  // available; AI fills only the remaining counts.
+  bool _useSavedLessonQuestions = true;
+  SavedLessonQuestions? _savedLessonQuestions;
   bool _routeDefaultsApplied = false;
 
   /// When non-null, the editor opens in combined-exam mode ('termExam' or
@@ -334,6 +340,58 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     }
   }
 
+  /// Refreshes how many of the configured questions this week's saved lesson
+  /// can cover (subject/class/week/term based). Cheap: one in-memory filter
+  /// over the school's non-deleted lessons.
+  Future<void> _refreshSavedLessonAvailability() async {
+    if (_teacherId == null || _schoolId == null) return;
+    final db = ref.read(databaseProvider);
+    final termLabel = await _resolveTermLabel(db) ?? '';
+    final saved = await ExamGenerationService(db).loadSavedLessonQuestions(
+      teacherServerId: _teacherId!,
+      schoolServerId: _schoolId!,
+      subject: _subject,
+      classLevel: _classLevel,
+      termLabel: termLabel,
+      weekNumbers: [_week],
+    );
+    if (!mounted) return;
+    setState(() {
+      _savedLessonQuestions = saved;
+      // Nothing usable → the checkbox is replaced by the calm note and
+      // generation must be the pure-AI path (decision §12.6).
+      if (saved.total == 0) _useSavedLessonQuestions = false;
+    });
+  }
+
+  /// X of the requested questions this week's saved lesson can cover (capped
+  /// per enabled type). Computed in build so typing a count updates the label
+  /// with no extra DB read.
+  int get _savedCoverage {
+    final saved = _savedLessonQuestions;
+    if (saved == null) return 0;
+    final requestedMcq =
+        _selectedQuestionTypes.contains('MCQ') ? (_questionCounts['MCQ'] ?? 0) : 0;
+    final requestedTheory = _selectedQuestionTypes.contains('Theory')
+        ? (_questionCounts['Theory'] ?? 0)
+        : 0;
+    final requestedSubjective = _selectedQuestionTypes.contains('Subjective')
+        ? (_questionCounts['Subjective'] ?? 0)
+        : 0;
+    return min(saved.mcqs.length, requestedMcq).toInt() +
+        min(saved.theory.length, requestedTheory).toInt() +
+        min(saved.subjective.length, requestedSubjective).toInt();
+  }
+
+  /// Total requested questions across the enabled types (Y of the label).
+  int get _neededQuestions {
+    var needed = 0;
+    for (final type in _selectedQuestionTypes) {
+      needed += _questionCounts[type] ?? 0;
+    }
+    return needed;
+  }
+
   Future<void> _refreshSourceMissing() async {
     if (_schemeOfWorkLocalId == null) {
       return;
@@ -485,6 +543,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
 
       await _loadSchemesForContext();
       await _refreshSourceMissing();
+      await _refreshSavedLessonAvailability();
     } catch (_) {}
   }
 
@@ -498,6 +557,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         _isManualTopicEntry = true;
         _sourceMissing = false;
       });
+      _refreshSavedLessonAvailability();
       return;
     }
     final displayTopic = scheme.adminEditedTopic ?? scheme.topic;
@@ -510,6 +570,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       _isManualTopicEntry = false;
       _sourceMissing = false;
     });
+    _refreshSavedLessonAvailability();
   }
 
   void _onLessonSelected(Lesson? lesson) {
@@ -518,6 +579,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         _selectedLessonId = null;
         _isManualTopicEntry = true;
       });
+      _refreshSavedLessonAvailability();
       return;
     }
     setState(() {
@@ -527,6 +589,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       _isManualTopicEntry = false;
       _sourceMissing = false;
     });
+    _refreshSavedLessonAvailability();
   }
 
   void _registerWithEmergencyFlush() {
@@ -567,6 +630,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       if (mounted) setState(() {});
       await _loadTeacherLessons();
       await _refreshSourceMissing();
+      await _refreshSavedLessonAvailability();
     } catch (_) {}
   }
 
@@ -671,7 +735,44 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       return;
     }
 
-    if (!await PlatformHelper.isOnline()) {
+    // Phase 3 hybrid: reuse this week's saved lesson questions, ask AI only
+    // for the remaining counts. Requested = the on-screen per-type counts
+    // (the prompts below are told the exact remaining count).
+    final db = ref.read(databaseProvider);
+    final topic = _topicController.text.trim();
+    final generateMcq = _selectedQuestionTypes.contains('MCQ');
+    final generateTheory = _selectedQuestionTypes.contains('Theory');
+    final generateSubjective = _selectedQuestionTypes.contains('Subjective');
+    List<Map<String, dynamic>> mcqs = [];
+    List<Map<String, dynamic>> theoryQuestions = [];
+    List<Map<String, dynamic>> subjectiveQuestions = [];
+
+    final saved = _useSavedLessonQuestions
+        ? await ExamGenerationService(db).loadSavedLessonQuestions(
+            teacherServerId: _teacherId ?? '',
+            schoolServerId: _schoolId ?? '',
+            subject: _subject,
+            classLevel: _classLevel,
+            termLabel: await _resolveTermLabel(db) ?? '',
+            weekNumbers: [_week],
+          )
+        : const SavedLessonQuestions.empty();
+    final requestedMcq = _questionCounts['MCQ'] ?? 0;
+    final requestedTheory = _questionCounts['Theory'] ?? 0;
+    final requestedSubjective = _questionCounts['Subjective'] ?? 0;
+    final usedMcq = generateMcq ? min(saved.mcqs.length, requestedMcq) : 0;
+    final usedTheory =
+        generateTheory ? min(saved.theory.length, requestedTheory) : 0;
+    final usedSubjective =
+        generateSubjective ? min(saved.subjective.length, requestedSubjective) : 0;
+    final remainingMcq = requestedMcq - usedMcq;
+    final remainingTheory = requestedTheory - usedTheory;
+    final remainingSubjective = requestedSubjective - usedSubjective;
+    // When every requested question is covered by saved lessons, skip the AI
+    // call entirely (no credits / daily-limit spend; works offline).
+    final needsAi = remainingMcq + remainingTheory + remainingSubjective > 0;
+
+    if (needsAi && !await PlatformHelper.isOnline()) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         showErrorToast(
@@ -685,41 +786,44 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     setState(() => _isGenerating = true);
 
     try {
-      final db = ref.read(databaseProvider);
       final aiService = AiService(db: db);
-      final topic = _topicController.text.trim();
-      final generateMcq = _selectedQuestionTypes.contains('MCQ');
-      final generateTheory = _selectedQuestionTypes.contains('Theory');
-      final generateSubjective = _selectedQuestionTypes.contains('Subjective');
-      List<Map<String, dynamic>> mcqs = [];
-      List<Map<String, dynamic>> theoryQuestions = [];
-      List<Map<String, dynamic>> subjectiveQuestions = [];
 
-      // Check daily generation limit before generating
-      try {
-        await aiService.checkDailyLimit(_subscriptionTier);
-      } on AiGenerationException catch (e) {
-        if (mounted) {
-          setState(() => _isGenerating = false);
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            showErrorToast(context: context, message: e.message);
-          });
+      // Check daily generation limit before generating (only when AI is
+      // actually needed — a fully saved-question exam spends no limit).
+      if (needsAi) {
+        try {
+          await aiService.checkDailyLimit(_subscriptionTier);
+        } on AiGenerationException catch (e) {
+          if (mounted) {
+            setState(() => _isGenerating = false);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              showErrorToast(context: context, message: e.message);
+            });
+          }
+          return;
         }
-        return;
       }
 
       // Generate questions
       // NOTE: No credit is spent on AI generation - credit is spent on unlock
-      if (generateMcq) {
+      if (generateMcq && remainingMcq > 0) {
         final mcqPrompt = PromptTemplates.mcqs(
           _subject,
           _classLevel,
           topic,
           _difficulty,
+          count: remainingMcq,
           teacherName: _teacherName,
           schoolName: _schoolName,
-        );
+        ) +
+            PromptTemplates.doNotRepeatInstruction(
+              'MCQ',
+              [
+                for (final q in saved.mcqs.take(usedMcq))
+                  q['question'].toString(),
+              ],
+            );
         mcqs = await _generateValidatedQuestions(
           prompt: mcqPrompt,
           aiService: aiService,
@@ -727,14 +831,22 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         );
       }
 
-      if (generateTheory) {
+      if (generateTheory && remainingTheory > 0) {
         final theoryPrompt = PromptTemplates.theoryQuestions(
           _subject,
           _classLevel,
           topic,
+          count: remainingTheory,
           teacherName: _teacherName,
           schoolName: _schoolName,
-        );
+        ) +
+            PromptTemplates.doNotRepeatInstruction(
+              'Theory',
+              [
+                for (final q in saved.theory.take(usedTheory))
+                  q['question'].toString(),
+              ],
+            );
         theoryQuestions = await _generateValidatedQuestions(
           prompt: theoryPrompt,
           aiService: aiService,
@@ -742,14 +854,22 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         );
       }
 
-      if (generateSubjective) {
+      if (generateSubjective && remainingSubjective > 0) {
         final subjectivePrompt = PromptTemplates.subjectiveQuestions(
           _subject,
           _classLevel,
           topic,
+          count: remainingSubjective,
           teacherName: _teacherName,
           schoolName: _schoolName,
-        );
+        ) +
+            PromptTemplates.doNotRepeatInstruction(
+              'Subjective',
+              [
+                for (final q in saved.subjective.take(usedSubjective))
+                  q['question'].toString(),
+              ],
+            );
         subjectiveQuestions = await _generateValidatedQuestions(
           prompt: subjectivePrompt,
           aiService: aiService,
@@ -778,6 +898,43 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         _selectedQuestionTypes.toList(),
       );
 
+      // Merge saved first, then AI — the requested totals are a contract. The
+      // AI may return more than the remainder it was asked for, so cap each
+      // type to the exact remaining count BEFORE merging (the final exam must
+      // never exceed the requested totals; the fill check below only catches
+      // shortfall). If the AI under-filled, abort BEFORE _saveExam so the
+      // draft keeps its previous content and nothing partial is written.
+      if (_useSavedLessonQuestions) {
+        mcqs = mcqs.take(remainingMcq).toList();
+        theoryQuestions = theoryQuestions.take(remainingTheory).toList();
+        subjectiveQuestions =
+            subjectiveQuestions.take(remainingSubjective).toList();
+
+        mcqs = [...saved.mcqs.take(usedMcq), ...mcqs];
+        theoryQuestions = [...saved.theory.take(usedTheory), ...theoryQuestions];
+        subjectiveQuestions = [
+          ...saved.subjective.take(usedSubjective),
+          ...subjectiveQuestions,
+        ];
+        if ((generateMcq && mcqs.length < requestedMcq) ||
+            (generateTheory && theoryQuestions.length < requestedTheory) ||
+            (generateSubjective &&
+                subjectiveQuestions.length < requestedSubjective)) {
+          if (mounted) {
+            setState(() => _isGenerating = false);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              showErrorToast(
+                context: context,
+                message: 'AI could not complete the exam — nothing was saved. '
+                    'Try again.',
+              );
+            });
+          }
+          return; // no _saveExam → the draft keeps its previous content
+        }
+      }
+
       setState(() {
         _mcqs = mcqs;
         _theoryQuestions = theoryQuestions;
@@ -798,6 +955,11 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
           if (_mcqs.isNotEmpty) parts.add('${_mcqs.length} MCQs');
           if (_theoryQuestions.isNotEmpty) parts.add('${_theoryQuestions.length} theory');
           if (_subjectiveQuestions.isNotEmpty) parts.add('${_subjectiveQuestions.length} subjective');
+          if (_useSavedLessonQuestions &&
+              usedMcq + usedTheory + usedSubjective > 0) {
+            parts.add('${usedMcq + usedTheory + usedSubjective} from saved '
+                'lessons');
+          }
           showInfoToast(
             context: context,
             message: 'Generated ${parts.join(', ')}',
@@ -1480,17 +1642,23 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                           subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
                                           classLevels: _classLevels,
                                           difficulties: _difficulties,
-                                          onSubjectChanged: (v) => setState(() {
-                                            _subject = v;
-                                            _selectedLessonId = null;
-                                            _isManualTopicEntry = true;
-                                            _loadSchemesForContext();
-                                          }),
-                                          onClassChanged: (v) => setState(() {
+                                          onSubjectChanged: (v) {
+                                            setState(() {
+                                              _subject = v;
+                                              _selectedLessonId = null;
+                                              _isManualTopicEntry = true;
+                                              _loadSchemesForContext();
+                                            });
+                                            _refreshSavedLessonAvailability();
+                                          },
+                                          onClassChanged: (v) {
+                                            setState(() {
                                               _classLevel = v;
                                               _selectedLessonId = null;
                                               _isManualTopicEntry = true;
-                                            }),
+                                            });
+                                            _refreshSavedLessonAvailability();
+                                          },
                                           onDifficultyChanged: (v) => setState(
                                               () => _difficulty = v),
                                           onTypeToggled: (type) => setState(() {
@@ -1505,13 +1673,24 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                           }),
                                           onGenerate: _handleGenerate,
                                           onAddNewSubject: _showAddSubjectDialog,
+                                          savedCoverage: _savedCoverage,
+                                          neededQuestions: _neededQuestions,
+                                          useSavedLessonQuestions:
+                                              _useSavedLessonQuestions,
+                                          onSavedToggle: () => setState(
+                                            () => _useSavedLessonQuestions =
+                                                !_useSavedLessonQuestions,
+                                          ),
                                           teacherLessons: _teacherLessons,
                                           schemes: _schemes,
                                           schemeOfWorkLocalId: _schemeOfWorkLocalId,
                                           isFromSchemeOfWork: _isFromSchemeOfWork,
                                           isManualTopicEntry: _isManualTopicEntry,
                                           selectedLessonId: _selectedLessonId,
-                                          onWeekChanged: (v) => setState(() => _week = v),
+                                          onWeekChanged: (v) {
+                                            setState(() => _week = v);
+                                            _refreshSavedLessonAvailability();
+                                          },
                                           onLessonSelected: _onLessonSelected,
                                           onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
                                           onManualTopicSelected: () => _onLessonSelected(null),
@@ -1568,17 +1747,23 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                         subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
                                         classLevels: _classLevels,
                                         difficulties: _difficulties,
-                                        onSubjectChanged: (v) => setState(() {
+                                        onSubjectChanged: (v) {
+                                          setState(() {
                                             _subject = v;
                                             _selectedLessonId = null;
                                             _isManualTopicEntry = true;
                                             _loadSchemesForContext();
-                                          }),
-                                        onClassChanged: (v) => setState(() {
-                                          _classLevel = v;
-                                          _selectedLessonId = null;
-                                          _isManualTopicEntry = true;
-                                        }),
+                                          });
+                                          _refreshSavedLessonAvailability();
+                                        },
+                                        onClassChanged: (v) {
+                                          setState(() {
+                                            _classLevel = v;
+                                            _selectedLessonId = null;
+                                            _isManualTopicEntry = true;
+                                          });
+                                          _refreshSavedLessonAvailability();
+                                        },
                                         onDifficultyChanged: (v) => setState(
                                             () => _difficulty = v),
                                         onTypeToggled: (type) => setState(() {
@@ -1593,13 +1778,24 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                         }),
                                         onGenerate: _handleGenerate,
                                         onAddNewSubject: _showAddSubjectDialog,
+                                        savedCoverage: _savedCoverage,
+                                        neededQuestions: _neededQuestions,
+                                        useSavedLessonQuestions:
+                                            _useSavedLessonQuestions,
+                                        onSavedToggle: () => setState(
+                                          () => _useSavedLessonQuestions =
+                                              !_useSavedLessonQuestions,
+                                        ),
                                         teacherLessons: _teacherLessons,
                                         schemes: _schemes,
                                         schemeOfWorkLocalId: _schemeOfWorkLocalId,
                                         isFromSchemeOfWork: _isFromSchemeOfWork,
                                         isManualTopicEntry: _isManualTopicEntry,
                                         selectedLessonId: _selectedLessonId,
-                                        onWeekChanged: (v) => setState(() => _week = v),
+                                        onWeekChanged: (v) {
+                                            setState(() => _week = v);
+                                            _refreshSavedLessonAvailability();
+                                          },
                                         onLessonSelected: _onLessonSelected,
                                         onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
                                         onManualTopicSelected: () => _onLessonSelected(null),
@@ -2036,6 +2232,10 @@ class _ConfigPanel extends StatelessWidget {
   final ValueChanged<Lesson?> onLessonSelected;
   final ValueChanged<SchemeOfWorkData?> onSchemeOfWorkSelected;
   final VoidCallback onManualTopicSelected;
+  final int savedCoverage;
+  final int neededQuestions;
+  final bool useSavedLessonQuestions;
+  final VoidCallback? onSavedToggle;
 
   const _ConfigPanel({
     required this.cs,
@@ -2074,6 +2274,10 @@ class _ConfigPanel extends StatelessWidget {
     required this.onLessonSelected,
     required this.onSchemeOfWorkSelected,
     required this.onManualTopicSelected,
+    this.savedCoverage = 0,
+    this.neededQuestions = 0,
+    this.useSavedLessonQuestions = true,
+    this.onSavedToggle,
   });
 
   @override
@@ -2442,6 +2646,73 @@ class _ConfigPanel extends StatelessWidget {
                 const SizedBox(height: 16),
               ],
 
+              // Phase 3: saved-lesson checkbox (or the calm note when
+              // nothing is available). The checkbox IS the warning — no
+              // extra popup.
+              if (onSavedToggle != null) ...[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: savedCoverage == 0
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                          decoration: BoxDecoration(
+                            color: cs.surfaceContainerLow,
+                            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                          ),
+                          child: Row(children: [
+                            Icon(Icons.info_outline_rounded,
+                                size: 18, color: cs.onSurfaceVariant),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'No saved lessons yet — using AI for all questions.',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ]),
+                        )
+                      : InkWell(
+                          onTap: onSavedToggle,
+                          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: cs.surfaceContainerLow,
+                              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                              border: Border.all(
+                                color: cs.outlineVariant.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Row(children: [
+                              Checkbox(
+                                value: useSavedLessonQuestions,
+                                onChanged: (_) => onSavedToggle?.call(),
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  'Use my saved lesson questions '
+                                  '($savedCoverage/$neededQuestions available)',
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              Icon(Icons.auto_awesome_rounded,
+                                  size: 18, color: cs.primary),
+                            ]),
+                          ),
+                        ),
+                ),
+              ],
               // Generate button
               SizedBox(
                 width: double.infinity,
@@ -3950,9 +4221,10 @@ class _ExamSchemeContextBanner extends ConsumerWidget {
 /// `compilationType` query parameter ('termExam' or 'caTest'). Replaces the
 /// old standalone Full-Term Exam screen:
 ///
-/// - One simple mode choice: **Term Exam** (all term topics, pre-selected
-///   with per-topic question counts) or **CA Test** (tick only the topics
-///   taught so far).
+/// - The exam type is chosen on the `/exams` choice screen; this setup panel
+///   locks to that mode: **Term Exam** (all term topics, pre-selected with
+///   per-topic question counts) or **CA Test** (tick only the topics taught
+///   so far).
 /// - Subject / Class / Term pickers.
 /// - ONE combined exam generated via the multi-topic
 ///   [PromptTemplates.examQuestions] prompt and saved as a single exam row.
@@ -3994,6 +4266,11 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
   String? _topicsError;
   bool _isGenerating = false;
   final _totalQuestionsController = TextEditingController(text: '30');
+
+  // Phase 3 hybrid: reuse saved lesson questions when available; AI fills
+  // only the remaining counts.
+  bool _useSavedLessonQuestions = true;
+  SavedLessonQuestions? _savedLessonQuestions;
 
   @override
   void initState() {
@@ -4074,6 +4351,7 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
         }
         _isLoadingTopics = false;
       });
+      _refreshSavedLessonQuestions();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -4083,13 +4361,137 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
     }
   }
 
-  void _switchMode(String mode) {
+  /// Selected topics with their requested per-topic counts — Term Exam:
+  /// every topic with count > 0; CA Test: the ticked topics at the default
+  /// count. Shared by `_generate`, the saved-coverage label and the refresh.
+  List<(TermTopic, int)> _selectedTopicsWithCounts() {
+    final result = <(TermTopic, int)>[];
+    if (_mode == 'termExam') {
+      for (var i = 0; i < _topics.length; i++) {
+        if (_questionCounts[i] > 0) {
+          result.add((_topics[i], _questionCounts[i]));
+        }
+      }
+    } else {
+      final indexes = _selectedIndexes.toList()..sort();
+      for (final index in indexes) {
+        result.add((_topics[index], _defaultQuestionsPerTopic));
+      }
+    }
+    return result;
+  }
+
+  /// Refreshes the saved lesson questions for the current selection
+  /// (subject/class/term/weeks). Cheap: one in-memory filter over the
+  /// school's non-deleted lessons. Runs on topic load, mode switch and CA
+  /// Test tick changes.
+  Future<void> _refreshSavedLessonQuestions() async {
+    final selected = _selectedTopicsWithCounts();
+    if (selected.isEmpty) {
+      if (mounted) setState(() => _savedLessonQuestions = null);
+      return;
+    }
+    final db = ref.read(databaseProvider);
+    final authState = ref.read(authProvider);
+    final school = authState.currentSchool ?? await db.schoolsDao.get();
+    final teacherServerId = authState.currentTeacher?.serverId;
+    if (school == null || teacherServerId == null) return;
+    final saved = await ExamGenerationService(db).loadSavedLessonQuestions(
+      teacherServerId: teacherServerId,
+      schoolServerId: school.serverId ?? '',
+      subject: _subject,
+      classLevel: _classLevel,
+      termLabel: _term,
+      weekNumbers: [for (final (t, _) in selected) t.weekNumber],
+    );
+    if (!mounted) return;
     setState(() {
-      _mode = mode;
-      _selectedIndexes = mode == 'caTest'
-          ? <int>{}
-          : {for (var i = 0; i < _topics.length; i++) i};
+      _savedLessonQuestions = saved;
+      // Nothing usable → the calm note replaces the checkbox and generation
+      // is the pure-AI path (decision §12.6).
+      if (saved.total == 0) _useSavedLessonQuestions = false;
     });
+  }
+
+  /// Phase 3 label: X/Y — how many of the requested questions the saved
+  /// lesson questions can cover (exact same distribution the service uses).
+  (int, int) _savedCoverage() {
+    if (_savedLessonQuestions == null) return (0, 0);
+    final saved = _savedLessonQuestions!;
+    var needed = 0, covered = 0, mcqNeeded = 0, theoryNeeded = 0, subjNeeded = 0;
+    for (final (_, count) in _selectedTopicsWithCounts()) {
+      final (m, t, s) = ExamGenerationService.distributePerTopicCount(count);
+      needed += count;
+      mcqNeeded += m;
+      theoryNeeded += t;
+      subjNeeded += s;
+    }
+    covered = min(saved.mcqs.length, mcqNeeded).toInt() +
+        min(saved.theory.length, theoryNeeded).toInt() +
+        min(saved.subjective.length, subjNeeded).toInt();
+    return (covered, needed);
+  }
+
+  /// The saved-lesson row shown directly above the Generate button: the
+  /// tappable checkbox when questions are available, the calm note otherwise.
+  Widget _buildSavedLessonRow(ColorScheme cs, ThemeData theme) {
+    final (covered, needed) = _savedCoverage();
+    if (covered == 0) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        ),
+        child: Row(children: [
+          Icon(Icons.info_outline_rounded, size: 18, color: cs.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'No saved lessons yet — using AI for all questions.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ]),
+      );
+    }
+    return InkWell(
+      onTap: () => setState(
+        () => _useSavedLessonQuestions = !_useSavedLessonQuestions,
+      ),
+      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          border: Border.all(
+            color: cs.outlineVariant.withValues(alpha: 0.3),
+          ),
+        ),
+        child: Row(children: [
+          Checkbox(
+            value: _useSavedLessonQuestions,
+            onChanged: (_) => setState(
+              () => _useSavedLessonQuestions = !_useSavedLessonQuestions,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              'Use my saved lesson questions '
+              '($covered/$needed available)',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Icon(Icons.auto_awesome_rounded, size: 18, color: cs.primary),
+        ]),
+      ),
+    );
   }
 
   void _autoDistribute() {
@@ -4127,29 +4529,16 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
   Future<void> _generate() async {
     // Build the selected topic list (Term Exam: every topic with a count > 0;
     // CA Test: only the ticked topics).
-    final selectedTopics = <TermTopic>[];
-    final selectedCounts = <int>[];
-    if (_mode == 'termExam') {
-      for (var i = 0; i < _topics.length; i++) {
-        if (_questionCounts[i] > 0) {
-          selectedTopics.add(_topics[i]);
-          selectedCounts.add(_questionCounts[i]);
-        }
-      }
-    } else {
-      final indexes = _selectedIndexes.toList()..sort();
-      for (final index in indexes) {
-        selectedTopics.add(_topics[index]);
-        selectedCounts.add(_defaultQuestionsPerTopic);
-      }
-    }
-    if (selectedTopics.isEmpty) {
+    final selected = _selectedTopicsWithCounts();
+    if (selected.isEmpty) {
       showErrorToast(
         context: context,
         message: 'Select at least one topic to generate.',
       );
       return;
     }
+    final selectedTopics = [for (final (t, _) in selected) t];
+    final selectedCounts = [for (final (_, c) in selected) c];
 
     // Tier gate — same as the single-topic editor.
     final authTier =
@@ -4161,7 +4550,11 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
       return;
     }
 
-    if (!await PlatformHelper.isOnline()) {
+    // Skip the online requirement when saved lessons cover everything — the
+    // service never calls AI in that case (no credits, works offline).
+    final (covered, needed) = _savedCoverage();
+    final needsAi = !_useSavedLessonQuestions || needed > covered;
+    if (needsAi && !await PlatformHelper.isOnline()) {
       showErrorToast(
         context: context,
         message: 'Generation requires internet — try again when connected.',
@@ -4195,6 +4588,7 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
         teacherServerId: teacher.serverId!,
         schoolServerId: school.serverId,
         subscriptionTier: school.subscriptionTier.toLowerCase(),
+        examGenerationAllowedTiers: config.examGenerationAllowedTiers,
         lessonStorageLimits:
             ref.read(configServiceProvider).lessonStorageLimits,
         difficulty: 'medium',
@@ -4202,17 +4596,24 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
         questionCounts: selectedCounts,
         topicTitle: topicTitle,
         aiGenerate: _aiGenerate,
+        useSavedLessonQuestions: _useSavedLessonQuestions,
         teacherName: teacher.teacherName,
         schoolName: school.schoolName,
       );
 
       if (!mounted) return;
       setState(() => _isGenerating = false);
-      showInfoToast(
+      // Big success confirmation. The setup screen is the final review, so
+      // generation jumps straight into the new exam with a green banner —
+      // there is no extra confirmation dialog before Generate.
+      AppToast.instance.showToast(
         context: context,
         message: _mode == 'termExam'
             ? 'Term exam created as draft!'
             : 'CA Test created as draft!',
+        icon: Icons.check_circle_rounded,
+        backgroundColor: const Color(0xFF2E7D32),
+        foregroundColor: Colors.white,
       );
       context.pushReplacement('/exams/$examId');
     } on ExamStorageLimitExceededException {
@@ -4223,10 +4624,32 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
         message: 'Exam storage limit reached. Upgrade your school plan to '
             'create more exams.',
       );
+    } on ExamGenerationNotAllowedException {
+      // Defense-in-depth: the pre-check above normally catches this, but the
+      // remote config may change between the check and the call.
+      if (!mounted) return;
+      setState(() => _isGenerating = false);
+      await _showUpgradeRequired();
+    } on ExamIncompleteGenerationException {
+      if (!mounted) return;
+      setState(() => _isGenerating = false);
+      showErrorToast(
+        context: context,
+        message: 'AI could not complete the exam — no exam was created. '
+            'Try again.',
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isGenerating = false);
-      showErrorToast(context: context, message: 'Failed to generate exam: $e');
+      final collected = _useSavedLessonQuestions &&
+          (_savedLessonQuestions?.total ?? 0) > 0;
+      showErrorToast(
+        context: context,
+        message: collected
+            ? 'Saved questions were found, but AI could not finish the exam — '
+                'no exam was created. Try again.'
+            : 'Failed to generate exam: $e',
+      );
     }
   }
 
@@ -4246,15 +4669,22 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
     return Scaffold(
       backgroundColor: cs.surface,
       appBar: AppBar(
+        // The setup screen always has a visible back affordance returning to
+        // the `/exams` choice screen (or wherever this screen was pushed
+        // from, e.g. the list zero state).
         leading: canPop
             ? IconButton(
                 onPressed: () => Navigator.of(context).pop(),
                 icon: const Icon(Icons.arrow_back_rounded),
-                tooltip: 'Back',
+                tooltip: 'Back to exams',
               )
-            : null,
+            : IconButton(
+                onPressed: () => context.go('/'),
+                icon: const Icon(Icons.home_rounded),
+                tooltip: 'Home',
+              ),
         title: Text(
-          'Term Exam / CA Test',
+          _mode == 'termExam' ? 'Term Exam Setup' : 'CA Test Setup',
           style: theme.textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.w700,
             letterSpacing: -0.12,
@@ -4267,37 +4697,6 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
       ),
       body: Column(
         children: [
-          // ── Mode choice (Term Exam vs CA Test) ──────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _CombinedModeCard(
-                    cs: cs,
-                    theme: theme,
-                    selected: _mode == 'termExam',
-                    title: 'Term Exam',
-                    subtitle: 'All topics in this term',
-                    icon: Icons.assignment_rounded,
-                    onTap: () => _switchMode('termExam'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _CombinedModeCard(
-                    cs: cs,
-                    theme: theme,
-                    selected: _mode == 'caTest',
-                    title: 'CA Test',
-                    subtitle: 'Only topics you tick',
-                    icon: Icons.checklist_rounded,
-                    onTap: () => _switchMode('caTest'),
-                  ),
-                ),
-              ],
-            ),
-          ),
           // ── Subject / Class / Term pickers ──────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -4468,6 +4867,17 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
                     ),
                     const SizedBox(height: 12),
                   ],
+                  // Phase 3: saved-lesson checkbox (or the calm note when
+                  // nothing is available) — directly above the Generate
+                  // button.
+                  if (!_isLoadingTopics &&
+                      _topicsError == null &&
+                      hasSelection) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _buildSavedLessonRow(cs, theme),
+                    ),
+                  ],
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
@@ -4486,7 +4896,7 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
                         _isGenerating
                             ? 'Generating...'
                             : _mode == 'termExam'
-                                ? 'Generate Exam'
+                                ? 'Generate Term Exam'
                                 : 'Generate CA Test',
                       ),
                       style: FilledButton.styleFrom(
@@ -4561,13 +4971,16 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
           return Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: InkWell(
-              onTap: () => setState(() {
-                if (selected) {
-                  _selectedIndexes.remove(index);
-                } else {
-                  _selectedIndexes.add(index);
-                }
-              }),
+              onTap: () {
+                setState(() {
+                  if (selected) {
+                    _selectedIndexes.remove(index);
+                  } else {
+                    _selectedIndexes.add(index);
+                  }
+                });
+                _refreshSavedLessonQuestions();
+              },
               borderRadius: BorderRadius.circular(16),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -4584,13 +4997,16 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
                   children: [
                     Checkbox(
                       value: selected,
-                      onChanged: (_) => setState(() {
-                        if (selected) {
-                          _selectedIndexes.remove(index);
-                        } else {
-                          _selectedIndexes.add(index);
-                        }
-                      }),
+                      onChanged: (_) {
+                        setState(() {
+                          if (selected) {
+                            _selectedIndexes.remove(index);
+                          } else {
+                            _selectedIndexes.add(index);
+                          }
+                        });
+                        _refreshSavedLessonQuestions();
+                      },
                     ),
                     Container(
                       width: 40,
@@ -4641,73 +5057,6 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
           ),
         );
       },
-    );
-  }
-}
-
-/// One of the two mode-choice cards (Term Exam / CA Test).
-class _CombinedModeCard extends StatelessWidget {
-  const _CombinedModeCard({
-    required this.cs,
-    required this.theme,
-    required this.selected,
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.onTap,
-  });
-
-  final ColorScheme cs;
-  final ThemeData theme;
-  final bool selected;
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final background =
-        selected ? cs.primaryContainer.withValues(alpha: 0.45) : cs.surfaceContainerLow;
-    final borderColor = selected
-        ? cs.primary.withValues(alpha: 0.55)
-        : cs.outlineVariant.withValues(alpha: 0.3);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          border: Border.all(color: borderColor),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              icon,
-              size: 22,
-              color: selected ? cs.primary : cs.onSurfaceVariant,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: selected ? cs.primary : cs.onSurface,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: cs.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

@@ -562,9 +562,26 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
       final paymentService = PaymentService(db);
       final schoolId = school.serverId ?? school.localId.toString();
+      final currentTier = school.subscriptionTier.toLowerCase();
+      final currentTierRank = _tierRank(currentTier);
 
       for (final payment in pendingPayments) {
         if (!mounted) break; // exit early if screen was disposed
+
+        // ── Downgrade guard: only auto-resume genuine upgrades ──────────
+        // A stale unconfirmed payment (e.g. an old Basic checkout) must never
+        // downgrade a currently higher tier. Skip and leave the row for
+        // manual review — same-tier renewals are user-triggered from the
+        // Payment screen instead.
+        final pendingPlanRank = _tierRank(payment.plan);
+        if (pendingPlanRank <= currentTierRank) {
+          debugPrint(
+            '[PAYMENT-RESUME] Skipping pending ${payment.plan} payment — current '
+            'tier is $currentTier and this is not an upgrade.',
+          );
+          continue;
+        }
+
         try {
           final confirmed = await paymentService.verifyPayment(
             payment.transactionReference,

@@ -284,7 +284,7 @@ void main() {
     });
 
     testWidgets(
-      '_saveScheme() draft-lesson path enqueues a lessons sync_queue row',
+      'teacher view is gone: no Save/Generate/Submit controls, only the admin review view',
       (tester) async {
         final fixture = await _seedTeacherSchemeFixture(db, teacherRole: 'teacher');
         final authState = AuthStateData(
@@ -295,38 +295,17 @@ void main() {
 
         await _pumpSchemeScreen(tester, db: db, authState: authState);
 
+        // The teacher view and its actions were removed; none of the old
+        // controls may render, and pumping as a teacher must queue nothing.
+        expect(find.text('Save Scheme'), findsNothing);
+        expect(find.text('Generate Scheme'), findsNothing);
+        expect(find.text('Submit for Approval'), findsNothing);
         expect(await db.lessonsDao.getAll(), isEmpty);
         expect(await db.examsDao.getAll(), isEmpty);
 
-        await tester.tap(find.widgetWithText(OutlinedButton, 'Save Scheme'));
-        await tester.pump(const Duration(seconds: 1));
-
-        await _expectLessonQueueEntry(db, schemeWeekId: fixture.schemeWeekId);
-      },
-    );
-
-    testWidgets(
-      '_saveScheme() no longer creates draft exams or queues exams sync entries',
-      (tester) async {
-        final fixture = await _seedTeacherSchemeFixture(db, teacherRole: 'teacher');
-        final authState = AuthStateData(
-          state: AuthState.authenticated,
-          currentTeacher: fixture.teacher,
-          currentSchool: fixture.school,
-        );
-
-        await _pumpSchemeScreen(tester, db: db, authState: authState);
-
-        expect(await db.lessonsDao.getAll(), isEmpty);
-        expect(await db.examsDao.getAll(), isEmpty);
-
-        await tester.tap(find.widgetWithText(OutlinedButton, 'Save Scheme'));
-        await tester.pump(const Duration(seconds: 1));
-
-        // The linked draft lesson is still created...
-        await _expectLessonQueueEntry(db, schemeWeekId: fixture.schemeWeekId);
-        // ...but no draft exam is.
-        await _expectNoExamQueueEntry(db);
+        // The admin review screen is the only view rendered.
+        expect(find.text('Scheme of Work Review'), findsOneWidget);
+        expect(find.text('Filter schemes'), findsOneWidget);
       },
     );
 
@@ -344,6 +323,11 @@ void main() {
 
         expect(await db.lessonsDao.getAll(), isEmpty);
         expect(await db.examsDao.getAll(), isEmpty);
+
+        // Scheme groups are collapsed by default; expand the
+        // Mathematics · JSS 1 group so the Approve button is visible.
+        await tester.tap(find.text('Mathematics · JSS 1'));
+        await tester.pump();
 
         await tester.tap(find.widgetWithText(TextButton, 'Approve'));
         await tester.pump(const Duration(seconds: 1));
@@ -367,6 +351,11 @@ void main() {
         expect(await db.lessonsDao.getAll(), isEmpty);
         expect(await db.examsDao.getAll(), isEmpty);
 
+        // Scheme groups are collapsed by default; expand the
+        // Mathematics · JSS 1 group so the Approve button is visible.
+        await tester.tap(find.text('Mathematics · JSS 1'));
+        await tester.pump();
+
         await tester.tap(find.widgetWithText(TextButton, 'Approve'));
         await tester.pump(const Duration(seconds: 1));
 
@@ -374,6 +363,29 @@ void main() {
         await _expectLessonQueueEntry(db, schemeWeekId: fixture.schemeWeekId);
         // ...but no draft exam is.
         await _expectNoExamQueueEntry(db);
+      },
+    );
+
+    testWidgets(
+      'admin-only screen renders the admin view without teacher Save/Generate controls',
+      (tester) async {
+        final fixture = await _seedTeacherSchemeFixture(db, teacherRole: 'admin');
+        final authState = AuthStateData(
+          state: AuthState.authenticated,
+          currentTeacher: fixture.teacher,
+          currentSchool: fixture.school,
+        );
+
+        await _pumpSchemeScreen(tester, db: db, authState: authState);
+
+        // The admin review view is the only view rendered.
+        expect(find.text('Scheme of Work Review'), findsOneWidget);
+        expect(find.text('All Schemes (Admin)'), findsOneWidget);
+
+        // The removed teacher actions must not exist.
+        expect(find.text('Save Scheme'), findsNothing);
+        expect(find.text('Generate Scheme'), findsNothing);
+        expect(find.text('Submit for Approval'), findsNothing);
       },
     );
   });

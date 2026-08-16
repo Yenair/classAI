@@ -1,10 +1,12 @@
 // lib/core/services/exam_generation_service.dart
 import 'dart:convert';
+import 'dart:math' show min;
 
 import 'package:drift/drift.dart' show Value;
 import 'package:classai/core/constants/prompt_templates.dart';
 import 'package:classai/core/data/nerdc_curriculum.dart';
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/services/question_validation.dart';
 import 'package:classai/core/services/scheme_of_work_service.dart';
 
 /// Thrown when no weekly topics can be resolved for a subject/class/term
@@ -40,6 +42,34 @@ class ExamStorageLimitExceededException implements Exception {
       'exams.';
 }
 
+/// Thrown when the school's subscription tier is not in the configured
+/// `exam_generation_allowed_tiers` (only Standard and Elite). Thrown at the
+/// very start of generation — before any DB insert, AI call or quota check —
+/// so nothing is ever created or queued for a disallowed tier.
+class ExamGenerationNotAllowedException implements Exception {
+  const ExamGenerationNotAllowedException();
+
+  @override
+  String toString() =>
+      'Exam generation is only available on Standard and Elite plans. '
+      'Upgrade to generate exams.';
+}
+
+/// Thrown when the hybrid merge cannot reach the requested per-type question
+/// counts even after the AI fill — nothing is created or queued, so no
+/// partial exam can ever persist.
+class ExamIncompleteGenerationException implements Exception {
+  const ExamIncompleteGenerationException(this.missing);
+
+  /// Type → how many questions are still missing.
+  final Map<String, int> missing;
+
+  @override
+  String toString() =>
+      'AI could not complete the exam (still missing $missing). '
+      'No exam was created — try again.';
+}
+
 /// One week's topic for a term exam / weekly exam generation.
 class TermTopic {
   final int weekNumber;
@@ -53,6 +83,39 @@ class TermTopic {
     required this.topic,
     this.schemeOfWorkId,
   });
+}
+
+/// Aggregated, validated saved lesson questions for a set of weeks,
+/// flattened in ascending week order.
+class SavedLessonQuestions {
+  final List<Map<String, dynamic>> mcqs;
+  final List<Map<String, dynamic>> theory;
+  final List<Map<String, dynamic>> subjective;
+
+  const SavedLessonQuestions({
+    required this.mcqs,
+    required this.theory,
+    required this.subjective,
+  });
+
+  const SavedLessonQuestions.empty()
+      : mcqs = const [],
+        theory = const [],
+        subjective = const [];
+
+  int get total => mcqs.length + theory.length + subjective.length;
+}
+
+/// Safely normalizes AI-returned question lists (any of the accepted keys)
+/// into `List<Map<String, dynamic>>`: non-list values contribute nothing,
+/// non-map entries are dropped and each map is copied, so the result is
+/// never a lazy cast view and malformed AI output cannot crash the app.
+List<Map<String, dynamic>> castQuestions(dynamic value) {
+  if (value is! List) return const [];
+  return value
+      .whereType<Map>()
+      .map((m) => Map<String, dynamic>.from(m))
+      .toList();
 }
 
 /// Shared persistence + generation for the explicit exam-creation flows:
@@ -163,6 +226,12 @@ class ExamGenerationService {
     /// `lesson_storage_limits` map used to enforce the per-tier exam storage
     /// quota — the same inputs the exam editor's `_saveExam` guard reads.
     required String subscriptionTier,
+
+    /// Remote `exam_generation_allowed_tiers` config (lowercased). The school
+    /// must be in this list or [ExamGenerationNotAllowedException] is thrown
+    /// before anything is loaded, checked, written or queued.
+    required List<String> examGenerationAllowedTiers,
+
     required Map<String, dynamic> lessonStorageLimits,
 
     required String subject,
@@ -170,6 +239,12 @@ class ExamGenerationService {
     required String termLabel,
     Future<Map<String, dynamic>> Function(String prompt)? aiGenerate,
   }) async {
+    // Subscription-tier gate — before ANY DB read/write, AI call or quota
+    // check. Only Standard and Elite may generate exams.
+    if (!examGenerationAllowedTiers.contains(subscriptionTier.toLowerCase())) {
+      throw const ExamGenerationNotAllowedException();
+    }
+
     final topics = await loadTermTopics(
       schoolId: schoolId,
       teacherId: teacherId,
@@ -323,6 +398,12 @@ class ExamGenerationService {
     /// `lesson_storage_limits` map used to enforce the per-tier exam storage
     /// quota — the same inputs the exam editor's `_saveExam` guard reads.
     required String subscriptionTier,
+
+    /// Remote `exam_generation_allowed_tiers` config (lowercased). The school
+    /// must be in this list or [ExamGenerationNotAllowedException] is thrown
+    /// before anything is loaded, checked, written or queued.
+    required List<String> examGenerationAllowedTiers,
+
     required Map<String, dynamic> lessonStorageLimits,
 
     required String difficulty,
@@ -330,9 +411,21 @@ class ExamGenerationService {
     required List<int> questionCounts,
     required String topicTitle,
     required Future<Map<String, dynamic>> Function(String prompt) aiGenerate,
+    /// Phase 3: reuse saved lesson questions first; AI fills the remainder.
+    /// Never produces a partial exam — throws ExamIncompleteGenerationException
+    /// (or the AI failure itself) before anything is inserted or queued.
+    /// When every requested question is covered by saved lessons, [aiGenerate]
+    /// is not called at all and the exam is built from saved questions only.
+    bool useSavedLessonQuestions = false,
     String teacherName = 'Teacher',
     String schoolName = 'School',
   }) async {
+    // Subscription-tier gate — before ANY DB read/write, AI call or quota
+    // check. Only Standard and Elite may generate exams.
+    if (!examGenerationAllowedTiers.contains(subscriptionTier.toLowerCase())) {
+      throw const ExamGenerationNotAllowedException();
+    }
+
     if (topics.isEmpty) {
       throw const ExamGenerationEmptySelectionException();
     }
@@ -359,9 +452,7 @@ class ExamGenerationService {
         '- Week ${topics[i].weekNumber}: "${topics[i].topic}" '
         '($count questions)',
       );
-      final mcq = (count * 0.5).round();
-      final theory = (count * 0.3).round();
-      final subjective = count - mcq - theory;
+      final (mcq, theory, subjective) = distributePerTopicCount(count);
       totalMcq += mcq;
       totalTheory += theory;
       totalSubjective += subjective;
@@ -370,11 +461,33 @@ class ExamGenerationService {
       throw const ExamGenerationEmptySelectionException();
     }
 
-    final typeCounts = <String, int>{
+    var typeCounts = <String, int>{
       'MCQ': totalMcq,
       'Theory': totalTheory,
       'Subjective': totalSubjective,
     };
+
+    // Phase 3 hybrid: reuse saved lesson questions, ask AI for the remainder.
+    SavedLessonQuestions saved = const SavedLessonQuestions.empty();
+    var usedMcq = 0, usedTheory = 0, usedSubjective = 0;
+    if (useSavedLessonQuestions) {
+      saved = await loadSavedLessonQuestions(
+        teacherServerId: teacherServerId,
+        schoolServerId: schoolServerId ?? '',
+        subject: subject,
+        classLevel: classLevel,
+        termLabel: termLabel,
+        weekNumbers: [for (final t in topics) t.weekNumber],
+      );
+      usedMcq = min(saved.mcqs.length, totalMcq);
+      usedTheory = min(saved.theory.length, totalTheory);
+      usedSubjective = min(saved.subjective.length, totalSubjective);
+      typeCounts = {
+        'MCQ': totalMcq - usedMcq,
+        'Theory': totalTheory - usedTheory,
+        'Subjective': totalSubjective - usedSubjective,
+      };
+    }
 
     final prompt = PromptTemplates.examQuestions(
       subject,
@@ -386,30 +499,102 @@ class ExamGenerationService {
       schoolName: schoolName,
     );
 
-    final result = await aiGenerate(prompt);
+    // Tell the AI which saved questions are already in the exam so it does
+    // not regenerate them. Only the questions actually reused (taken) are
+    // listed; types with nothing reused contribute an empty string.
+    final aiPrompt = useSavedLessonQuestions && saved.total > 0
+        ? '$prompt\n\n'
+            '${PromptTemplates.doNotRepeatInstruction('MCQ', [
+                  for (final q in saved.mcqs.take(usedMcq))
+                    q['question'].toString(),
+                ])}'
+            '${PromptTemplates.doNotRepeatInstruction('Theory', [
+                  for (final q in saved.theory.take(usedTheory))
+                    q['question'].toString(),
+                ])}'
+            '${PromptTemplates.doNotRepeatInstruction('Subjective', [
+                  for (final q in saved.subjective.take(usedSubjective))
+                    q['question'].toString(),
+                ])}'
+        : prompt;
 
-    // Parse the AI result into the exam content shape.
+    final remainingTotal =
+        typeCounts.values.fold<int>(0, (sum, count) => sum + count);
+
+    // When every requested question is covered by saved lessons, skip the AI
+    // call entirely (no credits / daily-limit spend; works offline).
     Map<String, dynamic> content;
-    if (result.containsKey('encryptedContent')) {
-      content = Map<String, dynamic>.from(result['raw'] as Map);
+    if (useSavedLessonQuestions && remainingTotal == 0) {
+      content = {
+        'mcqs': const [],
+        'theory': const [],
+        'subjective': const [],
+      };
     } else {
-      content = result;
+      final result = await aiGenerate(aiPrompt);
+
+      // Parse the AI result into the exam content shape.
+      if (result.containsKey('encryptedContent')) {
+        content = Map<String, dynamic>.from(result['raw'] as Map);
+      } else {
+        content = result;
+      }
     }
     final examContent = {
-      'mcqs': (content['mcq'] as List<dynamic>?)
-              ?.cast<Map<String, dynamic>>() ??
-          (content['mcqs'] as List<dynamic>?)
-              ?.cast<Map<String, dynamic>>() ??
-          (content['questions'] as List<dynamic>?)
-              ?.cast<Map<String, dynamic>>() ??
-          <Map<String, dynamic>>[],
-      'theory': (content['theory'] as List<dynamic>?)
-              ?.cast<Map<String, dynamic>>() ??
-          <Map<String, dynamic>>[],
-      'subjective': (content['subjective'] as List<dynamic>?)
-              ?.cast<Map<String, dynamic>>() ??
-          <Map<String, dynamic>>[],
+      'mcqs': castQuestions(
+        content['mcq'] ?? content['mcqs'] ?? content['questions'],
+      ),
+      'theory': castQuestions(content['theory']),
+      'subjective': castQuestions(content['subjective']),
     };
+
+    // Phase 3 hybrid merge: saved questions first, then AI — the requested
+    // per-type totals are a contract. The exam must never be written
+    // incomplete, so abort (throw) BEFORE the row insert / sync queue.
+    if (useSavedLessonQuestions) {
+      // The AI may return more than the remainder it was asked for — cap each
+      // type to the exact remaining count BEFORE merging so the final exam
+      // never exceeds the requested totals (the fill check below only catches
+      // shortfall). The pure-AI path keeps whatever the AI returns.
+      examContent['mcqs'] =
+          castQuestions(examContent['mcqs'])
+              .take(typeCounts['MCQ'] ?? 0)
+              .toList();
+      examContent['theory'] =
+          castQuestions(examContent['theory'])
+              .take(typeCounts['Theory'] ?? 0)
+              .toList();
+      examContent['subjective'] =
+          castQuestions(examContent['subjective'])
+              .take(typeCounts['Subjective'] ?? 0)
+              .toList();
+
+      examContent['mcqs'] = [
+        ...saved.mcqs.take(totalMcq),
+        ...?examContent['mcqs'],
+      ];
+      examContent['theory'] = [
+        ...saved.theory.take(totalTheory),
+        ...?examContent['theory'],
+      ];
+      examContent['subjective'] = [
+        ...saved.subjective.take(totalSubjective),
+        ...?examContent['subjective'],
+      ];
+      final missing = <String, int>{};
+      void check(String type, int requested, List<dynamic> actual) {
+        if (requested > 0 && actual.length < requested) {
+          missing[type] = requested - actual.length;
+        }
+      }
+
+      check('mcqs', totalMcq, examContent['mcqs']!);
+      check('theory', totalTheory, examContent['theory']!);
+      check('subjective', totalSubjective, examContent['subjective']!);
+      if (missing.isNotEmpty) {
+        throw ExamIncompleteGenerationException(missing);
+      }
+    }
 
     final termLabelStored = _normalizeTermLabelForDraft(termLabel);
     final weekNumber = topics.first.weekNumber;
@@ -453,6 +638,124 @@ class ExamGenerationService {
     );
 
     return examId;
+  }
+
+  /// The exact per-topic type distribution `generateCombinedExam` uses:
+  /// MCQ 50% (rounded), Theory 30% (rounded), Subjective = the remainder.
+  static (int mcq, int theory, int subjective) distributePerTopicCount(
+      int count) {
+    final mcq = (count * 0.5).round();
+    final theory = (count * 0.3).round();
+    return (mcq, theory, count - mcq - theory);
+  }
+
+  /// Finds the saved lesson questions for [weekNumbers] of
+  /// subject/class/term and returns them validated, in week order.
+  /// See plans/phase3_hybrid_exam_checkbox.md §3.2 for the matching rules:
+  /// - a lesson matches when `(weekNumber ?? week)` is in [weekNumbers], the
+  ///   subject and class match case-insensitively, and the lesson's term is
+  ///   empty (legacy rows) or term-normalized-equal to [termLabel];
+  /// - multiple lessons for one week → the best wins (most valid questions,
+  ///   tie-broken by most recently updated), never merged;
+  /// - malformed content / missing `questions` key contributes nothing.
+  Future<SavedLessonQuestions> loadSavedLessonQuestions({
+    required String teacherServerId,
+    required String schoolServerId,
+    required String subject,
+    required String classLevel,
+    required String termLabel,
+    required List<int> weekNumbers,
+  }) async {
+    if (weekNumbers.isEmpty) return const SavedLessonQuestions.empty();
+    final lessons = await db.lessonsDao
+        .getAllForTeacher(teacherServerId, schoolServerId);
+    if (lessons.isEmpty) return const SavedLessonQuestions.empty();
+
+    final weeks = weekNumbers.toSet();
+    final termKey = _normalizeTermKey(termLabel);
+    final subjectKey = subject.trim().toLowerCase();
+    final classKey = classLevel.trim().toLowerCase();
+
+    final byWeek = <int, List<Lesson>>{};
+    for (final lesson in lessons) {
+      final week = lesson.weekNumber ?? lesson.week;
+      if (!weeks.contains(week)) continue;
+      if (lesson.subject.trim().toLowerCase() != subjectKey) continue;
+      if (lesson.classLevel.trim().toLowerCase() != classKey) continue;
+      final lessonTerm = (lesson.term ?? '').trim();
+      if (lessonTerm.isNotEmpty &&
+          _normalizeTermKey(lessonTerm) != termKey) {
+        continue;
+      }
+      byWeek.putIfAbsent(week, () => []).add(lesson);
+    }
+    if (byWeek.isEmpty) return const SavedLessonQuestions.empty();
+
+    // Best lesson per week: most valid questions, then most recently updated.
+    SavedLessonQuestions bestOf(List<Lesson> candidates) {
+      candidates.sort((a, b) {
+        final aCount = _decodeLessonQuestions(a).total;
+        final bCount = _decodeLessonQuestions(b).total;
+        if (aCount != bCount) return bCount.compareTo(aCount);
+        return b.updatedAt.compareTo(a.updatedAt);
+      });
+      return _decodeLessonQuestions(candidates.first);
+    }
+
+    final mcqs = <Map<String, dynamic>>[];
+    final theory = <Map<String, dynamic>>[];
+    final subjective = <Map<String, dynamic>>[];
+    for (final week in (byWeek.keys.toList()..sort())) {
+      final picked = bestOf(byWeek[week]!);
+      mcqs.addAll(picked.mcqs);
+      theory.addAll(picked.theory);
+      subjective.addAll(picked.subjective);
+    }
+    return SavedLessonQuestions(
+      mcqs: mcqs,
+      theory: theory,
+      subjective: subjective,
+    );
+  }
+
+  /// Decodes one lesson's `content['questions']` with the shared validators.
+  /// Any malformed JSON / missing key / non-list value contributes nothing.
+  SavedLessonQuestions _decodeLessonQuestions(Lesson lesson) {
+    List<Map<String, dynamic>> cast(dynamic list) =>
+        (list as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((m) => Map<String, dynamic>.from(m))
+            .toList();
+    try {
+      final content = jsonDecode(lesson.content);
+      if (content is! Map<String, dynamic>) {
+        return const SavedLessonQuestions.empty();
+      }
+      final questions = content['questions'];
+      if (questions is! Map<String, dynamic>) {
+        return const SavedLessonQuestions.empty();
+      }
+      return SavedLessonQuestions(
+        mcqs: validateMcqs(cast(questions['mcqs'])).validQuestions,
+        theory:
+            validateWrittenQuestions(cast(questions['theory'])).validQuestions,
+        subjective:
+            validateWrittenQuestions(cast(questions['subjective']))
+                .validQuestions,
+      );
+    } catch (_) {
+      return const SavedLessonQuestions.empty();
+    }
+  }
+
+  /// '1st Term' | 'First' | '1' → '1' (likewise 2/3) — the term matcher,
+  /// mirroring the existing `findSchemes` matcher in SchemeOfWorkService.
+  String _normalizeTermKey(String term) {
+    final t = term.trim().toLowerCase();
+    if (t.contains('1st') || t.contains('first') || t == '1') return '1';
+    if (t.contains('2nd') || t.contains('second') || t == '2') return '2';
+    if (t.contains('3rd') || t.contains('third') || t == '3') return '3';
+    return t;
   }
 
   /// Finds the non-deleted exam that occupies [weekNumber] for the same

@@ -6,6 +6,18 @@ const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_PREFIX = "CLA";
 const DEFAULT_DURATION_DAYS = 365;
 
+// Tier rank order — free is the implicit baseline. Higher rank = better plan.
+const TIER_RANKS: Record<string, number> = {
+  free: 0,
+  basic: 1,
+  standard: 2,
+  elite: 3,
+};
+
+function tierRank(tier: string): number {
+  return TIER_RANKS[tier.toLowerCase()] ?? -1;
+}
+
 function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -122,6 +134,8 @@ serve(async (req) => {
     const eventType = payload.event ?? "unknown";
     const eventReference = payload.data?.reference ?? "unknown";
 
+    const now = new Date();
+
     // ── Log every webhook event ────────────────────────────────────
     console.log(
       `[paystack-webhook] event=${eventType} reference=${eventReference} timestamp=${now.toISOString()}`,
@@ -204,7 +218,7 @@ serve(async (req) => {
 
     const { data: school, error: schoolError } = await supabase
       .from("schools")
-      .select("id, school_name")
+      .select("id, school_name, subscription_tier")
       .eq("id", schoolId)
       .maybeSingle();
 
@@ -212,7 +226,27 @@ serve(async (req) => {
       return jsonResponse({ error: "School not found" }, 404);
     }
 
-    const now = new Date();
+    // ── DOWNGRADE GUARD: never downgrade a higher tier ──────────────────
+    // A late-arriving webhook for an older, lower-tier payment must not
+    // overwrite a current higher tier. Reject before writing anything:
+    // no activation code, no school update, no email.
+    const currentTier = typeof school.subscription_tier === "string"
+      ? school.subscription_tier.toLowerCase()
+      : "free";
+    const currentRank = tierRank(currentTier);
+    const incomingRank = tierRank(tier);
+
+    if (incomingRank < currentRank) {
+      return jsonResponse(
+        {
+          error: `Cannot downgrade subscription from ${currentTier} to ${tier}. Your current ${currentTier} plan remains active.`,
+          code: "DOWNGRADE_REJECTED",
+          current_subscription_tier: currentTier,
+        },
+        409,
+      );
+    }
+
     const expiryDate = new Date(
       now.getTime() + DEFAULT_DURATION_DAYS * 24 * 60 * 60 * 1000,
     );

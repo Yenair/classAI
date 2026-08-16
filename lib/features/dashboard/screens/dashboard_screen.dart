@@ -26,6 +26,16 @@ void _goToLessonsDeferred(BuildContext context) {
   });
 }
 
+// Tier rank order — free is the implicit baseline. Higher rank = better plan.
+const Map<String, int> _tierRanks = <String, int>{
+  'free': 0,
+  'basic': 1,
+  'standard': 2,
+  'elite': 3,
+};
+
+int _tierRank(String tier) => _tierRanks[tier.toLowerCase()] ?? -1;
+
 /// Root dashboard screen that routes to either [EditorLayout] or [ReaderLayout]
 /// based on [PlatformHelper.isEditorMode].
 ///
@@ -103,8 +113,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
       final paymentService = PaymentService(db);
       final schoolId = school.serverId ?? school.localId.toString();
+      final currentTier = school.subscriptionTier.toLowerCase();
+      final currentTierRank = _tierRank(currentTier);
 
       for (final payment in pendingPayments) {
+        // ── Downgrade guard: only auto-resume genuine upgrades ──────────
+        // A stale unconfirmed payment must never downgrade a currently
+        // higher tier. Skip and leave the row for manual review.
+        final pendingPlanRank = _tierRank(payment.plan);
+        if (pendingPlanRank <= currentTierRank) {
+          debugPrint(
+            '[PAYMENT-RESUME] Skipping pending ${payment.plan} payment — current '
+            'tier is $currentTier and this is not an upgrade.',
+          );
+          continue;
+        }
+
         final confirmed = await paymentService.verifyPayment(
           payment.transactionReference,
         );
@@ -226,56 +250,6 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
     );
   }
 
-  void _showExamTypePopup(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.quiz_rounded),
-              title: const Text('Individual Topic Exam'),
-              subtitle: const Text('Create an exam for a single topic'),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (context.mounted) {
-                    context.push('/exams');
-                  }
-                });
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.assignment_rounded),
-              title: const Text('Full-Term Exam'),
-              subtitle: const Text('Combine multiple topics into one exam'),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (context.mounted) {
-                    context.push('/exams');
-                  }
-                });
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-        ],
-      ),
-    );
-  }
-
   String _greeting(String? teacherName) {
     final hour = DateTime.now().hour;
     final timeGreeting = hour < 12
@@ -336,7 +310,7 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                 isPrimary: false,
                 cs: cs,
                 theme: theme,
-                onTap: () => context.push('/exam-editor'),
+                onTap: () => context.push('/exams'),
               ),
             ],
           )
@@ -440,7 +414,6 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                 ...List.generate(_navItems.length, (index) {
                   final item = _navItems[index];
                   final isActive = index == _selectedIndex;
-                  final isExamsNav = item.label == 'Exams';
                   return Padding(
                     padding: EdgeInsets.symmetric(
                       horizontal: _isSidebarOpen ? 12 : 8,
@@ -454,9 +427,7 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                         ),
                         onTap: () {
                           setState(() => _selectedIndex = index);
-                          if (isExamsNav) {
-                            _showExamTypePopup(context);
-                          } else if (item.route != null) {
+                          if (item.route != null) {
                             final route = item.route!;
                             WidgetsBinding.instance.addPostFrameCallback((_) {
                               if (context.mounted) {
@@ -1823,13 +1794,19 @@ class ReaderLayout extends ConsumerStatefulWidget {
 }
 
 class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
-  int _selectedIndex = 1; // Lessons is active by default in the HTML
-
   /// Bottom-nav destinations. The Scheme of Work tab is admin-only — teachers
   /// plan their term via "Plan My Term" on the Lessons list.
+  ///
+  /// The list is intentionally CONDITIONALLY sized (`if (isAdmin)` inserts
+  /// Scheme of Work before More), so the nav must never be driven by a
+  /// positional index — the active highlight is derived from the current
+  /// route instead, and taps dispatch by route. A positional index would
+  /// shift meaning whenever the role (and thus the list) changes, which is
+  /// exactly what used to send "More" to the Scheme of Work screen on
+  /// Android when the role finished loading after first build.
   List<_ReaderNavSpec> get _navSpecs {
     final isAdmin = ref.read(authProvider).currentTeacher?.role == 'admin';
-    final specs = <_ReaderNavSpec>[
+    return <_ReaderNavSpec>[
       const _ReaderNavSpec(icon: Icons.home_rounded, label: 'Home', route: 'home'),
       const _ReaderNavSpec(
           icon: Icons.menu_book_rounded, label: 'Lessons', route: '/lessons', isFilled: true),
@@ -1839,16 +1816,24 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
             icon: Icons.calendar_month_rounded, label: 'Scheme of Work', route: '/scheme-of-work'),
       const _ReaderNavSpec(icon: Icons.more_horiz_rounded, label: 'More', route: '/settings'),
     ];
-    for (var i = 0; i < specs.length; i++) {
-      specs[i] = _ReaderNavSpec(
-        icon: specs[i].icon,
-        label: specs[i].label,
-        route: specs[i].route,
-        isFilled: specs[i].isFilled,
-        index: i,
-      );
+  }
+
+  /// Maps the current router path to the nav spec route whose tab should be
+  /// shown as active. The reader layout renders at `/`, so `home` is the
+  /// active destination while on the dashboard.
+  String _activeRouteFor(String path) {
+    switch (path) {
+      case '/lessons':
+        return '/lessons';
+      case '/exams':
+        return 'exams';
+      case '/scheme-of-work':
+        return '/scheme-of-work';
+      case '/settings':
+        return '/settings';
+      default:
+        return 'home';
     }
-    return specs;
   }
 
   @override
@@ -2263,14 +2248,15 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
         ],
       ),
       bottomNavigationBar: _ReaderBottomNav(
-        selectedIndex: _selectedIndex,
+        // maybeOf keeps widget tests (which mount ReaderLayout without a
+        // GoRouter) on the 'home' fallback instead of throwing.
+        activeRoute: _activeRouteFor(
+          GoRouter.maybeOf(context)?.state.uri.path ?? '/',
+        ),
         cs: cs,
         theme: theme,
         destinations: _navSpecs,
-        onTap: (spec) {
-          setState(() => _selectedIndex = spec.index);
-          _onNavDestination(context, spec.route);
-        },
+        onTap: (spec) => _onNavDestination(context, spec.route),
       ),
     );
   }
@@ -2283,7 +2269,7 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
         _goToLessonsDeferred(context);
         break;
       case 'exams':
-        _showReaderExamPopup(context);
+        context.go('/exams');
         break;
       case '/scheme-of-work':
         context.go('/scheme-of-work');
@@ -2294,47 +2280,6 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
     }
   }
 
-  void _showReaderExamPopup(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.quiz_rounded),
-              title: const Text('Individual Topic Exam'),
-              subtitle: const Text('Create an exam for a single topic'),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                context.go('/exams');
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.assignment_rounded),
-              title: const Text('Full-Term Exam'),
-              subtitle: const Text('Combine multiple topics into one exam'),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                context.push('/exams');
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _ReaderNavSpec {
@@ -2342,27 +2287,25 @@ class _ReaderNavSpec {
   final String label;
   final String route;
   final bool isFilled;
-  final int index;
 
   const _ReaderNavSpec({
     required this.icon,
     required this.label,
     required this.route,
     this.isFilled = false,
-    this.index = 0,
   });
 }
 
 class _ReaderBottomNav extends StatelessWidget {
   const _ReaderBottomNav({
-    required this.selectedIndex,
+    required this.activeRoute,
     required this.cs,
     required this.theme,
     required this.destinations,
     required this.onTap,
   });
 
-  final int selectedIndex;
+  final String activeRoute;
   final ColorScheme cs;
   final ThemeData theme;
   final List<_ReaderNavSpec> destinations;
@@ -2393,7 +2336,7 @@ class _ReaderBottomNav extends StatelessWidget {
             Expanded(child: _BottomNavItem(
               icon: spec.icon,
               label: spec.label,
-              isActive: selectedIndex == spec.index,
+              isActive: spec.route == activeRoute,
               isFilled: spec.isFilled,
               cs: cs,
               theme: theme,
