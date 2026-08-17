@@ -19,10 +19,13 @@ class PromptTemplates {
         '## Homework\n'
         'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
         'Return ONLY valid JSON: '
-        '{"objectives":[...],"vocabulary":[...],"materials":[...],"presentation":{...},"assessment":"...","homework":"...","diagrams":[{"description":"..."}],"attribution":"$attribution"} '
+        '{"objectives":[...],"vocabulary":[...],"materials":[...],"presentation":{...},"assessment":"...","homework":"...","diagrams":[{"description":"..."}],"references":[{"title":"...","author":"...","chapter":"...","page":"..."}],"attribution":"$attribution"} '
         'Include between 1 and 3 diagram descriptions in the "diagrams" array. '
         'Use 1 prompt for simple topics, 2 for moderately complex topics, and 3 for complex topics. '
         'Each description should be a concise prompt for generating a single educational image relevant to the topic. '
+        'For the "references" array: do NOT invent textbook titles, chapter numbers, or page numbers. '
+        'Only include a textbook/chapter reference when you are confident it is a real, widely used source for this topic. '
+        'Return "references": [] when no reliable source is available. '
         '$_selfCheckInstruction';
   }
 

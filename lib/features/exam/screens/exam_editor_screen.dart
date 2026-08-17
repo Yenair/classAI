@@ -16,6 +16,7 @@ import 'package:classai/core/services/question_validation.dart';
 import 'package:classai/core/constants/prompt_templates.dart';
 import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/core/widgets/app_toast.dart';
+import 'package:classai/core/widgets/question_cards.dart';
 import 'package:classai/core/widgets/upgrade_request_dialog.dart';
 import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/utils/platform_helper.dart';
@@ -3107,7 +3108,13 @@ class _PreviewPanel extends StatelessWidget {
                 children: [
                   ...List.generate(
                     mcqs.length > 2 ? 2 : mcqs.length,
-                    (i) => _buildLockedMcqCard(i, theme, cs),
+                    (i) => McqQuestionCard(
+                      index: i,
+                      mcq: mcqs[i],
+                      cs: cs,
+                      theme: theme,
+                      readOnly: true,
+                    ),
                   ),
                   if (mcqs.length > 2)
                     Padding(
@@ -3142,7 +3149,13 @@ class _PreviewPanel extends StatelessWidget {
                 children: [
                   ...List.generate(
                     theoryQuestions.length > 2 ? 2 : theoryQuestions.length,
-                    (i) => _buildLockedTheoryCard(i, theme, cs, theoryQuestions),
+                    (i) => TheoryQuestionCard(
+                      index: i,
+                      question: theoryQuestions[i],
+                      cs: cs,
+                      theme: theme,
+                      readOnly: true,
+                    ),
                   ),
                   if (theoryQuestions.length > 2)
                     Padding(
@@ -3177,7 +3190,13 @@ class _PreviewPanel extends StatelessWidget {
                 children: [
                   ...List.generate(
                     subjectiveQuestions.length > 2 ? 2 : subjectiveQuestions.length,
-                    (i) => _buildLockedTheoryCard(i, theme, cs, subjectiveQuestions),
+                    (i) => TheoryQuestionCard(
+                      index: i,
+                      question: subjectiveQuestions[i],
+                      cs: cs,
+                      theme: theme,
+                      readOnly: true,
+                    ),
                   ),
                   if (subjectiveQuestions.length > 2)
                     Padding(
@@ -3210,7 +3229,7 @@ class _PreviewPanel extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               child: Column(
                 children: List.generate(mcqs.length,
-                    (i) => _McqCard(
+                    (i) => McqQuestionCard(
                       index: i,
                       mcq: mcqs[i],
                       cs: cs,
@@ -3238,7 +3257,7 @@ class _PreviewPanel extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               child: Column(
                 children: List.generate(
-                    theoryQuestions.length, (i) => _TheoryCard(
+                    theoryQuestions.length, (i) => TheoryQuestionCard(
                       index: i,
                       question: theoryQuestions[i],
                       cs: cs,
@@ -3265,7 +3284,7 @@ class _PreviewPanel extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               child: Column(
                 children: List.generate(
-                    subjectiveQuestions.length, (i) => _TheoryCard(
+                    subjectiveQuestions.length, (i) => TheoryQuestionCard(
                       index: i,
                       question: subjectiveQuestions[i],
                       cs: cs,
@@ -3388,140 +3407,6 @@ class _PreviewPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildLockedMcqCard(int index, ThemeData theme, ColorScheme cs) {
-    final mcq = mcqs[index];
-    final question = mcq['question'] as String? ?? '';
-    final options = mcq['options'] as Map<String, dynamic>? ?? {};
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.4),
-        ),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-            ),
-            child: Center(
-              child: Text(
-                '${index + 1}',
-                style: theme.textTheme.labelLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: cs.onSurfaceVariant,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  question,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: cs.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ...options.entries.take(2).map((e) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    '${e.key}. ${e.value}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: cs.onSurfaceVariant,
-                    ),
-                  ),
-                )),
-                if (options.length > 2)
-                  Text(
-                    '... ${options.length - 2} more options',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: cs.tertiary,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                const SizedBox(height: 4),
-                Icon(Icons.lock_rounded, size: 14, color: cs.tertiary),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLockedTheoryCard(int index, ThemeData theme, ColorScheme cs, List<Map<String, dynamic>> questions) {
-    final q = questions[index];
-    final question = q['question'] as String? ?? '';
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.4),
-        ),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-            ),
-            child: Center(
-              child: Text(
-                '${index + 1}',
-                style: theme.textTheme.labelLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: cs.onSurfaceVariant,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  question,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: cs.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Icon(Icons.lock_rounded, size: 14, color: cs.tertiary),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -3735,374 +3620,6 @@ class _SimpleDropdown extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// MCQ Question Card (StatefulWidget with per-field TextEditingControllers)
-// ═══════════════════════════════════════════════════════════════════════
-class _McqCard extends StatefulWidget {
-  final int index;
-  final Map<String, dynamic> mcq;
-  final ColorScheme cs;
-  final ThemeData theme;
-  final UndoHistoryController undoController;
-  final void Function(int, String, String) onUpdateMcq;
-  final void Function(int, String, String) onUpdateMcqOption;
-
-  const _McqCard({
-    required this.index,
-    required this.mcq,
-    required this.cs,
-    required this.theme,
-    required this.undoController,
-    required this.onUpdateMcq,
-    required this.onUpdateMcqOption,
-  });
-
-  @override
-  State<_McqCard> createState() => _McqCardState();
-}
-
-class _McqCardState extends State<_McqCard> {
-  late final TextEditingController _questionController;
-  late final Map<String, TextEditingController> _optionControllers;
-
-  @override
-  void initState() {
-    super.initState();
-    final mcq = widget.mcq;
-    final question = mcq['question'] as String? ?? '';
-    final options = mcq['options'] as Map<String, dynamic>? ?? {};
-
-    _questionController = TextEditingController(text: question)
-      ..addListener(_onQuestionChanged);
-
-    _optionControllers = {
-      for (final key in ['A', 'B', 'C', 'D'])
-        key: TextEditingController(text: options[key] as String? ?? '')
-          ..addListener(() => _onOptionChanged(key)),
-    };
-  }
-
-  void _onQuestionChanged() {
-    widget.onUpdateMcq(widget.index, 'question', _questionController.text);
-  }
-
-  void _onOptionChanged(String key) {
-    widget.onUpdateMcqOption(
-      widget.index,
-      key,
-      _optionControllers[key]?.text ?? '',
-    );
-  }
-
-  @override
-  void dispose() {
-    _questionController.dispose();
-    for (final c in _optionControllers.values) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = widget.theme;
-    final cs = widget.cs;
-    final mcq = widget.mcq;
-    final correct = mcq['correct']?.toString() ?? 'A';
-
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.4),
-        ),
-      ),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Question number
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: cs.primaryContainer,
-                  borderRadius: BorderRadius.circular(
-                    AppTheme.radiusFull,
-                  ),
-                ),
-                child: Center(
-                  child: Text(
-                    '${widget.index + 1}',
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: cs.onPrimaryContainer,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextFormField(
-                  controller: _questionController,
-                  undoController: widget.undoController,
-                  maxLines: 2,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(
-                      borderRadius:
-                          BorderRadius.circular(AppTheme.radiusLg),
-                      borderSide: BorderSide(color: cs.outlineVariant),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
-                    isDense: true,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Options grid
-          ...['A', 'B', 'C', 'D'].map((key) {
-            final isCorrect = correct == key;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  InkWell(
-                    onTap: () => widget.onUpdateMcq(widget.index, 'correct', key),
-                    borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                    child: Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isCorrect
-                            ? cs.secondaryContainer
-                            : Colors.transparent,
-                        border: Border.all(
-                          color: isCorrect
-                              ? cs.secondary
-                              : cs.outlineVariant,
-                          width: 2,
-                        ),
-                      ),
-                      child: isCorrect
-                          ? Icon(Icons.check_rounded,
-                              size: 14, color: cs.onSecondaryContainer)
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '$key.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: cs.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _optionControllers[key]!,
-                      undoController: widget.undoController,
-                      decoration: InputDecoration(
-                        isDense: true,
-                        border: OutlineInputBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppTheme.radiusLg),
-                          borderSide: BorderSide(color: cs.outlineVariant),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 6),
-                      ),
-                    ),
-                  ),
-                  if (isCorrect)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: Text(
-                        'CORRECT',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: cs.secondary,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// Theory / Subjective Question Card (StatefulWidget with controllers)
-// ═══════════════════════════════════════════════════════════════════════
-class _TheoryCard extends StatefulWidget {
-  final int index;
-  final Map<String, dynamic> question;
-  final ColorScheme cs;
-  final ThemeData theme;
-  final UndoHistoryController undoController;
-  final void Function(int, String, String) onUpdateTheory;
-
-  const _TheoryCard({
-    required this.index,
-    required this.question,
-    required this.cs,
-    required this.theme,
-    required this.undoController,
-    required this.onUpdateTheory,
-  });
-
-  @override
-  State<_TheoryCard> createState() => _TheoryCardState();
-}
-
-class _TheoryCardState extends State<_TheoryCard> {
-  late final TextEditingController _questionController;
-  late final TextEditingController _answerController;
-
-  @override
-  void initState() {
-    super.initState();
-    final q = widget.question;
-    _questionController = TextEditingController(
-      text: q['question'] as String? ?? '',
-    )..addListener(_onQuestionChanged);
-
-    _answerController = TextEditingController(
-      text: q['modelAnswer'] as String? ?? '',
-    )..addListener(_onAnswerChanged);
-  }
-
-  void _onQuestionChanged() {
-    widget.onUpdateTheory(widget.index, 'question', _questionController.text);
-  }
-
-  void _onAnswerChanged() {
-    widget.onUpdateTheory(widget.index, 'modelAnswer', _answerController.text);
-  }
-
-  @override
-  void dispose() {
-    _questionController.dispose();
-    _answerController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = widget.theme;
-    final cs = widget.cs;
-
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.4),
-        ),
-      ),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: cs.primaryContainer,
-                  borderRadius: BorderRadius.circular(
-                    AppTheme.radiusFull,
-                  ),
-                ),
-                child: Center(
-                  child: Text(
-                    '${widget.index + 1}',
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: cs.onPrimaryContainer,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextFormField(
-                  controller: _questionController,
-                  undoController: widget.undoController,
-                  maxLines: 3,
-                  decoration: InputDecoration(
-                    labelText: 'Question',
-                    labelStyle: theme.textTheme.labelMedium?.copyWith(
-                      color: cs.onSurfaceVariant,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius:
-                          BorderRadius.circular(AppTheme.radiusLg),
-                      borderSide: BorderSide(color: cs.outlineVariant),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _answerController,
-            undoController: widget.undoController,
-            maxLines: 4,
-            decoration: InputDecoration(
-              labelText: 'Marking Guide / Expected Elements',
-              labelStyle: theme.textTheme.labelMedium?.copyWith(
-                color: cs.primary,
-                fontWeight: FontWeight.w600,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                borderSide: BorderSide(
-                  color: cs.outlineVariant.withValues(alpha: 0.5),
-                  style: BorderStyle.solid,
-                ),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                borderSide: BorderSide(
-                  color: cs.outlineVariant.withValues(alpha: 0.5),
-                  style: BorderStyle.solid,
-                ),
-              ),
-              contentPadding: const EdgeInsets.all(12),
-              fillColor: cs.surfaceContainerLow,
-              filled: true,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

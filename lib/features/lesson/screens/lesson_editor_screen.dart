@@ -1,11 +1,14 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:drift/drift.dart' hide Column;
-import 'dart:io' show Platform;
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/core/services/ai_service.dart';
@@ -15,6 +18,7 @@ import 'package:classai/core/services/question_validation.dart';
 import 'package:classai/core/constants/prompt_templates.dart';
 import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/core/widgets/app_toast.dart';
+import 'package:classai/core/widgets/question_cards.dart';
 import 'package:classai/core/widgets/upgrade_request_dialog.dart';
 import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/utils/platform_helper.dart';
@@ -61,6 +65,10 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   final _presentationController = TextEditingController();
   final _assessmentController = TextEditingController();
   final _homeworkController = TextEditingController();
+  // Presentation sub-section controllers.
+  final _introController = TextEditingController();
+  final _devController = TextEditingController();
+  final _conclusionController = TextEditingController();
   int? _lessonId;
   String _lessonStatus = 'draft';
   int _week = 1;
@@ -92,6 +100,29 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   String _teacherName = 'Teacher';
   String _schoolName = 'School';
 
+  // Stage 4: per-teacher visible-section preferences (persisted locally via
+  // SharedPreferences, never stored in the lesson content JSON).
+  bool _visibleVocabulary = false;
+  bool _visibleMaterials = false;
+  bool _visibleSuggestedImages = false;
+
+  // Stage 1: legacy-settings fallback note.
+  String? _legacySettingsNote;
+
+  // Stage 1: regeneration undo snapshot path.
+  String? _regenerationSnapshotPath;
+
+  // Stage 1: persistent undo banner after regeneration.
+  bool _showRegenerationBanner = false;
+  // Stage 2: homework regeneration.
+  bool _isRegeneratingHomework = false;
+  String? _homeworkSnapshotPath;
+  // Stage 2: in-memory snapshot of the pre-regeneration homework. Serves as
+  // a reliable fallback for Undo when the snapshot file write fails.
+  String? _homeworkBeforeRegeneration;
+  // Stage 2: persistent undo banner after homework regeneration.
+  bool _showHomeworkRegenerationBanner = false;
+
   /// Loaded from subjectsDao, falls back to [_subjects] if empty.
   List<String> _loadedSubjects = [];
 
@@ -114,6 +145,16 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   List<Map<String, dynamic>> _mcqs = [];
   List<Map<String, dynamic>> _theoryQuestions = [];
   List<Map<String, dynamic>> _subjectiveQuestions = [];
+
+  // Stage 3: number of invalid questions dropped at the last generation.
+  int _droppedQuestionCount = 0;
+
+  // Stage 3: source references persisted inside the lesson content JSON.
+  // Each entry is {text, origin} where origin is 'ai' or 'teacher'.
+  List<Map<String, dynamic>> _references = [];
+
+  // Stage 3: debounced autosave timer for question edits/deletions.
+  Timer? _questionAutosaveTimer;
 
   final List<String> _subjects = [
     'Mathematics',
@@ -182,6 +223,88 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     _homeworkController.addListener(() {
       setState(() => _homeworkText = _homeworkController.text);
     });
+    _introController.addListener(_combinePresentation);
+    _devController.addListener(_combinePresentation);
+    _conclusionController.addListener(_combinePresentation);
+  }
+
+  /// Combine the three presentation sub-sections back into the single
+  /// [_presentationController] text so the content model stays intact.
+  void _combinePresentation() {
+    final parts = <String>[];
+    if (_introController.text.trim().isNotEmpty) {
+      parts.add('Introduction\n${_introController.text}');
+    }
+    if (_devController.text.trim().isNotEmpty) {
+      parts.add('Development\n${_devController.text}');
+    }
+    if (_conclusionController.text.trim().isNotEmpty) {
+      parts.add('Conclusion\n${_conclusionController.text}');
+    }
+    final combined = parts.join('\n\n');
+    if (_presentationController.text != combined) {
+      _presentationController.text = combined;
+    }
+  }
+
+  /// Parse the raw presentation text into three labeled sub-sections.
+  void _parsePresentationSubSections() {
+    final text = _presentationText;
+
+    // Try structured parse: look for labeled lines.
+    final lines = text.split('\n');
+    String? currentSection;
+    final buffer = StringBuffer();
+    final Map<String, String> sections = {};
+
+    for (final line in lines) {
+      final trimmed = line.trim();
+      final lower = trimmed.toLowerCase();
+      if (lower == 'introduction' || lower.startsWith('introduction:')) {
+        if (currentSection != null && buffer.isNotEmpty) {
+          sections[currentSection] = buffer.toString().trim();
+        }
+        buffer.clear();
+        currentSection = 'intro';
+        if (lower.startsWith('introduction:') && trimmed.length > 14) {
+          buffer.writeln(trimmed.substring(14).trim());
+        }
+      } else if (lower == 'development' || lower.startsWith('development:')) {
+        if (currentSection != null && buffer.isNotEmpty) {
+          sections[currentSection] = buffer.toString().trim();
+        }
+        buffer.clear();
+        currentSection = 'dev';
+        if (lower.startsWith('development:') && trimmed.length > 12) {
+          buffer.writeln(trimmed.substring(12).trim());
+        }
+      } else if (lower == 'conclusion' || lower.startsWith('conclusion:')) {
+        if (currentSection != null && buffer.isNotEmpty) {
+          sections[currentSection] = buffer.toString().trim();
+        }
+        buffer.clear();
+        currentSection = 'conclusion';
+        if (lower.startsWith('conclusion:') && trimmed.length > 11) {
+          buffer.writeln(trimmed.substring(11).trim());
+        }
+      } else if (currentSection != null) {
+        buffer.writeln(line);
+      }
+    }
+    if (currentSection != null && buffer.isNotEmpty) {
+      sections[currentSection] = buffer.toString().trim();
+    }
+
+    // If no sections were parsed, fall back: put everything in intro.
+    if (sections.isEmpty && text.trim().isNotEmpty) {
+      _introController.text = text;
+      _devController.text = '';
+      _conclusionController.text = '';
+    } else {
+      _introController.text = sections['intro'] ?? '';
+      _devController.text = sections['dev'] ?? '';
+      _conclusionController.text = sections['conclusion'] ?? '';
+    }
   }
 
   @override
@@ -210,6 +333,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       _loadAuthInfo();
       _loadSubjects();
       _loadSchemesForContext();
+      _loadVisibleSectionPrefs();
       if (_lessonId != null) {
         _loadLesson(_lessonId!);
       }
@@ -317,12 +441,32 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         } catch (_) {
           // Keep the saved content as-is if it is encrypted or not JSON.
         }
+        // Detect legacy lessons missing settings for fallback defaults.
+        final bool legacyDifficulty = lesson.difficulty.isEmpty;
+        final bool legacyBlooms = lesson.bloomsVerbs.trim().isEmpty;
+        final bool legacyAssessmentFormat = parsedContent != null &&
+            parsedContent['assessmentFormat'] == null &&
+            parsedContent['objectives'] != null;
+        final bool needsLegacyFallback =
+            legacyDifficulty || legacyBlooms || legacyAssessmentFormat;
         setState(() {
           _topicController.text = lesson.topic;
           _lessonStatus = lesson.status;
           _week = lesson.week;
           _subject = lesson.subject;
           _classLevel = lesson.classLevel;
+          _difficulty = legacyDifficulty ? 'medium' : lesson.difficulty;
+          _selectedBlooms.clear();
+          if (legacyBlooms) {
+            _selectedBlooms.addAll(_bloomVerbs);
+          } else {
+            _selectedBlooms.addAll(
+              lesson.bloomsVerbs
+                  .split(',')
+                  .map((e) => e.trim())
+                  .where((e) => e.isNotEmpty),
+            );
+          }
           _schemeOfWorkLocalId = lesson.schemeOfWorkId != null
               ? int.tryParse(lesson.schemeOfWorkId!)
               : null;
@@ -341,11 +485,14 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             _materialsController.text = _materialsText;
             _presentationText = _formatJson(parsedContent['presentation']);
             _presentationController.text = _presentationText;
+            _parsePresentationSubSections();
             _assessmentText = parsedContent['assessment'] as String? ?? '';
             _assessmentController.text = _assessmentText;
             _homeworkText = parsedContent['homework'] as String? ?? '';
             _homeworkController.text = _homeworkText;
             _hasGenerated = true;
+            _assessmentFormat =
+                parsedContent['assessmentFormat'] as String? ?? 'Both';
             // Restore structured questions if present in stored content.
             // Older lessons without the `questions` key load normally.
             final storedQuestions =
@@ -356,6 +503,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
               _subjectiveQuestions =
                   _castQuestionList(storedQuestions['subjective']);
             }
+            // Restore source references (Stage 3). Missing or malformed
+            // values fall back to an empty list.
+            _references = _parseReferences(parsedContent['references']);
             // Restore diagram results if present in stored content
             final storedDiagrams = parsedContent['diagrams'] as List<dynamic>?;
             if (storedDiagrams != null && storedDiagrams.isNotEmpty) {
@@ -365,6 +515,12 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             }
           }
         });
+        if (needsLegacyFallback && mounted) {
+          setState(() {
+            _legacySettingsNote =
+                'Some lesson settings were missing and restored to defaults.';
+          });
+        }
       }
     } catch (_) {
       // Lesson not found — continue with empty form
@@ -516,42 +672,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     return cleaned;
   }
 
-  Future<bool> _hasDuplicateLessonForGeneration(AppDatabase db) async {
-    try {
-      final teacherServerId = _teacherId;
-      if (teacherServerId == null || teacherServerId.isEmpty) return false;
-
-      final schoolLocalId =
-          ref.read(authProvider).currentSchool?.localId ??
-              (await db.schoolsDao.get())?.localId;
-      if (schoolLocalId == null) return false;
-
-      final targetTerm = await _resolveGenerationTermLabel(db);
-      if (targetTerm == null || targetTerm.isEmpty) return false;
-
-      final lessons = await db.lessonsDao.getAll();
-      for (final lesson in lessons) {
-        if (_lessonId != null && lesson.id == _lessonId) continue;
-        if (lesson.teacherServerId != teacherServerId) continue;
-        if (lesson.subject != _subject || lesson.week != _week) continue;
-
-        final lessonTerm =
-            await _resolveLessonTermLabel(db, lesson, schoolLocalId);
-        if (lessonTerm == null || lessonTerm.isEmpty) continue;
-        if (_normalizeTermLabel(lessonTerm) == targetTerm) {
-          // A scheme-of-work placeholder has empty content. Only treat a
-          // lesson as an existing generated lesson (and block re-generation)
-          // when its content is actually populated.
-          if (_isLessonContentEmpty(lesson.content)) continue;
-          return true;
-        }
-      }
-      return false;
-    } catch (_) {
-      return false;
-    }
-  }
-
   /// Returns true when the stored lesson content is an empty placeholder
   /// (no populated objectives/vocabulary/materials/presentation/assessment/
   /// homework), such as the rows auto-created from a scheme of work.
@@ -577,6 +697,40 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       // If it is not valid JSON, treat it as content that should be
       // preserved and therefore block generation (conservative).
       return false;
+    }
+  }
+
+  /// Returns the first duplicate lesson found, or null if none.
+  Future<Lesson?> _findDuplicateLesson(AppDatabase db) async {
+    try {
+      final teacherServerId = _teacherId;
+      if (teacherServerId == null || teacherServerId.isEmpty) return null;
+
+      final schoolLocalId =
+          ref.read(authProvider).currentSchool?.localId ??
+              (await db.schoolsDao.get())?.localId;
+      if (schoolLocalId == null) return null;
+
+      final targetTerm = await _resolveGenerationTermLabel(db);
+      if (targetTerm == null || targetTerm.isEmpty) return null;
+
+      final allLessons = await db.lessonsDao.getAll();
+      for (final lesson in allLessons) {
+        if (_lessonId != null && lesson.id == _lessonId) continue;
+        if (lesson.teacherServerId != teacherServerId) continue;
+        if (lesson.subject != _subject || lesson.week != _week) continue;
+
+        final lessonTerm =
+            await _resolveLessonTermLabel(db, lesson, schoolLocalId);
+        if (lessonTerm == null || lessonTerm.isEmpty) continue;
+        if (_normalizeTermLabel(lessonTerm) == targetTerm) {
+          if (_isLessonContentEmpty(lesson.content)) continue;
+          return lesson;
+        }
+      }
+      return null;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -663,7 +817,14 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   }
 
   Future<void> _handleGenerate() async {
-    if (!_formKey.currentState!.validate()) return;
+    // The blank-lesson entry screen does not render a Form, so its
+    // FormState is null. Only validate when a Form is actually mounted
+    // (the existing/generated editor path); the entry screen's
+    // "Create lesson" must not crash on a null check.
+    if (_formKey.currentState != null &&
+        !_formKey.currentState!.validate()) {
+      return;
+    }
 
     final topic = _topicController.text.trim();
     if (_isManualTopicEntry && topic.isEmpty) {
@@ -709,16 +870,37 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         schoolName: _schoolName,
       );
 
-      if (await _hasDuplicateLessonForGeneration(db)) {
+      // Duplicate detection — show a dialog with Open / Continue.
+      final duplicate = await _findDuplicateLesson(db);
+      if (duplicate != null && mounted) {
         setState(() => _isGenerating = false);
-        if (mounted) {
-          _showCenteredToast(
-            context: context,
-            message:
-                'A lesson already exists for this week. Edit the existing one instead.',
-          );
+        final action = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Duplicate Lesson'),
+            content: Text(
+              'You already have a lesson for ${duplicate.topic} in '
+              '${duplicate.subject} \u00b7 ${duplicate.classLevel} '
+              '\u00b7 Week ${duplicate.week}.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop('open'),
+                child: const Text('Open existing lesson'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop('continue'),
+                child: const Text('Continue anyway'),
+              ),
+            ],
+          ),
+        );
+        if (action == 'open') {
+          if (mounted) context.push('/lessons/${duplicate.id}');
+          return;
         }
-        return;
+        // 'continue' — fall through to generation.
+        setState(() => _isGenerating = true);
       }
 
       // ── Structured assessment questions (Phase 2) ────────────────
@@ -872,6 +1054,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             _materialsController.text = _materialsText;
             _presentationText = _formatJson(parsedRaw['presentation']);
             _presentationController.text = _presentationText;
+            _parsePresentationSubSections();
             _assessmentText = _formatList(parsedRaw['assessment']);
             _assessmentController.text = _assessmentText;
             _homeworkText = _formatList(parsedRaw['homework']);
@@ -879,6 +1062,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             _mcqs = parsedQuestions?['mcqs'] ?? const [];
             _theoryQuestions = parsedQuestions?['theory'] ?? const [];
             _subjectiveQuestions = parsedQuestions?['subjective'] ?? const [];
+            _droppedQuestionCount = droppedQuestionCount;
+            _references =
+                _parseReferences(parsedRaw['references'], forceAiOrigin: true);
             _diagramResults = generatedDiagrams;
             _hasGenerated = true;
             if (_lessonStatus == 'draft') _lessonStatus = 'generated';
@@ -982,7 +1168,39 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   }
 
   Future<void> _handleRegenerate() async {
-    setState(() => _isRegenerating = true);
+    // Show blocking confirmation dialog.
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Regenerate Lesson'),
+        content: const Text(
+          'Regenerating will replace your current lesson content, '
+          'including any manual edits you\u2019ve made. This cannot be undone '
+          'unless you use Undo immediately after. Continue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Regenerate'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    // Snapshot current content for undo before overwriting.
+    await _snapshotForUndo();
+
+    setState(() {
+      _isRegenerating = true;
+      _showRegenerationBanner = false;
+    });
     try {
       final db = ref.read(databaseProvider);
       final aiService = AiService(db: db);
@@ -1104,6 +1322,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         _materialsController.text = _materialsText;
         _presentationText = _formatJson(raw['presentation']);
         _presentationController.text = _presentationText;
+        _parsePresentationSubSections();
         _assessmentText = raw['assessment'] as String? ?? '';
         _assessmentController.text = _assessmentText;
         _homeworkText = raw['homework'] as String? ?? '';
@@ -1111,6 +1330,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         _mcqs = parsedQuestions?['mcqs'] ?? const [];
         _theoryQuestions = parsedQuestions?['theory'] ?? const [];
         _subjectiveQuestions = parsedQuestions?['subjective'] ?? const [];
+        _droppedQuestionCount = droppedQuestionCount;
+        _references =
+            _parseReferences(raw['references'], forceAiOrigin: true);
         _hasGenerated = true;
         if (_lessonStatus == 'draft') _lessonStatus = 'generated';
         _configExpanded = false;
@@ -1123,6 +1345,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       _reviewController.clear();
 
       if (mounted) {
+        // Show persistent undo banner after regeneration.
+        setState(() => _showRegenerationBanner = true);
         if (!questionsEnabled) {
           showInfoToast(
             context: context,
@@ -1141,9 +1365,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             message: 'Lesson saved — $droppedQuestionCount question(s) '
                 'were invalid and skipped.',
           );
-        } else {
-          showInfoToast(
-              context: context, message: 'Lesson regenerated successfully!');
         }
       }
     } catch (e) {
@@ -1275,6 +1496,263 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         .toList();
   }
 
+  /// Safely parses a `references` value (from the AI response or stored
+  /// lesson content) into a list of {text, origin} maps. Malformed or
+  /// missing input never throws and defaults to an empty list.
+  ///
+  /// When [forceAiOrigin] is true (AI response), every entry is labeled
+  /// 'ai' so generated references are never presented without a label.
+  /// When false (stored content), stored origins are preserved and
+  /// sanitized to 'teacher' or 'ai'.
+  List<Map<String, dynamic>> _parseReferences(
+    dynamic raw, {
+    bool forceAiOrigin = false,
+  }) {
+    if (raw is! List) return const [];
+    final result = <Map<String, dynamic>>[];
+    try {
+      for (final entry in raw) {
+        if (entry is! Map) continue;
+        final map = Map<String, dynamic>.from(entry);
+        final text =
+            (map['text'] ?? map['title'] ?? '').toString().trim();
+        if (text.isEmpty) continue;
+        var origin = map['origin']?.toString().trim().toLowerCase();
+        if (origin != 'teacher' && origin != 'ai') {
+          origin = 'ai';
+        }
+        result.add({
+          'text': text,
+          'origin': forceAiOrigin ? 'ai' : origin,
+        });
+      }
+    } catch (_) {
+      return const [];
+    }
+    return result;
+  }
+
+  // ── Stage 3: Question editing / deletion ────────────────────────
+
+  /// Schedules a debounced autosave (500ms) after a question edit or
+  /// deletion. Only fires while the lesson is unlocked and has a persisted
+  /// row; repeated edits cancel the previous pending save so the final
+  /// save always reflects the current in-memory state.
+  void _scheduleQuestionAutosave() {
+    if (!_isUnlocked || _lessonId == null || !_hasGenerated) return;
+    _questionAutosaveTimer?.cancel();
+    _questionAutosaveTimer = Timer(const Duration(milliseconds: 500), () {
+      _questionAutosaveTimer = null;
+      if (!mounted) return;
+      _saveLesson(notify: false);
+    });
+  }
+
+  void _updateMcq(int index, String field, String value) {
+    if (index < 0 || index >= _mcqs.length) return;
+    setState(() {
+      _mcqs[index][field] = value;
+    });
+    _scheduleQuestionAutosave();
+  }
+
+  void _updateMcqOption(int index, String optionKey, String value) {
+    if (index < 0 || index >= _mcqs.length) return;
+    setState(() {
+      final options = Map<String, String>.from(
+          _mcqs[index]['options'] as Map? ?? {});
+      options[optionKey] = value;
+      _mcqs[index]['options'] = options;
+    });
+    _scheduleQuestionAutosave();
+  }
+
+  void _updateTheory(int index, String field, String value) {
+    if (index < 0 || index >= _theoryQuestions.length) return;
+    setState(() {
+      _theoryQuestions[index][field] = value;
+    });
+    _scheduleQuestionAutosave();
+  }
+
+  /// Subjective questions store the answer under both `answer` (legacy)
+  /// and `modelAnswer` (normalized) — keep them in sync when the shared
+  /// card edits `modelAnswer`.
+  void _updateSubjective(int index, String field, String value) {
+    if (index < 0 || index >= _subjectiveQuestions.length) return;
+    setState(() {
+      _subjectiveQuestions[index][field] = value;
+      if (field == 'modelAnswer') {
+        _subjectiveQuestions[index]['answer'] = value;
+      }
+    });
+    _scheduleQuestionAutosave();
+  }
+
+  /// Removes a question from the in-memory list; the saved lesson content
+  /// is updated on the next save.
+  void _deleteMcq(int index) {
+    if (index < 0 || index >= _mcqs.length) return;
+    setState(() {
+      _mcqs.removeAt(index);
+    });
+    _scheduleQuestionAutosave();
+  }
+
+  void _deleteTheory(int index) {
+    if (index < 0 || index >= _theoryQuestions.length) return;
+    setState(() {
+      _theoryQuestions.removeAt(index);
+    });
+    _scheduleQuestionAutosave();
+  }
+
+  void _deleteSubjective(int index) {
+    if (index < 0 || index >= _subjectiveQuestions.length) return;
+    setState(() {
+      _subjectiveQuestions.removeAt(index);
+    });
+    _scheduleQuestionAutosave();
+  }
+
+  // ── Stage 3: References panel ───────────────────────────────────
+
+  /// Builds the "linked scheme-of-work name and week" reference text, or
+  /// null when the lesson is not linked to a scheme.
+  String? _buildSchemeReference() {
+    final schemeId = _schemeOfWorkLocalId;
+    if (schemeId == null) return null;
+    final scheme = _schemes.where((s) => s.id == schemeId).firstOrNull;
+    final topic = scheme?.adminEditedTopic ?? scheme?.topic;
+    final base = '$_subject Scheme of Work — Week $_week';
+    if (topic != null && topic.trim().isNotEmpty) {
+      return '$base: ${topic.trim()}';
+    }
+    return base;
+  }
+
+  /// Shows the References bottom sheet. While the lesson is still locked
+  /// the sheet opens in read-only mode: references can be viewed but not
+  /// added or removed.
+  void _showReferencesSheet() {
+    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final topic = _topicController.text.trim();
+    final readOnly = !_isUnlocked;
+    // Priority order: (1) linked scheme, (2) source topic when manually
+    // entered, then (3) stored AI / teacher references.
+    final schemeReference = _buildSchemeReference();
+    final topicReference = (!_isFromSchemeOfWork && topic.isNotEmpty)
+        ? topic
+        : null;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => _ReferencesSheet(
+        cs: cs,
+        theme: theme,
+        schemeReference: schemeReference,
+        topicReference: topicReference,
+        references: List<Map<String, dynamic>>.from(_references),
+        readOnly: readOnly,
+        onAddReference: (text) {
+          setState(() {
+            _references.add({'text': text, 'origin': 'teacher'});
+          });
+        },
+        onRemoveReference: (index) {
+          setState(() {
+            if (index >= 0 && index < _references.length) {
+              _references.removeAt(index);
+            }
+          });
+        },
+      ),
+    );
+  }
+
+  // ── Stage 4: Visible sections preferences ───────────────────────
+
+  /// Returns the SharedPreferences key for a visible-section toggle, scoped
+  /// per teacher (`<teacherId>_lesson_visible_...`). Falls back to the
+  /// unscoped key when no teacher ID is known yet, which is a safe default
+  /// (one shared preference set for anonymous / not-yet-loaded sessions).
+  String _visibleSectionPrefKey(String baseKey) {
+    final teacherId = _teacherId;
+    return (teacherId == null || teacherId.isEmpty)
+        ? baseKey
+        : '${teacherId}_$baseKey';
+  }
+
+  /// Loads the per-teacher visible-section preferences. Defaults are all
+  /// OFF (sections hidden) when nothing has been saved yet.
+  Future<void> _loadVisibleSectionPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      setState(() {
+        _visibleVocabulary =
+            prefs.getBool(_visibleSectionPrefKey('lesson_visible_vocabulary')) ??
+                false;
+        _visibleMaterials =
+            prefs.getBool(_visibleSectionPrefKey('lesson_visible_materials')) ??
+                false;
+        _visibleSuggestedImages =
+            prefs.getBool(
+                  _visibleSectionPrefKey('lesson_visible_suggested_images'),
+                ) ??
+                false;
+      });
+    } catch (_) {
+      // Preferences unavailable — keep the defaults (sections hidden).
+    }
+  }
+
+  /// Persists a single visible-section toggle. Never touches the lesson
+  /// content JSON.
+  Future<void> _persistVisibleSection(String key, bool value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(key, value);
+    } catch (_) {
+      // Non-fatal: the toggle still applies for this session.
+    }
+  }
+
+  /// Opens the bottom sheet where the teacher picks which optional sections
+  /// (Vocabulary, Materials, Suggested Images / Diagrams) appear in the
+  /// lesson document.
+  void _showVisibleSectionsSheet() {
+    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => _VisibleSectionsSheet(
+        cs: cs,
+        theme: theme,
+        visibleVocabulary: _visibleVocabulary,
+        visibleMaterials: _visibleMaterials,
+        visibleSuggestedImages: _visibleSuggestedImages,
+        onVocabularyChanged: (v) {
+          setState(() => _visibleVocabulary = v);
+          _persistVisibleSection(
+              _visibleSectionPrefKey('lesson_visible_vocabulary'), v);
+        },
+        onMaterialsChanged: (v) {
+          setState(() => _visibleMaterials = v);
+          _persistVisibleSection(
+              _visibleSectionPrefKey('lesson_visible_materials'), v);
+        },
+        onSuggestedImagesChanged: (v) {
+          setState(() => _visibleSuggestedImages = v);
+          _persistVisibleSection(
+              _visibleSectionPrefKey('lesson_visible_suggested_images'), v);
+        },
+      ),
+    );
+  }
+
   String _formatJson(dynamic obj) {
     if (obj == null) return '';
     if (obj is Map) {
@@ -1300,6 +1778,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             'theory': _theoryQuestions,
             'subjective': _subjectiveQuestions,
           },
+        if (_references.isNotEmpty) 'references': _references,
         if (_diagramResults.isNotEmpty) 'diagrams': _diagramResults,
       };
       final topic = _topicController.text.trim();
@@ -1417,6 +1896,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           term: termLabel != null ? Value(termLabel) : const Value.absent(),
         ),
       );
+      // Remember the new lesson ID so undo and subsequent saves work.
+      _lessonId = id;
 
       // Queue sync entry
       final lessonContent = jsonEncode(content);
@@ -1687,11 +2168,372 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       _mcqs = [];
       _theoryQuestions = [];
       _subjectiveQuestions = [];
+      _droppedQuestionCount = 0;
+      _references = [];
       _hasGenerated = false;
       _schemeOfWorkLocalId = null;
       _isFromSchemeOfWork = false;
       _isManualTopicEntry = true;
     });
+  }
+
+  // ── Regeneration undo snapshot ──────────────────────────────────
+
+  /// Snapshot all six content sections + questions + diagrams to a local
+  /// JSON file so the teacher can undo a regeneration.
+  Future<void> _snapshotForUndo() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/lesson_undo_${_lessonId}.json');
+      final snapshot = <String, dynamic>{
+        'objectives': _objectivesText,
+        'vocabulary': _vocabularyText,
+        'materials': _materialsText,
+        'presentation': _presentationText,
+        'assessment': _assessmentText,
+        'homework': _homeworkText,
+        'questions': {
+          'mcqs': _mcqs,
+          'theory': _theoryQuestions,
+          'subjective': _subjectiveQuestions,
+        },
+        'diagrams': _diagramResults,
+        'assessmentFormat': _assessmentFormat,
+        'difficulty': _difficulty,
+        'bloomsVerbs': _selectedBlooms.join(', '),
+      };
+      await file.writeAsString(jsonEncode(snapshot));
+      _regenerationSnapshotPath = file.path;
+    } catch (_) {
+      // Snapshot failure is non-fatal — regeneration proceeds without undo.
+    }
+  }
+
+  /// Restore the content from the undo snapshot, save the lesson, then
+  /// delete the snapshot file.
+  Future<void> _restoreFromUndo() async {
+    if (_regenerationSnapshotPath == null) return;
+    try {
+      final file = File(_regenerationSnapshotPath!);
+      if (!await file.exists()) return;
+      final snapshot =
+          jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      setState(() {
+        _objectivesText = snapshot['objectives'] as String? ?? '';
+        _objectivesController.text = _objectivesText;
+        _vocabularyText = snapshot['vocabulary'] as String? ?? '';
+        _vocabularyController.text = _vocabularyText;
+        _materialsText = snapshot['materials'] as String? ?? '';
+        _materialsController.text = _materialsText;
+        _presentationText = snapshot['presentation'] as String? ?? '';
+        _presentationController.text = _presentationText;
+        _parsePresentationSubSections();
+        _assessmentText = snapshot['assessment'] as String? ?? '';
+        _assessmentController.text = _assessmentText;
+        _homeworkText = snapshot['homework'] as String? ?? '';
+        _homeworkController.text = _homeworkText;
+        _mcqs = _castQuestionList(
+            (snapshot['questions'] as Map<String, dynamic>?)?['mcqs']);
+        _theoryQuestions = _castQuestionList(
+            (snapshot['questions'] as Map<String, dynamic>?)?['theory']);
+        _subjectiveQuestions = _castQuestionList(
+            (snapshot['questions'] as Map<String, dynamic>?)?['subjective']);
+        _diagramResults = (snapshot['diagrams'] as List<dynamic>? ?? [])
+            .whereType<Map>()
+            .map((m) => Map<String, dynamic>.from(m))
+            .toList();
+        _showRegenerationBanner = false;
+        _previewRevision++;
+      });
+      await _saveLesson(notify: false);
+      try {
+        await file.delete();
+      } catch (_) {}
+      _regenerationSnapshotPath = null;
+      if (mounted) {
+        showInfoToast(context: context, message: 'Lesson restored from undo.');
+      }
+    } catch (_) {
+      if (mounted) {
+        showErrorToast(context: context, message: 'Undo failed.');
+      }
+    }
+  }
+
+  // ── Stage 2: Homework regeneration ──────────────────────────
+
+  Future<void> _snapshotHomework() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/lesson_hw_undo_${_lessonId}.json');
+      await file.writeAsString(jsonEncode({'homework': _homeworkText}));
+      _homeworkSnapshotPath = file.path;
+    } catch (_) {}
+  }
+
+  Future<void> _handleRegenerateHomework() async {
+    if (_lessonId == null) return;
+    setState(() => _isRegeneratingHomework = true);
+    try {
+      // Snapshot the current homework in memory before overwriting it. This
+      // is the authoritative source for Undo; the file snapshot below is
+      // only a persistence fallback.
+      _homeworkBeforeRegeneration = _homeworkText;
+      await _snapshotHomework();
+      final db = ref.read(databaseProvider);
+      final topic = _topicController.text.trim();
+      final prompt = 'Regenerate only the Homework section for a lesson on '
+          '"$topic" in $_subject, $_classLevel, Week $_week. '
+          'Return a JSON object with a "homework" key containing the homework text.';
+      final result = widget.generateCallback != null
+          ? await widget.generateCallback!(prompt)
+          : await AiService(db: db).generate(prompt);
+      final raw = result['raw'] as Map<String, dynamic>? ?? result;
+      final newHomework = raw['homework'] as String? ?? '';
+      if (newHomework.isNotEmpty && mounted) {
+        setState(() {
+          _homeworkText = newHomework;
+          _homeworkController.text = _homeworkText;
+          _previewRevision++;
+        });
+        await _saveLesson(notify: false);
+        // Show the persistent undo banner only after the regenerated
+        // homework has actually been saved.
+        if (mounted) {
+          setState(() => _showHomeworkRegenerationBanner = true);
+        }
+      }
+      if (mounted) {
+        showInfoToast(context: context, message: 'Homework regenerated.');
+      }
+    } catch (e) {
+      if (mounted) {
+        showErrorToast(context: context, message: 'Homework regeneration failed: $e');
+      }
+    } finally {
+      if (mounted) setState(() => _isRegeneratingHomework = false);
+    }
+  }
+
+  /// Restore the previous homework, save the lesson, then delete the
+  /// snapshot. The in-memory snapshot ([_homeworkBeforeRegeneration]) is the
+  /// authoritative source; the snapshot file is a secondary fallback. Called
+  /// from the persistent undo banner.
+  Future<void> _restoreHomeworkUndo() async {
+    // Always hide the banner immediately, even when there is nothing to
+    // restore.
+    if (mounted) setState(() => _showHomeworkRegenerationBanner = false);
+
+    // Restore from the in-memory snapshot first; fall back to the file.
+    String? oldHomework = _homeworkBeforeRegeneration;
+    if (oldHomework == null && _homeworkSnapshotPath != null) {
+      try {
+        final file = File(_homeworkSnapshotPath!);
+        if (await file.exists()) {
+          final snapshot =
+              jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+          oldHomework = snapshot['homework'] as String? ?? '';
+        }
+      } catch (_) {
+        oldHomework = null;
+      }
+    }
+
+    if (oldHomework != null) {
+      // Bind to a non-null local so the value is promoted inside the
+      // setState closure (oldHomework is written in the catch block above,
+      // which defeats flow analysis promotion for captured variables).
+      final restoredText = oldHomework ?? '';
+      if (mounted) {
+        setState(() {
+          _homeworkText = restoredText;
+          _homeworkController.text = restoredText;
+          _previewRevision++;
+        });
+        await _saveLesson(notify: false);
+      }
+      if (mounted) {
+        showInfoToast(
+            context: context, message: 'Homework restored from undo.');
+      }
+    } else if (mounted) {
+      showInfoToast(context: context, message: 'Nothing to undo.');
+    }
+
+    // Delete the snapshot file (if any) and clear both snapshot sources.
+    if (_homeworkSnapshotPath != null) {
+      try {
+        final file = File(_homeworkSnapshotPath!);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (_) {}
+    }
+    _homeworkSnapshotPath = null;
+    _homeworkBeforeRegeneration = null;
+  }
+
+  /// Deletes the homework undo snapshot file and clears the stored path.
+  /// Called when the banner is dismissed; also covered by
+  /// [_cleanupUndoSnapshot] on dispose / back navigation.
+  void _deleteHomeworkSnapshot() {
+    if (_homeworkSnapshotPath == null) return;
+    try {
+      final file = File(_homeworkSnapshotPath!);
+      if (file.existsSync()) {
+        file.deleteSync();
+      }
+    } catch (_) {}
+    _homeworkSnapshotPath = null;
+  }
+
+  // ── Entry screen: Lesson details bottom sheet ────────────────────
+
+  void _showLessonDetailsSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => _LessonDetailsSheet(
+        subject: _subject,
+        classLevel: _classLevel,
+        week: _week,
+        subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
+        classLevels: _classLevels,
+        schemes: _schemes,
+        schemeOfWorkLocalId: _schemeOfWorkLocalId,
+        isFromSchemeOfWork: _isFromSchemeOfWork,
+        isManualTopicEntry: _isManualTopicEntry,
+        onSubjectChanged: (v) {
+          setState(() => _subject = v);
+          _loadSchemesForContext();
+        },
+        onClassChanged: (v) {
+          setState(() => _classLevel = v);
+          _loadSchemesForContext();
+        },
+        onWeekChanged: (v) => setState(() => _week = v),
+        onSchemeOfWorkSelected: _onSchemeOfWorkSelected,
+        onManualTopicSelected: _onManualTopicSelected,
+      ),
+    );
+  }
+
+  // ── Entry screen skeleton for new blank lessons ──────────────
+
+  Widget _buildEntryScreenSkeleton(ColorScheme cs, ThemeData theme) {
+    final topicEmpty = _topicController.text.trim().isEmpty;
+    final canCreate = !topicEmpty && _isOnline && !_isGenerating;
+    String? disabledReason;
+    if (topicEmpty) {
+      disabledReason = null; // no reason text, just disabled
+    } else if (!_isOnline) {
+      disabledReason =
+          "You\u2019re offline \u2014 connect to the internet to generate a lesson.";
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 32),
+        Text(
+          'Lesson topic',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: cs.onSurface,
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _topicController,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: InputDecoration(
+            hintText: 'e.g., Introduction to Fractions',
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+            ),
+            filled: true,
+            fillColor: cs.surfaceBright,
+          ),
+          style: theme.textTheme.bodyLarge?.copyWith(color: cs.onSurface),
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 16),
+        // Compact context line
+        InkWell(
+          onTap: _showLessonDetailsSheet,
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Tooltip(
+                    message: '$_subject \u00b7 $_classLevel \u00b7 Week $_week',
+                    child: Text(
+                      '$_subject \u00b7 $_classLevel \u00b7 Week $_week',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded,
+                    size: 18, color: cs.onSurfaceVariant),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        // Create button
+        SizedBox(
+          width: double.infinity,
+          height: AppTheme.touchTarget,
+          child: FilledButton.icon(
+            onPressed: canCreate ? _handleGenerate : null,
+            style: FilledButton.styleFrom(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+              ),
+            ),
+            icon: _isGenerating
+                ? SizedBox(
+                    height: 22,
+                    width: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: cs.onPrimary,
+                    ),
+                  )
+                : const Icon(Icons.auto_awesome_rounded),
+            label: Text(
+              _isGenerating ? 'Generating...' : 'Create lesson',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+        if (disabledReason != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              disabledReason,
+              style: theme.textTheme.bodySmall?.copyWith(color: cs.error),
+            ),
+          ),
+      ],
+    );
   }
 
   Widget _buildConfigArea({required Widget child}) {
@@ -1779,8 +2621,42 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     _presentationController.dispose();
     _assessmentController.dispose();
     _homeworkController.dispose();
+    _introController.dispose();
+    _devController.dispose();
+    _conclusionController.dispose();
     _undoController.dispose();
+    _questionAutosaveTimer?.cancel();
+    // Clean up undo snapshot file and banner on navigation away.
+    _cleanupUndoSnapshot();
+    // Also clear the in-memory homework undo snapshot.
+    _homeworkBeforeRegeneration = null;
     super.dispose();
+  }
+
+  /// Delete the undo snapshot file if it exists and clear the banner.
+  void _cleanupUndoSnapshot() {
+    _showRegenerationBanner = false;
+    if (_regenerationSnapshotPath != null) {
+      try {
+        final file = File(_regenerationSnapshotPath!);
+        if (file.existsSync()) {
+          file.deleteSync();
+        }
+      } catch (_) {}
+      _regenerationSnapshotPath = null;
+    }
+    // Also clean up homework snapshot.
+    if (_homeworkSnapshotPath != null) {
+      try {
+        final file = File(_homeworkSnapshotPath!);
+        if (file.existsSync()) {
+          file.deleteSync();
+        }
+      } catch (_) {}
+      _homeworkSnapshotPath = null;
+    }
+    // Also clear the in-memory homework snapshot.
+    _homeworkBeforeRegeneration = null;
   }
 
   // ── Nav item data class ──────────────────────────────────────────────
@@ -1804,6 +2680,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
+    final showEntryScreen =
+        widget.lessonId == null && !_hasGenerated && !_isGenerating;
 
     // Read-only summary of the stored structured assessment questions.
     final questionSummary =
@@ -1819,7 +2697,16 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         const SingleActivator(LogicalKeyboardKey.keyY, control: true):
             _undoController.redo,
       },
-      child: Scaffold(
+      child: PopScope(
+        canPop: true,
+        // Clean up the undo snapshot file + banner whenever the route pops
+        // (back button, system back, or explicit Navigator.pop). dispose()
+        // cleanup alone is not enough — the banner state must be cleared
+        // before the route is removed.
+        onPopInvokedWithResult: (didPop, result) {
+          _cleanupUndoSnapshot();
+        },
+        child: Scaffold(
       backgroundColor: cs.surface,
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1868,7 +2755,84 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                               sidebarOpen: _editorSidebarOpen,
                               undoController: _undoController,
                             ),
-                            if (_schemeOfWorkLocalId != null)
+                            // ── Entry screen for new blank lessons ──
+                            if (showEntryScreen)
+                              Padding(
+                                padding: EdgeInsets.all(
+                                  isWide
+                                      ? AppTheme.spacingMarginTablet
+                                      : AppTheme.spacingMarginMobile,
+                                ),
+                                child: _buildEntryScreenSkeleton(cs, theme),
+                              ),
+                            // ── Legacy settings note ──────────────
+                            if (_legacySettingsNote != null)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                                child: MaterialBanner(
+                                  content: Text(_legacySettingsNote!),
+                                  leading: Icon(Icons.info_outline,
+                                      color: cs.primary, size: 20),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          setState(() => _legacySettingsNote = null),
+                                      child: const Text('Dismiss'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            // ── Regeneration undo banner ──────────
+                            if (_showRegenerationBanner && _lessonId != null)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                                child: MaterialBanner(
+                                  content: const Text('Lesson regenerated.'),
+                                  leading: Icon(Icons.check_circle_outline,
+                                      color: cs.primary, size: 20),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: _restoreFromUndo,
+                                      child: const Text('Undo'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => setState(
+                                          () => _showRegenerationBanner = false),
+                                      child: const Text('Dismiss'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            // ── Homework regeneration undo banner ──
+                            if (_showHomeworkRegenerationBanner &&
+                                _lessonId != null)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                                child: MaterialBanner(
+                                  content: const Text('Homework regenerated.'),
+                                  leading: Icon(Icons.check_circle_outline,
+                                      color: cs.primary, size: 20),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: _restoreHomeworkUndo,
+                                      child: const Text('Undo'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () {
+                                        setState(() {
+                                          _showHomeworkRegenerationBanner =
+                                              false;
+                                        });
+                                        // Dismissing also discards the
+                                        // undo snapshot.
+                                        _deleteHomeworkSnapshot();
+                                      },
+                                      child: const Text('Dismiss'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            if (!showEntryScreen && _schemeOfWorkLocalId != null)
                               Padding(
                                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                                 child: _LinkedSchemeBanner(
@@ -1881,7 +2845,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                               ),
 
                             // ── Two-column layout ───────────────────
-                            if (_sourceMissing)
+                            if (!showEntryScreen && _sourceMissing)
                               Padding(
                                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                                 child: Container(
@@ -1898,6 +2862,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                   ),
                                 ),
                               ),
+                            if (!showEntryScreen)
                             Padding(
                               padding: EdgeInsets.all(
                                 isWide
@@ -1968,6 +2933,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                                     subscriptionTier: _subscriptionTier,
                                                     includeDiagrams: _includeDiagrams,
                                                     onIncludeDiagramsChanged: (v) => setState(() => _includeDiagrams = v),
+                                                    onShowReferences: _showReferencesSheet,
                                                   ),
                                             ),
                                           ),
@@ -1990,10 +2956,12 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                               onRegenerateDiagram: _generateSuggestedImage,
                                               objectivesController: _objectivesController,
                                               vocabularyController: _vocabularyController,
-                                              materialsController: _materialsController,
-                                              presentationController: _presentationController,
-                                              assessmentController: _assessmentController,
-                                              homeworkController: _homeworkController,
+                                              materialsController: _materialsController,                                               presentationController: _presentationController,
+                                               introController: _introController,
+                                               devController: _devController,
+                                               conclusionController: _conclusionController,
+                                               assessmentController: _assessmentController,
+                                               homeworkController: _homeworkController,
                                               questionSummary: questionSummary,
                                               reviewController: _reviewController,
                                               undoController: _undoController,
@@ -2003,10 +2971,45 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                               onRegenerate: _isUnlocked ? _handleRegenerate : null,
                                               lessonStatus: _lessonStatus,
                                               onMarkCompleted: _isUnlocked ? _handleMarkCompleted : null,
-                                              onToggleComplete: _isUnlocked ? _handleToggleComplete : null,
-                                              onExportPdf: _hasGenerated ? _handleExportPdf : null,
-                                              isExporting: _isExporting,
-                                            ),
+                                              onToggleComplete: _isUnlocked ? _handleToggleComplete : null,                                               onExportPdf: _hasGenerated ? _handleExportPdf : null,
+                                               isExporting: _isExporting,
+                                               assessmentFormat: _assessmentFormat,
+                                               onAssessmentFormatChanged: (v) => setState(() => _assessmentFormat = v),
+                                               mcqs: _mcqs,
+                                               theoryQuestions: _theoryQuestions,
+                                               subjectiveQuestions: _subjectiveQuestions,
+                                               droppedQuestionCount: _droppedQuestionCount,
+                                               onUpdateMcq: _updateMcq,
+                                               onUpdateMcqOption: _updateMcqOption,
+                                               onUpdateTheory: _updateTheory,
+                                               onUpdateSubjective: _updateSubjective,
+                                               onDeleteMcq: _deleteMcq,
+                                               onDeleteTheory: _deleteTheory,
+                                               onDeleteSubjective: _deleteSubjective,
+                                               difficulty: _difficulty,
+                                               onDifficultyChanged: (v) => setState(() => _difficulty = v),
+                                               selectedBlooms: _selectedBlooms,
+                                               onBloomToggled: (v) {
+                                                 setState(() {
+                                                   if (_selectedBlooms.contains(v)) {
+                                                     _selectedBlooms.remove(v);
+                                                   } else {
+                                                     _selectedBlooms.add(v);
+                                                   }
+                                                 });
+                                               },
+                                               bloomVerbs: _bloomVerbs,
+                                               includeDiagrams: _includeDiagrams,
+                                               onIncludeDiagramsChanged: (v) => setState(() => _includeDiagrams = v),
+                                               onShowUpgradeRequired: _showUpgradeRequiredDialog,
+                                               onShowReferences: _showReferencesSheet,
+                                               onRegenerateHomework: _handleRegenerateHomework,
+                                               isRegeneratingHomework: _isRegeneratingHomework,
+                                               visibleVocabulary: _visibleVocabulary,
+                                               visibleMaterials: _visibleMaterials,
+                                               visibleSuggestedImages: _visibleSuggestedImages,
+                                               onShowVisibleSections: _showVisibleSectionsSheet,
+                                             ),
                                           ),
                                         ],
                                       )
@@ -2066,6 +3069,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                               subscriptionTier: _subscriptionTier,
                                               includeDiagrams: _includeDiagrams,
                                               onIncludeDiagramsChanged: (v) => setState(() => _includeDiagrams = v),
+                                              onShowReferences: _showReferencesSheet,
                                             ),
                                           ),
                                           const SizedBox(height: 24),
@@ -2087,6 +3091,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                             vocabularyController: _vocabularyController,
                                             materialsController: _materialsController,
                                             presentationController: _presentationController,
+                                            introController: _introController,
+                                            devController: _devController,
+                                            conclusionController: _conclusionController,
                                             assessmentController: _assessmentController,
                                             homeworkController: _homeworkController,
                                             questionSummary: questionSummary,
@@ -2097,10 +3104,45 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                             onDiscard: _discard,
                                             onRegenerate: _isUnlocked ? _handleRegenerate : null,
                                             lessonStatus: _lessonStatus,
-                                            onMarkCompleted: _isUnlocked ? _handleMarkCompleted : null,
-                                            onExportPdf: _hasGenerated ? _handleExportPdf : null,
-                                            isExporting: _isExporting,
-                                          ),
+                                            onMarkCompleted: _isUnlocked ? _handleMarkCompleted : null,                                             onExportPdf: _hasGenerated ? _handleExportPdf : null,
+                                             isExporting: _isExporting,
+                                             assessmentFormat: _assessmentFormat,
+                                             onAssessmentFormatChanged: (v) => setState(() => _assessmentFormat = v),
+                                             mcqs: _mcqs,
+                                             theoryQuestions: _theoryQuestions,
+                                             subjectiveQuestions: _subjectiveQuestions,
+                                             droppedQuestionCount: _droppedQuestionCount,
+                                             onUpdateMcq: _updateMcq,
+                                             onUpdateMcqOption: _updateMcqOption,
+                                             onUpdateTheory: _updateTheory,
+                                             onUpdateSubjective: _updateSubjective,
+                                             onDeleteMcq: _deleteMcq,
+                                             onDeleteTheory: _deleteTheory,
+                                             onDeleteSubjective: _deleteSubjective,
+                                             difficulty: _difficulty,
+                                             onDifficultyChanged: (v) => setState(() => _difficulty = v),
+                                             selectedBlooms: _selectedBlooms,
+                                             onBloomToggled: (v) {
+                                               setState(() {
+                                                 if (_selectedBlooms.contains(v)) {
+                                                   _selectedBlooms.remove(v);
+                                                 } else {
+                                                   _selectedBlooms.add(v);
+                                                 }
+                                               });
+                                             },
+                                             bloomVerbs: _bloomVerbs,
+                                             includeDiagrams: _includeDiagrams,
+                                             onIncludeDiagramsChanged: (v) => setState(() => _includeDiagrams = v),
+                                             onShowUpgradeRequired: _showUpgradeRequiredDialog,
+                                             onShowReferences: _showReferencesSheet,
+                                             onRegenerateHomework: _handleRegenerateHomework,
+                                             isRegeneratingHomework: _isRegeneratingHomework,
+                                             visibleVocabulary: _visibleVocabulary,
+                                             visibleMaterials: _visibleMaterials,
+                                             visibleSuggestedImages: _visibleSuggestedImages,
+                                             onShowVisibleSections: _showVisibleSectionsSheet,
+                                           ),
                                         ],
                                       ),
                               ),
@@ -2119,6 +3161,286 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           ),
         ],
       ),
+      ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Lesson details bottom sheet (entry screen)
+// ═══════════════════════════════════════════════════════════════════════
+class _LessonDetailsSheet extends StatefulWidget {
+  final String subject;
+  final String classLevel;
+  final int week;
+  final List<String> subjects;
+  final List<String> classLevels;
+  final List<SchemeOfWorkData> schemes;
+  final int? schemeOfWorkLocalId;
+  final bool isFromSchemeOfWork;
+  final bool isManualTopicEntry;
+  final ValueChanged<String> onSubjectChanged;
+  final ValueChanged<String> onClassChanged;
+  final ValueChanged<int> onWeekChanged;
+  final ValueChanged<SchemeOfWorkData?> onSchemeOfWorkSelected;
+  final VoidCallback onManualTopicSelected;
+
+  const _LessonDetailsSheet({
+    required this.subject,
+    required this.classLevel,
+    required this.week,
+    required this.subjects,
+    required this.classLevels,
+    required this.schemes,
+    this.schemeOfWorkLocalId,
+    required this.isFromSchemeOfWork,
+    required this.isManualTopicEntry,
+    required this.onSubjectChanged,
+    required this.onClassChanged,
+    required this.onWeekChanged,
+    required this.onSchemeOfWorkSelected,
+    required this.onManualTopicSelected,
+  });
+
+  @override
+  State<_LessonDetailsSheet> createState() => _LessonDetailsSheetState();
+}
+
+class _LessonDetailsSheetState extends State<_LessonDetailsSheet> {
+  late String _subject;
+  late String _classLevel;
+  late int _week;
+
+  @override
+  void initState() {
+    super.initState();
+    _subject = widget.subject;
+    _classLevel = widget.classLevel;
+    _week = widget.week;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Lesson details',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Subject dropdown
+          Text('Subject',
+              style: theme.textTheme.labelMedium
+                  ?.copyWith(color: cs.onSurfaceVariant)),
+          const SizedBox(height: 4),
+          Container(
+            height: AppTheme.touchTarget,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+              border: Border.all(color: cs.outline),
+              color: cs.surfaceBright,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _subject,
+                isExpanded: true,
+                items: widget.subjects
+                    .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) {
+                    setState(() => _subject = v);
+                    widget.onSubjectChanged(v);
+                  }
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Class dropdown
+          Text('Class',
+              style: theme.textTheme.labelMedium
+                  ?.copyWith(color: cs.onSurfaceVariant)),
+          const SizedBox(height: 4),
+          Container(
+            height: AppTheme.touchTarget,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+              border: Border.all(color: cs.outline),
+              color: cs.surfaceBright,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _classLevel,
+                isExpanded: true,
+                items: widget.classLevels
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) {
+                    setState(() => _classLevel = v);
+                    widget.onClassChanged(v);
+                  }
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Week stepper
+          Text('Week',
+              style: theme.textTheme.labelMedium
+                  ?.copyWith(color: cs.onSurfaceVariant)),
+          const SizedBox(height: 4),
+          Container(
+            height: AppTheme.touchTarget,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+              border: Border.all(color: cs.outline),
+              color: cs.surfaceBright,
+            ),
+            child: Row(
+              children: [
+                InkWell(
+                  onTap: _week > 1
+                      ? () {
+                          setState(() => _week--);
+                          widget.onWeekChanged(_week);
+                        }
+                      : null,
+                  child: Container(
+                    width: 44,
+                    height: AppTheme.touchTarget,
+                    alignment: Alignment.center,
+                    child: Icon(Icons.remove_rounded, size: 18,
+                        color: _week > 1 ? cs.onSurfaceVariant : cs.outlineVariant),
+                  ),
+                ),
+                Expanded(
+                  child: Center(
+                    child: Text('$_week',
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.w600)),
+                  ),
+                ),
+                InkWell(
+                  onTap: _week < 52
+                      ? () {
+                          setState(() => _week++);
+                          widget.onWeekChanged(_week);
+                        }
+                      : null,
+                  child: Container(
+                    width: 44,
+                    height: AppTheme.touchTarget,
+                    alignment: Alignment.center,
+                    child: Icon(Icons.add_rounded, size: 18,
+                        color: _week < 52 ? cs.onSurfaceVariant : cs.outlineVariant),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Scheme topic selector
+          Text('Scheme topic',
+              style: theme.textTheme.labelMedium
+                  ?.copyWith(color: cs.onSurfaceVariant)),
+          const SizedBox(height: 4),
+          if (widget.schemes.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'No scheme topics available for this subject and class.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            )
+          else
+            Container(
+              height: AppTheme.touchTarget,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                border: Border.all(color: cs.outline),
+                color: cs.surfaceBright,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: widget.isFromSchemeOfWork && widget.schemeOfWorkLocalId != null
+                      ? widget.schemeOfWorkLocalId.toString()
+                      : '__manual__',
+                  isExpanded: true,
+                  items: [
+                    DropdownMenuItem(
+                      value: '__manual__',
+                      child: Text(
+                        'Write a new topic',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: cs.onSurface,
+                        ),
+                      ),
+                    ),
+                    ...widget.schemes.map((s) {
+                      final displayTopic = s.adminEditedTopic ?? s.topic;
+                      return DropdownMenuItem(
+                        value: s.id.toString(),
+                        child: Tooltip(
+                          message: 'Week ${s.weekNumber}: $displayTopic',
+                          child: Text(
+                            'Week ${s.weekNumber}: $displayTopic',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: cs.onSurface,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                  onChanged: (id) {
+                    if (id == null || id == '__manual__') {
+                      widget.onManualTopicSelected();
+                    } else {
+                      final scheme = widget.schemes
+                          .where((s) => s.id.toString() == id)
+                          .firstOrNull;
+                      if (scheme != null) {
+                        widget.onSchemeOfWorkSelected(scheme);
+                      }
+                    }
+                  },
+                ),
+              ),
+            ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            height: AppTheme.touchTarget,
+            child: FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Done'),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2702,6 +4024,9 @@ class _ConfigColumn extends StatelessWidget {
   final ValueChanged<SchemeOfWorkData?> onSchemeOfWorkSelected;
   final VoidCallback onManualTopicSelected;
 
+  /// Stage 3: opens the References panel (only shown after generation).
+  final VoidCallback? onShowReferences;
+
   const _ConfigColumn({
     required this.cs,
     required this.theme,
@@ -2735,6 +4060,7 @@ class _ConfigColumn extends StatelessWidget {
     required this.subscriptionTier,
     required this.includeDiagrams,
     this.onIncludeDiagramsChanged,
+    this.onShowReferences,
   });
 
   @override
@@ -2749,32 +4075,24 @@ class _ConfigColumn extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Subject + Class row
-              Row(
-                children: [
-                  Expanded(
-                    child: _StyledDropdown<String>(
-                      cs: cs,
-                      theme: theme,
-                      label: 'Subject',
-                      onAddNewSubject: onAddNewSubject,
-                      value: subject,
-                      items: subjects,
-                      onChanged: onSubjectChanged,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _StyledDropdown<String>(
-                      cs: cs,
-                      theme: theme,
-                      label: 'Class',
-                      value: classLevel,
-                      items: classLevels,
-                      onChanged: onClassChanged,
-                    ),
-                  ),
-                ],
+              // Subject + Class (stacked vertically for small screens)
+              _StyledDropdown<String>(
+                cs: cs,
+                theme: theme,
+                label: 'Subject',
+                onAddNewSubject: onAddNewSubject,
+                value: subject,
+                items: subjects,
+                onChanged: onSubjectChanged,
+              ),
+              const SizedBox(height: 16),
+              _StyledDropdown<String>(
+                cs: cs,
+                theme: theme,
+                label: 'Class',
+                value: classLevel,
+                items: classLevels,
+                onChanged: onClassChanged,
               ),
               const SizedBox(height: 16),
               // Topics dropdown
@@ -2883,6 +4201,20 @@ class _ConfigColumn extends StatelessWidget {
                   ),
                 ],
               ),
+              // References button near the lesson title (Stage 3) — only
+              // shown after generation.
+              if (hasGenerated && onShowReferences != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: OutlinedButton.icon(
+                    onPressed: onShowReferences,
+                    icon: const Icon(Icons.menu_book_outlined, size: 16),
+                    label: const Text('References'),
+                    style: OutlinedButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -3021,6 +4353,9 @@ class _PreviewColumn extends StatelessWidget {
   final TextEditingController vocabularyController;
   final TextEditingController materialsController;
   final TextEditingController presentationController;
+  final TextEditingController introController;
+  final TextEditingController devController;
+  final TextEditingController conclusionController;
   final TextEditingController assessmentController;
   final TextEditingController homeworkController;
   final String? questionSummary;
@@ -3035,6 +4370,43 @@ class _PreviewColumn extends StatelessWidget {
   final VoidCallback? onToggleComplete;
   final VoidCallback? onExportPdf;
   final bool isExporting;
+  // Stage 2: Assessment
+  final String assessmentFormat;
+  final ValueChanged<String>? onAssessmentFormatChanged;
+  final List<Map<String, dynamic>> mcqs;
+  final List<Map<String, dynamic>> theoryQuestions;
+  final List<Map<String, dynamic>> subjectiveQuestions;
+  // Stage 3: question editing / deletion callbacks + dropped-count note
+  final void Function(int index, String field, String value)? onUpdateMcq;
+  final void Function(int index, String optionKey, String value)?
+      onUpdateMcqOption;
+  final void Function(int index, String field, String value)? onUpdateTheory;
+  final void Function(int index, String field, String value)?
+      onUpdateSubjective;
+  final ValueChanged<int>? onDeleteMcq;
+  final ValueChanged<int>? onDeleteTheory;
+  final ValueChanged<int>? onDeleteSubjective;
+  final int droppedQuestionCount;
+  // Stage 2: Advanced settings
+  final String difficulty;
+  final ValueChanged<String>? onDifficultyChanged;
+  final Set<String> selectedBlooms;
+  final ValueChanged<String>? onBloomToggled;
+  final List<String> bloomVerbs;
+  final bool includeDiagrams;
+  final ValueChanged<bool>? onIncludeDiagramsChanged;
+  final VoidCallback? onShowUpgradeRequired;
+  // Stage 3: References (opens the references bottom sheet; read-only
+  // while the lesson is still locked)
+  final VoidCallback? onShowReferences;
+  // Stage 2: Homework
+  final VoidCallback? onRegenerateHomework;
+  final bool isRegeneratingHomework;
+  // Stage 4: visible-section preferences + settings sheet opener
+  final bool visibleVocabulary;
+  final bool visibleMaterials;
+  final bool visibleSuggestedImages;
+  final VoidCallback? onShowVisibleSections;
 
   const _PreviewColumn({
     super.key,
@@ -3054,6 +4426,9 @@ class _PreviewColumn extends StatelessWidget {
     required this.vocabularyController,
     required this.materialsController,
     required this.presentationController,
+    required this.introController,
+    required this.devController,
+    required this.conclusionController,
     required this.assessmentController,
     required this.homeworkController,
     this.questionSummary,
@@ -3068,6 +4443,40 @@ class _PreviewColumn extends StatelessWidget {
     this.onToggleComplete,
     this.onExportPdf,
     this.isExporting = false,
+    // Stage 2: Assessment
+    this.assessmentFormat = 'Both',
+    this.onAssessmentFormatChanged,
+    this.mcqs = const [],
+    this.theoryQuestions = const [],
+    this.subjectiveQuestions = const [],
+    // Stage 3: question editing / deletion callbacks + dropped-count note
+    this.onUpdateMcq,
+    this.onUpdateMcqOption,
+    this.onUpdateTheory,
+    this.onUpdateSubjective,
+    this.onDeleteMcq,
+    this.onDeleteTheory,
+    this.onDeleteSubjective,
+    this.droppedQuestionCount = 0,
+    // Stage 2: Advanced settings
+    this.difficulty = 'medium',
+    this.onDifficultyChanged,
+    this.selectedBlooms = const {},
+    this.onBloomToggled,
+    this.bloomVerbs = const [],
+    this.includeDiagrams = false,
+    this.onIncludeDiagramsChanged,
+    this.onShowUpgradeRequired,
+    // Stage 3: References
+    this.onShowReferences,
+    // Stage 2: Homework
+    this.onRegenerateHomework,
+    this.isRegeneratingHomework = false,
+    // Stage 4: visible-section preferences + settings sheet opener
+    this.visibleVocabulary = false,
+    this.visibleMaterials = false,
+    this.visibleSuggestedImages = false,
+    this.onShowVisibleSections,
   });
 
   @override
@@ -3187,6 +4596,15 @@ class _PreviewColumn extends StatelessWidget {
                     ),
                   ),
                 ),
+                // Stage 4: choose which optional sections appear.
+                if (onShowVisibleSections != null)
+                  IconButton(
+                    onPressed: onShowVisibleSections,
+                    icon: const Icon(Icons.settings_rounded, size: 20),
+                    color: cs.onSurfaceVariant,
+                    tooltip: 'Visible sections',
+                    visualDensity: VisualDensity.compact,
+                  ),
               ],
             ),
           ),
@@ -3227,7 +4645,22 @@ class _PreviewColumn extends StatelessWidget {
                         color: cs.onSurfaceVariant,
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
+                    if (onShowReferences != null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: onShowReferences,
+                          icon: const Icon(
+                              Icons.menu_book_outlined, size: 16),
+                          label: const Text('View References'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: cs.tertiary,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 4),
                     SizedBox(
                       width: double.infinity,
                       height: AppTheme.touchTarget,
@@ -3250,16 +4683,30 @@ class _PreviewColumn extends StatelessWidget {
               ),
             ),
 
-          // ── Locked preview (brief draft preview) ───────────────
+          // ── Locked preview (full content, read-only) ────────────
           if (hasGenerated && !isUnlocked)
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildLockedPreviewCard('Objectives', objectivesController.text),
-                  const SizedBox(height: 12),
-                  _buildLockedPreviewCard('Presentation', presentationController.text),
+                  _buildLockedPreviewSection('Objectives', objectivesController.text),
+                  if (visibleVocabulary)
+                    _buildLockedPreviewSection(
+                        'Vocabulary', vocabularyController.text),
+                  if (visibleMaterials)
+                    _buildLockedPreviewSection('Materials', materialsController.text),
+                  _buildLockedPreviewSection('Presentation', presentationController.text,
+                      introController: introController,
+                      devController: devController,
+                      conclusionController: conclusionController),
+                  _buildLockedPreviewSection('Assessment', assessmentController.text),
+                  _buildLockedPreviewSection('Homework', homeworkController.text),
+                  // ── Suggested Images section (Stage 4) — read-only in
+                  // the locked preview; the same default-collapsed
+                  // _DocumentSection used in the unlocked document.
+                  if (visibleSuggestedImages)
+                    _buildSuggestedImagesSection(context, readOnly: true),
                 ],
               ),
             ),
@@ -3305,28 +4752,35 @@ class _PreviewColumn extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildPreviewCard('Objectives', objectivesController,
+                  // ── Collapsible document sections ──────────────
+                  _buildCollapsibleSection(
+                    title: 'Objectives',
+                    controller: objectivesController,
+                    readOnly: !isUnlocked,
+                    undoController: undoController,
+                  ),
+                  if (visibleVocabulary)
+                    _buildCollapsibleSection(
+                      title: 'Vocabulary',
+                      controller: vocabularyController,
+                      readOnly: !isUnlocked,
+                      undoController: undoController,
+                    ),
+                  if (visibleMaterials)
+                    _buildCollapsibleSection(
+                      title: 'Materials',
+                      controller: materialsController,
+                      readOnly: !isUnlocked,
+                      undoController: undoController,
+                    ),
+                  _buildPresentationSection(
                     readOnly: !isUnlocked,
                   ),
-                  const SizedBox(height: 12),
-                  _buildPreviewCard('Vocabulary', vocabularyController,
-                    readOnly: !isUnlocked,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildPreviewCard('Materials', materialsController,
-                    readOnly: !isUnlocked,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildPreviewCard('Presentation', presentationController,
-                    readOnly: !isUnlocked,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildPreviewCard('Assessment', assessmentController,
-                    readOnly: !isUnlocked,
-                  ),
+                  // ── Assessment section (Stage 2) ────────────
+                  _buildAssessmentSection(),
                   if (questionSummary != null)
                     Padding(
-                      padding: const EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                       child: Text(
                         questionSummary!,
                         style: theme.textTheme.labelMedium?.copyWith(
@@ -3334,160 +4788,15 @@ class _PreviewColumn extends StatelessWidget {
                         ),
                       ),
                     ),
-                  const SizedBox(height: 12),
-                  _buildPreviewCard('Homework', homeworkController,
-                    readOnly: !isUnlocked,
-                  ),
+                  // ── Homework section (Stage 2) ───────────────
+                  _buildHomeworkSection(),
+                  // ── Advanced settings panel (Stage 2) ──────
+                  if (isUnlocked)
+                    _buildAdvancedSettingsPanel(),
 
-                  // ── Diagram Previews ─────────────────────────────
-                  if (diagramResults.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4, bottom: 8),
-                      child: Text(
-                        'Suggested Images',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: cs.onSurface,
-                        ),
-                      ),
-                    ),
-                    ...diagramResults.asMap().entries.map((entry) {
-                      final index = entry.key;
-                      final suggestion = entry.value;
-                      final desc = suggestion['description'] as String? ?? '';
-                      final imageUrl = suggestion['imageUrl'] as String?;
-                      final error = suggestion['error'] as String?;
-                      final isElite = subscriptionTier.toLowerCase() == 'elite';
-                      final isGeneratingThisItem = generatingDiagramIndex == index;
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Card(
-                          margin: EdgeInsets.zero,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                            side: BorderSide(
-                              color: cs.outlineVariant.withValues(alpha: 0.4),
-                            ),
-                          ),
-                          color: cs.surfaceBright,
-                          clipBehavior: Clip.antiAlias,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                                child: Text(
-                                  'Suggestion ${index + 1}',
-                                  style: theme.textTheme.labelMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: cs.onSurfaceVariant,
-                                  ),
-                                ),
-                              ),
-                              if (desc.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                                  child: Text(
-                                    desc,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: cs.onSurfaceVariant,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              const SizedBox(height: 8),
-                              if (imageUrl != null)
-                                GestureDetector(
-                                  onTap: () => _openDiagramViewer(
-                                    context,
-                                    imageUrl,
-                                    desc: desc,
-                                  ),
-                                  child: DiagramImage(url: imageUrl),
-                                )
-                              else if (error != null)
-                                Padding(
-                                  padding: const EdgeInsets.all(32),
-                                  child: Center(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.error_outline,
-                                            size: 40, color: cs.error),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          error,
-                                          style: theme.textTheme.bodySmall?.copyWith(
-                                            color: cs.error),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              // Generate button for this suggestion
-                              if (onRegenerateDiagram != null) ...[
-                                const Divider(height: 1),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  child: SizedBox(
-                                    width: double.infinity,
-                                    height: 40,
-                                    child: isElite
-                                        ? FilledButton.icon(
-                                            onPressed: !isGeneratingDiagrams &&
-                                                    !isGeneratingThisItem
-                                                ? () => onRegenerateDiagram!(index)
-                                                : null,
-                                            icon: isGeneratingThisItem
-                                                ? SizedBox(
-                                                    height: 16,
-                                                    width: 16,
-                                                    child: CircularProgressIndicator(
-                                                      strokeWidth: 2,
-                                                      color: cs.onPrimary,
-                                                    ),
-                                                  )
-                                                : const Icon(
-                                                    Icons.auto_awesome_rounded,
-                                                    size: 16,
-                                                  ),
-                                            label: Text(
-                                              isGeneratingThisItem
-                                                  ? 'Generating...'
-                                                  : 'Generate Image',
-                                              style: theme.textTheme.labelSmall?.copyWith(
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          )
-                                        : Tooltip(
-                                            message: 'Upgrade to Elite to generate images',
-                                            child: FilledButton.icon(
-                                              onPressed: null,
-                                              icon: const Icon(
-                                                Icons.lock_rounded,
-                                                size: 16,
-                                              ),
-                                              label: Text(
-                                                'Generate Image',
-                                                style: theme.textTheme.labelSmall?.copyWith(
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      );
-                    }),
-                  ],
+                  // ── Suggested Images section (Stage 4) ───────
+                  if (visibleSuggestedImages)
+                    _buildSuggestedImagesSection(context),
 
                   // ── Review & Regenerate ────────────────────────
                   if (onRegenerate != null) ...[
@@ -3603,8 +4912,10 @@ class _PreviewColumn extends StatelessWidget {
           if (hasGenerated)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   OutlinedButton(
                     onPressed: onDiscard,
@@ -3616,12 +4927,11 @@ class _PreviewColumn extends StatelessWidget {
                       padding:
                           const EdgeInsets.symmetric(horizontal: 24),
                       minimumSize:
-                          const Size(100, AppTheme.touchTarget),
+                          const Size(80, AppTheme.touchTarget),
                     ),
                     child: const Text('Discard'),
                   ),
-                  if (onExportPdf != null) ...[
-                    const SizedBox(width: 12),
+                  if (onExportPdf != null)
                     OutlinedButton.icon(
                       onPressed: isExporting ? null : onExportPdf,
                       style: OutlinedButton.styleFrom(
@@ -3648,9 +4958,7 @@ class _PreviewColumn extends StatelessWidget {
                           : const Icon(Icons.picture_as_pdf_rounded, size: 20),
                       label: Text(isExporting ? 'Exporting...' : 'Export PDF'),
                     ),
-                  ],
-                  if (onToggleComplete != null) ...[
-                    const SizedBox(width: 12),
+                  if (onToggleComplete != null)
                     FilledButton.tonalIcon(
                       onPressed: onToggleComplete,
                       style: FilledButton.styleFrom(
@@ -3671,8 +4979,6 @@ class _PreviewColumn extends StatelessWidget {
                               ? 'Mark Draft'
                               : 'Mark Completed'),
                     ),
-                  ],
-                  const SizedBox(width: 12),
                   FilledButton(
                     onPressed: lessonStatus == 'completed'
                         ? null
@@ -3770,6 +5076,42 @@ class _PreviewColumn extends StatelessWidget {
     );
   }
 
+  /// Renders list-style content (Objectives, Vocabulary, Materials) as a
+  /// bulleted list — each line prefixed with a bullet. Display-only: the
+  /// stored text is never modified.
+  Widget _renderBulletedList(String content) {
+    final lines = content
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    if (lines.isEmpty) {
+      return Text(
+        'No content yet.',
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: cs.onSurfaceVariant,
+        ),
+      );
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final line in lines)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              '\u2022 $line',
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: cs.onSurface,
+                height: 1.5,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   /// Render markdown heading lines (starting with ##) as bold text.
   /// Other lines are rendered as normal body text with paragraph spacing.
   Widget _renderMarkdownContent(String content) {
@@ -3819,13 +5161,15 @@ class _PreviewColumn extends StatelessWidget {
         // Blank line = paragraph break
         widgets.add(const SizedBox(height: 8));
       } else {
-        // Normal body text
+        // Normal body text — bodyLarge with a comfortable line height so
+        // the lesson reads like a document, not a form.
         widgets.add(Padding(
           padding: const EdgeInsets.only(bottom: 4.0),
           child: Text(
             line,
-            style: theme.textTheme.bodyMedium?.copyWith(
+            style: theme.textTheme.bodyLarge?.copyWith(
               color: cs.onSurface,
+              height: 1.5,
             ),
           ),
         ));
@@ -3848,119 +5192,692 @@ class _PreviewColumn extends StatelessWidget {
     );
   }
 
-  Widget _buildLockedPreviewCard(String title, String content) {
-    // Show first 2 sentences with maxLines:5 ellipsis
-    final sentences = content
-        .split(RegExp(r'(?<=[.!?])\s+'))
-        .take(2)
-        .join(' ');
-    final displayText = sentences.isNotEmpty ? sentences : content;
-    return Card(
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-        side: BorderSide(
-          color: cs.outlineVariant.withValues(alpha: 0.4),
-        ),
+  /// Presentation section with Introduction / Development / Conclusion
+  /// rendered as labeled document sub-headings below the section header.
+  Widget _buildPresentationSection({
+    required bool readOnly,
+  }) {
+    final sections = [
+      ('Introduction', introController),
+      ('Development', devController),
+      ('Conclusion', conclusionController),
+    ];
+    return _DocumentSection(
+      title: 'Presentation',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: sections.map((entry) {
+          final (label, controller) = entry;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                if (readOnly)
+                  _renderMarkdownContent(controller.text)
+                else
+                  _buildDocumentTextField(
+                    controller,
+                    undoController: undoController,
+                    minLines: 3,
+                    hintText: '$label content...',
+                  ),
+              ],
+            ),
+          );
+        }).toList(),
       ),
-      color: cs.surfaceBright,
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: cs.onSurface,
+    );
+  }
+
+  // ── Stage 2: Assessment section ───────────────────────────────
+
+  bool get _isAssessmentTierBlocked {
+    final tier = subscriptionTier.toLowerCase();
+    return tier != 'standard' && tier != 'elite';
+  }
+
+  String get _assessmentSummary {
+    switch (assessmentFormat) {
+      case 'MCQ':
+        return '${mcqs.length} MCQ';
+      case 'Theory':
+        return '${theoryQuestions.length} Theory';
+      case 'Subjective':
+        return '${subjectiveQuestions.length} Subjective';
+      default: // 'Both'
+        return '${mcqs.length} MCQ \u00b7 ${theoryQuestions.length} Theory';
+    }
+  }
+
+  Widget _buildAssessmentSection() {
+    return _DocumentSection(
+      title: 'Assessment',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+        // Stage 3: non-blocking note when some generated questions were
+        // invalid and dropped during validation.
+        if (droppedQuestionCount > 0)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline_rounded,
+                      size: 18, color: cs.tertiary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "Some generated questions didn't meet quality checks "
+                      'and were skipped.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
+          ),
+        if (_isAssessmentTierBlocked) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.lock_rounded, size: 18, color: cs.tertiary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Upgrade to Standard or Elite to view assessment questions.',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: cs.onSurface,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (onShowUpgradeRequired != null)
+                  SizedBox(
+                    width: double.infinity,
+                    height: AppTheme.touchTarget,
+                    child: FilledButton.icon(
+                      onPressed: onShowUpgradeRequired,
+                      icon: const Icon(Icons.upgrade_rounded, size: 18),
+                      label: const Text('Request Upgrade'),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ] else ...[
+          // Assessment format control
+          if (onAssessmentFormatChanged != null) ...[
+            _buildFormatControl(),
             const SizedBox(height: 8),
             Text(
-              displayText,
-              maxLines: 5,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodyMedium?.copyWith(
+              _assessmentSummary,
+              style: theme.textTheme.labelMedium?.copyWith(
                 color: cs.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.lock_rounded, size: 14, color: cs.tertiary),
-                const SizedBox(width: 4),
-                Text(
-                  'Full content visible after unlock',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: cs.tertiary,
-                    fontStyle: FontStyle.italic,
+          ],
+          // Question cards
+          ..._buildQuestionCards(),
+        ],
+      ],
+    ),
+  );
+  }
+
+  Widget _buildFormatControl() {
+    final options = ['MCQ', 'Theory', 'Both', 'Subjective'];
+    return Container(
+      height: AppTheme.touchTarget,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(color: cs.outline),
+        color: cs.surfaceBright,
+      ),
+      padding: const EdgeInsets.all(4),
+      child: Row(
+        children: List.generate(options.length * 2 - 1, (index) {
+          if (index.isOdd) {
+            return Container(
+              width: 1,
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              color: cs.outlineVariant.withValues(alpha: 0.5),
+            );
+          }
+          final i = index ~/ 2;
+          final option = options[i];
+          final isSelected = option == assessmentFormat;
+          return Expanded(
+            child: InkWell(
+              onTap: () => onAssessmentFormatChanged?.call(option),
+              borderRadius: BorderRadius.circular(AppTheme.radiusLg - 2),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? cs.secondaryContainer
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusLg - 2),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  option,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                    color: isSelected
+                        ? cs.onSecondaryContainer
+                        : cs.onSurfaceVariant,
                   ),
                 ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  List<Widget> _buildQuestionCards() {
+    final widgets = <Widget>[];
+    // MCQs
+    for (int i = 0; i < mcqs.length; i++) {
+      widgets.add(McqQuestionCard(
+        index: i,
+        mcq: mcqs[i],
+        cs: cs,
+        theme: theme,
+        undoController: undoController,
+        onUpdateMcq: onUpdateMcq,
+        onUpdateMcqOption: onUpdateMcqOption,
+        onDelete: onDeleteMcq != null ? () => onDeleteMcq!(i) : null,
+      ));
+    }
+    // Theory
+    for (int i = 0; i < theoryQuestions.length; i++) {
+      widgets.add(TheoryQuestionCard(
+        index: i,
+        question: theoryQuestions[i],
+        cs: cs,
+        theme: theme,
+        undoController: undoController,
+        onUpdateTheory: onUpdateTheory,
+        onDelete: onDeleteTheory != null ? () => onDeleteTheory!(i) : null,
+      ));
+    }
+    // Subjective
+    for (int i = 0; i < subjectiveQuestions.length; i++) {
+      widgets.add(TheoryQuestionCard(
+        index: i,
+        question: subjectiveQuestions[i],
+        cs: cs,
+        theme: theme,
+        undoController: undoController,
+        onUpdateTheory: onUpdateSubjective,
+        onDelete: onDeleteSubjective != null
+            ? () => onDeleteSubjective!(i)
+            : null,
+      ));
+    }
+    if (mcqs.isEmpty && theoryQuestions.isEmpty && subjectiveQuestions.isEmpty) {
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            'No questions generated yet.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+        ),
+      );
+    }
+    return widgets;
+  }
+
+  // ── Stage 2: Advanced settings panel ─────────────────────────
+
+  Widget _buildAdvancedSettingsPanel() {
+    return _DocumentSection(
+      title: 'Advanced Settings',
+      icon: Icons.tune_rounded,
+      initiallyExpanded: false,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+        // Difficulty
+        if (onDifficultyChanged != null) ...[
+          _SegmentedControl(
+            cs: cs,
+            theme: theme,
+            label: 'Difficulty',
+            options: const ['Easy', 'Medium', 'Hard'],
+            value: difficulty[0].toUpperCase() + difficulty.substring(1),
+            onChanged: (v) => onDifficultyChanged!(v.toLowerCase()),
+          ),
+          const SizedBox(height: 16),
+        ],
+        // Bloom's
+        if (onBloomToggled != null) ...[
+          _BloomChipsSection(
+            cs: cs,
+            theme: theme,
+            bloomVerbs: bloomVerbs,
+            selectedBlooms: selectedBlooms,
+            onToggle: onBloomToggled!,
+          ),
+          const SizedBox(height: 16),
+        ],
+        // Auto-generate images (Elite only)
+        if (onIncludeDiagramsChanged != null) ...[
+          const Divider(height: 1),
+          const SizedBox(height: 8),
+          if (subscriptionTier.toLowerCase() == 'elite')
+            CheckboxListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              visualDensity: VisualDensity.compact,
+              title: Text(
+                'Auto-generate first image',
+                style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurface),
+              ),
+              subtitle: Text(
+                'Automatically create the first suggested image after lesson generation',
+                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+              value: includeDiagrams,
+              onChanged: (v) {
+                if (v != null) onIncludeDiagramsChanged!(v);
+              },
+              controlAffinity: ListTileControlAffinity.leading,
+            )
+          else
+            ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.image_outlined, color: cs.onSurfaceVariant, size: 20),
+              title: Text(
+                'Auto-generate first image',
+                style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+              ),
+              subtitle: Text(
+                'Upgrade to Elite to auto-generate lesson images.',
+                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+            ),
+        ],
+      ],
+    ),
+  );
+  }
+
+  // ── Stage 2: Homework section ────────────────────────────────
+
+  Widget _buildHomeworkSection() {
+    return _DocumentSection(
+      title: 'Homework',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+        if (!isUnlocked)
+          _renderMarkdownContent(homeworkController.text)
+        else ...[
+          _buildDocumentTextField(
+            homeworkController,
+            undoController: undoController,
+            minLines: 4,
+          ),
+          const SizedBox(height: 8),
+          if (onRegenerateHomework != null)
+            SizedBox(
+              width: double.infinity,
+              height: 40,
+              child: OutlinedButton.icon(
+                onPressed: isRegeneratingHomework ? null : onRegenerateHomework,
+                icon: isRegeneratingHomework
+                    ? SizedBox(
+                        height: 16, width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
+                      )
+                    : Icon(Icons.refresh_rounded, size: 16, color: cs.primary),
+                label: Text(
+                  isRegeneratingHomework ? 'Regenerating...' : 'Regenerate homework only',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: cs.primary,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: cs.primary.withValues(alpha: 0.5)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ],
+    ),
+  );
+  }
+
+  /// Suggested Images as a collapsible document section. Closed by default
+  /// and only rendered when the teacher enabled the section in the "Visible
+  /// sections" sheet. Shows an empty state when no images were generated.
+  /// When [readOnly] is true (locked preview) the Generate Image action is
+  /// hidden and the section is purely informational.
+  Widget _buildSuggestedImagesSection(
+    BuildContext context, {
+    bool readOnly = false,
+  }) {
+    return _DocumentSection(
+      title: 'Suggested Images',
+      icon: Icons.image_outlined,
+      initiallyExpanded: false,
+      child: diagramResults.isEmpty
+          ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text(
+                'No images generated yet.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            )
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ...diagramResults.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final suggestion = entry.value;
+                  final desc = suggestion['description'] as String? ?? '';
+                  final imageUrl = suggestion['imageUrl'] as String?;
+                  final error = suggestion['error'] as String?;
+                  final isElite = subscriptionTier.toLowerCase() == 'elite';
+                  final isGeneratingThisItem = generatingDiagramIndex == index;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Card(
+                      margin: EdgeInsets.zero,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                        side: BorderSide(
+                          color: cs.outlineVariant.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      color: cs.surfaceBright,
+                      clipBehavior: Clip.antiAlias,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                            child: Text(
+                              'Suggestion ${index + 1}',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                          if (desc.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                              child: Text(
+                                desc,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          const SizedBox(height: 8),
+                          if (imageUrl != null)
+                            GestureDetector(
+                              onTap: () => _openDiagramViewer(
+                                context,
+                                imageUrl,
+                                desc: desc,
+                              ),
+                              child: DiagramImage(url: imageUrl),
+                            )
+                          else if (error != null)
+                            Padding(
+                              padding: const EdgeInsets.all(32),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.error_outline,
+                                      size: 40, color: cs.error),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    error,
+                                    style: theme.textTheme.bodySmall
+                                        ?.copyWith(color: cs.error),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          // Generate button for this suggestion (hidden in
+                          // the read-only locked preview).
+                          if (!readOnly && onRegenerateDiagram != null) ...[
+                            const Divider(height: 1),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              child: SizedBox(
+                                width: double.infinity,
+                                height: 40,
+                                child: isElite
+                                    ? FilledButton.icon(
+                                        onPressed: !isGeneratingDiagrams &&
+                                                !isGeneratingThisItem
+                                            ? () => onRegenerateDiagram!(index)
+                                            : null,
+                                        icon: isGeneratingThisItem
+                                            ? SizedBox(
+                                                height: 16,
+                                                width: 16,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  color: cs.onPrimary,
+                                                ),
+                                              )
+                                            : const Icon(
+                                                Icons.auto_awesome_rounded,
+                                                size: 16,
+                                              ),
+                                        label: Text(
+                                          isGeneratingThisItem
+                                              ? 'Generating...'
+                                              : 'Generate Image',
+                                          style: theme.textTheme.labelSmall
+                                              ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      )
+                                    : Tooltip(
+                                        message:
+                                            'Upgrade to Elite to generate images',
+                                        child: FilledButton.icon(
+                                          onPressed: null,
+                                          icon: const Icon(
+                                            Icons.lock_rounded,
+                                            size: 16,
+                                          ),
+                                          label: Text(
+                                            'Generate Image',
+                                            style: theme.textTheme.labelSmall
+                                                ?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
               ],
             ),
-          ],
+    );
+  }
+
+  /// Collapsible section for the continuous document skeleton.
+  Widget _buildCollapsibleSection({
+    required String title,
+    required TextEditingController controller,
+    required bool readOnly,
+    UndoHistoryController? undoController,
+  }) {
+    return _DocumentSection(
+      title: title,
+      child: readOnly
+          ? (title == 'Objectives' ||
+                    title == 'Vocabulary' ||
+                    title == 'Materials'
+                ? _renderBulletedList(controller.text)
+                : _renderMarkdownContent(controller.text))
+          : _buildDocumentTextField(
+              controller,
+              undoController: undoController,
+              minLines: 4,
+            ),
+    );
+  }
+
+  /// Editable body field shared by the continuous document sections.
+  Widget _buildDocumentTextField(
+    TextEditingController controller, {
+    UndoHistoryController? undoController,
+    int minLines = 4,
+    String? hintText,
+  }) {
+    return TextFormField(
+      controller: controller,
+      undoController: undoController,
+      maxLines: null,
+      minLines: minLines,
+      decoration: InputDecoration(
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          borderSide: BorderSide(color: cs.outlineVariant),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          borderSide: BorderSide(
+            color: cs.outlineVariant.withValues(alpha: 0.5),
+          ),
+        ),
+        contentPadding: const EdgeInsets.all(12),
+        hintText: hintText ?? 'No content yet.',
+        hintStyle: theme.textTheme.bodySmall?.copyWith(
+          color: cs.onSurfaceVariant.withValues(alpha: 0.5),
         ),
       ),
     );
   }
 
-  Widget _buildPreviewCard(
+  /// Full-content locked preview section (no truncation) styled like the
+  /// continuous document. When [introController], [devController],
+  /// [conclusionController] are provided for Presentation, the labeled
+  /// sub-sections are rendered as document sub-headings.
+  Widget _buildLockedPreviewSection(
     String title,
-    TextEditingController controller, {
-    bool readOnly = false,
+    String content, {
+    TextEditingController? introController,
+    TextEditingController? devController,
+    TextEditingController? conclusionController,
   }) {
-    return Card(
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-        side: BorderSide(
-          color: cs.outlineVariant.withValues(alpha: 0.4),
-        ),
-      ),
-      color: cs.surfaceBright,
-      clipBehavior: Clip.antiAlias,
-      child: ListTile(
-        contentPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-        title: Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Text(
-            title,
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: cs.onSurface,
-            ),
-          ),
-        ),
-        subtitle: readOnly
-            ? _renderMarkdownContent(controller.text)
-            : TextFormField(
-                controller: controller,
-                undoController: undoController,
-                maxLines: 6,
-                decoration: InputDecoration(
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                    borderSide: BorderSide(color: cs.outlineVariant),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                    borderSide: BorderSide(
-                      color: cs.outlineVariant.withValues(alpha: 0.5),
+    // For Presentation, render labeled sub-sections.
+    if (title == 'Presentation' &&
+        introController != null &&
+        devController != null &&
+        conclusionController != null) {
+      final subs = [
+        ('Introduction', introController.text),
+        ('Development', devController.text),
+        ('Conclusion', conclusionController.text),
+      ];
+      final hasAny = subs.any((s) => s.$2.trim().isNotEmpty);
+      if (!hasAny) return const SizedBox.shrink();
+      return _DocumentSection(
+        title: title,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: subs.where((s) => s.$2.trim().isNotEmpty).map((entry) {
+            final (label, text) = entry;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurfaceVariant,
                     ),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
-                  ),
-                  hintText: 'No content yet. Tap Generate first.',
-                  hintStyle: theme.textTheme.bodySmall?.copyWith(
-                    color: cs.onSurfaceVariant.withValues(alpha: 0.5),
-                  ),
-                ),
+                  const SizedBox(height: 2),
+                  _renderMarkdownContent(text),
+                ],
               ),
-      ),
+            );
+          }).toList(),
+        ),
+      );
+    }
+    if (content.trim().isEmpty) return const SizedBox.shrink();
+    return _DocumentSection(
+      title: title,
+      child: (title == 'Objectives' ||
+              title == 'Vocabulary' ||
+              title == 'Materials')
+          ? _renderBulletedList(content)
+          : _renderMarkdownContent(content),
     );
   }
 
@@ -3971,6 +5888,520 @@ class _PreviewColumn extends StatelessWidget {
       return 'Unlock \u2014 $remainingDailyPreviews previews left';
     }
     return 'Unlock for 1 Offline Credit';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Collapsible document section (continuous lesson document)
+// ═══════════════════════════════════════════════════════════════════════
+/// A collapsible section header used to make the generated lesson read as
+/// one continuous document instead of a stack of boxed cards: a tappable
+/// header row (title + chevron) with plain body content below and only a
+/// subtle horizontal divider separating it from the next section. Collapse
+/// is animated with [AnimatedSize] — the body always keeps its intrinsic
+/// height so it stays safe inside a scroll view.
+class _DocumentSection extends StatefulWidget {
+  final String title;
+  final IconData? icon;
+  final Widget child;
+  final bool initiallyExpanded;
+
+  const _DocumentSection({
+    required this.title,
+    this.icon,
+    required this.child,
+    this.initiallyExpanded = true,
+  });
+
+  @override
+  State<_DocumentSection> createState() => _DocumentSectionState();
+}
+
+class _DocumentSectionState extends State<_DocumentSection> {
+  late bool _expanded;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = widget.initiallyExpanded;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Tappable header — plain row, no border, no filled background.
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: Row(
+              children: [
+                if (widget.icon != null) ...[
+                  Icon(widget.icon, size: 18, color: cs.onSurfaceVariant),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  child: Text(
+                    widget.title,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                ),
+                Icon(
+                  _expanded
+                      ? Icons.keyboard_arrow_up
+                      : Icons.keyboard_arrow_down,
+                  size: 22,
+                  color: cs.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
+        ),
+        // Collapsible body — animated but always finite intrinsic height.
+        ClipRect(
+          child: AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeInOut,
+            alignment: Alignment.topCenter,
+            child: _expanded
+                ? widget.child
+                : const SizedBox(width: double.infinity),
+          ),
+        ),
+        // Subtle divider between document sections.
+        const SizedBox(height: 12),
+        Divider(
+          height: 1,
+          color: cs.outlineVariant.withValues(alpha: 0.4),
+        ),
+      ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Visible sections bottom sheet (Stage 4)
+// ═══════════════════════════════════════════════════════════════════════
+/// Bottom sheet listing the optional lesson sections (Vocabulary, Materials,
+/// Suggested Images / Diagrams) with per-section toggles. Choices are
+/// persisted per teacher via SharedPreferences by the parent screen.
+class _VisibleSectionsSheet extends StatefulWidget {
+  final ColorScheme cs;
+  final ThemeData theme;
+  final bool visibleVocabulary;
+  final bool visibleMaterials;
+  final bool visibleSuggestedImages;
+  final ValueChanged<bool> onVocabularyChanged;
+  final ValueChanged<bool> onMaterialsChanged;
+  final ValueChanged<bool> onSuggestedImagesChanged;
+
+  const _VisibleSectionsSheet({
+    required this.cs,
+    required this.theme,
+    required this.visibleVocabulary,
+    required this.visibleMaterials,
+    required this.visibleSuggestedImages,
+    required this.onVocabularyChanged,
+    required this.onMaterialsChanged,
+    required this.onSuggestedImagesChanged,
+  });
+
+  @override
+  State<_VisibleSectionsSheet> createState() => _VisibleSectionsSheetState();
+}
+
+class _VisibleSectionsSheetState extends State<_VisibleSectionsSheet> {
+  late bool _vocabulary;
+  late bool _materials;
+  late bool _suggestedImages;
+
+  @override
+  void initState() {
+    super.initState();
+    _vocabulary = widget.visibleVocabulary;
+    _materials = widget.visibleMaterials;
+    _suggestedImages = widget.visibleSuggestedImages;
+  }
+
+  Widget _toggleTile({
+    required IconData icon,
+    required String title,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return SwitchListTile(
+      contentPadding: EdgeInsets.zero,
+      secondary: Icon(icon, color: widget.cs.onSurfaceVariant),
+      title: Text(
+        title,
+        style: widget.theme.textTheme.bodyMedium?.copyWith(
+          color: widget.cs.onSurface,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      value: value,
+      onChanged: onChanged,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = widget.cs;
+    final theme = widget.theme;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        16 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Visible sections',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSurface,
+                ),
+              ),
+              IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close_rounded),
+                color: cs.onSurfaceVariant,
+                tooltip: 'Close',
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Choose which sections appear in the lesson document.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _toggleTile(
+            icon: Icons.menu_book_outlined,
+            title: 'Vocabulary',
+            value: _vocabulary,
+            onChanged: (v) {
+              setState(() => _vocabulary = v);
+              widget.onVocabularyChanged(v);
+            },
+          ),
+          _toggleTile(
+            icon: Icons.inventory_2_outlined,
+            title: 'Materials',
+            value: _materials,
+            onChanged: (v) {
+              setState(() => _materials = v);
+              widget.onMaterialsChanged(v);
+            },
+          ),
+          _toggleTile(
+            icon: Icons.image_outlined,
+            title: 'Suggested Images / Diagrams',
+            value: _suggestedImages,
+            onChanged: (v) {
+              setState(() => _suggestedImages = v);
+              widget.onSuggestedImagesChanged(v);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// References bottom sheet (Stage 3)
+// ═══════════════════════════════════════════════════════════════════════
+/// Bottom sheet listing the source references for a generated lesson, in
+/// priority order: (1) linked scheme-of-work name + week, (2) the source
+/// topic, (3) stored AI-generated / teacher-entered references. Every item
+/// carries an origin label ("From scheme of work" / "Teacher entered" /
+/// "AI-generated"); AI-generated references are never shown unlabeled.
+class _ReferencesSheet extends StatefulWidget {
+  final ColorScheme cs;
+  final ThemeData theme;
+
+  /// Priority 1 — linked scheme-of-work name and week, or null.
+  final String? schemeReference;
+
+  /// Priority 2 — the source topic (manual entry), or null.
+  final String? topicReference;
+
+  /// Stored references ({text, origin}); origin is 'ai' or 'teacher'.
+  final List<Map<String, dynamic>> references;
+
+  /// When true (locked lesson), references can be viewed but not added or
+  /// removed: the remove buttons and the add-reference input are hidden.
+  final bool readOnly;
+
+  final ValueChanged<String> onAddReference;
+  final ValueChanged<int> onRemoveReference;
+
+  const _ReferencesSheet({
+    required this.cs,
+    required this.theme,
+    this.schemeReference,
+    this.topicReference,
+    required this.references,
+    this.readOnly = false,
+    required this.onAddReference,
+    required this.onRemoveReference,
+  });
+
+  @override
+  State<_ReferencesSheet> createState() => _ReferencesSheetState();
+}
+
+class _ReferencesSheetState extends State<_ReferencesSheet> {
+  final _controller = TextEditingController();
+  late final List<Map<String, dynamic>> _items;
+
+  @override
+  void initState() {
+    super.initState();
+    _items = List<Map<String, dynamic>>.from(widget.references);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String _originLabel(String origin) {
+    switch (origin) {
+      case 'scheme':
+        return 'From scheme of work';
+      case 'teacher':
+        return 'Teacher entered';
+      default:
+        return 'AI-generated';
+    }
+  }
+
+  void _addReference() {
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
+    widget.onAddReference(text);
+    setState(() {
+      _items.add({'text': text, 'origin': 'teacher'});
+      _controller.clear();
+    });
+  }
+
+  void _removeReference(int storedIndex) {
+    if (storedIndex < 0 || storedIndex >= _items.length) return;
+    widget.onRemoveReference(storedIndex);
+    setState(() {
+      _items.removeAt(storedIndex);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = widget.cs;
+    final theme = widget.theme;
+
+    // Build the display list in priority order. Only stored items
+    // (AI-generated / teacher-entered) are removable.
+    final displayItems =
+        <({String text, String origin, bool removable, int? storedIndex})>[];
+    final schemeRef = widget.schemeReference?.trim() ?? '';
+    final topicRef = widget.topicReference?.trim() ?? '';
+    if (schemeRef.isNotEmpty) {
+      displayItems.add(
+          (text: schemeRef, origin: 'scheme', removable: false, storedIndex: null));
+    }
+    if (topicRef.isNotEmpty) {
+      displayItems.add(
+          (text: topicRef, origin: 'teacher', removable: false, storedIndex: null));
+    }
+    var storedIndex = 0;
+    for (final item in _items) {
+      final text = (item['text'] ?? '').toString().trim();
+      if (text.isEmpty) continue;
+      final origin = (item['origin'] ?? 'ai').toString();
+      displayItems.add((
+        text: text,
+        origin: origin,
+        removable: !widget.readOnly,
+        storedIndex: storedIndex,
+      ));
+      storedIndex++;
+    }
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        16 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header with close button
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'References',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: cs.onSurface,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded),
+                  color: cs.onSurfaceVariant,
+                  tooltip: 'Close',
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Source references used for this lesson.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (displayItems.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                ),
+                child: Text(
+                  'No source references provided.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+              )
+            else
+              ...displayItems.map((item) {
+                return Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                    border: Border.all(
+                      color: cs.outlineVariant.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.book_outlined,
+                          size: 18, color: cs.primary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.text,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: cs.onSurface,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: cs.secondaryContainer
+                                    .withValues(alpha: 0.6),
+                                borderRadius:
+                                    BorderRadius.circular(AppTheme.radiusFull),
+                              ),
+                              child: Text(
+                                _originLabel(item.origin),
+                                style:
+                                    theme.textTheme.labelSmall?.copyWith(
+                                  color: cs.onSecondaryContainer,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (item.removable)
+                        IconButton(
+                          onPressed: () =>
+                              _removeReference(item.storedIndex ?? -1),
+                          icon: const Icon(Icons.close_rounded, size: 16),
+                          color: cs.onSurfaceVariant,
+                          tooltip: 'Remove reference',
+                          visualDensity: VisualDensity.compact,
+                        ),
+                    ],
+                  ),
+                );
+              }),
+            if (!widget.readOnly) ...[
+              const SizedBox(height: 12),
+              // Add a teacher-entered reference
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      decoration: InputDecoration(
+                        hintText: 'Add a reference (e.g. textbook, source)…',
+                        isDense: true,
+                        border: OutlineInputBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusLg),
+                          borderSide: BorderSide(color: cs.outlineVariant),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                      ),
+                      onSubmitted: (_) => _addReference(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton.filled(
+                    onPressed: _addReference,
+                    icon: const Icon(Icons.add_rounded),
+                    tooltip: 'Add reference',
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -4035,12 +6466,16 @@ class _BottomNavBar extends StatelessWidget {
                                 color: cs.onSecondaryContainer,
                               ),
                               const SizedBox(width: 6),
-                              Text(
-                                item.label,
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  color: cs.onSecondaryContainer,
-                                  fontSize: 11,
+                              Flexible(
+                                child: Text(
+                                  item.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color: cs.onSecondaryContainer,
+                                    fontSize: 11,
+                                  ),
                                 ),
                               ),
                             ],
@@ -4187,12 +6622,18 @@ class _StyledDropdown<T> extends StatelessWidget {
               ),
               items: [
                 ...items.map((item) {
+                  final label = item.toString();
                   return DropdownMenuItem(
                     value: item,
-                    child: Text(
-                      item.toString(),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: cs.onSurface,
+                    child: Tooltip(
+                      message: label,
+                      child: Text(
+                        label,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: cs.onSurface,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   );
@@ -4474,7 +6915,9 @@ class _BloomChipsSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Text(
               'Cognitive Objectives (Bloom\'s)',
@@ -4482,7 +6925,6 @@ class _BloomChipsSection extends StatelessWidget {
                 color: cs.onSurfaceVariant,
               ),
             ),
-            const Spacer(),
             Text(
               'SELECT MULTIPLE',
               style: TextStyle(

@@ -1,5 +1,4 @@
 import 'package:classai/core/constants/curriculum_types.dart' show nerdcSubjects;
-import 'package:classai/core/database/database.dart';
 import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/core/services/ai_service.dart';
 import 'package:classai/core/services/exam_generation_service.dart';

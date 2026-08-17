@@ -14,8 +14,10 @@ class PdfCacheKey {
   final String schoolNameHash;
   final String? logoHash;
 
+  // v2: busts cached PDFs generated before the References section was added
+  // so existing lessons re-export with their source references included.
   String get compositeKey =>
-      '$contentHash-$applyWatermark-$schoolNameHash-${logoHash ?? "none"}';
+      'v2-$contentHash-$applyWatermark-$schoolNameHash-${logoHash ?? "none"}';
 
   PdfCacheKey({
     required this.contentHash,
@@ -148,6 +150,7 @@ class PdfService {
       schoolName: school.schoolName,
       applyWatermark: applyWatermark,
       teacherEmail: teacherEmail,
+      references: await _buildLessonReferences(lesson),
     );
 
     final pdfBytes = await Isolate.run(() => _generatePdfInIsolate(params));
@@ -168,6 +171,71 @@ class PdfService {
 
     return pdfBytes;
   }
+
+  /// Collects the lesson's source references for the PDF References section:
+  /// the linked scheme-of-work reference (if any) plus the stored
+  /// AI-generated / teacher-entered references from the lesson content JSON.
+  /// Every entry is a {text, origin} map with origin 'scheme' | 'teacher' |
+  /// 'ai'. Malformed or missing content never throws.
+  Future<List<Map<String, dynamic>>> _buildLessonReferences(
+      Lesson lesson) async {
+    final references = <Map<String, dynamic>>[];
+
+    // Priority 1: linked scheme of work ("From scheme of work").
+    final schemeId = int.tryParse(lesson.schemeOfWorkId ?? '');
+    if (schemeId != null) {
+      try {
+        final scheme = await _db.schemeOfWorkDao.getById(schemeId);
+        if (scheme != null) {
+          final topic = scheme.adminEditedTopic ?? scheme.topic;
+          final base = '${lesson.subject} Scheme of Work — Week ${lesson.week}';
+          final text =
+              topic.trim().isNotEmpty ? '$base: ${topic.trim()}' : base;
+          references.add({'text': text, 'origin': 'scheme'});
+        }
+      } catch (_) {
+        // Scheme missing — continue with the stored references only.
+      }
+    }
+
+    // Priority 2: references stored inside the lesson content JSON.
+    try {
+      final content = jsonDecode(lesson.content);
+      if (content is Map<String, dynamic>) {
+        final stored = content['references'];
+        if (stored is List) {
+          for (final entry in stored) {
+            if (entry is! Map) continue;
+            final map = Map<String, dynamic>.from(entry);
+            final text =
+                (map['text'] ?? map['title'] ?? '').toString().trim();
+            if (text.isEmpty) continue;
+            var origin = map['origin']?.toString().trim().toLowerCase();
+            if (origin != 'teacher' && origin != 'ai') {
+              origin = 'ai';
+            }
+            references.add({'text': text, 'origin': origin});
+          }
+        }
+      }
+    } catch (_) {
+      // Content may be encrypted or malformed; references are skipped.
+    }
+
+    return references;
+  }
+}
+
+/// Human-readable origin label for a reference in the PDF.
+String _pdfOriginLabel(String origin) {
+  switch (origin) {
+    case 'scheme':
+      return 'From scheme of work';
+    case 'teacher':
+      return 'Teacher entered';
+    default:
+      return 'AI-generated';
+  }
 }
 
 // Separate function for isolate entry point
@@ -178,12 +246,16 @@ class _PdfParams {
   final bool applyWatermark;
   final String? teacherEmail;
 
+  /// {text, origin} entries for the References section; empty when none.
+  final List<Map<String, dynamic>> references;
+
   _PdfParams({
     required this.lessonTitle,
     required this.lessonContent,
     required this.schoolName,
     required this.applyWatermark,
     this.teacherEmail,
+    this.references = const [],
   });
 }
 
@@ -224,6 +296,54 @@ Future<Uint8List> _generatePdfInIsolate(_PdfParams params) async {
           pw.Header(text: params.lessonTitle),
           pw.Paragraph(text: params.lessonContent),
         ]);
+
+        // ── References section ────────────────────────────────
+        widgets.add(pw.SizedBox(height: 16));
+        widgets.add(pw.Text(
+          'References',
+          style: pw.TextStyle(
+            fontSize: 13,
+            fontWeight: pw.FontWeight.bold,
+          ),
+        ));
+        widgets.add(pw.SizedBox(height: 8));
+        if (params.references.isEmpty) {
+          widgets.add(pw.Paragraph(
+            text: 'No source references provided.',
+            style: pw.TextStyle(
+              fontSize: 11,
+              color: PdfColors.grey600,
+              fontStyle: pw.FontStyle.italic,
+            ),
+          ));
+        } else {
+          for (final ref in params.references) {
+            final text = (ref['text'] ?? '').toString();
+            final label =
+                _pdfOriginLabel(ref['origin']?.toString() ?? 'ai');
+            widgets.add(pw.Padding(
+              padding: const pw.EdgeInsets.only(bottom: 6),
+              child: pw.RichText(
+                text: pw.TextSpan(
+                  style: const pw.TextStyle(
+                    fontSize: 11,
+                    color: PdfColors.grey800,
+                  ),
+                  children: [
+                    pw.TextSpan(text: '• $text '),
+                    pw.TextSpan(
+                      text: '($label)',
+                      style: pw.TextStyle(
+                        fontStyle: pw.FontStyle.italic,
+                        color: PdfColors.grey600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ));
+          }
+        }
 
         return widgets;
       },
