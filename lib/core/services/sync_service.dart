@@ -1104,9 +1104,11 @@ class SyncService {
       }
     }
 
-    // Issue 3: Upsert any pending (force_password_reset=true) teachers that
-    // may have been missed by the incremental pull because their record was
-    // last modified before the sync cursor.
+    // Issue 3: Upsert the school's full teacher roster (returned by sync-pull
+    // independently of the incremental cursor) so teachers whose rows were
+    // last modified before the sync cursor — including newly added teachers
+    // whose force_password_reset already flipped to false on first login —
+    // still propagate to every device without a full resync.
     if (pendingTeachers != null) {
       for (final change in pendingTeachers) {
         await _upsertTeacherFromSync(change.row);

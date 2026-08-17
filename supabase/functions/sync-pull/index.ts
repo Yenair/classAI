@@ -240,8 +240,12 @@ serve(async (req) => {
     // ── 3. Fetch teacher metadata for client-side reconciliation ──────────────
     // Return the set of all active teacher IDs so the client can delete local
     // records for teachers that were hard-deleted from the server (Issue 1).
-    // Also return teachers with force_password_reset=true that may have been
-    // missed by the incremental pull (Issue 3).
+    // Also return the school's full teacher roster so the client can upsert
+    // teachers missed by the incremental pull (Issue 3 + teacher-propagation
+    // fix): the teachers table has no updated_at trigger (updated_at only
+    // advances at INSERT) and force_password_reset flips to false on first
+    // login, so a teacher created before a device's stored sync cursor would
+    // otherwise never propagate until a full resync.
     let activeTeacherIds: string[] = [];
     let pendingTeachers: Record<string, unknown>[] = [];
 
@@ -274,12 +278,14 @@ serve(async (req) => {
           activeTeacherIds = teacherData.map((t: Record<string, unknown>) => t.id as string);
         }
 
-        // All teachers with force_password_reset = true (pending sign-in, scoped to school)
+        // Full teacher roster for this school (scoped to school), independent
+        // of the incremental updated_at cursor. The client upserts every row
+        // on each pull, so newly added teachers propagate to all devices even
+        // when their updated_at is older than a device's stored cursor.
         const { data: pendingData } = await supabase
           .from("teachers")
           .select("*")
-          .eq("school_id", school_id)
-          .eq("force_password_reset", true);
+          .eq("school_id", school_id);
 
         if (pendingData && pendingData.length > 0) {
           pendingTeachers = pendingData;
