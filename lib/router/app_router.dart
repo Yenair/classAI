@@ -16,7 +16,6 @@ import 'package:classai/features/lesson/screens/lessons_list_screen.dart';
 import 'package:classai/features/exam/screens/exam_choice_screen.dart';
 import 'package:classai/features/exam/screens/exam_editor_screen.dart';
 import 'package:classai/features/exam/screens/exams_list_screen.dart';
-import 'package:classai/features/exam/screens/weekly_exams_setup_screen.dart';
 import 'package:classai/features/admin/screens/admin_dashboard_screen.dart';
 import 'package:classai/features/admin/screens/teacher_detail_screen.dart';
 // import 'package:classai/features/vault/screens/vault_browser_screen.dart'; // Vault feature disabled
@@ -46,7 +45,6 @@ final goRouterRefreshNotifier = ValueNotifier<int>(0);
 /// - `/exams` → Exam choice screen (what do you want to make?)
 /// - `/exams/list` → Exams list (existing/generated exams)
 /// - `/exams/:id` → Exam editor
-/// - `/weekly-exams-setup` → Weekly Exams setup screen
 /// - `/conflicts` → Conflict resolution screen
 /// - `/admin` → Admin dashboard (teacher management, vault queue, sync health)
 /// - `/admin/teachers/:id` → Teacher detail screen
@@ -94,8 +92,7 @@ final appRouter = GoRouter(
         location == '/lesson-editor' ||
         location == '/exams' ||
         location.startsWith('/exams/') ||
-        location == '/exam-editor' ||
-        location == '/weekly-exams-setup';
+        location == '/exam-editor';
     final isAdminRoute =
         location == '/admin' ||
         location.startsWith('/admin/teachers/') ||
@@ -171,11 +168,6 @@ final appRouter = GoRouter(
       path: '/exam-editor',
       name: 'exam-creator',
       builder: (context, state) => const ExamEditorScreen(),
-    ),
-    _route(
-      path: '/weekly-exams-setup',
-      name: 'weekly-exams-setup',
-      builder: (context, state) => const WeeklyExamsSetupScreen(),
     ),
     _route(
       path: '/conflicts',

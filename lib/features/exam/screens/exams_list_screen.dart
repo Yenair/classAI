@@ -91,8 +91,8 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
     _StatusFilterItem('Needs Sync', Icons.sync_rounded),
   ];
 
-  /// Type tab filter — `All | CA Test (Class Test) | Term Exam | Weekly Exams`.
-  static const _typeTabs = ['All', 'CA Test (Class Test)', 'Term Exam', 'Weekly Exams'];
+  /// Type tab filter — `All | CA Test (Class Test) | Term Exam`.
+  static const _typeTabs = ['All', 'CA Test (Class Test)', 'Term Exam'];
 
   String _selectedTypeTab = 'All';
   String _selectedStatusFilter = 'All';
@@ -192,8 +192,6 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
         return _examTypeOf(exam) == _ExamType.caTest;
       case 'Term Exam':
         return _examTypeOf(exam) == _ExamType.termExam;
-      case 'Weekly Exams':
-        return _examTypeOf(exam) == _ExamType.weekly;
       default:
         return true;
     }
@@ -644,7 +642,7 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
                 );
 
                 // Type tabs — the primary way to filter the list (All |
-                // CA Test (Class Test) | Term Exam | Weekly Exams).
+                // CA Test (Class Test) | Term Exam).
                 final typeTabs = Padding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
                   child: SingleChildScrollView(
@@ -699,7 +697,7 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
 
                 if (exams.isEmpty) {
                   // Zero state: "No exams yet" then the two primary creation
-                  // cards plus the Weekly Exams disclosure link.
+                  // cards.
                   return ListView(
                     physics: (Platform.isAndroid || Platform.isIOS)
                         ? const BouncingScrollPhysics()
@@ -1069,19 +1067,19 @@ class _StatusFilterItem {
   final IconData icon;
 }
 
-/// The three exam types shown as tabs and badges. Type is derived from the
+/// The two exam types shown as tabs and badges. Type is derived from the
 /// generated topic title: combined exams are prefixed "Term Exam (...)" or
-/// "CA Test (...)"; everything else is a weekly exam draft (the only other
-/// creation path). Colors/icons reuse the shared choice-screen coding
-/// (blue quiz / green assignment / orange calendar) so the mapping is
-/// identical wherever a type appears.
-enum _ExamType { caTest, termExam, weekly }
+/// "CA Test (...)". Legacy weekly draft exams (no prefix) carry no type and
+/// show no badge. Colors/icons reuse the shared choice-screen coding (blue
+/// quiz / green assignment) so the mapping is identical wherever a type
+/// appears.
+enum _ExamType { caTest, termExam }
 
-_ExamType _examTypeOf(Exam exam) {
+_ExamType? _examTypeOf(Exam exam) {
   final topic = exam.topic.trim().toLowerCase();
   if (topic.startsWith('term exam')) return _ExamType.termExam;
   if (topic.startsWith('ca test')) return _ExamType.caTest;
-  return _ExamType.weekly;
+  return null;
 }
 
 String _examTypeLabel(_ExamType type) {
@@ -1090,8 +1088,6 @@ String _examTypeLabel(_ExamType type) {
       return 'CA Test';
     case _ExamType.termExam:
       return 'Term Exam';
-    case _ExamType.weekly:
-      return 'Weekly Exams';
   }
 }
 
@@ -1101,8 +1097,6 @@ Color _examTypeColor(_ExamType type) {
       return kCaTestColor;
     case _ExamType.termExam:
       return kTermExamColor;
-    case _ExamType.weekly:
-      return kWeeklyExamsColor;
   }
 }
 
@@ -1112,8 +1106,6 @@ IconData _examTypeIcon(_ExamType type) {
       return Icons.quiz_rounded;
     case _ExamType.termExam:
       return Icons.assignment_rounded;
-    case _ExamType.weekly:
-      return Icons.calendar_view_week_rounded;
   }
 }
 
@@ -1160,7 +1152,9 @@ class _StatusCircle extends StatelessWidget {
 
 class _ExamCard extends StatelessWidget {
   final Exam exam;
-  final _ExamType type;
+  /// Null for legacy weekly draft exams — they stay visible in the list but
+  /// show no type badge.
+  final _ExamType? type;
   final int position;
   final String classLevelLabel;
   final VoidCallback onTap;
@@ -1287,34 +1281,39 @@ class _ExamCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // Type badge — always visible regardless of the active tab.
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: _examTypeColor(type).withValues(alpha: 0.13),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _examTypeIcon(type),
-                        size: 13,
-                        color: _examTypeColor(type),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _examTypeLabel(type),
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: _examTypeColor(type),
-                          letterSpacing: 0.2,
+                // Type badge — always visible regardless of the active tab,
+                // except for legacy weekly draft exams (type == null) which
+                // show no badge at all.
+                if (type != null) ...[
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: _examTypeColor(type!).withValues(alpha: 0.13),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _examTypeIcon(type!),
+                          size: 13,
+                          color: _examTypeColor(type!),
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 4),
+                        Text(
+                          _examTypeLabel(type!),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: _examTypeColor(type!),
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 6),
+                  const SizedBox(height: 6),
+                ],
                 Text(
                   _formatDate(exam.createdAt),
                   style: theme.textTheme.labelSmall?.copyWith(
@@ -1454,8 +1453,8 @@ String _formatDate(DateTime dt) {
   return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
 }
 
-/// One pill-shaped type tab (All | CA Test (Class Test) | Term Exam |
-/// Weekly Exams). The active tab stays highlighted.
+/// One pill-shaped type tab (All | CA Test (Class Test) | Term Exam). The
+/// active tab stays highlighted.
 class _TypeTab extends StatelessWidget {
   const _TypeTab({
     required this.label,

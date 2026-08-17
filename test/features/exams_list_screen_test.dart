@@ -148,8 +148,9 @@ AuthStateData _authState(_AuthFixture fixture) {
   );
 }
 
-/// Seeds one CA Test exam and one weekly exam so the type tabs and badges
-/// can be exercised.
+/// Seeds one CA Test exam and one legacy weekly draft exam (a topic with no
+/// type prefix) so the list still shows drafts under All — but never with a
+/// Weekly Exams badge.
 Future<void> _seedExams(AppDatabase db, _AuthFixture fixture) async {
   await db.examsDao.insertExam(
     ExamsCompanion.insert(
@@ -307,13 +308,12 @@ void main() {
           reason: 'no exam creation may be queued by opening the list');
 
       // The zero state repeats the /exams creation cards: the two primary
-      // cards plus the Weekly Exams disclosure link.
+      // cards only — no Weekly Exams disclosure link.
       expect(find.text('No exams yet'), findsOneWidget);
       expect(find.text('Term Exam'), findsOneWidget);
       expect(find.text('CA Test (Class Test)'), findsOneWidget);
-      expect(find.text('More ways to make a test ▾'), findsOneWidget);
-      expect(find.text('Weekly Exams').hitTestable(), findsNothing,
-          reason: 'Weekly Exams is hidden behind the disclosure link');
+      expect(find.text('More ways to make a test ▾'), findsNothing);
+      expect(find.text('Weekly Exams'), findsNothing);
       expect(find.text('New Exam'), findsNothing,
           reason: 'the old single-exam FAB is gone');
     },
@@ -328,9 +328,8 @@ void main() {
       expect(find.text('No exams yet'), findsOneWidget);
       expect(find.text('Term Exam'), findsOneWidget);
       expect(find.text('CA Test (Class Test)'), findsOneWidget);
-      expect(find.text('More ways to make a test ▾'), findsOneWidget);
-      expect(find.text('Weekly Exams').hitTestable(), findsNothing,
-          reason: 'Weekly Exams is hidden behind the disclosure link');
+      expect(find.text('More ways to make a test ▾'), findsNothing);
+      expect(find.text('Weekly Exams'), findsNothing);
     },
   );
 
@@ -344,8 +343,8 @@ void main() {
     expect(paths, contains('/exam-editor'));
     expect(paths, contains('/exams/list'),
         reason: 'the list-only screen must be reachable at /exams/list');
-    expect(paths, contains('/weekly-exams-setup'),
-        reason: 'Weekly Exams setup must be a route');
+    expect(paths, isNot(contains('/weekly-exams-setup')),
+        reason: 'the Weekly Exams setup route must be removed');
   });
 
   testWidgets('/full-term-exam redirects to the exam editor in Term Exam mode',
@@ -388,8 +387,8 @@ void main() {
         reason: 'the redirected editor must open in Term Exam mode');
   });
 
-  testWidgets('the /exams choice screen shows primary cards, disclosure, '
-      'and View my exams', (tester) async {
+  testWidgets('the /exams choice screen shows exactly Term Exam, CA Test '
+      'and View my exams — no Weekly Exams disclosure', (tester) async {
     await _pumpRouterApp(tester, db: db, fixture: fixture);
     appRouter.go('/exams');
     for (var i = 0; i < 5; i++) {
@@ -399,23 +398,11 @@ void main() {
     expect(find.text('What do you want to make?'), findsOneWidget);
     expect(find.text('Term Exam'), findsOneWidget);
     expect(find.text('CA Test (Class Test)'), findsOneWidget);
-    expect(find.text('More ways to make a test ▾'), findsOneWidget);
     expect(find.text('View my exams'), findsOneWidget);
-    // Weekly Exams is hidden until the disclosure link is expanded. The card
-    // stays in the tree inside AnimatedCrossFade, so visibility is asserted
-    // via hit-testability (invisible children ignore pointers).
-    expect(find.text('Weekly Exams').hitTestable(), findsNothing);
-
-    // Expanding the disclosure reveals the Weekly Exams card inline.
-    await tester.tap(find.text('More ways to make a test ▾'));
-    await tester.pumpAndSettle();
-    expect(find.text('Weekly Exams').hitTestable(), findsOneWidget);
-    expect(find.text('More ways to make a test ▴'), findsOneWidget);
-
-    // The disclosure stays on screen and can be toggled back.
-    await tester.tap(find.text('More ways to make a test ▴'));
-    await tester.pumpAndSettle();
-    expect(find.text('Weekly Exams').hitTestable(), findsNothing);
+    // The Weekly Exams progressive-disclosure link is gone entirely.
+    expect(find.text('More ways to make a test ▾'), findsNothing);
+    expect(find.text('More ways to make a test ▴'), findsNothing);
+    expect(find.text('Weekly Exams'), findsNothing);
   });
 
   testWidgets('View my exams on the choice screen routes to /exams/list',
@@ -448,7 +435,7 @@ void main() {
     await _seedExams(db, fixture);
     await _pumpExamsList(tester, db: db, fixture: fixture);
 
-    // All four tabs are visible; the active tab is 'All'. ('All' is scoped
+    // All three tabs are visible; the active tab is 'All'. ('All' is scoped
     // to the tabs row because the status filter chips also contain 'All'.)
     final tabsRow = find.byType(SingleChildScrollView).first;
     Finder typeTab(String label) =>
@@ -457,22 +444,25 @@ void main() {
     expect(typeTab('All'), findsOneWidget);
     expect(typeTab('CA Test (Class Test)'), findsOneWidget);
     expect(typeTab('Term Exam'), findsOneWidget);
-    // 'Weekly Exams' appears twice: the tab plus the weekly exam's badge.
-    expect(find.text('Weekly Exams'), findsNWidgets(2));
+    // No Weekly Exams tab, and the legacy draft shows no Weekly Exams badge.
+    expect(find.text('Weekly Exams'), findsNothing);
     // The CA exam card shows its badge regardless of the active tab.
     expect(find.text('CA Test'), findsOneWidget);
+    // The legacy weekly draft stays visible under All without a badge.
+    expect(find.text('Algebraic Expressions'), findsOneWidget);
 
     // Tapping the CA Test tab filters to only the CA exam.
     await tester.tap(typeTab('CA Test (Class Test)'));
     await tester.pumpAndSettle();
     expect(find.text('CA Test'), findsOneWidget);
-    expect(find.text('Weekly Exams'), findsOneWidget,
-        reason: 'only the tab remains — the weekly exam card is filtered out');
+    expect(find.text('Algebraic Expressions'), findsNothing,
+        reason: 'the legacy draft is filtered out by the CA Test tab');
 
     // Back to All restores both cards.
     await tester.tap(typeTab('All'));
     await tester.pumpAndSettle();
-    expect(find.text('Weekly Exams'), findsNWidgets(2));
+    expect(find.text('CA Test'), findsOneWidget);
+    expect(find.text('Algebraic Expressions'), findsOneWidget);
   });
 
   testWidgets('deleting an exam offers Undo and restores the row',

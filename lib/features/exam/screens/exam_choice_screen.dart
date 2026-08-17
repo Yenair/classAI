@@ -9,27 +9,17 @@ import 'package:go_router/go_router.dart';
 /// |----------------|--------|---------------------------|
 /// | CA Test        | Blue   | quiz_rounded              |
 /// | Term Exam      | Green  | assignment_rounded        |
-/// | Weekly Exams   | Orange | calendar_view_week_rounded |
 const kCaTestColor = Color(0xFF2196F3);
 const kTermExamColor = Color(0xFF4CAF50);
-const kWeeklyExamsColor = Color(0xFFFF9800);
 
-/// The two primary creation cards plus the progressive-disclosure link for
-/// Weekly Exams. Shared by the `/exams` choice screen and the `/exams/list`
-/// zero state so both lead into the exact same setup screens.
-class ExamCreationCards extends StatefulWidget {
+/// The two primary creation cards. Shared by the `/exams` choice screen and
+/// the `/exams/list` zero state so both lead into the exact same setup
+/// screens.
+class ExamCreationCards extends StatelessWidget {
   const ExamCreationCards({super.key});
 
   @override
-  State<ExamCreationCards> createState() => _ExamCreationCardsState();
-}
-
-class _ExamCreationCardsState extends State<ExamCreationCards> {
-  bool _weeklyExpanded = false;
-
-  @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -47,44 +37,6 @@ class _ExamCreationCardsState extends State<ExamCreationCards> {
           color: kCaTestColor,
           icon: Icons.quiz_rounded,
           onTap: () => context.push('/exam-editor?compilationType=caTest'),
-        ),
-        const SizedBox(height: 4),
-        // Progressive disclosure: stays on screen, toggles the Weekly Exams
-        // card inline. The link never navigates away.
-        InkWell(
-          onTap: () => setState(() => _weeklyExpanded = !_weeklyExpanded),
-          borderRadius: BorderRadius.circular(10),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _weeklyExpanded
-                      ? 'More ways to make a test ▴'
-                      : 'More ways to make a test ▾',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        AnimatedCrossFade(
-          duration: const Duration(milliseconds: 200),
-          crossFadeState: _weeklyExpanded
-              ? CrossFadeState.showSecond
-              : CrossFadeState.showFirst,
-          firstChild: const SizedBox(width: double.infinity),
-          secondChild: ExamTypeCard(
-            title: 'Weekly Exams',
-            subtitle: 'Make 13 weekly exam drafts.',
-            color: kWeeklyExamsColor,
-            icon: Icons.calendar_view_week_rounded,
-            onTap: () => context.push('/weekly-exams-setup'),
-          ),
         ),
       ],
     );
@@ -173,8 +125,8 @@ class ExamTypeCard extends StatelessWidget {
 }
 
 /// The `/exams` screen: decide what to make. Term Exam and CA Test are the
-/// two primary paths; Weekly Exams is revealed through progressive disclosure;
-/// `View my exams` always routes to the list at `/exams/list`.
+/// two primary paths; `View my exams` always routes to the list at
+/// `/exams/list`.
 class ExamChoiceScreen extends StatelessWidget {
   const ExamChoiceScreen({super.key});
 
