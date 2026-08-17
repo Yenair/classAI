@@ -14,6 +14,8 @@
 .txt
 .swiftpm/
 migrate_working_dir/
+.freebuff/
+.sentry-native/
 
 # IntelliJ related
 *.iml
@@ -42,6 +44,10 @@ app.*.symbols
 # Obfuscation related
 app.*.map.json
 
+# Signing files - never commit 
+/android/app/upload-keystore.jks 
+/android/key.properties
+
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile
@@ -69,3 +75,8 @@ node_modules/
 # Android keystore and signing properties (never commit)
 android/key.properties
 android/upload-keystore.jks
+
+# Legacy planning docs / review artifacts
+plans/
+ClassAI MarkDown Files/
+phase4_subscription_gate.diff
