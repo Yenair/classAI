@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:classai/core/database/database.dart';
@@ -13,6 +15,7 @@ import 'package:classai/features/dashboard/providers/dashboard_data_providers.da
 import 'package:classai/features/exam/screens/exam_choice_screen.dart';
 import 'package:classai/main.dart' show databaseProvider;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:go_router/go_router.dart';
@@ -20,6 +23,26 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// examsListProvider is defined in
 /// lib/features/dashboard/providers/dashboard_data_providers.dart.
+
+/// One reversible delete performed on this screen. Holds the exam snapshot
+/// taken before the soft-delete, the id of the DELETE sync entry created by
+/// this delete (null when the exam has no server row), and the ids of any
+/// DELETE entries that were already pending for the exam before this delete.
+class _DeleteRecord {
+  _DeleteRecord({
+    required this.exam,
+    required this.queueEntryId,
+    required this.pendingDeleteEntryIds,
+  });
+
+  final Exam exam;
+
+  /// Id of the DELETE sync entry created by this delete. Replaced on redo
+  /// (the undo that preceded it removed the previous entry).
+  int? queueEntryId;
+
+  final List<int> pendingDeleteEntryIds;
+}
 
 /// Displays a list of exams from the local database.
 class ExamsListScreen extends ConsumerStatefulWidget {
@@ -30,6 +53,33 @@ class ExamsListScreen extends ConsumerStatefulWidget {
 }
 
 class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
+
+  /// How long the Undo SnackBar stays visible. The DELETE sync entry created
+  /// by a delete is held (`next_retry_at` in the future) for exactly this
+  /// window so the sync engine cannot push it before Undo is possible.
+  static const _undoWindow = Duration(seconds: 4);
+
+  /// Flow-local reversible command stack for deletes on this screen. Undo
+  /// (SnackBar action or Ctrl+Z) restores the row and drops the held DELETE
+  /// entry; redo (Ctrl+Y) re-applies the delete and re-queues the entry.
+  final List<_DeleteRecord> _undoStack = [];
+  final List<_DeleteRecord> _redoStack = [];
+
+  /// Release timers for held DELETE entries, keyed by queue entry id. Each
+  /// fires at the end of the Undo window and clears `next_retry_at` so the
+  /// sync engine pushes the delete normally. Cancelled by Undo (the entry is
+  /// removed anyway) and on dispose (the timestamp itself still auto-releases
+  /// the entry).
+  final Map<int, Timer> _heldDeleteTimers = {};
+
+  @override
+  void dispose() {
+    for (final timer in _heldDeleteTimers.values) {
+      timer.cancel();
+    }
+    _heldDeleteTimers.clear();
+    super.dispose();
+  }
 
   static const _termFilters = ['All', '1st Term', '2nd Term', '3rd Term'];
   static const _statusFilters = [
@@ -283,75 +333,185 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
     );
 
     if (confirmed == true && mounted) {
-      try {
-        final db = ref.read(databaseProvider);
-        // Capture pending DELETE queue entries before deleting so Undo can
-        // drop them — otherwise the queued DELETE would still remove the
-        // server row after the local row is restored.
-        final pendingDeleteEntries = (await db.syncQueueDao.pendingEntries())
-            .where((e) =>
-                e.queueTable == 'exams' &&
-                e.recordLocalId == exam.id &&
-                e.operation == 'DELETE')
-            .map((e) => e.id)
-            .toList();
+      await _deleteExam(exam);
+    }
+  }
 
-        await db.examsDao.deleteExam(exam.id);
-        // Only queue a remote DELETE when the exam has a server UUID.
-        // Exams whose original INSERT was skipped server-side have no server
-        // row; queueing a DELETE with only the local id caused the server to
-        // fail `.eq("id", <localInt>)` forever.
-        if (exam.serverId != null && exam.serverId!.isNotEmpty) {
-          await db.syncQueueDao.insertEntry(
-            queueTable: 'exams',
-            recordLocalId: exam.id,
-            operation: 'DELETE',
-            payload: {
-              'id': exam.id,
-              'server_id': exam.serverId,
-            },
-          );
-        }
-        ref.invalidate(examsListProvider);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Exam deleted'),
-              action: SnackBarAction(
-                label: 'Undo',
-                onPressed: () => _undoDeleteExam(exam, pendingDeleteEntries),
-              ),
-            ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to delete: $e')),
-          );
-        }
+  /// Applies a delete as a reversible command:
+  ///  1. captures DELETE entries already pending for the exam,
+  ///  2. soft-deletes the local row immediately,
+  ///  3. queues the remote DELETE but holds it (`next_retry_at` in the
+  ///     future) so the sync engine cannot push it before the Undo window
+  ///     elapses,
+  ///  4. pushes the operation onto the flow-local undo stack.
+  Future<void> _deleteExam(Exam exam) async {
+    try {
+      final db = ref.read(databaseProvider);
+      // Capture pending DELETE queue entries before deleting so Undo can drop
+      // them — otherwise the queued DELETE would still remove the server row
+      // after the local row is restored.
+      final pendingDeleteEntries = (await db.syncQueueDao.pendingEntries())
+          .where((e) =>
+              e.queueTable == 'exams' &&
+              e.recordLocalId == exam.id &&
+              e.operation == 'DELETE')
+          .map((e) => e.id)
+          .toList();
+
+      await db.examsDao.deleteExam(exam.id);
+
+      // Only queue a remote DELETE when the exam has a server UUID. Exams
+      // whose original INSERT was skipped server-side have no server row;
+      // queueing a DELETE with only the local id caused the server to fail
+      // `.eq("id", <localInt>)` forever.
+      int? newQueueEntryId;
+      if (exam.serverId != null && exam.serverId!.isNotEmpty) {
+        newQueueEntryId = await _queueHeldDelete(
+          db,
+          table: 'exams',
+          localId: exam.id,
+          serverId: exam.serverId!,
+        );
+      }
+
+      // Any new delete invalidates the redo history — the stack only covers
+      // the current delete flow.
+      _redoStack.clear();
+      _undoStack.add(_DeleteRecord(
+        exam: exam,
+        queueEntryId: newQueueEntryId,
+        pendingDeleteEntryIds: pendingDeleteEntries,
+      ));
+      ref.invalidate(examsListProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            duration: _undoWindow,
+            content: const Text('Exam deleted'),
+            action: SnackBarAction(label: 'Undo', onPressed: _undo),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete: $e')),
+        );
       }
     }
   }
 
-  /// Restores a soft-deleted exam and drops the DELETE queue entries that were
-  /// pending before the delete, so the server row is left untouched.
-  Future<void> _undoDeleteExam(Exam exam, List<int> pendingDeleteEntries) async {
+  /// Inserts a DELETE sync entry for [localId] and immediately holds it by
+  /// setting `next_retry_at` past the Undo window, so a sync cycle cannot
+  /// push the delete before the user's Undo opportunity elapses. A release
+  /// timer clears `next_retry_at` once the window passes, making the entry
+  /// due for a normal push; Undo cancels the timer and removes the entry.
+  Future<int> _queueHeldDelete(
+    AppDatabase db, {
+    required String table,
+    required int localId,
+    required String serverId,
+  }) async {
+    final entryId = await db.into(db.syncQueue).insert(
+          SyncQueueCompanion.insert(
+            queueTable: table,
+            recordLocalId: localId,
+            operation: 'DELETE',
+            payload: jsonEncode({'id': localId, 'server_id': serverId}),
+          ),
+        );
+    // `where` on a drift statement returns void, so the write must be chained
+    // through a parenthesized cascade (same pattern as the DAOs).
+    await (db.update(db.syncQueue)..where((t) => t.id.equals(entryId))).write(
+          SyncQueueCompanion(
+            nextRetryAt: Value(DateTime.now().add(_undoWindow)),
+          ),
+        );
+    final releaseTimer = Timer(_undoWindow, () {
+      _heldDeleteTimers.remove(entryId);
+      (db.update(db.syncQueue)..where((t) => t.id.equals(entryId)))
+          .write(const SyncQueueCompanion(nextRetryAt: Value(null)));
+    });
+    _heldDeleteTimers[entryId] = releaseTimer;
+    return entryId;
+  }
+
+  /// Undo the most recent delete — shared by the SnackBar action and the
+  /// Ctrl+Z shortcut, so both operate on the same flow-local stack.
+  void _undo() {
+    if (_undoStack.isEmpty) return;
+    final record = _undoStack.removeLast();
+    _redoStack.add(record);
+    unawaited(_applyUndo(record));
+  }
+
+  /// Restores a soft-deleted exam and drops the DELETE entries created by the
+  /// delete plus any that were pending before it, so the server row is left
+  /// untouched.
+  Future<void> _applyUndo(_DeleteRecord record) async {
+    // Stop the release timer — the entry is being removed anyway.
+    final newEntryId = record.queueEntryId;
+    if (newEntryId != null) {
+      _heldDeleteTimers.remove(newEntryId)?.cancel();
+    }
     try {
       final db = ref.read(databaseProvider);
       await db.examsDao.updateExam(
-        exam.id,
+        record.exam.id,
         ExamsCompanion(
           isDeleted: const Value(false),
           updatedAt: Value(DateTime.now()),
         ),
       );
-      for (final entryId in pendingDeleteEntries) {
+      if (newEntryId != null) {
+        await db.syncQueueDao.deleteById(newEntryId);
+      }
+      for (final entryId in record.pendingDeleteEntryIds) {
         await db.syncQueueDao.deleteById(entryId);
       }
       ref.invalidate(examsListProvider);
     } catch (_) {
       // Undo is best-effort; the exam remains deleted if it fails.
+    }
+  }
+
+  /// Re-applies the most recently undone delete (Ctrl+Y).
+  void _redo() {
+    if (_redoStack.isEmpty) return;
+    final record = _redoStack.removeLast();
+    _undoStack.add(record);
+    unawaited(_applyRedo(record));
+  }
+
+  /// Re-applies a delete: soft-deletes the row again and re-queues a held
+  /// DELETE entry. The record's [queueEntryId] is refreshed so a subsequent
+  /// Undo removes the newly queued entry.
+  Future<void> _applyRedo(_DeleteRecord record) async {
+    try {
+      final db = ref.read(databaseProvider);
+      await db.examsDao.deleteExam(record.exam.id);
+      int? newQueueEntryId;
+      if (record.exam.serverId != null && record.exam.serverId!.isNotEmpty) {
+        newQueueEntryId = await _queueHeldDelete(
+          db,
+          table: 'exams',
+          localId: record.exam.id,
+          serverId: record.exam.serverId!,
+        );
+      }
+      record.queueEntryId = newQueueEntryId;
+      ref.invalidate(examsListProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            duration: _undoWindow,
+            content: const Text('Exam deleted'),
+            action: SnackBarAction(label: 'Undo', onPressed: _undo),
+          ),
+        );
+      }
+    } catch (_) {
+      // Best-effort — the row stays deleted even if re-queueing failed.
     }
   }
 
@@ -361,19 +521,45 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
 
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && mounted) {
-          context.go('/');
-        }
+    // CallbackShortcuts must sit ABOVE the autofocused node so key events
+    // bubbling up from it reach the bindings (Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z).
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyZ, control: true): _undo,
+        const SingleActivator(LogicalKeyboardKey.keyY, control: true): _redo,
+        // Ctrl+Shift+Z is the conventional redo shortcut on Windows/Linux.
+        const SingleActivator(
+          LogicalKeyboardKey.keyZ,
+          control: true,
+          shift: true,
+        ):
+            _redo,
       },
-      child: Scaffold(
+      child: Focus(
+        autofocus: true,
+        child: PopScope(
+          // Normal popping is preserved when the list was pushed (e.g. from
+          // /exams); only when there is no history to pop do we fall back to
+          // Home, keeping the previous behavior for deep links. Uses the
+          // plain Navigator so the screen also builds standalone (no router).
+          canPop: Navigator.of(context).canPop(),
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop && mounted) {
+              context.go('/');
+            }
+          },
+          child: Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          onPressed: () => context.go('/'),
+          onPressed: () {
+            if (Navigator.of(context).canPop()) {
+              context.pop();
+            } else {
+              context.go('/');
+            }
+          },
           icon: const Icon(Icons.arrow_back_rounded),
-          tooltip: 'Back to Home',
+          tooltip: 'Back',
         ),
         title: Text(
           'Exams',
@@ -652,6 +838,8 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
             ),
           ),
         ],
+      ),
+      ),
       ),
       ),
     );

@@ -187,9 +187,18 @@ class ExamChoiceScreen extends StatelessWidget {
       backgroundColor: cs.surface,
       appBar: AppBar(
         leading: IconButton(
-          onPressed: () => context.go('/'),
+          // History-aware back: pop to the route that opened Exams when there
+          // is history (e.g. the dashboard's "Generate Exam" push); only fall
+          // back to Home when Exams was reached without history to pop.
+          onPressed: () {
+            if (Navigator.of(context).canPop()) {
+              context.pop();
+            } else {
+              context.go('/');
+            }
+          },
           icon: const Icon(Icons.arrow_back_rounded),
-          tooltip: 'Back to Home',
+          tooltip: 'Back',
         ),
         title: Text(
           'Exams',

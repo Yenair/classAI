@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'package:classai/core/database/database.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:classai/core/constants/curriculum_types.dart' show nerdcSubjects;
 import 'package:classai/core/constants/prompt_templates.dart';
 import 'package:classai/core/data/nerdc_curriculum.dart';
@@ -26,6 +27,7 @@ import 'package:classai/main.dart' show databaseProvider;
 import 'package:file_selector/file_selector.dart'
     show getSaveLocation, XTypeGroup;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
@@ -36,6 +38,33 @@ import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
 /// lessonsListProvider is defined in
 /// lib/features/dashboard/providers/dashboard_data_providers.dart.
 
+/// One reversible delete performed on this screen. Holds the lesson snapshot
+/// taken before the soft-delete, the id of the DELETE sync entry created by
+/// this delete (null when the lesson has no server row), the ids of any
+/// DELETE entries that were already pending for the lesson before this
+/// delete, and the timer that performs the delayed remote diagram cleanup
+/// once the Undo window elapses.
+class _LessonDeleteRecord {
+  _LessonDeleteRecord({
+    required this.lesson,
+    required this.queueEntryId,
+    required this.pendingDeleteEntryIds,
+    this.diagramCleanupTimer,
+  });
+
+  final Lesson lesson;
+
+  /// Id of the DELETE sync entry created by this delete. Replaced on redo
+  /// (the undo that preceded it removed the previous entry).
+  int? queueEntryId;
+
+  final List<int> pendingDeleteEntryIds;
+
+  /// Timer for the delayed remote diagram deletion; cancelled by Undo and
+  /// re-created by redo.
+  Timer? diagramCleanupTimer;
+}
+
 /// Displays a list of lessons from the local database.
 class LessonsListScreen extends ConsumerStatefulWidget {
   const LessonsListScreen({super.key});
@@ -45,6 +74,35 @@ class LessonsListScreen extends ConsumerStatefulWidget {
 }
 
 class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
+
+  /// How long the Undo SnackBar stays visible. The DELETE sync entry created
+  /// by a delete is held (`next_retry_at` in the future) and the remote
+  /// diagram deletion is delayed for exactly this window, so neither can run
+  /// before Undo is possible.
+  static const _undoWindow = Duration(seconds: 4);
+
+  /// Flow-local reversible command stack for deletes on this screen. Undo
+  /// (SnackBar action or Ctrl+Z) restores the row, drops the held DELETE
+  /// entry, and cancels the delayed diagram cleanup; redo (Ctrl+Y) re-applies
+  /// the delete and re-queues both.
+  final List<_LessonDeleteRecord> _undoStack = [];
+  final List<_LessonDeleteRecord> _redoStack = [];
+
+  /// Release timers for held DELETE entries, keyed by queue entry id. Each
+  /// fires at the end of the Undo window and clears `next_retry_at` so the
+  /// sync engine pushes the delete normally. Cancelled by Undo (the entry is
+  /// removed anyway) and on dispose (the timestamp itself still auto-releases
+  /// the entry).
+  final Map<int, Timer> _heldDeleteTimers = {};
+
+  @override
+  void dispose() {
+    for (final timer in _heldDeleteTimers.values) {
+      timer.cancel();
+    }
+    _heldDeleteTimers.clear();
+    super.dispose();
+  }
 
   static const _termFilters = ['All', '1st Term', '2nd Term', '3rd Term'];
   static const _statusFilters = [
@@ -711,14 +769,30 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
     final theme = Theme.of(context);
 
 
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && mounted) {
-          context.go('/');
-        }
+    // CallbackShortcuts must sit ABOVE the autofocused node so key events
+    // bubbling up from it reach the bindings (Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z).
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyZ, control: true): _undo,
+        const SingleActivator(LogicalKeyboardKey.keyY, control: true): _redo,
+        // Ctrl+Shift+Z is the conventional redo shortcut on Windows/Linux.
+        const SingleActivator(
+          LogicalKeyboardKey.keyZ,
+          control: true,
+          shift: true,
+        ):
+            _redo,
       },
-      child: Scaffold(
+      child: Focus(
+        autofocus: true,
+        child: PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop && mounted) {
+              context.go('/');
+            }
+          },
+          child: Scaffold(
         appBar: AppBar(
           leading: IconButton(
             onPressed: () => context.go('/'),
@@ -1056,49 +1130,57 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
           ],
         ),
       ),
+      ),
+      ),
     );
   }
 
-  /// Parse diagram URLs from lesson.content and attempt to delete each one
-  /// via the `delete-diagram` Edge Function as a best-effort optimization.
-  ///
-  /// This runs BEFORE the local soft-delete so the lesson content is intact.
-  /// Failure is logged but never blocks lesson deletion — section 2's
-  /// sync-push cleanup is the authoritative path.
-  Future<void> _cleanupDiagramsIfOnline(Lesson lesson) async {
+  /// Extracts diagram URLs from the lesson content at delete time and
+  /// schedules the remote `delete-diagram` Edge Function calls for after the
+  /// Undo window elapses, so the remote diagrams are never deleted before the
+  /// user can Undo. Returns null when there is nothing to clean up (offline,
+  /// no diagrams, no JWT, or Supabase unavailable) so Undo has no timer to
+  /// cancel. Best-effort only — failure never blocks lesson deletion.
+  Future<Timer?> _scheduleDelayedDiagramCleanup(Lesson lesson) async {
     try {
-      if (!await PlatformHelper.isOnline()) return;
+      if (!await PlatformHelper.isOnline()) return null;
 
       final contentRaw = lesson.content;
-      if (contentRaw.isEmpty) return;
+      if (contentRaw.isEmpty) return null;
 
       final parsed = json.decode(contentRaw) as Map<String, dynamic>?;
-      if (parsed == null) return;
+      if (parsed == null) return null;
       final diagrams = parsed['diagrams'] as List<dynamic>?;
-      if (diagrams == null || diagrams.isEmpty) return;
+      if (diagrams == null || diagrams.isEmpty) return null;
 
       final jwt = ref.read(authServiceProvider).currentJwt;
-      if (jwt == null || jwt.isEmpty) return;
+      if (jwt == null || jwt.isEmpty) return null;
 
-      final client = supabase_pkg.Supabase.instance.client;
-
+      final urls = <String>[];
       for (final entry in diagrams) {
         if (entry is! Map<String, dynamic>) continue;
         final url = entry['imageUrl'] as String?;
-        if (url == null || url.isEmpty) continue;
-
-        try {
-          await client.functions.invoke(
-            'delete-diagram',
-            headers: {'x-classai-jwt': jwt},
-            body: {'url': url},
-          );
-        } catch (_) {
-          // Best-effort only — sync-push will clean up via section 2.
-        }
+        if (url != null && url.isNotEmpty) urls.add(url);
       }
+      if (urls.isEmpty) return null;
+
+      final client = supabase_pkg.Supabase.instance.client;
+      return Timer(_undoWindow, () async {
+        for (final url in urls) {
+          try {
+            await client.functions.invoke(
+              'delete-diagram',
+              headers: {'x-classai-jwt': jwt},
+              body: {'url': url},
+            );
+          } catch (_) {
+            // Best-effort only — never surface diagram cleanup failures.
+          }
+        }
+      });
     } catch (_) {
       // Entire cleanup is best-effort; never block deletion.
+      return null;
     }
   }
 
@@ -1126,32 +1208,195 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
     );
 
     if (confirmed == true && mounted) {
-      try {
-        // Best-effort diagram cleanup (online optimization only)
-        await _cleanupDiagramsIfOnline(lesson);
+      await _deleteLesson(lesson);
+    }
+  }
 
-        final db = ref.read(databaseProvider);
-        await db.lessonsDao.deleteLesson(lesson.id);
-        // Only queue a remote DELETE when the lesson has a server UUID.
-        // Lessons whose original INSERT was skipped server-side have no
-        // server row; queueing a DELETE with only the local id caused the
-        // server to fail `.eq("id", <localInt>)` forever.
-        if (lesson.serverId != null && lesson.serverId!.isNotEmpty) {
-          await db.syncQueueDao.insertEntry(
-            queueTable: 'lessons',
-            recordLocalId: lesson.id,
-            operation: 'DELETE',
-            payload: {
-              'id': lesson.id,
-              'server_id': lesson.serverId,
-            },
-          );
-        }
-        ref.invalidate(lessonsListProvider);
-        _showToast('Lesson deleted');
-      } catch (e) {
-        _showToast('Failed to delete: $e');
+  /// Applies a delete as a reversible command:
+  ///  1. captures DELETE entries already pending for the lesson,
+  ///  2. soft-deletes the local row FIRST — remote side effects never run
+  ///     before the local row is gone,
+  ///  3. queues the remote DELETE but holds it (`next_retry_at` in the
+  ///     future) so the sync engine cannot push it before the Undo window
+  ///     elapses,
+  ///  4. schedules the remote diagram deletion for after the Undo window,
+  ///  5. pushes the operation onto the flow-local undo stack.
+  Future<void> _deleteLesson(Lesson lesson) async {
+    try {
+      final db = ref.read(databaseProvider);
+      // Capture pending DELETE queue entries before deleting so Undo can drop
+      // them — otherwise the queued DELETE would still remove the server row
+      // after the local row is restored.
+      final pendingDeleteEntries = (await db.syncQueueDao.pendingEntries())
+          .where((e) =>
+              e.queueTable == 'lessons' &&
+              e.recordLocalId == lesson.id &&
+              e.operation == 'DELETE')
+          .map((e) => e.id)
+          .toList();
+
+      await db.lessonsDao.deleteLesson(lesson.id);
+
+      // Only queue a remote DELETE when the lesson has a server UUID.
+      // Lessons whose original INSERT was skipped server-side have no server
+      // row; queueing a DELETE with only the local id caused the server to
+      // fail `.eq("id", <localInt>)` forever.
+      int? newQueueEntryId;
+      if (lesson.serverId != null && lesson.serverId!.isNotEmpty) {
+        newQueueEntryId = await _queueHeldDelete(
+          db,
+          table: 'lessons',
+          localId: lesson.id,
+          serverId: lesson.serverId!,
+        );
       }
+
+      // Delay the remote diagram deletion until the Undo window elapses;
+      // Undo cancels it, and after the window it proceeds automatically.
+      final diagramCleanupTimer =
+          await _scheduleDelayedDiagramCleanup(lesson);
+
+      // Any new delete invalidates the redo history — the stack only covers
+      // the current delete flow.
+      _redoStack.clear();
+      _undoStack.add(_LessonDeleteRecord(
+        lesson: lesson,
+        queueEntryId: newQueueEntryId,
+        pendingDeleteEntryIds: pendingDeleteEntries,
+        diagramCleanupTimer: diagramCleanupTimer,
+      ));
+      ref.invalidate(lessonsListProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            duration: _undoWindow,
+            content: const Text('Lesson deleted'),
+            action: SnackBarAction(label: 'Undo', onPressed: _undo),
+          ),
+        );
+      }
+    } catch (e) {
+      _showToast('Failed to delete: $e');
+    }
+  }
+
+  /// Inserts a DELETE sync entry for [localId] and immediately holds it by
+  /// setting `next_retry_at` past the Undo window, so a sync cycle cannot
+  /// push the delete before the user's Undo opportunity elapses. A release
+  /// timer clears `next_retry_at` once the window passes, making the entry
+  /// due for a normal push; Undo cancels the timer and removes the entry.
+  Future<int> _queueHeldDelete(
+    AppDatabase db, {
+    required String table,
+    required int localId,
+    required String serverId,
+  }) async {
+    final entryId = await db.into(db.syncQueue).insert(
+          SyncQueueCompanion.insert(
+            queueTable: table,
+            recordLocalId: localId,
+            operation: 'DELETE',
+            payload: jsonEncode({'id': localId, 'server_id': serverId}),
+          ),
+        );
+    // `where` on a drift statement returns void, so the write must be chained
+    // through a parenthesized cascade (same pattern as the DAOs).
+    await (db.update(db.syncQueue)..where((t) => t.id.equals(entryId))).write(
+          SyncQueueCompanion(
+            nextRetryAt: Value(DateTime.now().add(_undoWindow)),
+          ),
+        );
+    final releaseTimer = Timer(_undoWindow, () {
+      _heldDeleteTimers.remove(entryId);
+      (db.update(db.syncQueue)..where((t) => t.id.equals(entryId)))
+          .write(const SyncQueueCompanion(nextRetryAt: Value(null)));
+    });
+    _heldDeleteTimers[entryId] = releaseTimer;
+    return entryId;
+  }
+
+  /// Undo the most recent delete — shared by the SnackBar action and the
+  /// Ctrl+Z shortcut, so both operate on the same flow-local stack.
+  void _undo() {
+    if (_undoStack.isEmpty) return;
+    final record = _undoStack.removeLast();
+    _redoStack.add(record);
+    unawaited(_applyUndo(record));
+  }
+
+  /// Restores a soft-deleted lesson, cancels the delayed remote diagram
+  /// deletion, and drops the DELETE entries created by the delete plus any
+  /// that were pending before it, so the server row is left untouched.
+  Future<void> _applyUndo(_LessonDeleteRecord record) async {
+    // Cancel the queued remote diagram deletion so the diagrams stay put,
+    // and stop the DELETE entry's release timer — the entry is removed below.
+    record.diagramCleanupTimer?.cancel();
+    final newEntryId = record.queueEntryId;
+    if (newEntryId != null) {
+      _heldDeleteTimers.remove(newEntryId)?.cancel();
+    }
+    try {
+      final db = ref.read(databaseProvider);
+      await db.lessonsDao.updateLesson(
+        record.lesson.id,
+        LessonsCompanion(
+          isDeleted: const Value(false),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      if (newEntryId != null) {
+        await db.syncQueueDao.deleteById(newEntryId);
+      }
+      for (final entryId in record.pendingDeleteEntryIds) {
+        await db.syncQueueDao.deleteById(entryId);
+      }
+      ref.invalidate(lessonsListProvider);
+    } catch (_) {
+      // Undo is best-effort; the lesson remains deleted if it fails.
+    }
+  }
+
+  /// Re-applies the most recently undone delete (Ctrl+Y).
+  void _redo() {
+    if (_redoStack.isEmpty) return;
+    final record = _redoStack.removeLast();
+    _undoStack.add(record);
+    unawaited(_applyRedo(record));
+  }
+
+  /// Re-applies a delete: soft-deletes the row again, re-queues a held
+  /// DELETE entry, and re-schedules the delayed diagram cleanup. The record's
+  /// [queueEntryId] is refreshed so a subsequent Undo removes the new entry.
+  Future<void> _applyRedo(_LessonDeleteRecord record) async {
+    try {
+      final db = ref.read(databaseProvider);
+      await db.lessonsDao.deleteLesson(record.lesson.id);
+      int? newQueueEntryId;
+      if (record.lesson.serverId != null &&
+          record.lesson.serverId!.isNotEmpty) {
+        newQueueEntryId = await _queueHeldDelete(
+          db,
+          table: 'lessons',
+          localId: record.lesson.id,
+          serverId: record.lesson.serverId!,
+        );
+      }
+      final diagramCleanupTimer =
+          await _scheduleDelayedDiagramCleanup(record.lesson);
+      record.queueEntryId = newQueueEntryId;
+      record.diagramCleanupTimer = diagramCleanupTimer;
+      ref.invalidate(lessonsListProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            duration: _undoWindow,
+            content: const Text('Lesson deleted'),
+            action: SnackBarAction(label: 'Undo', onPressed: _undo),
+          ),
+        );
+      }
+    } catch (_) {
+      // Best-effort — the row stays deleted even if re-queueing failed.
     }
   }
 

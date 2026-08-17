@@ -2,6 +2,7 @@ import 'package:classai/core/database/database.dart';
 import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/core/services/config_service.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
+import 'package:classai/features/exam/screens/exam_choice_screen.dart';
 import 'package:classai/features/exam/screens/exams_list_screen.dart';
 import 'package:classai/main.dart' show databaseProvider;
 import 'package:classai/router/app_router.dart' show appRouter;
@@ -11,6 +12,7 @@ import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_
 import 'package:connectivity_plus_platform_interface/method_channel_connectivity.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -233,6 +235,41 @@ Future<void> _pumpExamsList(
     ),
   );
   await tester.pumpAndSettle();
+}
+
+/// Seeds one exam that has a server UUID so the delete path queues a remote
+/// DELETE entry.
+Future<int> _seedExamWithServerId(AppDatabase db, _AuthFixture fixture) async {
+  return db.examsDao.insertExam(
+    ExamsCompanion.insert(
+      subject: 'Mathematics',
+      classLevel: 'JSS 1',
+      topic: 'Queue Delete Exam',
+      difficulty: 'medium',
+      curriculum: 'NERDC',
+      content: '{"mcqs":[],"theory":[],"subjective":[]}',
+      teacherServerId: Value(fixture.teacher.serverId),
+      schoolServerId: Value(fixture.school.serverId),
+      isUnlocked: const Value(false),
+      weekNumber: const Value(3),
+      term: const Value('1st Term'),
+      serverId: const Value('00000000-0000-0000-0000-00000000dd01'),
+    ),
+  );
+}
+
+/// Pending DELETE sync entries for the exams table.
+Future<List<SyncQueueData>> _examDeleteEntries(AppDatabase db) async {
+  return (await db.syncQueueDao.pendingEntries())
+      .where((e) => e.queueTable == 'exams' && e.operation == 'DELETE')
+      .toList();
+}
+
+/// Presses a Ctrl+[key] chord (e.g. Ctrl+Z / Ctrl+Y).
+Future<void> _sendCtrlKey(WidgetTester tester, LogicalKeyboardKey key) async {
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+  await tester.sendKeyEvent(key);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
 }
 
 void main() {
@@ -460,5 +497,202 @@ void main() {
     await tester.pumpAndSettle();
     expect((await db.examsDao.getAll()).length, 2,
         reason: 'Undo restores the deleted exam');
+  });
+
+  testWidgets(
+      'Undo removes the NEW DELETE entry, not just the pre-existing ones',
+      (tester) async {
+    final examId = await _seedExamWithServerId(db, fixture);
+    // A stale DELETE entry already pending for this exam (e.g. left over
+    // from an earlier flow) must also be dropped on Undo.
+    await db.syncQueueDao.insertEntry(
+      queueTable: 'exams',
+      recordLocalId: examId,
+      operation: 'DELETE',
+      payload: {
+        'id': examId,
+        'server_id': '00000000-0000-0000-0000-00000000dd01',
+      },
+    );
+    await _pumpExamsList(tester, db: db, fixture: fixture);
+
+    await tester.tap(find.byTooltip('Delete'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete Exam'), findsOneWidget);
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Exam deleted'), findsOneWidget);
+    expect(await db.examsDao.getAll(), isEmpty,
+        reason: 'the exam is soft-deleted immediately');
+
+    var deletes = await _examDeleteEntries(db);
+    expect(deletes, hasLength(2),
+        reason: 'one pre-existing + one new DELETE entry are pending');
+    final held = deletes.where((e) => e.nextRetryAt != null).toList();
+    expect(held, hasLength(1),
+        reason: 'the NEW entry is held until the Undo window elapses');
+    expect(held.single.recordLocalId, examId);
+    expect(held.single.nextRetryAt!.isAfter(DateTime.now()), isTrue);
+
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+
+    expect((await db.examsDao.getAll()).length, 1,
+        reason: 'Undo restores the exam locally');
+    expect(await _examDeleteEntries(db), isEmpty,
+        reason: 'Undo must drop the NEW DELETE entry too, or the server row '
+            'would still be deleted on the next sync');
+  });
+
+  testWidgets('Ctrl+Z undoes and Ctrl+Y redoes, re-queueing a held DELETE '
+      'entry', (tester) async {
+    final examId = await _seedExamWithServerId(db, fixture);
+    await _pumpExamsList(tester, db: db, fixture: fixture);
+
+    await tester.tap(find.byTooltip('Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(await db.examsDao.getAll(), isEmpty,
+        reason: 'the exam is soft-deleted');
+
+    // Ctrl+Z undoes the delete.
+    await _sendCtrlKey(tester, LogicalKeyboardKey.keyZ);
+    await tester.pumpAndSettle();
+    expect((await db.examsDao.getAll()).length, 1,
+        reason: 'Ctrl+Z restores the soft-deleted exam');
+    expect(await _examDeleteEntries(db), isEmpty);
+
+    // Ctrl+Y re-applies the delete and re-queues a held DELETE entry.
+    await _sendCtrlKey(tester, LogicalKeyboardKey.keyY);
+    await tester.pumpAndSettle();
+    expect(await db.examsDao.getAll(), isEmpty,
+        reason: 'Ctrl+Y re-applies the delete');
+    var deletes = await _examDeleteEntries(db);
+    expect(deletes, hasLength(1),
+        reason: 'redo re-queues the DELETE entry');
+    expect(deletes.single.recordLocalId, examId);
+    expect(deletes.single.nextRetryAt!.isAfter(DateTime.now()), isTrue,
+        reason: 'the re-queued DELETE entry is held again');
+
+    // Ctrl+Z again undoes the redo.
+    await _sendCtrlKey(tester, LogicalKeyboardKey.keyZ);
+    await tester.pumpAndSettle();
+    expect((await db.examsDao.getAll()).length, 1,
+        reason: 'Ctrl+Z undoes the redo');
+    expect(await _examDeleteEntries(db), isEmpty);
+  });
+
+  testWidgets('the held DELETE entry is released once the Undo window elapses',
+      (tester) async {
+    final examId = await _seedExamWithServerId(db, fixture);
+    await _pumpExamsList(tester, db: db, fixture: fixture);
+
+    await tester.tap(find.byTooltip('Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+
+    var deletes = await _examDeleteEntries(db);
+    expect(deletes.single.recordLocalId, examId);
+    expect(deletes.single.nextRetryAt, isNotNull,
+        reason: 'the DELETE entry is held while Undo is still possible');
+    expect(deletes.single.nextRetryAt!.isAfter(DateTime.now()), isTrue);
+
+    // Let the Undo window elapse — the release timer fires and clears the
+    // hold so the sync engine pushes the delete on its next cycle.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+
+    deletes = await _examDeleteEntries(db);
+    expect(deletes, hasLength(1),
+        reason: 'the entry stays queued for the server-side delete');
+    expect(deletes.single.nextRetryAt, isNull,
+        reason: 'after the window the entry is released for normal push');
+  });
+
+  testWidgets('/exams -> Term Exam card -> setup screen -> Back returns to '
+      '/exams', (tester) async {
+    await _pumpRouterApp(tester, db: db, fixture: fixture);
+    appRouter.go('/exams');
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('What do you want to make?'), findsOneWidget);
+
+    await tester.tap(find.text('Term Exam'));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('Term Exam Setup'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back to exams'));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('What do you want to make?'), findsOneWidget,
+        reason: 'Back from the setup screen must return to /exams');
+    expect(find.text('Term Exam Setup'), findsNothing);
+  });
+
+  testWidgets('/exams -> View my exams -> /exams/list -> Back returns to '
+      '/exams', (tester) async {
+    await _pumpRouterApp(tester, db: db, fixture: fixture);
+    appRouter.go('/exams');
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    await tester.tap(find.text('View my exams'));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.byType(ExamsListScreen), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back'));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.byType(ExamChoiceScreen), findsOneWidget,
+        reason: 'Back from /exams/list must return to /exams');
+    expect(find.text('What do you want to make?'), findsOneWidget);
+    expect(find.byType(ExamsListScreen), findsNothing);
+  });
+
+  testWidgets('Back from /exams pops history instead of hardcoding Home',
+      (tester) async {
+    await _pumpRouterApp(tester, db: db, fixture: fixture);
+    appRouter.go('/');
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    // Build a history stack: / -> /exams/list -> /exams
+    appRouter.push('/exams/list');
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    appRouter.push('/exams');
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.byType(ExamChoiceScreen), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back'));
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    // The choice screen is gone and the Exams list (the route that opened
+    // /exams) is still in the stack — a hardcoded go('/') would have removed
+    // it and landed on Home instead.
+    expect(find.byType(ExamsListScreen), findsOneWidget,
+        reason: 'Back must pop to the route that opened /exams, not Home');
+    expect(find.byType(ExamChoiceScreen), findsNothing);
+    final listState = GoRouterState.of(
+      tester.element(find.byType(ExamsListScreen)),
+    );
+    expect(listState.uri.path, '/exams/list');
   });
 }

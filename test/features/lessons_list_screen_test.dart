@@ -6,7 +6,7 @@ import 'package:classai/main.dart' show databaseProvider;
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 // ignore: depend_on_referenced_packages
 import 'package:connectivity_plus_platform_interface/method_channel_connectivity.dart';
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNotNull;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -317,6 +317,65 @@ void main() {
         // the AI service construction throws before any HTTP request — so no
         // network call is made.
         expect(find.textContaining('Could not create plan'), findsOneWidget);
+      },
+    );
+  });
+
+  group('LessonsListScreen delete / Undo', () {
+    testWidgets(
+      'deleting a lesson offers Undo, restores the row and drops the held '
+      'DELETE entry',
+      (tester) async {
+        fixture = await _seedAuthFixture(db, teacherRole: 'teacher');
+        final lessonId = await db.lessonsDao.insertLesson(
+          LessonsCompanion.insert(
+            subject: 'Mathematics',
+            classLevel: 'JSS 1',
+            week: 1,
+            topic: 'Algebraic Expressions',
+            difficulty: 'medium',
+            bloomsVerbs: '',
+            curriculum: 'NERDC',
+            content: '{"objectives":[],"diagrams":[]}',
+            teacherServerId: Value(fixture.teacher.serverId),
+            schoolServerId: Value(fixture.school.serverId),
+            serverId: const Value('00000000-0000-0000-0000-00000000ee01'),
+            // The test harness pre-filters by subject/class/term, so the
+            // seeded lesson must match those filters to stay visible.
+            term: const Value('1st Term'),
+          ),
+        );
+        await _pumpLessonsList(tester, db: db, fixture: fixture);
+
+        await tester.tap(find.byTooltip('Delete'));
+        await tester.pumpAndSettle();
+        expect(find.text('Delete Lesson'), findsOneWidget);
+        await tester.tap(find.text('Delete'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Lesson deleted'), findsOneWidget);
+        expect(await db.lessonsDao.getAll(), isEmpty,
+            reason: 'the lesson is soft-deleted immediately');
+        final deletes = (await db.syncQueueDao.pendingEntries())
+            .where((e) =>
+                e.queueTable == 'lessons' && e.operation == 'DELETE')
+            .toList();
+        expect(deletes, hasLength(1));
+        expect(deletes.single.recordLocalId, lessonId);
+        expect(deletes.single.nextRetryAt, isNotNull,
+            reason: 'the DELETE entry is held until the Undo window elapses');
+
+        await tester.tap(find.text('Undo'));
+        await tester.pumpAndSettle();
+        expect((await db.lessonsDao.getAll()).length, 1,
+            reason: 'Undo restores the lesson locally');
+        expect(
+          (await db.syncQueueDao.pendingEntries())
+              .where((e) =>
+                  e.queueTable == 'lessons' && e.operation == 'DELETE'),
+          isEmpty,
+          reason: 'Undo drops the new DELETE entry so the server row is kept',
+        );
       },
     );
   });

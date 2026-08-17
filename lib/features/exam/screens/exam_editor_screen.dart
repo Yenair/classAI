@@ -4174,7 +4174,6 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
-    final canPop = Navigator.of(context).canPop();
     final hasSelection = _mode == 'caTest'
         ? _selectedIndexes.isNotEmpty
         : _questionCounts.any((c) => c > 0);
@@ -4188,18 +4187,20 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
       appBar: AppBar(
         // The setup screen always has a visible back affordance returning to
         // the `/exams` choice screen (or wherever this screen was pushed
-        // from, e.g. the list zero state).
-        leading: canPop
-            ? IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.arrow_back_rounded),
-                tooltip: 'Back to exams',
-              )
-            : IconButton(
-                onPressed: () => context.go('/'),
-                icon: const Icon(Icons.home_rounded),
-                tooltip: 'Home',
-              ),
+        // from, e.g. the list zero state). History-preserving: pop when this
+        // screen was pushed, and fall back to the /exams choice screen when
+        // it was reached with no history (e.g. a deep link) — never Home.
+        leading: IconButton(
+          onPressed: () {
+            if (Navigator.of(context).canPop()) {
+              context.pop();
+            } else {
+              context.go('/exams');
+            }
+          },
+          icon: const Icon(Icons.arrow_back_rounded),
+          tooltip: 'Back to exams',
+        ),
         title: Text(
           _mode == 'termExam' ? 'Term Exam Setup' : 'CA Test Setup',
           style: theme.textTheme.titleLarge?.copyWith(
