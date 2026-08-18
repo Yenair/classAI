@@ -1,4 +1,5 @@
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/widgets/status_chip.dart';
 import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/core/services/config_service.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
@@ -684,5 +685,122 @@ void main() {
       tester.element(find.byType(ExamsListScreen)),
     );
     expect(listState.uri.path, '/exams/list');
+  });
+
+  testWidgets('exam cards show icon+text status chips instead of '
+      'color-only dots', (tester) async {
+    await _seedExams(db, fixture);
+    await _pumpExamsList(tester, db: db, fixture: fixture);
+
+    // Both seeded exams are drafts (not unlocked): each card renders a
+    // Draft chip with both an icon and a label, never a bare color dot.
+    final chips = find.byType(StatusChip);
+    expect(chips, findsNWidgets(3));
+    expect(
+      find.descendant(of: chips, matching: find.text('Draft')),
+      findsNWidgets(2),
+    );
+    expect(
+      find.descendant(
+        of: chips,
+        matching: find.byIcon(Icons.edit_note_rounded),
+      ),
+      findsNWidgets(2),
+    );
+    // The scheme-linked legacy draft also carries the "Linked" marker.
+    expect(
+      find.descendant(of: chips, matching: find.text('Linked')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: chips,
+        matching: find.byIcon(Icons.link_rounded),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('unlocked exams show the Unlocked chip with its exclusive '
+      'icon', (tester) async {
+    await _seedExams(db, fixture);
+    final exams = await db.examsDao.getAll();
+    final caTest = exams.firstWhere((e) => e.topic.startsWith('CA Test'));
+    await db.examsDao.updateExam(
+      caTest.id,
+      ExamsCompanion(isUnlocked: const Value(true)),
+    );
+    await _pumpExamsList(tester, db: db, fixture: fixture);
+
+    final chips = find.byType(StatusChip);
+    expect(
+      find.descendant(of: chips, matching: find.text('Unlocked')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: chips,
+        matching: find.byIcon(Icons.auto_awesome_rounded),
+      ),
+      findsOneWidget,
+    );
+    // Unlocked must not reuse the exam-type or Generated glyphs.
+    expect(
+      find.descendant(of: chips, matching: find.byIcon(Icons.quiz_rounded)),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: chips,
+        matching: find.byIcon(Icons.lock_open_rounded),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: chips, matching: find.text('Draft')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('type badges use the exclusive exam-type icons, separate from '
+      'status chips', (tester) async {
+    await _seedExams(db, fixture);
+    await db.examsDao.insertExam(
+      ExamsCompanion.insert(
+        subject: 'Mathematics',
+        classLevel: 'JSS 1',
+        topic: 'Term Exam (13 topics)',
+        difficulty: 'medium',
+        curriculum: 'NERDC',
+        content: '{"mcqs":[],"theory":[],"subjective":[]}',
+        teacherServerId: Value(fixture.teacher.serverId),
+        schoolServerId: Value(fixture.school.serverId),
+        isUnlocked: const Value(true),
+        weekNumber: const Value(3),
+        term: const Value('1st Term'),
+      ),
+    );
+    await _pumpExamsList(tester, db: db, fixture: fixture);
+
+    // CA Test badge + CA Test tab carry the quiz icon; the Term Exam badge
+    // and tab carry the turned-in assignment icon.
+    expect(find.byIcon(Icons.quiz_rounded), findsNWidgets(2));
+    expect(
+      find.byIcon(Icons.assignment_turned_in_rounded),
+      findsNWidgets(2),
+    );
+    // Status chips never reuse the exam-type glyphs.
+    final chips = find.byType(StatusChip);
+    expect(
+      find.descendant(of: chips, matching: find.byIcon(Icons.quiz_rounded)),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: chips,
+        matching: find.byIcon(Icons.assignment_turned_in_rounded),
+      ),
+      findsNothing,
+    );
   });
 }

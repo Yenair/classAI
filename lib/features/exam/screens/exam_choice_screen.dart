@@ -5,12 +5,16 @@ import 'package:go_router/go_router.dart';
 /// list tabs/badges, success content). Kept in one place so the coding stays
 /// consistent:
 ///
-/// | Type           | Color  | Icon                      |
-/// |----------------|--------|---------------------------|
-/// | CA Test        | Blue   | quiz_rounded              |
-/// | Term Exam      | Green  | assignment_rounded        |
-const kCaTestColor = Color(0xFF2196F3);
-const kTermExamColor = Color(0xFF4CAF50);
+/// | Type           | Color   | Icon                           |
+/// |----------------|---------|--------------------------------|
+/// | CA Test        | Teal    | quiz_rounded                   |
+/// | Term Exam      | Indigo  | assignment_turned_in_rounded   |
+///
+/// These colors are exclusive to exam types and deliberately distinct from
+/// the status/lifecycle palette (grey / blue / purple / green / amber) in
+/// core/widgets/status_chip.dart.
+const kCaTestColor = Color(0xFF009688);
+const kTermExamColor = Color(0xFF5C6BC0);
 
 /// The two primary creation cards. Shared by the `/exams` choice screen and
 /// the `/exams/list` zero state so both lead into the exact same setup
@@ -27,7 +31,7 @@ class ExamCreationCards extends StatelessWidget {
           title: 'Term Exam',
           subtitle: 'Make one exam for the term.',
           color: kTermExamColor,
-          icon: Icons.assignment_rounded,
+          icon: Icons.assignment_turned_in_rounded,
           onTap: () => context.push('/exam-editor?compilationType=termExam'),
         ),
         const SizedBox(height: 12),

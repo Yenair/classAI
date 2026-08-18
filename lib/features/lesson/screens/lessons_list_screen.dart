@@ -16,6 +16,7 @@ import 'package:classai/core/services/pdf_service.dart';
 import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/core/widgets/conflict_banner.dart';
 import 'package:classai/core/widgets/credit_counter.dart';
+import 'package:classai/core/widgets/status_chip.dart';
 import 'package:classai/core/widgets/sync_indicator.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
@@ -1759,45 +1760,10 @@ Future<void> exportLessonPdf(
   }
 }
 
-/// Status-circle colors shared with the exams list so the mapping stays
-/// consistent across both screens: Draft → grey, Unlocked → blue,
-/// Completed → green, linked to a scheme → orange border.
-const _draftCircleColor = Color(0xFF9E9E9E);
-const _unlockedCircleColor = Color(0xFF2196F3);
-const _completedCircleColor = Color(0xFF4CAF50);
-const _schemeLinkedCircleColor = Color(0xFFFF9800);
-
-/// Lesson → circle color: Completed → green, Unlocked → blue, Draft → grey.
-Color _lessonStatusCircleColor(Lesson lesson) {
-  if (lesson.status == 'completed') return _completedCircleColor;
-  if (lesson.isUnlocked) return _unlockedCircleColor;
-  return _draftCircleColor;
-}
-
-/// Small colored circle showing an item's state. An orange border is drawn
-/// when the item is linked to a scheme of work. Identical implementation on
-/// the exams list so the two screens stay consistent.
-class _StatusCircle extends StatelessWidget {
-  const _StatusCircle({required this.color, required this.linked});
-
-  final Color color;
-  final bool linked;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 12,
-      height: 12,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: color,
-        border: linked
-            ? Border.all(color: _schemeLinkedCircleColor, width: 2)
-            : null,
-      ),
-    );
-  }
-}
+/// Lesson row status chips (Completed / Unlocked / Draft) plus the brown
+/// "Linked" marker come from the shared status language in
+/// core/widgets/status_chip.dart, keeping the exams and lessons lists
+/// consistent.
 
 class _LessonCard extends StatelessWidget {
   final Lesson lesson;
@@ -1844,11 +1810,21 @@ class _LessonCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            _StatusCircle(
-              color: _lessonStatusCircleColor(lesson),
-              linked: lesson.schemeOfWorkId != null,
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                lessonRowStatusChip(
+                  completed: lesson.status == 'completed',
+                  unlocked: lesson.isUnlocked,
+                ),
+                if (lesson.schemeOfWorkId != null) ...[
+                  const SizedBox(height: 4),
+                  schemeLinkedChip(),
+                ],
+              ],
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 10),
             SizedBox(
               width: 18,
               child: Text(

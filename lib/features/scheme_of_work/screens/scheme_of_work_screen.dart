@@ -7,6 +7,7 @@ import 'package:classai/core/database/database.dart';
 import 'package:classai/core/services/scheme_of_work_service.dart';
 import 'package:classai/core/constants/curriculum_types.dart';
 import 'package:classai/core/widgets/app_toast.dart';
+import 'package:classai/core/widgets/status_chip.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
@@ -122,21 +123,6 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     final edited = record.adminEditedTopic;
     if (edited != null && edited.isNotEmpty) return edited;
     return record.topic;
-  }
-
-  String _lessonStatusLabel(String? status) {
-    switch (status?.trim().toLowerCase()) {
-      case 'generated':
-        return 'Generated';
-      case 'completed':
-        return 'Completed';
-      case 'draft':
-      case null:
-      case '':
-        return 'Draft';
-      default:
-        return status!.trim();
-    }
   }
 
   /// Expansion keys use the normalized subject and class values.
@@ -577,6 +563,13 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
             letterSpacing: -0.12,
           ),
         ),
+        actions: [
+          IconButton(
+            onPressed: () => context.go('/'),
+            icon: const Icon(Icons.home_rounded),
+            tooltip: 'Home',
+          ),
+        ],
         elevation: 0,
         backgroundColor: cs.surface,
         foregroundColor: cs.onSurface,
@@ -1256,15 +1249,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
                   ),
                 ),
                 const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: _statusColor(record.status, cs),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(record.status,
-                      style: TextStyle(color: cs.onPrimary, fontSize: 12, fontWeight: FontWeight.w600)),
-                ),
+                schemeStatusChip(record.status),
               ],
             ),
             const SizedBox(height: 8),
@@ -1337,17 +1322,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
           padding: const EdgeInsets.only(top: 6),
           child: Row(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: _lessonStatusColor(lesson.status, cs),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  _lessonStatusLabel(lesson.status),
-                  style: TextStyle(color: cs.onPrimary, fontSize: 12, fontWeight: FontWeight.w600),
-                ),
-              ),
+              lessonStatusChipFor(lesson.status),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -1367,27 +1342,4 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     ];
   }
 
-  Color _lessonStatusColor(String? status, ColorScheme cs) {
-    switch (status?.trim().toLowerCase()) {
-      case 'completed':
-        return Colors.green;
-      case 'generated':
-        return Colors.orange;
-      case 'draft':
-      case null:
-      case '':
-        return cs.primary;
-      default:
-        return cs.primary;
-    }
-  }
-
-  Color _statusColor(String status, ColorScheme cs) {
-    switch (status) {
-      case 'approved': return Colors.green;
-      case 'rejected': return Colors.red;
-      case 'pending': return Colors.orange;
-      default: return cs.primary;
-    }
-  }
 }

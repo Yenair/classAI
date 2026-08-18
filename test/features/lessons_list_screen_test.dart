@@ -1,4 +1,5 @@
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/widgets/status_chip.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/lesson/screens/lessons_list_screen.dart';
 import 'package:classai/main.dart' show databaseProvider;
@@ -379,4 +380,68 @@ void main() {
       },
     );
   });
+
+  testWidgets(
+    'lesson cards show icon+text status chips (Draft / Completed)',
+    (tester) async {
+      fixture = await _seedAuthFixture(db, teacherRole: 'teacher');
+      await db.lessonsDao.insertLesson(
+        LessonsCompanion.insert(
+          subject: 'Mathematics',
+          classLevel: 'JSS 1',
+          week: 1,
+          topic: 'Draft Lesson',
+          difficulty: 'medium',
+          bloomsVerbs: '',
+          curriculum: 'NERDC',
+          content: '{"objectives":[],"diagrams":[]}',
+          teacherServerId: Value(fixture.teacher.serverId),
+          schoolServerId: Value(fixture.school.serverId),
+          term: const Value('1st Term'),
+        ),
+      );
+      await db.lessonsDao.insertLesson(
+        LessonsCompanion.insert(
+          subject: 'Mathematics',
+          classLevel: 'JSS 1',
+          week: 2,
+          topic: 'Completed Lesson',
+          difficulty: 'medium',
+          bloomsVerbs: '',
+          curriculum: 'NERDC',
+          content: '{"objectives":[{"text":"done"}],"diagrams":[]}',
+          teacherServerId: Value(fixture.teacher.serverId),
+          schoolServerId: Value(fixture.school.serverId),
+          term: const Value('1st Term'),
+          status: const Value('completed'),
+          isUnlocked: const Value(true),
+        ),
+      );
+      await _pumpLessonsList(tester, db: db, fixture: fixture);
+
+      final chips = find.byType(StatusChip);
+      expect(
+        find.descendant(of: chips, matching: find.text('Draft')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: chips,
+          matching: find.byIcon(Icons.edit_note_rounded),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: chips, matching: find.text('Completed')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: chips,
+          matching: find.byIcon(Icons.check_circle_rounded),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
 }

@@ -202,7 +202,7 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
     return [
       NavItem(icon: Icons.home_rounded, label: 'Home', route: null),
       NavItem(icon: Icons.menu_book_rounded, label: 'Lessons', route: '/lessons'),
-      NavItem(icon: Icons.quiz_rounded, label: 'Exams', route: '/exams'),
+      NavItem(icon: Icons.fact_check_rounded, label: 'Exams', route: '/exams'),
       // NavItem(icon: Icons.inventory_2_rounded, label: 'Vault', route: '/vault'), // Vault feature disabled
       // Scheme of Work is admin-only — teachers plan their term via "Plan My
       // Term" on the Lessons list.
@@ -305,7 +305,7 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                 onTap: () => context.push('/lesson-editor'),
               ),
               _ActionButton(
-                icon: Icons.assignment_rounded,
+                icon: Icons.fact_check_rounded,
                 label: 'Generate Exam',
                 isPrimary: false,
                 cs: cs,
@@ -1489,7 +1489,7 @@ class _ReaderTotalOverviewPanel extends ConsumerWidget {
           Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.2)),
           const SizedBox(height: 12),
           _OverviewStatRow(
-            icon: Icons.quiz,
+            icon: Icons.fact_check_rounded,
             label: 'Exams',
             value: examCountAsync.isLoading ? '...' : examLabel,
             cs: cs,
@@ -1810,7 +1810,7 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
       const _ReaderNavSpec(icon: Icons.home_rounded, label: 'Home', route: 'home'),
       const _ReaderNavSpec(
           icon: Icons.menu_book_rounded, label: 'Lessons', route: '/lessons', isFilled: true),
-      const _ReaderNavSpec(icon: Icons.quiz_rounded, label: 'Exams', route: 'exams'),
+      const _ReaderNavSpec(icon: Icons.fact_check_rounded, label: 'Exams', route: 'exams'),
       if (isAdmin)
         const _ReaderNavSpec(
             icon: Icons.calendar_month_rounded, label: 'Scheme of Work', route: '/scheme-of-work'),

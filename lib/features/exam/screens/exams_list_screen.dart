@@ -5,6 +5,7 @@ import 'dart:io' show Platform;
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/widgets/conflict_banner.dart';
 import 'package:classai/core/widgets/credit_counter.dart';
+import 'package:classai/core/widgets/status_chip.dart';
 import 'package:classai/core/widgets/sync_indicator.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
@@ -654,6 +655,7 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
                             padding: const EdgeInsets.only(right: 8),
                             child: _TypeTab(
                               label: tab,
+                              icon: _typeTabIcon(tab),
                               selected: _selectedTypeTab == tab,
                               onTap: () => _setTypeTab(tab),
                             ),
@@ -713,7 +715,7 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
                             borderRadius: BorderRadius.circular(24),
                           ),
                           child: Icon(
-                            Icons.quiz_rounded,
+                            Icons.fact_check_rounded,
                             size: 38,
                             color: cs.onSurfaceVariant.withValues(alpha: 0.5),
                           ),
@@ -1105,48 +1107,20 @@ IconData _examTypeIcon(_ExamType type) {
     case _ExamType.caTest:
       return Icons.quiz_rounded;
     case _ExamType.termExam:
-      return Icons.assignment_rounded;
+      return Icons.assignment_turned_in_rounded;
   }
 }
 
-/// Status-circle colors shared with the lessons list so the mapping stays
-/// consistent across both screens: Draft → grey, Unlocked → blue,
-/// linked to a scheme → orange border. (Green for "completed" only exists
-/// on the lessons list — exams have no completed state.)
-const _draftCircleColor = Color(0xFF9E9E9E);
-const _unlockedCircleColor = Color(0xFF2196F3);
-const _schemeLinkedCircleColor = Color(0xFFFF9800);
-
-/// Exam → circle color: Unlocked → blue, Draft → grey. Exams have no separate
-/// completed state today, so green (completed) only applies to lessons (see
-/// the lessons list's `_lessonStatusCircleColor`).
-Color _examStatusCircleColor(Exam exam) {
-  if (exam.isUnlocked) return _unlockedCircleColor;
-  return _draftCircleColor;
-}
-
-/// Small colored circle showing an item's state. An orange border is drawn
-/// when the item is linked to a scheme of work. Identical implementation on
-/// the lessons list so the two screens stay consistent.
-class _StatusCircle extends StatelessWidget {
-  const _StatusCircle({required this.color, required this.linked});
-
-  final Color color;
-  final bool linked;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 12,
-      height: 12,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: color,
-        border: linked
-            ? Border.all(color: _schemeLinkedCircleColor, width: 2)
-            : null,
-      ),
-    );
+/// Icon for a type tab label ('' for All), so the tabs carry the same
+/// exclusive type icons as the badges.
+IconData? _typeTabIcon(String label) {
+  switch (label) {
+    case 'CA Test (Class Test)':
+      return Icons.quiz_rounded;
+    case 'Term Exam':
+      return Icons.assignment_turned_in_rounded;
+    default:
+      return null;
   }
 }
 
@@ -1197,11 +1171,18 @@ class _ExamCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            _StatusCircle(
-              color: _examStatusCircleColor(exam),
-              linked: exam.schemeOfWorkId != null,
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                examRowStatusChip(unlocked: exam.isUnlocked),
+                if (exam.schemeOfWorkId != null) ...[
+                  const SizedBox(height: 4),
+                  schemeLinkedChip(),
+                ],
+              ],
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 10),
             SizedBox(
               width: 18,
               child: Text(
@@ -1454,15 +1435,18 @@ String _formatDate(DateTime dt) {
 }
 
 /// One pill-shaped type tab (All | CA Test (Class Test) | Term Exam). The
-/// active tab stays highlighted.
+/// active tab stays highlighted; type tabs carry the same exclusive type
+/// icon as the badges.
 class _TypeTab extends StatelessWidget {
   const _TypeTab({
     required this.label,
+    this.icon,
     required this.selected,
     required this.onTap,
   });
 
   final String label;
+  final IconData? icon;
   final bool selected;
   final VoidCallback onTap;
 
@@ -1487,12 +1471,25 @@ class _TypeTab extends StatelessWidget {
                   : cs.outlineVariant.withValues(alpha: 0.4),
             ),
           ),
-          child: Text(
-            label,
-            style: theme.textTheme.labelLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: selected ? cs.onPrimary : cs.onSurfaceVariant,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(
+                  icon,
+                  size: 16,
+                  color: selected ? cs.onPrimary : cs.onSurfaceVariant,
+                ),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                label,
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: selected ? cs.onPrimary : cs.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
         ),
       ),

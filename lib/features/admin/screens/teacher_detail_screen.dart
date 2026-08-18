@@ -1,8 +1,10 @@
 // lib/features/admin/screens/teacher_detail_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/widgets/status_chip.dart';
 import 'package:classai/features/admin/providers/admin_provider.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/main.dart' show databaseProvider;
@@ -368,6 +370,13 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(teacher.teacherName),
+        actions: [
+          IconButton(
+            onPressed: () => context.go('/'),
+            icon: const Icon(Icons.home_rounded),
+            tooltip: 'Home',
+          ),
+        ],
         elevation: 0,
         backgroundColor: cs.surface,
         foregroundColor: cs.onSurface,
@@ -498,29 +507,7 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
                   ),
                   const SizedBox(height: 16),
                   // Scheme status chip
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: _schemeStatusColor(cs).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: _schemeStatusColor(cs).withValues(alpha: 0.25),
-                          ),
-                        ),
-                        child: Text(
-                          _schemeStatusLabel(),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: _schemeStatusColor(cs),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                  schemeStatusChip(_schemeStatus, fallbackLabel: 'No Scheme'),
                   if (_totalWeeks > 0) ...[
                     const SizedBox(height: 16),
                     // Progress bar
@@ -904,29 +891,4 @@ class _TeacherDetailScreenState extends ConsumerState<TeacherDetailScreen> {
     );
   }
 
-  Color _schemeStatusColor(ColorScheme cs) {
-    switch (_schemeStatus) {
-      case 'draft':
-        return Colors.orange;
-      case 'pending':
-        return Colors.blue;
-      case 'approved':
-        return Colors.green;
-      default:
-        return cs.onSurfaceVariant;
-    }
-  }
-
-  String _schemeStatusLabel() {
-    switch (_schemeStatus) {
-      case 'draft':
-        return 'Draft';
-      case 'pending':
-        return 'Pending';
-      case 'approved':
-        return 'Approved';
-      default:
-        return 'No Scheme';
-    }
-  }
 }

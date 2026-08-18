@@ -1499,7 +1499,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   static const _navItems = [
     _NavDef('Home', Icons.home_rounded, false),
     _NavDef('Lessons', Icons.menu_book_rounded, false),
-    _NavDef('Exams', Icons.quiz_rounded, true),
+    _NavDef('Exams', Icons.fact_check_rounded, true),
     // _NavDef('Vault', Icons.inventory_2_rounded, false), // Vault feature disabled
     _NavDef('Admin', Icons.admin_panel_settings_rounded, false),
   ];
@@ -1507,7 +1507,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   static const _bottomNavItems = [
     _BottomDef('Home', Icons.home_rounded, false),
     _BottomDef('Lessons', Icons.menu_book_rounded, false),
-    _BottomDef('Exams', Icons.quiz_rounded, true),
+    _BottomDef('Exams', Icons.fact_check_rounded, true),
     _BottomDef('More', Icons.more_horiz_rounded, false),
   ];
 
@@ -4208,6 +4208,13 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
             letterSpacing: -0.12,
           ),
         ),
+        actions: [
+          IconButton(
+            onPressed: () => context.go('/'),
+            icon: const Icon(Icons.home_rounded),
+            tooltip: 'Home',
+          ),
+        ],
         elevation: 0,
         backgroundColor: cs.surface,
         foregroundColor: cs.onSurface,
