@@ -13,9 +13,9 @@ class SchemeOfWorkService {
 
   /// Writes one scheme_of_work row per week and auto-creates a linked draft
   /// lesson for each week. Exams are NEVER created here — exam creation is
-  /// exclusively explicit (the Exams list "Generate Weekly Exams" and
-  /// "Term Exam / CA Test" flows). Everything runs inside a single database
-  /// transaction — a partial failure rolls the whole plan back.
+  /// exclusively explicit (the exam editor's "Term Exam / CA Test" setup
+  /// and single-topic generation flows). Everything runs inside a single
+  /// database transaction — a partial failure rolls the whole plan back.
   ///
   /// When [deleteExistingFirst] is true, any existing saved plan for the same
   /// subject/class/term is deleted (scheme rows hard-deleted, linked draft

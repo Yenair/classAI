@@ -1203,7 +1203,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     });
     try {
       final db = ref.read(databaseProvider);
-      final aiService = AiService(db: db);
       final topic = _topicController.text.trim();
       final review = _reviewController.text.trim();
 
@@ -1268,6 +1267,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           }
         }
       } else {
+        // Production path: construct AiService only here so widget tests
+        // providing a generateCallback never touch Supabase.
+        final aiService = AiService(db: db);
         final lessonFuture = aiService.generate(regeneratedPrompt);
         final questionsFuture = questionsPrompt != null
             ? aiService

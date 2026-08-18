@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/widgets/conflict_banner.dart';
+import 'package:classai/core/widgets/status_chip.dart';
 import 'package:classai/core/widgets/sync_indicator.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
@@ -1197,6 +1198,11 @@ class _RecentLessonsSection extends ConsumerWidget {
     : (lesson.status == 'generated' ? 'Generated' : 'Draft'),
                                       statusColor: cs.primary,
                                       statusBg: cs.primary.withValues(alpha: 0.1),
+                                      showGeneratedChip: lesson.status ==
+                                              'generated' &&
+                                          !lesson.isUnlocked,
+                                      needsSync: lesson.serverId == null ||
+                                          lesson.serverId!.isEmpty,
                                       timeAgo: 'Updated ${_timeAgo(lesson.updatedAt)}',
                                       cs: cs,
                                       theme: theme,
@@ -1230,6 +1236,11 @@ class _RecentLessonsSection extends ConsumerWidget {
     : (lesson.status == 'generated' ? 'Generated' : 'Draft'),
                                       statusColor: cs.onSurfaceVariant,
                                       statusBg: cs.surfaceContainerHighest,
+                                      showGeneratedChip: lesson.status ==
+                                              'generated' &&
+                                          !lesson.isUnlocked,
+                                      needsSync: lesson.serverId == null ||
+                                          lesson.serverId!.isEmpty,
                                       timeAgo:
                                           'Updated ${_timeAgo(lesson.updatedAt)}',
                                       cs: cs,
@@ -1263,6 +1274,10 @@ class _RecentLessonsSection extends ConsumerWidget {
     : (lesson.status == 'generated' ? 'Generated' : 'Draft'),
                               statusColor: cs.primary,
                               statusBg: cs.primary.withValues(alpha: 0.1),
+                              showGeneratedChip: lesson.status == 'generated' &&
+                                  !lesson.isUnlocked,
+                              needsSync: lesson.serverId == null ||
+                                  lesson.serverId!.isEmpty,
                               timeAgo: 'Updated ${_timeAgo(lesson.updatedAt)}',
                               cs: cs,
                               theme: theme,
@@ -1299,6 +1314,8 @@ class _LessonCard extends StatelessWidget {
     required this.status,
     required this.statusColor,
     required this.statusBg,
+    required this.showGeneratedChip,
+    required this.needsSync,
     required this.timeAgo,
     required this.cs,
     required this.theme,
@@ -1312,6 +1329,14 @@ class _LessonCard extends StatelessWidget {
   final String status;
   final Color statusColor;
   final Color statusBg;
+
+  /// Secondary "Generated" chip — shown only while the lesson is generated
+  /// but still locked; the primary badge already conveys it once unlocked.
+  final bool showGeneratedChip;
+
+  /// Secondary "Needs Sync" chip — shown when the lesson has no server id.
+  final bool needsSync;
+
   final String timeAgo;
   final ColorScheme cs;
   final ThemeData theme;
@@ -1370,6 +1395,29 @@ class _LessonCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (showGeneratedChip || needsSync) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      if (showGeneratedChip)
+                        const StatusChip(
+                          label: 'Generated',
+                          icon: Icons.lock_open_rounded,
+                          color: kStatusGeneratedColor,
+                          dense: true,
+                        ),
+                      if (needsSync)
+                        const StatusChip(
+                          label: 'Needs Sync',
+                          icon: Icons.sync_rounded,
+                          color: kStatusNeedsSyncColor,
+                          dense: true,
+                        ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Text(
                   title,
