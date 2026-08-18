@@ -444,4 +444,157 @@ void main() {
       );
     },
   );
+
+  group('LessonsListScreen secondary status chips', () {
+    testWidgets(
+      'a generated but locked lesson shows Draft + Generated + Needs Sync',
+      (tester) async {
+        fixture = await _seedAuthFixture(db, teacherRole: 'teacher');
+        await db.lessonsDao.insertLesson(
+          LessonsCompanion.insert(
+            subject: 'Mathematics',
+            classLevel: 'JSS 1',
+            week: 1,
+            topic: 'Generated Locked Lesson',
+            difficulty: 'medium',
+            bloomsVerbs: '',
+            curriculum: 'NERDC',
+            content: '{"objectives":[],"diagrams":[]}',
+            teacherServerId: Value(fixture.teacher.serverId),
+            schoolServerId: Value(fixture.school.serverId),
+            term: const Value('1st Term'),
+            status: const Value('generated'),
+            // No serverId -> Needs Sync applies.
+          ),
+        );
+        await _pumpLessonsList(tester, db: db, fixture: fixture);
+
+        final chips = find.byType(StatusChip);
+        expect(
+          find.descendant(of: chips, matching: find.text('Draft')),
+          findsOneWidget,
+          reason: 'the locked generated lesson keeps its primary Draft chip',
+        );
+        expect(
+          find.descendant(of: chips, matching: find.text('Generated')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: chips,
+            matching: find.byIcon(Icons.lock_open_rounded),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: chips, matching: find.text('Needs Sync')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: chips,
+            matching: find.byIcon(Icons.sync_rounded),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'a generated but unlocked lesson hides the secondary Generated chip',
+      (tester) async {
+        fixture = await _seedAuthFixture(db, teacherRole: 'teacher');
+        await db.lessonsDao.insertLesson(
+          LessonsCompanion.insert(
+            subject: 'Mathematics',
+            classLevel: 'JSS 1',
+            week: 1,
+            topic: 'Generated Unlocked Lesson',
+            difficulty: 'medium',
+            bloomsVerbs: '',
+            curriculum: 'NERDC',
+            content: '{"objectives":[],"diagrams":[]}',
+            teacherServerId: Value(fixture.teacher.serverId),
+            schoolServerId: Value(fixture.school.serverId),
+            term: const Value('1st Term'),
+            status: const Value('generated'),
+            isUnlocked: const Value(true),
+          ),
+        );
+        await _pumpLessonsList(tester, db: db, fixture: fixture);
+
+        final chips = find.byType(StatusChip);
+        expect(
+          find.descendant(of: chips, matching: find.text('Unlocked')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: chips,
+            matching: find.byIcon(Icons.auto_awesome_rounded),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: chips, matching: find.text('Generated')),
+          findsNothing,
+          reason: 'Unlocked already conveys generated, so no secondary chip',
+        );
+        expect(
+          find.descendant(
+            of: chips,
+            matching: find.byIcon(Icons.lock_open_rounded),
+          ),
+          findsNothing,
+        );
+        // Still no serverId, so Needs Sync remains.
+        expect(
+          find.descendant(of: chips, matching: find.text('Needs Sync')),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'a generated lesson with a serverId hides Needs Sync',
+      (tester) async {
+        fixture = await _seedAuthFixture(db, teacherRole: 'teacher');
+        await db.lessonsDao.insertLesson(
+          LessonsCompanion.insert(
+            subject: 'Mathematics',
+            classLevel: 'JSS 1',
+            week: 1,
+            topic: 'Synced Generated Lesson',
+            difficulty: 'medium',
+            bloomsVerbs: '',
+            curriculum: 'NERDC',
+            content: '{"objectives":[],"diagrams":[]}',
+            teacherServerId: Value(fixture.teacher.serverId),
+            schoolServerId: Value(fixture.school.serverId),
+            term: const Value('1st Term'),
+            status: const Value('generated'),
+            serverId: const Value('00000000-0000-0000-0000-00000000ef01'),
+          ),
+        );
+        await _pumpLessonsList(tester, db: db, fixture: fixture);
+
+        final chips = find.byType(StatusChip);
+        expect(
+          find.descendant(of: chips, matching: find.text('Generated')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: chips, matching: find.text('Needs Sync')),
+          findsNothing,
+        );
+        expect(
+          find.descendant(
+            of: chips,
+            matching: find.byIcon(Icons.sync_rounded),
+          ),
+          findsNothing,
+        );
+      },
+    );
+  });
 }

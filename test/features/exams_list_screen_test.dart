@@ -694,8 +694,9 @@ void main() {
 
     // Both seeded exams are drafts (not unlocked): each card renders a
     // Draft chip with both an icon and a label, never a bare color dot.
+    // Neither exam has a serverId, so each also shows a Needs Sync chip.
     final chips = find.byType(StatusChip);
-    expect(chips, findsNWidgets(3));
+    expect(chips, findsNWidgets(5));
     expect(
       find.descendant(of: chips, matching: find.text('Draft')),
       findsNWidgets(2),
@@ -704,6 +705,18 @@ void main() {
       find.descendant(
         of: chips,
         matching: find.byIcon(Icons.edit_note_rounded),
+      ),
+      findsNWidgets(2),
+    );
+    // Both exams lack a serverId -> Needs Sync on each card.
+    expect(
+      find.descendant(of: chips, matching: find.text('Needs Sync')),
+      findsNWidgets(2),
+    );
+    expect(
+      find.descendant(
+        of: chips,
+        matching: find.byIcon(Icons.sync_rounded),
       ),
       findsNWidgets(2),
     );
@@ -718,6 +731,82 @@ void main() {
         matching: find.byIcon(Icons.link_rounded),
       ),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('exams show Needs Sync only when the serverId is missing',
+      (tester) async {
+    // One exam without a serverId (offline-created) and one synced exam.
+    await db.examsDao.insertExam(
+      ExamsCompanion.insert(
+        subject: 'Mathematics',
+        classLevel: 'JSS 1',
+        topic: 'Unsynced Exam',
+        difficulty: 'medium',
+        curriculum: 'NERDC',
+        content: '{"mcqs":[],"theory":[],"subjective":[]}',
+        teacherServerId: Value(fixture.teacher.serverId),
+        schoolServerId: Value(fixture.school.serverId),
+        isUnlocked: const Value(false),
+        weekNumber: const Value(1),
+        term: const Value('1st Term'),
+      ),
+    );
+    await db.examsDao.insertExam(
+      ExamsCompanion.insert(
+        subject: 'Mathematics',
+        classLevel: 'JSS 1',
+        topic: 'Synced Exam',
+        difficulty: 'medium',
+        curriculum: 'NERDC',
+        content: '{"mcqs":[],"theory":[],"subjective":[]}',
+        teacherServerId: Value(fixture.teacher.serverId),
+        schoolServerId: Value(fixture.school.serverId),
+        isUnlocked: const Value(false),
+        weekNumber: const Value(2),
+        term: const Value('1st Term'),
+        serverId: const Value('00000000-0000-0000-0000-00000000de01'),
+      ),
+    );
+    await _pumpExamsList(tester, db: db, fixture: fixture);
+
+    Finder needsSyncInCard(String topic) => find.descendant(
+          of: find.ancestor(
+            of: find.text(topic),
+            matching: find.byType(InkWell),
+          ),
+          matching: find.byType(StatusChip),
+        );
+
+    expect(
+      find.descendant(
+        of: needsSyncInCard('Unsynced Exam'),
+        matching: find.text('Needs Sync'),
+      ),
+      findsOneWidget,
+      reason: 'an exam with no serverId must show Needs Sync',
+    );
+    expect(
+      find.descendant(
+        of: needsSyncInCard('Unsynced Exam'),
+        matching: find.byIcon(Icons.sync_rounded),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: needsSyncInCard('Synced Exam'),
+        matching: find.text('Needs Sync'),
+      ),
+      findsNothing,
+      reason: 'an exam with a serverId must not show Needs Sync',
+    );
+    expect(
+      find.descendant(
+        of: needsSyncInCard('Synced Exam'),
+        matching: find.byIcon(Icons.sync_rounded),
+      ),
+      findsNothing,
     );
   });
 

@@ -1171,15 +1171,22 @@ class _ExamCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
               children: [
                 examRowStatusChip(unlocked: exam.isUnlocked),
-                if (exam.schemeOfWorkId != null) ...[
-                  const SizedBox(height: 4),
-                  schemeLinkedChip(),
-                ],
+                // Secondary "Needs Sync" chip — the Unlocked primary chip is
+                // the only generated signal for exams, so no Generated chip
+                // is added here.
+                if (exam.serverId == null || exam.serverId!.isEmpty)
+                  const StatusChip(
+                    label: 'Needs Sync',
+                    icon: Icons.sync_rounded,
+                    color: kStatusNeedsSyncColor,
+                    dense: true,
+                  ),
+                if (exam.schemeOfWorkId != null) schemeLinkedChip(),
               ],
             ),
             const SizedBox(width: 10),

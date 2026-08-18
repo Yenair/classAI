@@ -1810,18 +1810,32 @@ class _LessonCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
               children: [
                 lessonRowStatusChip(
                   completed: lesson.status == 'completed',
                   unlocked: lesson.isUnlocked,
                 ),
-                if (lesson.schemeOfWorkId != null) ...[
-                  const SizedBox(height: 4),
-                  schemeLinkedChip(),
-                ],
+                // Secondary "Generated" chip — only when the lesson is
+                // generated but still locked; the Unlocked primary chip
+                // already conveys it once unlocked.
+                if (lesson.status == 'generated' && !lesson.isUnlocked)
+                  const StatusChip(
+                    label: 'Generated',
+                    icon: Icons.lock_open_rounded,
+                    color: kStatusGeneratedColor,
+                    dense: true,
+                  ),
+                if (lesson.serverId == null || lesson.serverId!.isEmpty)
+                  const StatusChip(
+                    label: 'Needs Sync',
+                    icon: Icons.sync_rounded,
+                    color: kStatusNeedsSyncColor,
+                    dense: true,
+                  ),
+                if (lesson.schemeOfWorkId != null) schemeLinkedChip(),
               ],
             ),
             const SizedBox(width: 10),
