@@ -909,11 +909,17 @@ class _ExamFiltersPanel extends StatelessWidget {
                 children: [
                   Icon(Icons.tune_rounded, size: 18, color: cs.primary),
                   const SizedBox(width: 8),
-                  Text(
-                    'Filter my exams',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: cs.onSurface,
+                  // Flexible lets the label ellipsize on narrow widths
+                  // instead of overflowing the header row.
+                  Flexible(
+                    child: Text(
+                      'Filter my exams',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: cs.onSurface,
+                      ),
                     ),
                   ),
                   const Spacer(),
@@ -1150,6 +1156,206 @@ class _ExamCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
 
+    // Status / secondary chips — shared by both layouts. On wide (desktop)
+    // cards the chips sit inline at the start of the main row; on narrow
+    // cards they move to their own line so they can wrap without starving
+    // the text/actions siblings for width.
+    final chipsWrap = Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        examRowStatusChip(unlocked: exam.isUnlocked),
+        // Secondary "Needs Sync" chip — the Unlocked primary chip
+        // is the only generated signal for exams, so no Generated
+        // chip is added here.
+        if (exam.serverId == null || exam.serverId!.isEmpty)
+          const StatusChip(
+            label: 'Needs Sync',
+            icon: Icons.sync_rounded,
+            color: kStatusNeedsSyncColor,
+            dense: true,
+          ),
+        if (exam.schemeOfWorkId != null) schemeLinkedChip(),
+      ],
+    );
+
+    // Position + icon + text + actions — the shared main row body used by
+    // both the desktop (chips inline) and narrow (chips stacked) layouts.
+    final mainRowChildren = <Widget>[
+      const SizedBox(width: 10),
+      SizedBox(
+        width: 18,
+        child: Text(
+          '$position',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      const SizedBox(width: 10),
+      Container(
+        width: 46,
+        height: 46,
+        decoration: BoxDecoration(
+          color: cs.tertiaryContainer.withValues(alpha: 0.35),
+          borderRadius: BorderRadius.circular(13),
+        ),
+        child: Icon(
+          Icons.assignment_rounded,
+          color: cs.tertiary,
+          size: 22,
+        ),
+      ),
+      const SizedBox(width: 14),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              exam.topic,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: cs.onSurface,
+              ),
+            ),
+            const SizedBox(height: 4),
+            // Flexible + ellipsis keeps the subject badge from
+            // overflowing the text column on narrow cards.
+            Row(
+              children: [
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainer,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      exam.subject,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: cs.onSurfaceVariant,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              classLevelLabel,
+              style: theme.textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: cs.onSurfaceVariant,
+                letterSpacing: 0.15,
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(width: 8),
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // Type badge — always visible regardless of the active
+          // tab, except for legacy weekly draft exams (type ==
+          // null) which show no badge at all.
+          if (type != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 3,
+              ),
+              decoration: BoxDecoration(
+                color: _examTypeColor(type!).withValues(alpha: 0.13),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _examTypeIcon(type!),
+                    size: 13,
+                    color: _examTypeColor(type!),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _examTypeLabel(type!),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: _examTypeColor(type!),
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+          ],
+          Text(
+            _formatDate(exam.createdAt),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+              letterSpacing: 0.2,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: Icon(
+                  Icons.edit_rounded,
+                  size: 20,
+                  color: cs.primary,
+                ),
+                onPressed: onEdit,
+                tooltip: 'Edit',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                  minWidth: 36,
+                  minHeight: 36,
+                ),
+              ),
+              IconButton(
+                icon: Icon(
+                  Icons.delete_outline_rounded,
+                  size: 20,
+                  color: cs.error,
+                ),
+                onPressed: onDelete,
+                tooltip: 'Delete',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                  minWidth: 36,
+                  minHeight: 36,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 4),
+          Icon(
+            Icons.chevron_right_rounded,
+            size: 20,
+            color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+          ),
+        ],
+      ),
+    ];
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
@@ -1169,181 +1375,30 @@ class _ExamCard extends StatelessWidget {
             ),
           ],
         ),
-        child: Row(
-          children: [
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                examRowStatusChip(unlocked: exam.isUnlocked),
-                // Secondary "Needs Sync" chip — the Unlocked primary chip is
-                // the only generated signal for exams, so no Generated chip
-                // is added here.
-                if (exam.serverId == null || exam.serverId!.isEmpty)
-                  const StatusChip(
-                    label: 'Needs Sync',
-                    icon: Icons.sync_rounded,
-                    color: kStatusNeedsSyncColor,
-                    dense: true,
-                  ),
-                if (exam.schemeOfWorkId != null) schemeLinkedChip(),
-              ],
-            ),
-            const SizedBox(width: 10),
-            SizedBox(
-              width: 18,
-              child: Text(
-                '$position',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: cs.onSurfaceVariant.withValues(alpha: 0.6),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color: cs.tertiaryContainer.withValues(alpha: 0.35),
-                borderRadius: BorderRadius.circular(13),
-              ),
-              child: Icon(
-                Icons.assignment_rounded,
-                color: cs.tertiary,
-                size: 22,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        // Desktop (>= 480dp): chips inline where they originally sat, then
+        // the position/icon/text/actions row. Narrow (< 480dp): chips wrap
+        // on their own line above the same row, keeping 320dp safe.
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth >= 480) {
+              return Row(
                 children: [
-                  Text(
-                    exam.topic,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: cs.onSurface,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: cs.surfaceContainer,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          exam.subject,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            fontWeight: FontWeight.w500,
-                            color: cs.onSurfaceVariant,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    classLevelLabel,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: cs.onSurfaceVariant,
-                      letterSpacing: 0.15,
-                    ),
-                  ),
+                  chipsWrap,
+                  const SizedBox(width: 10),
+                  ...mainRowChildren,
                 ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Column(
+              );
+            }
+            return Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Type badge — always visible regardless of the active tab,
-                // except for legacy weekly draft exams (type == null) which
-                // show no badge at all.
-                if (type != null) ...[
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: _examTypeColor(type!).withValues(alpha: 0.13),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          _examTypeIcon(type!),
-                          size: 13,
-                          color: _examTypeColor(type!),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _examTypeLabel(type!),
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: _examTypeColor(type!),
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                ],
-                Text(
-                  _formatDate(exam.createdAt),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: cs.onSurfaceVariant.withValues(alpha: 0.7),
-                    letterSpacing: 0.2,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: Icon(Icons.edit_rounded, size: 20, color: cs.primary),
-                      onPressed: onEdit,
-                      tooltip: 'Edit',
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        Icons.delete_outline_rounded,
-                        size: 20,
-                        color: cs.error,
-                      ),
-                      onPressed: onDelete,
-                      tooltip: 'Delete',
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                    ),
-                  ],
-                ),
+                chipsWrap,
+                const SizedBox(height: 8),
+                Row(children: mainRowChildren),
               ],
-            ),
-            const SizedBox(width: 4),
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 20,
-              color: cs.onSurfaceVariant.withValues(alpha: 0.5),
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
@@ -1389,23 +1444,29 @@ class _ExamCardSkeleton extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
+                  // Flexible placeholders shrink with the text column so
+                  // the skeleton never overflows at 320dp.
                   Row(
                     children: [
-                      Container(
-                        height: 20,
-                        width: 64,
-                        decoration: BoxDecoration(
-                          color: cs.surfaceContainer,
-                          borderRadius: BorderRadius.circular(6),
+                      Flexible(
+                        flex: 2,
+                        child: Container(
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: cs.surfaceContainer,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Container(
-                        height: 20,
-                        width: 92,
-                        decoration: BoxDecoration(
-                          color: cs.surfaceContainer,
-                          borderRadius: BorderRadius.circular(6),
+                      Flexible(
+                        flex: 3,
+                        child: Container(
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: cs.surfaceContainer,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
                         ),
                       ),
                     ],

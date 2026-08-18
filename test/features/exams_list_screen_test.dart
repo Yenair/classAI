@@ -221,8 +221,9 @@ Future<void> _pumpExamsList(
   WidgetTester tester, {
   required AppDatabase db,
   required _AuthFixture fixture,
+  Size surfaceSize = const Size(1280, 1400),
 }) async {
-  await tester.binding.setSurfaceSize(const Size(1280, 1400));
+  await tester.binding.setSurfaceSize(surfaceSize);
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
   await tester.pumpWidget(
@@ -891,5 +892,51 @@ void main() {
       ),
       findsNothing,
     );
+  });
+
+  testWidgets('the exam card chip row does not overflow at 320dp width',
+      (tester) async {
+    await db.examsDao.insertExam(
+      ExamsCompanion.insert(
+        subject: 'Mathematics',
+        classLevel: 'JSS 1',
+        topic: 'Narrow Overflow Guard Exam',
+        difficulty: 'medium',
+        curriculum: 'NERDC',
+        content: '{"mcqs":[],"theory":[],"subjective":[]}',
+        teacherServerId: Value(fixture.teacher.serverId),
+        schoolServerId: Value(fixture.school.serverId),
+        isUnlocked: const Value(false),
+        weekNumber: const Value(1),
+        term: const Value('1st Term'),
+        // No serverId -> Needs Sync secondary chip.
+        schemeOfWorkId: const Value('99'), // -> Linked indicator.
+      ),
+    );
+    await _pumpExamsList(
+      tester,
+      db: db,
+      fixture: fixture,
+      surfaceSize: const Size(320, 1200),
+    );
+
+    // The full chip set renders on the narrow card: primary Draft,
+    // secondary Needs Sync, and the Linked indicator.
+    final chips = find.byType(StatusChip);
+    expect(
+      find.descendant(of: chips, matching: find.text('Draft')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: chips, matching: find.text('Needs Sync')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: chips, matching: find.text('Linked')),
+      findsOneWidget,
+    );
+    // A RenderFlex overflow during layout would be reported here and
+    // fail the test.
+    expect(tester.takeException(), isNull);
   });
 }

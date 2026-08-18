@@ -1,17 +1,23 @@
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/providers/config_provider.dart';
+import 'package:classai/core/services/config_service.dart';
 import 'package:classai/core/widgets/status_chip.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
+import 'package:classai/features/dashboard/screens/dashboard_screen.dart';
 import 'package:classai/features/lesson/screens/lessons_list_screen.dart';
 import 'package:classai/main.dart' show databaseProvider;
+import 'package:classai/router/app_router.dart' show appRouter;
 // ignore: depend_on_referenced_packages
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 // ignore: depend_on_referenced_packages
 import 'package:connectivity_plus_platform_interface/method_channel_connectivity.dart';
-import 'package:drift/drift.dart' hide isNotNull;
+import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide AuthState;
 
 /// A connectivity platform stub so `PlatformHelper.isOnline()` is
 /// deterministic in the widget tests. With a non-none result the online
@@ -35,6 +41,22 @@ class FixedAuthNotifier extends AuthNotifier {
 
   @override
   AuthStateData build() => fixedState;
+}
+
+class MockSupabaseClient extends Mock implements SupabaseClient {}
+
+class MockFunctionsClient extends Mock implements FunctionsClient {}
+
+/// Builds a mock Supabase client whose `get-config` function fails fast so
+/// [ConfigService.refresh] throws synchronously with no network I/O.
+MockSupabaseClient buildMockSupabase() {
+  final supabase = MockSupabaseClient();
+  final functions = MockFunctionsClient();
+  when(() => functions.invoke('get-config')).thenThrow(
+    FunctionException(status: 500),
+  );
+  when(() => supabase.functions).thenReturn(functions);
+  return supabase;
 }
 
 class AuthFixture {
@@ -128,8 +150,9 @@ Future<void> _pumpLessonsList(
   WidgetTester tester, {
   required AppDatabase db,
   required AuthFixture fixture,
+  Size surfaceSize = const Size(1280, 1400),
 }) async {
-  await tester.binding.setSurfaceSize(const Size(1280, 1400));
+  await tester.binding.setSurfaceSize(surfaceSize);
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
   await tester.pumpWidget(
@@ -142,6 +165,38 @@ Future<void> _pumpLessonsList(
     ),
   );
   await tester.pumpAndSettle();
+}
+
+/// Pumps the full router app (MaterialApp.router with [appRouter]) so route
+/// navigation — e.g. the Lessons list back button — can be exercised against
+/// the real Home (dashboard) route.
+Future<void> _pumpRouterApp(
+  WidgetTester tester, {
+  required AppDatabase db,
+  required AuthFixture fixture,
+}) async {
+  tester.view.physicalSize = const Size(1600, 1200);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
+
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        authProvider.overrideWith(
+          () => FixedAuthNotifier(_authState(fixture)),
+        ),
+        configServiceProvider.overrideWithValue(
+          ConfigService(client: buildMockSupabase()),
+        ),
+      ],
+      child: MaterialApp.router(routerConfig: appRouter),
+    ),
+  );
+  // Explicit pumps — the dashboard's async providers never fully settle
+  // in isolation, so pumpAndSettle would time out.
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 100));
 }
 
 /// Opens the "Create" flyout menu and waits for it to settle.
@@ -597,4 +652,85 @@ void main() {
       },
     );
   });
+
+  group('LessonsListScreen narrow-width chip overflow', () {
+    testWidgets(
+      'the lesson card chip row does not overflow at 320dp width',
+      (tester) async {
+        fixture = await _seedAuthFixture(db, teacherRole: 'teacher');
+        await db.lessonsDao.insertLesson(
+          LessonsCompanion.insert(
+            subject: 'Mathematics',
+            classLevel: 'JSS 1',
+            week: 1,
+            topic: 'Narrow Overflow Guard',
+            difficulty: 'medium',
+            bloomsVerbs: '',
+            curriculum: 'NERDC',
+            content: '{"objectives":[],"diagrams":[]}',
+            teacherServerId: Value(fixture.teacher.serverId),
+            schoolServerId: Value(fixture.school.serverId),
+            term: const Value('1st Term'),
+            status: const Value('generated'),
+            // No serverId -> Needs Sync secondary chip.
+            schemeOfWorkId: const Value('7'), // -> Linked indicator.
+          ),
+        );
+        await _pumpLessonsList(
+          tester,
+          db: db,
+          fixture: fixture,
+          surfaceSize: const Size(320, 1200),
+        );
+
+        // The full chip set renders on the narrow card: primary Draft,
+        // secondary Generated + Needs Sync, and the Linked indicator.
+        final chips = find.byType(StatusChip);
+        expect(
+          find.descendant(of: chips, matching: find.text('Draft')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: chips, matching: find.text('Generated')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: chips, matching: find.text('Needs Sync')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: chips, matching: find.text('Linked')),
+          findsOneWidget,
+        );
+        // A RenderFlex overflow during layout would be reported here and
+        // fail the test.
+        expect(tester.takeException(), isNull);
+      },
+    );
+  });
+
+  testWidgets(
+    'the Lessons list back button navigates Home without the quit dialog',
+    (tester) async {
+      fixture = await _seedAuthFixture(db, teacherRole: 'teacher');
+      await _pumpRouterApp(tester, db: db, fixture: fixture);
+
+      appRouter.go('/lessons');
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.byType(LessonsListScreen), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Back to Home'));
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      expect(find.byType(LessonsListScreen), findsNothing);
+      expect(find.byType(DashboardScreen), findsOneWidget,
+          reason: 'Back must navigate to Home (the dashboard route)');
+      expect(find.text('Quit ClassAI?'), findsNothing,
+          reason: 'navigating back must not trigger the quit dialog');
+    },
+  );
 }
