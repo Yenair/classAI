@@ -2343,7 +2343,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       // Bind to a non-null local so the value is promoted inside the
       // setState closure (oldHomework is written in the catch block above,
       // which defeats flow analysis promotion for captured variables).
-      final restoredText = oldHomework ?? '';
+      final restoredText = oldHomework;
       if (mounted) {
         setState(() {
           _homeworkText = restoredText;
