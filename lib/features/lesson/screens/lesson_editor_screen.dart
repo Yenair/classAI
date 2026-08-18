@@ -30,6 +30,7 @@ import 'package:classai/features/lesson/screens/lessons_list_screen.dart'
     show exportLessonPdf;
 import 'package:classai/core/services/diagram_service.dart'
     show DiagramService, DiagramRequest, DiagramImage;
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
 /// Stitch‑designed lesson note editor with AI generation.
@@ -5114,10 +5115,10 @@ class _PreviewColumn extends StatelessWidget {
     );
   }
 
-  /// Render markdown heading lines (starting with ##) as bold text.
-  /// Other lines are rendered as normal body text with paragraph spacing.
+  /// Render markdown content using flutter_markdown_plus for proper
+  /// headings, bold, italic, and list rendering.
   Widget _renderMarkdownContent(String content) {
-    if (content.isEmpty) {
+    if (content.trim().isEmpty) {
       return Text(
         'No content yet.',
         style: theme.textTheme.bodyMedium?.copyWith(
@@ -5126,71 +5127,38 @@ class _PreviewColumn extends StatelessWidget {
       );
     }
 
-    final lines = content.split('\n');
-    final widgets = <Widget>[];
-
-    for (int i = 0; i < lines.length; i++) {
-      final line = lines[i];
-      final trimmed = line.trim();
-
-      if (trimmed.startsWith('## ')) {
-        // Render heading as bold text
-        final headingText = trimmed.substring(3).trim();
-        widgets.add(Padding(
-          padding: EdgeInsets.only(top: i > 0 ? 12.0 : 0, bottom: 4.0),
-          child: Text(
-            headingText,
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: cs.onSurface,
-            ),
-          ),
-        ));
-      } else if (trimmed.startsWith('#')) {
-        // Single # heading
-        final headingText = trimmed.substring(1).trim();
-        widgets.add(Padding(
-          padding: EdgeInsets.only(top: i > 0 ? 12.0 : 0, bottom: 4.0),
-          child: Text(
-            headingText,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: cs.onSurface,
-            ),
-          ),
-        ));
-      } else if (trimmed.isEmpty) {
-        // Blank line = paragraph break
-        widgets.add(const SizedBox(height: 8));
-      } else {
-        // Normal body text — bodyLarge with a comfortable line height so
-        // the lesson reads like a document, not a form.
-        widgets.add(Padding(
-          padding: const EdgeInsets.only(bottom: 4.0),
-          child: Text(
-            line,
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: cs.onSurface,
-              height: 1.5,
-            ),
-          ),
-        ));
-      }
-    }
-
-    if (widgets.isEmpty) {
-      return Text(
-        'No content yet.',
-        style: theme.textTheme.bodyMedium?.copyWith(
-          color: cs.onSurfaceVariant,
+    return MarkdownBody(
+      data: content,
+      selectable: true,
+      styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+        p: theme.textTheme.bodyLarge?.copyWith(
+          color: cs.onSurface,
+          height: 1.5,
         ),
-      );
-    }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: widgets,
+        h1: theme.textTheme.headlineSmall?.copyWith(
+          color: cs.onSurface,
+          fontWeight: FontWeight.w700,
+          height: 1.3,
+        ),
+        h2: theme.textTheme.titleLarge?.copyWith(
+          color: cs.onSurface,
+          fontWeight: FontWeight.w700,
+          height: 1.3,
+        ),
+        h3: theme.textTheme.titleMedium?.copyWith(
+          color: cs.onSurface,
+          fontWeight: FontWeight.w700,
+          height: 1.3,
+        ),
+        h1Padding: const EdgeInsets.only(top: 16, bottom: 8),
+        h2Padding: const EdgeInsets.only(top: 14, bottom: 6),
+        h3Padding: const EdgeInsets.only(top: 12, bottom: 4),
+        blockSpacing: 8,
+        listBullet: theme.textTheme.bodyLarge?.copyWith(
+          color: cs.onSurface,
+        ),
+        listIndent: 24,
+      ),
     );
   }
 
