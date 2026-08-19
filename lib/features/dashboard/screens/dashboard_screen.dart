@@ -1194,13 +1194,21 @@ class _RecentLessonsSection extends ConsumerWidget {
                                     subtitle:
                                         '${lesson.classLevel} • ${lesson.subject}',
                                     status: lesson.status == 'completed'
-    ? 'Completed'
-    : (lesson.status == 'generated' ? 'Generated' : 'Draft'),
-                                      statusColor: cs.primary,
-                                      statusBg: cs.primary.withValues(alpha: 0.1),
-                                      showGeneratedChip: lesson.status ==
-                                              'generated' &&
-                                          !lesson.isUnlocked,
+                                        ? 'Completed'
+                                        : (lesson.isUnlocked
+                                            ? 'Unlocked'
+                                            : (lesson.status == 'generated'
+                                                ? 'Generated'
+                                                : 'Draft')),
+                                      accentColor: switch (lesson.status) {
+                                        'completed' => kStatusCompletedColor,
+                                        'generated' when lesson.isUnlocked =>
+                                          kStatusUnlockedColor,
+                                        'generated' => kStatusGeneratedColor,
+                                        _ => lesson.isUnlocked
+                                            ? kStatusUnlockedColor
+                                            : kStatusDraftColor,
+                                      },
                                       needsSync: lesson.serverId == null ||
                                           lesson.serverId!.isEmpty,
                                       timeAgo: 'Updated ${_timeAgo(lesson.updatedAt)}',
@@ -1232,13 +1240,21 @@ class _RecentLessonsSection extends ConsumerWidget {
                                       subtitle:
                                           '${lesson.classLevel} • ${lesson.subject}',
                                       status: lesson.status == 'completed'
-    ? 'Completed'
-    : (lesson.status == 'generated' ? 'Generated' : 'Draft'),
-                                      statusColor: cs.onSurfaceVariant,
-                                      statusBg: cs.surfaceContainerHighest,
-                                      showGeneratedChip: lesson.status ==
-                                              'generated' &&
-                                          !lesson.isUnlocked,
+                                          ? 'Completed'
+                                          : (lesson.isUnlocked
+                                              ? 'Unlocked'
+                                              : (lesson.status == 'generated'
+                                                  ? 'Generated'
+                                                  : 'Draft')),
+                                      accentColor: switch (lesson.status) {
+                                        'completed' => kStatusCompletedColor,
+                                        'generated' when lesson.isUnlocked =>
+                                          kStatusUnlockedColor,
+                                        'generated' => kStatusGeneratedColor,
+                                        _ => lesson.isUnlocked
+                                            ? kStatusUnlockedColor
+                                            : kStatusDraftColor,
+                                      },
                                       needsSync: lesson.serverId == null ||
                                           lesson.serverId!.isEmpty,
                                       timeAgo:
@@ -1267,15 +1283,23 @@ class _RecentLessonsSection extends ConsumerWidget {
                               title: lesson.topic.isNotEmpty
                                   ? lesson.topic
                                   : lesson.subject,
-                              subtitle:
-                                  '${lesson.classLevel} • ${lesson.subject}',
+                              subtitle: '${lesson.classLevel} • ${lesson.subject}',
                               status: lesson.status == 'completed'
-    ? 'Completed'
-    : (lesson.status == 'generated' ? 'Generated' : 'Draft'),
-                              statusColor: cs.primary,
-                              statusBg: cs.primary.withValues(alpha: 0.1),
-                              showGeneratedChip: lesson.status == 'generated' &&
-                                  !lesson.isUnlocked,
+                                  ? 'Completed'
+                                  : (lesson.isUnlocked
+                                      ? 'Unlocked'
+                                      : (lesson.status == 'generated'
+                                          ? 'Generated'
+                                          : 'Draft')),
+                              accentColor: switch (lesson.status) {
+                                'completed' => kStatusCompletedColor,
+                                'generated' when lesson.isUnlocked =>
+                                  kStatusUnlockedColor,
+                                'generated' => kStatusGeneratedColor,
+                                _ => lesson.isUnlocked
+                                    ? kStatusUnlockedColor
+                                    : kStatusDraftColor,
+                              },
                               needsSync: lesson.serverId == null ||
                                   lesson.serverId!.isEmpty,
                               timeAgo: 'Updated ${_timeAgo(lesson.updatedAt)}',
@@ -1312,9 +1336,7 @@ class _LessonCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.status,
-    required this.statusColor,
-    required this.statusBg,
-    required this.showGeneratedChip,
+    required this.accentColor,
     required this.needsSync,
     required this.timeAgo,
     required this.cs,
@@ -1327,16 +1349,8 @@ class _LessonCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final String status;
-  final Color statusColor;
-  final Color statusBg;
-
-  /// Secondary "Generated" chip — shown only while the lesson is generated
-  /// but still locked; the primary badge already conveys it once unlocked.
-  final bool showGeneratedChip;
-
-  /// Secondary "Needs Sync" chip — shown when the lesson has no server id.
+  final Color accentColor;
   final bool needsSync;
-
   final String timeAgo;
   final ColorScheme cs;
   final ThemeData theme;
@@ -1357,115 +1371,122 @@ class _LessonCard extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: iconColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                      ),
-                      child: Icon(icon, color: iconColor, size: 24),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusBg,
-                        borderRadius: BorderRadius.circular(AppTheme.radiusDefault),
-                      ),
-                      child: Text(
-                        status.toUpperCase(),
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: statusColor,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                if (showGeneratedChip || needsSync) ...[
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      if (showGeneratedChip)
-                        const StatusChip(
-                          label: 'Generated',
-                          icon: Icons.lock_open_rounded,
-                          color: kStatusGeneratedColor,
-                          dense: true,
-                        ),
-                      if (needsSync)
-                        const StatusChip(
-                          label: 'Needs Sync',
-                          icon: Icons.sync_rounded,
-                          color: kStatusNeedsSyncColor,
-                          dense: true,
-                        ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 16),
-                Text(
-                  title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    color: cs.primary,
-                    height: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: cs.outline,
-                  ),
-                ),
-                const SizedBox(height: 16),
+                // 4px left accent strip
                 Container(
-                  padding: const EdgeInsets.only(top: 16),
+                  width: 4,
                   decoration: BoxDecoration(
-                    border: Border(
-                      top: BorderSide(
-                        color: cs.outlineVariant.withValues(alpha: 0.2),
-                      ),
+                    color: accentColor,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(AppTheme.radiusXl),
+                      bottomLeft: Radius.circular(AppTheme.radiusXl),
                     ),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          timeAgo,
-                          style: theme.textTheme.labelMedium?.copyWith(
-                            color: cs.onSurfaceVariant,
-                            overflow: TextOverflow.clip,
+                ),
+                // Card content
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: iconColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                              ),
+                              child: Icon(icon, color: iconColor, size: 24),
+                            ),
+                            // Vertical status chip column
+                            Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                StatusChip(
+                                  label: status,
+                                  icon: switch (status) {
+                                    'Completed' => Icons.check_circle_rounded,
+                                    'Unlocked' => Icons.auto_awesome_rounded,
+                                    'Generated' => Icons.lock_open_rounded,
+                                    _ => Icons.edit_note_rounded,
+                                  },
+                                  color: accentColor,
+                                  dense: true,
+                                ),
+                                if (needsSync) ...[
+                                  const SizedBox(height: 4),
+                                  const StatusChip(
+                                    label: 'Needs Sync',
+                                    icon: Icons.sync_rounded,
+                                    color: kStatusNeedsSyncColor,
+                                    dense: true,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            color: cs.primary,
+                            height: 1.2,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        size: 20,
-                        color: cs.primary,
-                      ),
-                    ],
+                        const SizedBox(height: 4),
+                        Text(
+                          subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: cs.outline,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.only(top: 16),
+                          decoration: BoxDecoration(
+                            border: Border(
+                              top: BorderSide(
+                                color: cs.outlineVariant.withValues(alpha: 0.2),
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  timeAgo,
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                    overflow: TextOverflow.clip,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Icon(
+                                Icons.chevron_right_rounded,
+                                size: 20,
+                                color: cs.primary,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -1474,8 +1495,8 @@ class _LessonCard extends StatelessWidget {
         ),
       ),
     );
+    }
   }
-}
 
 class _ReaderTotalOverviewPanel extends ConsumerWidget {
   const _ReaderTotalOverviewPanel();

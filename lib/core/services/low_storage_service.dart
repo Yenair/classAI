@@ -152,17 +152,39 @@ class LowStorageService {
     }
   }
 
-  /// Query free disk space on Windows using `wmic`.
+  /// Query free disk space on Windows.  Tries PowerShell first
+  /// (recommended, `wmic` is deprecated since Windows 11 24H2),
+  /// then falls back to `wmic`.  Returns `null` if both fail.
   Future<double?> _queryWindowsDiskFree(String path) async {
+    final drive = path.substring(0, 2); // e.g., "C:"
+
+    // 1. PowerShell Get-CimInstance (preferred)
     try {
-      // Extract drive letter (e.g., "C:" from "C:\Users\...")
-      final drive = path.substring(0, 2); // e.g., "C:"
+      final result = await Process.run(
+        'powershell',
+        [
+          '-NoProfile',
+          '-Command',
+          "(Get-CimInstance Win32_LogicalDisk -Filter \"DeviceID='$drive'\").FreeSpace",
+        ],
+        runInShell: true,
+      );
+      final stdout = (result.stdout as String).trim();
+      if (stdout.isNotEmpty && result.exitCode == 0) {
+        final parsed = double.tryParse(stdout);
+        if (parsed != null && parsed > 0) return parsed;
+      }
+    } catch (_) {
+      // PowerShell unavailable — fall through to legacy path.
+    }
+
+    // 2. Legacy wmic fallback
+    try {
       final result = await Process.run(
         'wmic',
         ['logicaldisk', 'where', 'DeviceID="$drive"', 'get', 'FreeSpace'],
         runInShell: true,
       );
-      // Parse output — first line is header, second line has the value
       final lines = (result.stdout as String)
           .split('\n')
           .map((l) => l.trim())
@@ -175,6 +197,7 @@ class LowStorageService {
     } catch (_) {
       // Silently fall through
     }
+
     return null;
   }
 

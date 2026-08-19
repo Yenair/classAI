@@ -201,7 +201,7 @@ Future<void> _pumpRouterApp(
 
 /// Opens the "Create" flyout menu and waits for it to settle.
 Future<void> _openCreateMenu(WidgetTester tester) async {
-  await tester.tap(find.text('Create'));
+  await tester.tap(find.byTooltip('Create'));
   await tester.pumpAndSettle();
 }
 
@@ -249,7 +249,7 @@ void main() {
 
         // The compact "Create" flyout is the single AppBar action; menu
         // items are only visible once the menu is open.
-        expect(find.text('Create'), findsOneWidget);
+        expect(find.byTooltip('Create'), findsOneWidget);
         expect(find.text('✏️  Add Single Lesson'), findsNothing);
         expect(find.text('📋  Bulk Generate'), findsNothing);
         expect(find.text('🔄  Refresh Plan'), findsNothing);
@@ -502,7 +502,7 @@ void main() {
 
   group('LessonsListScreen secondary status chips', () {
     testWidgets(
-      'a generated but locked lesson shows Draft + Generated + Needs Sync',
+      'a generated but locked lesson shows Generated + Needs Sync',
       (tester) async {
         fixture = await _seedAuthFixture(db, teacherRole: 'teacher');
         await db.lessonsDao.insertLesson(
@@ -525,11 +525,7 @@ void main() {
         await _pumpLessonsList(tester, db: db, fixture: fixture);
 
         final chips = find.byType(StatusChip);
-        expect(
-          find.descendant(of: chips, matching: find.text('Draft')),
-          findsOneWidget,
-          reason: 'the locked generated lesson keeps its primary Draft chip',
-        );
+        // Generated status now shows as primary chip (blue)
         expect(
           find.descendant(of: chips, matching: find.text('Generated')),
           findsOneWidget,
@@ -540,6 +536,11 @@ void main() {
             matching: find.byIcon(Icons.lock_open_rounded),
           ),
           findsOneWidget,
+        );
+        // No Draft chip for generated lessons
+        expect(
+          find.descendant(of: chips, matching: find.text('Draft')),
+          findsNothing,
         );
         expect(
           find.descendant(of: chips, matching: find.text('Needs Sync')),
@@ -673,7 +674,6 @@ void main() {
             term: const Value('1st Term'),
             status: const Value('generated'),
             // No serverId -> Needs Sync secondary chip.
-            schemeOfWorkId: const Value('7'), // -> Linked indicator.
           ),
         );
         await _pumpLessonsList(
@@ -683,13 +683,9 @@ void main() {
           surfaceSize: const Size(320, 1200),
         );
 
-        // The full chip set renders on the narrow card: primary Draft,
-        // secondary Generated + Needs Sync, and the Linked indicator.
+        // The full chip set renders on the narrow card: primary Generated
+        // and secondary Needs Sync.
         final chips = find.byType(StatusChip);
-        expect(
-          find.descendant(of: chips, matching: find.text('Draft')),
-          findsOneWidget,
-        );
         expect(
           find.descendant(of: chips, matching: find.text('Generated')),
           findsOneWidget,
@@ -698,9 +694,10 @@ void main() {
           find.descendant(of: chips, matching: find.text('Needs Sync')),
           findsOneWidget,
         );
+        // No Draft chip for generated lessons
         expect(
-          find.descendant(of: chips, matching: find.text('Linked')),
-          findsOneWidget,
+          find.descendant(of: chips, matching: find.text('Draft')),
+          findsNothing,
         );
         // A RenderFlex overflow during layout would be reported here and
         // fail the test.

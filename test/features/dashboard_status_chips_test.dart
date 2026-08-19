@@ -265,20 +265,22 @@ void main() {
       expect(find.text('Locked Generated Synced'), findsOneWidget);
       expect(find.text('Draft Synced'), findsOneWidget);
 
-      // Exactly two lessons carry each secondary chip: Generated on the two
-      // locked generated lessons, Needs Sync on the two serverId-less ones.
+      // Primary status chips: Generated for locked generated,
+      // Unlocked for unlocked generated, Draft for draft.
       final chips = find.byType(StatusChip);
       expect(
         find.descendant(of: chips, matching: find.text('Generated')),
-        findsNWidgets(2),
+        findsNWidgets(2), // Locked Generated Unsynced + Locked Generated Synced
       );
       expect(
-        find.descendant(
-          of: chips,
-          matching: find.byIcon(Icons.lock_open_rounded),
-        ),
-        findsNWidgets(2),
+        find.descendant(of: chips, matching: find.text('Unlocked')),
+        findsNWidgets(1), // Unlocked Generated Unsynced
       );
+      expect(
+        find.descendant(of: chips, matching: find.text('Draft')),
+        findsNWidgets(1), // Draft Synced
+      );
+      // Needs Sync appears on the two serverId-less lessons.
       expect(
         find.descendant(of: chips, matching: find.text('Needs Sync')),
         findsNWidgets(2),
@@ -291,7 +293,8 @@ void main() {
         findsNWidgets(2),
       );
 
-      // Scoped per card: locked generated + unsynced shows both chips.
+      // Scoped per card: locked generated + unsynced shows Generated
+      // primary + Needs Sync.
       expect(
         find.descendant(
           of: _chipsInLessonCard('Locked Generated Unsynced'),
@@ -307,19 +310,18 @@ void main() {
         findsOneWidget,
       );
 
-      // Unlocked: the secondary Generated chip must NOT appear (the primary
-      // badge already conveys generated), but Needs Sync remains.
+      // Unlocked: primary Unlocked, no Generated, Needs Sync remains.
       expect(
         find.descendant(
           of: _chipsInLessonCard('Unlocked Generated Unsynced'),
-          matching: find.text('Generated'),
+          matching: find.text('Unlocked'),
         ),
-        findsNothing,
+        findsOneWidget,
       );
       expect(
         find.descendant(
           of: _chipsInLessonCard('Unlocked Generated Unsynced'),
-          matching: find.byIcon(Icons.lock_open_rounded),
+          matching: find.text('Generated'),
         ),
         findsNothing,
       );
@@ -331,7 +333,7 @@ void main() {
         findsOneWidget,
       );
 
-      // Synced: Generated stays for locked lessons, Needs Sync disappears.
+      // Synced locked: Generated primary, no Needs Sync.
       expect(
         find.descendant(
           of: _chipsInLessonCard('Locked Generated Synced'),
@@ -347,8 +349,14 @@ void main() {
         findsNothing,
       );
 
-      // A plain synced draft shows no secondary chips at all.
-      expect(_chipsInLessonCard('Draft Synced'), findsNothing);
+      // A plain synced draft shows only the Draft primary chip.
+      expect(
+        find.descendant(
+          of: _chipsInLessonCard('Draft Synced'),
+          matching: find.text('Draft'),
+        ),
+        findsOneWidget,
+      );
     },
   );
 
@@ -370,9 +378,8 @@ void main() {
       textScale: 0.55,
     );
 
-    // The primary Draft badge and the secondary Needs Sync chip render on
-    // the narrow card.
-    expect(find.text('DRAFT'), findsOneWidget);
+    // The primary Draft badge renders on the narrow card.
+    expect(find.text('Draft'), findsOneWidget);
     final chips = find.byType(StatusChip);
     expect(
       find.descendant(of: chips, matching: find.text('Needs Sync')),

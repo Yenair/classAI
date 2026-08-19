@@ -1,5 +1,7 @@
 import 'dart:isolate';
+import 'dart:typed_data';
 import 'package:drift/drift.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:crypto/crypto.dart';
@@ -141,6 +143,17 @@ class PdfService {
     final cached = await _db.pdfCacheDao.get(cacheKey.compositeKey);
     if (cached != null) return cached;
 
+    // Load Unicode font asset for the isolate.  Missing or corrupt font
+    // bytes are passed as null; the isolate falls back to the built-in
+    // Latin-1 font so the export never crashes.
+    Uint8List? fontBytes;
+    try {
+      final fontData = await rootBundle.load('assets/fonts/NotoSans-Regular.ttf');
+      fontBytes = fontData.buffer.asUint8List();
+    } catch (_) {
+      // Font asset missing — isolate will use the default built-in font.
+    }
+
     // Generate in isolate
     // lesson.topic is used as the PDF title — the schema uses `topic`
     // to represent the lesson title, not a separate `title` column.
@@ -151,6 +164,7 @@ class PdfService {
       applyWatermark: applyWatermark,
       teacherEmail: teacherEmail,
       references: await _buildLessonReferences(lesson),
+      fontBytes: fontBytes,
     );
 
     final pdfBytes = await Isolate.run(() => _generatePdfInIsolate(params));
@@ -238,6 +252,115 @@ String _pdfOriginLabel(String origin) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Content parser – exported (non-private) so unit tests can import it.
+// ---------------------------------------------------------------------------
+
+/// Parses lesson content JSON into structured sections for PDF rendering.
+class PdfContentParser {
+  /// Parse [content] (raw JSON string or plain text) into a list of
+  /// `(heading, body)` pairs.  Recognised top-level keys are rendered with
+  /// section headings; everything else goes into an "Additional Notes" bucket.
+  ///
+  /// Returns a single entry with the raw text when parsing fails so the
+  /// caller never crashes.
+  static List<MapEntry<String, String>> parseLessonContent(String content) {
+    final trimmed = content.trim();
+    if (trimmed.isEmpty) return [];
+
+    try {
+      final decoded = jsonDecode(trimmed);
+      if (decoded is! Map<String, dynamic>) {
+        return [MapEntry('', trimmed)];
+      }
+
+      const keys = [
+        'objectives',
+        'vocabulary',
+        'materials',
+        'presentation',
+        'assessment',
+        'homework',
+      ];
+
+      final sections = <MapEntry<String, String>>[];
+      final additionalNotes = <String>[];
+
+      for (final entry in decoded.entries) {
+        if (keys.contains(entry.key)) {
+          final text = _sectionText(entry.value);
+          if (text.isNotEmpty) {
+            sections.add(MapEntry(_sectionHeading(entry.key), text));
+          }
+        } else if (entry.key != 'references' &&
+            entry.key != 'diagrams' &&
+            entry.key != 'title') {
+          final text = _sectionText(entry.value);
+          if (text.isNotEmpty) {
+            additionalNotes.add('**${entry.key}**: $text');
+          }
+        }
+      }
+
+      if (additionalNotes.isNotEmpty) {
+        sections.add(MapEntry('Additional Notes', additionalNotes.join('\n\n')));
+      }
+
+      return sections;
+    } catch (_) {
+      return [MapEntry('', trimmed)];
+    }
+  }
+
+  /// Human-readable heading for a content section key.
+  static String _sectionHeading(String key) {
+    switch (key) {
+      case 'objectives':
+        return 'Objectives';
+      case 'vocabulary':
+        return 'Vocabulary';
+      case 'materials':
+        return 'Materials';
+      case 'presentation':
+        return 'Presentation';
+      case 'assessment':
+        return 'Assessment';
+      case 'homework':
+        return 'Homework';
+      default:
+        return key[0].toUpperCase() + key.substring(1);
+    }
+  }
+
+  /// Coerce a section value (string, list, or map) into readable text.
+  static String _sectionText(dynamic value) {
+    if (value == null) return '';
+    if (value is String) return value.trim();
+    if (value is List) {
+      if (value.isEmpty) return '';
+      return value.map((e) => '• ${e.toString().trim()}').join('\n');
+    }
+    if (value is Map) {
+      if (value.isEmpty) return '';
+      return value.entries
+          .map((e) => '${e.key}: ${e.value}')
+          .join('\n');
+    }
+    return value.toString().trim();
+  }
+}
+
+/// Sanitise a [filename] for use as a PDF file name, stripping characters
+/// that are unsafe across platforms.
+String sanitizePdfFilename(String filename) {
+  var sanitized = filename.replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1f]'), '_');
+  sanitized = sanitized.replaceAll(RegExp(r'\s+'), '_');
+  sanitized = sanitized.replaceAll(RegExp(r'_+'), '_');
+  sanitized = sanitized.replaceAll(RegExp(r'^_+|_+$'), '');
+  if (sanitized.isEmpty) sanitized = 'lesson';
+  return sanitized;
+}
+
 // Separate function for isolate entry point
 class _PdfParams {
   final String lessonTitle;
@@ -249,6 +372,11 @@ class _PdfParams {
   /// {text, origin} entries for the References section; empty when none.
   final List<Map<String, dynamic>> references;
 
+  /// Pre-loaded TTF font bytes for Unicode support.  `null` when the asset
+  /// is missing or could not be read — the isolate falls back to the
+  /// built-in Latin-1 font.
+  final Uint8List? fontBytes;
+
   _PdfParams({
     required this.lessonTitle,
     required this.lessonContent,
@@ -256,15 +384,36 @@ class _PdfParams {
     required this.applyWatermark,
     this.teacherEmail,
     this.references = const [],
+    this.fontBytes,
   });
 }
 
 Future<Uint8List> _generatePdfInIsolate(_PdfParams params) async {
   final doc = pw.Document();
 
+  // Unicode-capable font ------------------------------------------------
+  pw.Font? unicodeFont;
+  if (params.fontBytes != null) {
+    try {
+      unicodeFont = pw.Font.ttf(
+        ByteData.view(params.fontBytes!.buffer),
+      );
+    } catch (_) {
+      // Corrupt bytes — fall back to default Latin-1 font.
+    }
+  }
+
+  final theme = unicodeFont != null
+      ? pw.ThemeData.withFont(base: unicodeFont)
+      : pw.ThemeData();
+
+  // Lesson content sections -------------------------------------------
+  final sections = PdfContentParser.parseLessonContent(params.lessonContent);
+
   doc.addPage(
     pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
+      theme: theme,
       build: (context) {
         final widgets = <pw.Widget>[];
 
@@ -292,10 +441,36 @@ Future<Uint8List> _generatePdfInIsolate(_PdfParams params) async {
           );
         }
 
-        widgets.addAll([
-          pw.Header(text: params.lessonTitle),
-          pw.Paragraph(text: params.lessonContent),
-        ]);
+        widgets.add(pw.Header(text: params.lessonTitle));
+
+        // Render parsed lesson sections --------------------------------
+        if (sections.isEmpty) {
+          widgets.add(pw.Paragraph(
+            text: 'No content available.',
+            style: const pw.TextStyle(
+              fontSize: 12,
+              color: PdfColors.grey600,
+            ),
+          ));
+        } else {
+          for (final section in sections) {
+            if (section.key.isNotEmpty) {
+              widgets.add(pw.SizedBox(height: 12));
+              widgets.add(pw.Text(
+                section.key,
+                style: pw.TextStyle(
+                  fontSize: 13,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ));
+              widgets.add(pw.SizedBox(height: 4));
+            }
+            widgets.add(pw.Paragraph(
+              text: section.value,
+              style: const pw.TextStyle(fontSize: 12),
+            ));
+          }
+        }
 
         // ── References section ────────────────────────────────
         widgets.add(pw.SizedBox(height: 16));

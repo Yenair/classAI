@@ -1,4 +1,24 @@
 class PromptTemplates {
+  /// Curated list of real, widely used NERDC-aligned Nigerian textbook
+  /// titles. These are safe to reference — no fabricated page numbers,
+  /// chapter numbers, or invented authors.
+  static const List<String> curatedTextbookTitles = [
+    'New General Mathematics for Junior Secondary Schools',
+    'Basic Science and Technology for Junior Secondary Schools',
+    'English Studies for Junior Secondary Schools',
+    'Basic Technology for Junior Secondary Schools',
+    'Agricultural Science for Junior Secondary Schools',
+    'Civic Education for Junior Secondary Schools',
+    'Social Studies for Junior Secondary Schools',
+    'Christian Religious Studies for Junior Secondary Schools',
+    'Home Economics for Junior Secondary Schools',
+    'Physical and Health Education for Junior Secondary Schools',
+    'New General Mathematics for Senior Secondary Schools',
+    'Further Mathematics for Senior Secondary Schools',
+    'Comprehensive Physical and Health Education for Senior Secondary Schools',
+    'Computer Studies for Senior Secondary Schools',
+  ];
+
   static const String _selfCheckInstruction =
       'After generating the questions, double-check each answer. If any answer is likely incorrect, replace it with a correct one. Do not output questions you are unsure about - omit them and reduce the count accordingly. Return only valid JSON.';
 
@@ -24,8 +44,12 @@ class PromptTemplates {
         'Use 1 prompt for simple topics, 2 for moderately complex topics, and 3 for complex topics. '
         'Each description should be a concise prompt for generating a single educational image relevant to the topic. '
         'For the "references" array: do NOT invent textbook titles, chapter numbers, or page numbers. '
-        'Only include a textbook/chapter reference when you are confident it is a real, widely used source for this topic. '
-        'Return "references": [] when no reliable source is available. '
+        'Do NOT include author names unless you are certain they are correct. '
+        'Only return references from this curated list of real Nigerian textbooks: '
+        '${curatedTextbookTitles.join('; ')}. '
+        'Return a reference object {"title":"..."} only when a curated title is relevant to the topic. '
+        'Do NOT add chapter, page, or author fields — leave them out. '
+        'Return "references": [] when none of the curated titles are relevant. '
         '$_selfCheckInstruction';
   }
 

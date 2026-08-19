@@ -96,11 +96,12 @@ StatusChip examRowStatusChip({required bool unlocked}) => unlocked
         color: kStatusDraftColor,
       );
 
-/// Status chip for a lesson row (Completed, Unlocked or Draft — matching the
-/// states the list previously showed with its colored dot).
+/// Status chip for a lesson row. Priority:
+/// Completed > Unlocked > Generated > Draft.
 StatusChip lessonRowStatusChip({
   required bool completed,
   required bool unlocked,
+  required bool generated,
 }) {
   if (completed) {
     return const StatusChip(
@@ -114,6 +115,13 @@ StatusChip lessonRowStatusChip({
       label: 'Unlocked',
       icon: Icons.auto_awesome_rounded,
       color: kStatusUnlockedColor,
+    );
+  }
+  if (generated) {
+    return const StatusChip(
+      label: 'Generated',
+      icon: Icons.lock_open_rounded,
+      color: kStatusGeneratedColor,
     );
   }
   return const StatusChip(

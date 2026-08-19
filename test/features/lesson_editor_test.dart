@@ -174,10 +174,10 @@ Future<void> _tapGenerate(WidgetTester tester) async {
   if (controller == null || controller.text.trim().isEmpty) {
     await _enterTopic(tester, 'Algebraic Expressions');
   }
-  final createButton = find.text('Create lesson');
-  await tester.ensureVisible(createButton);
+  final generateButton = find.text('Generate with AI');
+  await tester.ensureVisible(generateButton);
   await tester.pumpAndSettle();
-  await tester.tap(createButton);
+  await tester.tap(generateButton);
   await tester.pumpAndSettle();
   // Let the async _saveLesson inside the post-frame callback complete.
   await tester.pump(const Duration(seconds: 1));
@@ -272,29 +272,18 @@ void main() {
   }
 
   group('LessonEditorScreen', () {
-    testWidgets('renders all form fields', (tester) async {
+    testWidgets('renders entry screen with Generate with AI button', (tester) async {
       await ensureViewportHeight(tester);
       await tester.pumpWidget(createTestApp());
       await tester.pumpAndSettle();
 
-      // The new blank-lesson entry screen: a large topic input, a compact
-      // context line, and the single primary create action.
+      // The blank-lesson entry screen: a large topic input and the single
+      // primary create action. No Subject/Class/Week dropdowns.
       expect(find.text('Lesson topic'), findsOneWidget);
-      expect(find.text('Mathematics · JSS 1 · Week 1'), findsOneWidget);
-      expect(find.text('Create lesson'), findsOneWidget);
-
-      // Tapping the context line opens the Lesson details bottom sheet.
-      await tester.ensureVisible(find.text('Mathematics · JSS 1 · Week 1'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Mathematics · JSS 1 · Week 1'));
-      await tester.pumpAndSettle();
-
-      // The sheet exposes Subject, Class, Week and the Scheme topic selector.
-      expect(find.text('Lesson details'), findsOneWidget);
-      expect(find.text('Subject'), findsOneWidget);
-      expect(find.text('Class'), findsOneWidget);
-      expect(find.text('Week'), findsOneWidget);
-      expect(find.text('Scheme topic'), findsOneWidget);
+      expect(find.text('Generate with AI'), findsOneWidget);
+      expect(find.text('Regenerate'), findsNothing);
+      // No context line or lesson details sheet.
+      expect(find.textContaining('·'), findsNothing);
     });
 
     testWidgets('displays credit balance in header', (tester) async {
@@ -319,30 +308,6 @@ void main() {
       expect(find.byType(TextField), findsWidgets);
     });
 
-    testWidgets('can select different subject', (tester) async {
-      await ensureViewportHeight(tester);
-      await tester.pumpWidget(createTestApp());
-      await tester.pumpAndSettle();
-
-      // Open the Lesson details sheet from the context line.
-      await tester.tap(find.text('Mathematics · JSS 1 · Week 1'));
-      await tester.pumpAndSettle();
-
-      // Change the Subject inside the sheet.
-      await tester.tap(find.text('Mathematics').last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('English').last);
-      await tester.pumpAndSettle();
-
-      // Close the sheet.
-      await tester.tap(find.text('Done'));
-      await tester.pumpAndSettle();
-
-      // The context line reflects the new subject.
-      expect(find.text('English · JSS 1 · Week 1'), findsOneWidget);
-      expect(find.text('Mathematics · JSS 1 · Week 1'), findsNothing);
-    });
-
     testWidgets('can select Bloom\'s verbs chips', (tester) async {
       await ensureViewportHeight(tester);
       _mockConnectivityChannel(isOnline: true);
@@ -355,30 +320,14 @@ void main() {
       await _enterTopic(tester, 'Algebraic Expressions');
       await _tapGenerate(tester);
 
-      // Unlock the lesson so the editable document (which contains the
-      // Advanced Settings panel) is rendered, then dismiss the unlock toast.
-      final unlockButton = find.text('Unlock — Unlimited previews');
-      await tester.ensureVisible(unlockButton);
-      await tester.pumpAndSettle();
-      await tester.tap(unlockButton);
-      await tester.pumpAndSettle();
-      await tester.pump(const Duration(seconds: 1));
-      await tester.tap(find.text('Close'));
-      await tester.pumpAndSettle();
-
-      // Advanced Settings is collapsed by default: its Bloom chips are not
-      // built yet.
+      // After generation, the Advanced Settings card is visible but collapsed
+      // by default. Expand it to access Bloom chips.
       expect(find.text('Advanced Settings'), findsOneWidget);
       expect(find.text('Remember'), findsNothing);
 
-      // Expand the panel.
-      await tester.ensureVisible(find.text('Advanced Settings'));
-      await tester.pumpAndSettle();
+      // Expand Advanced Settings.
       await tester.tap(find.text('Advanced Settings'));
       await tester.pumpAndSettle();
-
-      // The Bloom's verbs chips are now visible.
-      expect(find.text('Cognitive Objectives (Bloom\'s)'), findsOneWidget);
       expect(find.text('Remember'), findsOneWidget);
 
       // Tapping a chip selects it: a check icon appears inside its row.
@@ -418,41 +367,6 @@ void main() {
         ),
         findsOneWidget,
       );
-    });
-
-    testWidgets('week spinbox increments and decrements', (tester) async {
-      await ensureViewportHeight(tester);
-
-      await tester.pumpWidget(createTestApp());
-      await tester.pumpAndSettle();
-
-      // Open the Lesson details sheet to reach the Week stepper.
-      await tester.tap(find.text('Mathematics · JSS 1 · Week 1'));
-      await tester.pumpAndSettle();
-
-      // Initial week is 1.
-      expect(find.text('1'), findsWidgets);
-
-      // Tap increment.
-      await tester.tap(find.byIcon(Icons.add_rounded));
-      await tester.pumpAndSettle();
-      expect(find.text('2'), findsWidgets);
-
-      // Close the sheet; the context line reflects the new week.
-      await tester.tap(find.text('Done'));
-      await tester.pumpAndSettle();
-      expect(find.text('Mathematics · JSS 1 · Week 2'), findsOneWidget);
-
-      // Reopen the sheet and decrement back to week 1.
-      await tester.tap(find.text('Mathematics · JSS 1 · Week 2'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.remove_rounded));
-      await tester.pumpAndSettle();
-      expect(find.text('1'), findsWidgets);
-
-      await tester.tap(find.text('Done'));
-      await tester.pumpAndSettle();
-      expect(find.text('Mathematics · JSS 1 · Week 1'), findsOneWidget);
     });
 
     testWidgets('generate callback is invoked with valid prompts',
@@ -642,7 +556,7 @@ void main() {
       expect(content.containsKey('questions'), isFalse);
 
       // Unlock so the editable document (with the tier-gated Assessment
-      // section) is rendered, then dismiss the unlock toast.
+      // tab) is rendered, then dismiss the unlock toast.
       final unlockButton = find.text('Unlock — 10 previews left');
       await tester.ensureVisible(unlockButton);
       await tester.pumpAndSettle();
@@ -652,14 +566,14 @@ void main() {
       await tester.tap(find.text('Close'));
       await tester.pumpAndSettle();
 
-      // Basic tier: the Assessment section shows the upgrade blocker, not
-      // the question cards.
-      final blocker = find.text(
-          'Upgrade to Standard or Elite to view assessment questions.');
-      await tester.ensureVisible(blocker);
+      // Tap the Assessment tab to see the tier-gated content.
+      await tester.tap(find.text('Assessment'));
       await tester.pumpAndSettle();
-      expect(blocker, findsOneWidget);
-      expect(find.text('Request Upgrade'), findsOneWidget);
+
+      // Basic tier: the Assessment tab shows the upgrade blocker, not
+      // the question cards.
+      expect(find.text('Assessment questions'), findsOneWidget);
+      expect(find.text('Upgrade Plan'), findsOneWidget);
       expect(find.text('What is 2 + 2?'), findsNothing);
     });
 
@@ -699,7 +613,7 @@ void main() {
       expect(find.text('Preview Generated Content'), findsOneWidget);
     });
 
-    testWidgets('discard clears form fields', (tester) async {
+    testWidgets('floating action area appears after generation', (tester) async {
       await ensureViewportHeight(tester);
       _mockConnectivityChannel(isOnline: true);
 
@@ -711,32 +625,15 @@ void main() {
       await _enterTopic(tester, 'Algebraic Expressions');
       await _tapGenerate(tester);
 
-      // Generated content is visible in the locked preview.
-      expect(find.text('Preview Generated Content'), findsOneWidget);
-      expect(find.textContaining('Learn X'), findsOneWidget);
-
-      // Scroll the Discard action into view (it's below the document).
-      await tester.scrollUntilVisible(
-        find.text('Discard'),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.pumpAndSettle();
-
-      // Tap Discard.
-      await tester.tap(find.text('Discard'));
-      await tester.pumpAndSettle();
-
-      // Discard returns to the blank entry screen and clears the topic.
-      expect(find.text('Lesson topic'), findsOneWidget);
-      expect(find.text('Create lesson'), findsOneWidget);
-      expect(find.text('Preview Generated Content'), findsNothing);
-      final topicField = tester.widget<TextField>(find.byType(TextField).first);
-      expect(topicField.controller!.text, isEmpty);
+      // After generation, the floating action area is visible with
+      // the expected controls.
+      expect(find.text('Regenerate'), findsOneWidget);
+      expect(find.text('Export PDF'), findsOneWidget);
+      expect(find.text('Visible Sections'), findsOneWidget);
     });
 
     testWidgets(
-        'visible sections sheet reveals hidden sections and Suggested Images collapses',
+        'visible sections sheet reveals hidden sections and Suggested Images opens',
         (tester) async {
       await ensureViewportHeight(tester);
       _mockConnectivityChannel(isOnline: true);
@@ -783,8 +680,7 @@ void main() {
       expect(find.text('Materials'), findsOneWidget);
       expect(find.textContaining('Book'), findsOneWidget);
 
-      // Unlock the lesson so the editable document (including the Suggested
-      // Images section) is rendered, then dismiss the unlock toast.
+      // Unlock the lesson so the Diagrams tab is available, then dismiss the unlock toast.
       final unlockButton = find.text('Unlock — Unlimited previews');
       await tester.ensureVisible(unlockButton);
       await tester.pumpAndSettle();
@@ -794,8 +690,11 @@ void main() {
       await tester.tap(find.text('Close'));
       await tester.pumpAndSettle();
 
-      // Suggested Images is a collapsible section that starts collapsed:
-      // the header is visible but the body is not built.
+      // Tap the Diagrams tab to see Suggested Images.
+      await tester.tap(find.text('Diagrams'));
+      await tester.pumpAndSettle();
+
+      // Suggested Images is expanded by default after it becomes visible.
       final suggestedImagesHeader = find.text('Suggested Images');
       expect(suggestedImagesHeader, findsOneWidget);
       expect(find.text('No images generated yet.'), findsNothing);
@@ -850,7 +749,7 @@ void main() {
       await _tapGenerate(tester);
 
       // Unlock so the editable document (with the homework regenerate
-      // button) is rendered, then dismiss the unlock toast.
+      // button in the Assessment tab) is rendered, then dismiss the unlock toast.
       final unlockButton = find.text('Unlock — Unlimited previews');
       await tester.ensureVisible(unlockButton);
       await tester.pumpAndSettle();
@@ -858,6 +757,10 @@ void main() {
       await tester.pumpAndSettle();
       await tester.pump(const Duration(seconds: 1));
       await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+
+      // Tap the Assessment tab to see homework controls.
+      await tester.tap(find.text('Assessment'));
       await tester.pumpAndSettle();
 
       // The generated homework is on screen before regeneration.
@@ -931,6 +834,607 @@ void main() {
       expect(find.text('Dismiss'), findsNothing);
       expect(find.textContaining('Worksheet'), findsOneWidget);
       expect(find.textContaining('New Homework'), findsNothing);
+    });
+
+    testWidgets('generate card switches from Generate with AI to Regenerate after generation', (tester) async {
+      await ensureViewportHeight(tester);
+      _mockConnectivityChannel(isOnline: true);
+
+      await tester.pumpWidget(buildApp(
+        generateCallback: dispatchCallback(),
+      ));
+      await tester.pumpAndSettle();
+
+      await _enterTopic(tester, 'Algebraic Expressions');
+      expect(find.text('Generate with AI'), findsOneWidget);
+      expect(find.text('Regenerate'), findsNothing);
+
+      await _tapGenerate(tester);
+
+      // After generation, only the regeneration primary action remains.
+      expect(find.text('Regenerate'), findsOneWidget);
+      expect(find.text('Generate with AI'), findsNothing);
+      expect(find.text('Preview Generated Content'), findsOneWidget);
+    });
+
+    testWidgets('Advanced Settings only contains Difficulty and Bloom after tab move', (tester) async {
+      await ensureViewportHeight(tester);
+      _mockConnectivityChannel(isOnline: true);
+
+      await tester.pumpWidget(buildApp(
+        generateCallback: dispatchCallback(),
+      ));
+      await tester.pumpAndSettle();
+
+      await _enterTopic(tester, 'Algebraic Expressions');
+      await _tapGenerate(tester);
+
+      // After generation, Advanced Settings card is visible (collapsed).
+      expect(find.text('Advanced Settings'), findsOneWidget);
+
+      // Expand Advanced Settings — only Difficulty and Bloom remain.
+      await tester.tap(find.text('Advanced Settings'));
+      await tester.pumpAndSettle();
+      expect(find.text('Difficulty'), findsOneWidget);
+      expect(find.text("Cognitive Objectives (Bloom's)"), findsOneWidget);
+      // Assessment format, question counts, and auto-image are NOT here.
+      expect(find.text('Assessment Format'), findsNothing);
+      expect(find.text('Question Counts'), findsNothing);
+      expect(find.text('Auto-generate first image'), findsNothing);
+    });
+
+    testWidgets('unlocked preview shows tab chips not flat sections', (tester) async {
+      await ensureViewportHeight(tester);
+      _mockConnectivityChannel(isOnline: true);
+
+      await tester.pumpWidget(buildApp(
+        generateCallback: dispatchCallback(),
+      ));
+      await tester.pumpAndSettle();
+
+      await _enterTopic(tester, 'Algebraic Expressions');
+      await _tapGenerate(tester);
+
+      // Unlock the lesson.
+      final unlockButton = find.text('Unlock \u2014 Unlimited previews');
+      await tester.ensureVisible(unlockButton);
+      await tester.pumpAndSettle();
+      await tester.tap(unlockButton);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+
+      // Tab chips are visible.
+      expect(find.text('Lesson Note'), findsOneWidget);
+      expect(find.text('Assessment'), findsOneWidget);
+      expect(find.text('Diagrams'), findsOneWidget);
+
+      // Lesson Note tab is active: objectives are visible on tab 0.
+      expect(find.text('Objectives'), findsWidgets);
+    });
+
+    testWidgets(
+        'draft lesson with partial content shows unlocked Generate with AI',
+        (tester) async {
+      final id = await db.lessonsDao.insertLesson(
+        LessonsCompanion.insert(
+          subject: 'Mathematics',
+          classLevel: 'JSS 1',
+          week: 1,
+          topic: 'Algebraic Expressions',
+          difficulty: 'medium',
+          bloomsVerbs: 'Remember,Understand',
+          curriculum: 'NERDC',
+          content: jsonEncode({
+            'objectives': ['Partially saved objective'],
+            'vocabulary': <String>[],
+            'materials': <String>[],
+            'presentation': <String, dynamic>{},
+            'assessment': '',
+            'homework': '',
+          }),
+          status: const Value('draft'),
+          isUnlocked: const Value(false),
+          teacherServerId:
+              const Value('00000000-0000-0000-0000-000000000001'),
+          schoolServerId:
+              const Value('00000000-0000-0000-0000-000000000010'),
+        ),
+      );
+
+      await ensureViewportHeight(tester);
+      _mockConnectivityChannel(isOnline: true);
+      await tester.pumpWidget(buildApp(lessonId: id));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Generate with AI'), findsOneWidget);
+      expect(find.text('Regenerate'), findsNothing);
+      expect(find.text('Locked — Preview only'), findsNothing);
+      expect(find.text('Preview Generated Content'), findsNothing);
+    });
+
+    testWidgets('existing lesson loading still works', (tester) async {
+      final id = await db.lessonsDao.insertLesson(
+        LessonsCompanion.insert(
+          subject: 'Mathematics',
+          classLevel: 'JSS 1',
+          week: 1,
+          topic: 'Algebraic Expressions',
+          difficulty: 'medium',
+          bloomsVerbs: 'Remember,Understand',
+          curriculum: 'NERDC',
+          content: jsonEncode({
+            'objectives': ['Learn algebraic expressions'],
+            'vocabulary': ['Variable', 'Constant'],
+            'materials': ['Textbook'],
+            'presentation': {'step1': 'Introduction'},
+            'assessment': 'Quiz on expressions',
+            'homework': 'Practice problems',
+          }),
+          teacherServerId:
+              const Value('00000000-0000-0000-0000-000000000001'),
+          schoolServerId:
+              const Value('00000000-0000-0000-0000-000000000010'),
+        ),
+      );
+
+      await ensureViewportHeight(tester);
+      _mockConnectivityChannel(isOnline: true);
+      await tester.pumpWidget(buildApp(lessonId: id));
+      await tester.pumpAndSettle();
+
+      // The lesson loads without crashing; the locked preview shows the
+      // restored objectives text.
+      expect(find.textContaining('Learn algebraic expressions'), findsOneWidget);
+      expect(find.text('Preview Generated Content'), findsOneWidget);
+    });
+
+    testWidgets(
+        'after generation, topic field is disabled and requires double-tap to edit',
+        (tester) async {
+      await ensureViewportHeight(tester);
+      _mockConnectivityChannel(isOnline: true);
+
+      await tester.pumpWidget(buildApp(
+        generateCallback: dispatchCallback(),
+      ));
+      await tester.pumpAndSettle();
+
+      await _enterTopic(tester, 'Algebraic Expressions');
+      await _tapGenerate(tester);
+
+      // The topic field in the Generate card is read-only after generation.
+      final topicField = find.byType(TextField).first;
+      final textField = tester.widget<TextField>(topicField);
+      expect(textField.readOnly, isTrue);
+
+      // Double-tap shows the confirmation dialog.
+      await tester.tap(topicField, warnIfMissed: false);
+      await tester.pump();
+      await tester.tap(topicField, warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(find.text('Edit Topic?'), findsOneWidget);
+      expect(find.text('Proceed to Edit'), findsOneWidget);
+
+      // Cancel keeps the field read-only.
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(topicField).readOnly, isTrue);
+
+      // Double-tap again and confirm to enable editing.
+      await tester.tap(topicField, warnIfMissed: false);
+      await tester.pump();
+      await tester.tap(topicField, warnIfMissed: false);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Proceed to Edit'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(topicField).readOnly, isFalse);
+    });
+
+    testWidgets(
+        'tool header subtitle is removed',
+        (tester) async {
+      await ensureViewportHeight(tester);
+      _mockConnectivityChannel(isOnline: true);
+
+      await tester.pumpWidget(buildApp(
+        generateCallback: dispatchCallback(),
+      ));
+      await tester.pumpAndSettle();
+
+      await _enterTopic(tester, 'Algebraic Expressions');
+      await _tapGenerate(tester);
+
+      // The tool header subtitle should not be present.
+      expect(
+        find.text('Configure parameters to generate high-quality, localized educational content.'),
+        findsNothing,
+      );
+      // But the main title should still be present.
+      expect(find.text('Lesson Editor'), findsOneWidget);
+    });
+
+    testWidgets(
+        'single completion control in floating action area after unlock',
+        (tester) async {
+      await ensureViewportHeight(tester);
+      _mockConnectivityChannel(isOnline: true);
+
+      await tester.pumpWidget(buildApp(
+        generateCallback: dispatchCallback(),
+      ));
+      await tester.pumpAndSettle();
+
+      await _enterTopic(tester, 'Algebraic Expressions');
+      await _tapGenerate(tester);
+
+      // Unlock the lesson so the floating action area shows completion control.
+      final unlockButton = find.text('Unlock \u2014 Unlimited previews');
+      await tester.ensureVisible(unlockButton);
+      await tester.pumpAndSettle();
+      await tester.tap(unlockButton);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+
+      // There should be exactly one 'Mark Completed' button (in the floating
+      // action area), not duplicated in the preview footer.
+      expect(find.text('Mark Completed'), findsOneWidget);
+      // The old 'Mark Lesson as Completed' button should not exist.
+      expect(find.text('Mark Lesson as Completed'), findsNothing);
+    });
+
+    testWidgets(
+        'curated reference appears when AI returns a real textbook title',
+        (tester) async {
+      await ensureViewportHeight(tester);
+      _mockConnectivityChannel(isOnline: true);
+
+      // Return a lesson with a curated textbook reference.
+      final curatedResult = {
+        'raw': {
+          'objectives': ['Learn fractions'],
+          'vocabulary': ['Numerator'],
+          'materials': ['Textbook'],
+          'presentation': {'step1': 'Intro'},
+          'assessment': 'Quiz',
+          'homework': 'Worksheet',
+          'references': [
+            {'title': 'New General Mathematics for Junior Secondary Schools'},
+          ],
+        },
+      };
+
+      await tester.pumpWidget(buildApp(
+        generateCallback: (prompt) async {
+          if (prompt.contains('## Learning Objectives')) {
+            return curatedResult;
+          }
+          return _defaultQuestionsResult;
+        },
+      ));
+      await tester.pumpAndSettle();
+
+      await _enterTopic(tester, 'Algebraic Expressions');
+      await _tapGenerate(tester);
+
+      // Verify the reference was saved in the lesson content.
+      final lessons = await db.select(db.lessons).get();
+      expect(lessons.length, equals(1));
+      final content = jsonDecode(lessons.first.content) as Map<String, dynamic>;
+      final refs = content['references'] as List<dynamic>;
+      expect(refs.length, equals(1));
+      expect(refs[0]['text'],
+          equals('New General Mathematics for Junior Secondary Schools'));
+      expect(refs[0]['origin'], equals('curated'));
+    });
+
+    testWidgets(
+        'empty references show empty state in References sheet',
+        (tester) async {
+      await ensureViewportHeight(tester);
+      _mockConnectivityChannel(isOnline: true);
+
+      await tester.pumpWidget(buildApp(
+        generateCallback: dispatchCallback(),
+      ));
+      await tester.pumpAndSettle();
+
+      await _enterTopic(tester, 'Algebraic Expressions');
+      await _tapGenerate(tester);
+
+      // 'View References' is shown in the locked preview (before unlock).
+      final refsButton = find.text('View References');
+      await tester.ensureVisible(refsButton);
+      await tester.pumpAndSettle();
+      await tester.tap(refsButton);
+      await tester.pumpAndSettle();
+
+      // dispatchCallback returns no references, so the empty state
+      // message should be shown.
+      expect(find.text('No source references provided.'), findsOneWidget);
+    });
+
+    testWidgets(
+        'no fabricated page or chapter in curated references',
+        (tester) async {
+      await ensureViewportHeight(tester);
+      _mockConnectivityChannel(isOnline: true);
+
+      // Return a reference with a curated title but no page/chapter.
+      final result = {
+        'raw': {
+          'objectives': ['Learn algebra'],
+          'vocabulary': ['Variable'],
+          'materials': ['Textbook'],
+          'presentation': {'step1': 'Intro'},
+          'assessment': 'Quiz',
+          'homework': 'Worksheet',
+          'references': [
+            {
+              'title':
+                  'New General Mathematics for Junior Secondary Schools',
+            },
+          ],
+        },
+      };
+
+      await tester.pumpWidget(buildApp(
+        generateCallback: (prompt) async {
+          if (prompt.contains('## Learning Objectives')) return result;
+          return _defaultQuestionsResult;
+        },
+      ));
+      await tester.pumpAndSettle();
+
+      await _enterTopic(tester, 'Algebraic Expressions');
+      await _tapGenerate(tester);
+
+      // The saved reference should contain only the title — no page,
+      // chapter, or author fields.
+      final lessons = await db.select(db.lessons).get();
+      final content = jsonDecode(lessons.first.content) as Map<String, dynamic>;
+      final refs = content['references'] as List<dynamic>;
+      expect(refs.length, equals(1));
+      final ref = refs[0] as Map<String, dynamic>;
+      expect(ref.containsKey('page'), isFalse);
+      expect(ref.containsKey('chapter'), isFalse);
+      expect(ref.containsKey('author'), isFalse);
+      expect(ref['text'],
+          equals('New General Mathematics for Junior Secondary Schools'));
+    });
+
+    testWidgets('four tabs appear after unlock in correct order', (tester) async {
+      await ensureViewportHeight(tester);
+      _mockConnectivityChannel(isOnline: true);
+
+      await tester.pumpWidget(buildApp(
+        generateCallback: dispatchCallback(),
+      ));
+      await tester.pumpAndSettle();
+
+      await _enterTopic(tester, 'Algebraic Expressions');
+      await _tapGenerate(tester);
+
+      // Unlock the lesson.
+      final unlockButton = find.text('Unlock \u2014 Unlimited previews');
+      await tester.ensureVisible(unlockButton);
+      await tester.pumpAndSettle();
+      await tester.tap(unlockButton);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+
+      // All four tabs are visible in order (References hidden by default).
+      expect(find.text('Lesson Note'), findsOneWidget);
+      expect(find.text('Assessment'), findsOneWidget);
+      expect(find.text('Diagrams'), findsOneWidget);
+      // References not visible (default toggle is off).
+      expect(find.text('References'), findsNothing);
+
+      // Tap Assessment, then Diagrams to verify they work.
+      await tester.tap(find.text('Assessment'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Diagrams'));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('References tab hidden unless visible toggle is enabled', (tester) async {
+      await ensureViewportHeight(tester);
+      _mockConnectivityChannel(isOnline: true);
+
+      // Enable the references visible toggle.
+      SharedPreferences.setMockInitialValues({
+        '00000000-0000-0000-0000-000000000001_lesson_visible_references': true,
+      });
+
+      await tester.pumpWidget(buildApp(
+        generateCallback: dispatchCallback(),
+      ));
+      await tester.pumpAndSettle();
+
+      await _enterTopic(tester, 'Algebraic Expressions');
+      await _tapGenerate(tester);
+
+      // Unlock.
+      final unlockButton = find.text('Unlock \u2014 Unlimited previews');
+      await tester.ensureVisible(unlockButton);
+      await tester.pumpAndSettle();
+      await tester.tap(unlockButton);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+
+      // With toggle enabled, References tab appears as fourth tab.
+      expect(find.text('Lesson Note'), findsOneWidget);
+      expect(find.text('Assessment'), findsOneWidget);
+      expect(find.text('Diagrams'), findsOneWidget);
+      expect(find.text('References'), findsOneWidget);
+    });
+
+    testWidgets('Homework appears in Assessment tab not Lesson Note', (tester) async {
+      await ensureViewportHeight(tester);
+      _mockConnectivityChannel(isOnline: true);
+
+      await tester.pumpWidget(buildApp(
+        generateCallback: dispatchCallback(),
+      ));
+      await tester.pumpAndSettle();
+
+      await _enterTopic(tester, 'Algebraic Expressions');
+      await _tapGenerate(tester);
+
+      // Unlock.
+      final unlockButton = find.text('Unlock \u2014 Unlimited previews');
+      await tester.ensureVisible(unlockButton);
+      await tester.pumpAndSettle();
+      await tester.tap(unlockButton);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+
+      // Homework should NOT appear on the Lesson Note tab (tab 0).
+      // It should appear on the Assessment tab (tab 1).
+      // First check that Lesson Note tab does NOT show Homework header.
+      // The PageView starts on tab 0, so Homework shouldn't be rendered.
+      expect(find.text('Homework'), findsNothing);
+
+      // Tap Assessment tab.
+      await tester.tap(find.text('Assessment'));
+      await tester.pumpAndSettle();
+
+      // Now Homework should appear.
+      expect(find.text('Homework'), findsOneWidget);
+    });
+
+    testWidgets('format selector and question counts appear in Assessment tab', (tester) async {
+      await ensureViewportHeight(tester);
+      _mockConnectivityChannel(isOnline: true);
+
+      await tester.pumpWidget(buildApp(
+        generateCallback: dispatchCallback(),
+      ));
+      await tester.pumpAndSettle();
+
+      await _enterTopic(tester, 'Algebraic Expressions');
+      await _tapGenerate(tester);
+
+      // Unlock.
+      final unlockButton = find.text('Unlock \u2014 Unlimited previews');
+      await tester.ensureVisible(unlockButton);
+      await tester.pumpAndSettle();
+      await tester.tap(unlockButton);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+
+      // Tap Assessment tab.
+      await tester.tap(find.text('Assessment'));
+      await tester.pumpAndSettle();
+
+      // Format selector and question counts are visible.
+      expect(find.text('Assessment Format'), findsOneWidget);
+      expect(find.text('Question Counts'), findsOneWidget);
+      expect(find.text('Objective'), findsOneWidget);
+    });
+
+    testWidgets('include diagram toggle appears in Advanced Settings', (tester) async {
+      await ensureViewportHeight(tester);
+      _mockConnectivityChannel(isOnline: true);
+
+      await tester.pumpWidget(buildApp(
+        generateCallback: dispatchCallback(),
+      ));
+      await tester.pumpAndSettle();
+
+      await _enterTopic(tester, 'Algebraic Expressions');
+      await _tapGenerate(tester);
+
+      // Unlock.
+      final unlockButton = find.text('Unlock \u2014 Unlimited previews');
+      await tester.ensureVisible(unlockButton);
+      await tester.pumpAndSettle();
+      await tester.tap(unlockButton);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+
+      // Expand Advanced Settings to reveal the toggle.
+      await tester.ensureVisible(find.text('Advanced Settings'));
+      await tester.tap(find.text('Advanced Settings'));
+      await tester.pumpAndSettle();
+      expect(find.text('Include diagram generation'), findsOneWidget);
+    });
+
+    testWidgets('topic context line shows Subject Class Week on Lesson Note tab', (tester) async {
+      await ensureViewportHeight(tester);
+      _mockConnectivityChannel(isOnline: true);
+
+      await tester.pumpWidget(buildApp(
+        generateCallback: dispatchCallback(),
+      ));
+      await tester.pumpAndSettle();
+
+      await _enterTopic(tester, 'Algebraic Expressions');
+      await _tapGenerate(tester);
+
+      // Unlock.
+      final unlockButton = find.text('Unlock \u2014 Unlimited previews');
+      await tester.ensureVisible(unlockButton);
+      await tester.pumpAndSettle();
+      await tester.tap(unlockButton);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+
+      // Lesson Note tab shows the context line with subject, class, week.
+      expect(find.textContaining('\u00b7'), findsOneWidget);
+    });
+
+    testWidgets('keyboard arrow switching is ignored while a text field has focus', (tester) async {
+      await ensureViewportHeight(tester);
+      _mockConnectivityChannel(isOnline: true);
+
+      await tester.pumpWidget(buildApp(
+        generateCallback: dispatchCallback(),
+      ));
+      await tester.pumpAndSettle();
+
+      await _enterTopic(tester, 'Algebraic Expressions');
+      await _tapGenerate(tester);
+
+      // Unlock.
+      final unlockButton = find.text('Unlock \u2014 Unlimited previews');
+      await tester.ensureVisible(unlockButton);
+      await tester.pumpAndSettle();
+      await tester.tap(unlockButton);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+
+      // Focus the objectives text field on the Lesson Note tab.
+      // Tap into the Objectives section to get a TextFormField focused.
+      final objectivesField = find.byType(TextFormField).first;
+      await tester.ensureVisible(objectivesField);
+      await tester.tap(objectivesField);
+      await tester.pumpAndSettle();
+
+      // Send right arrow key — should NOT switch tabs because a field is focused.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+
+      // Still on Lesson Note tab (Objectives visible, Assessment tab content not visible).
+      expect(find.text('Objectives'), findsWidgets);
+      expect(find.text('Assessment Format'), findsNothing);
     });
   });
 }

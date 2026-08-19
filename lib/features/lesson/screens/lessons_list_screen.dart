@@ -112,7 +112,6 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
     _StatusFilterItem('Completed', Icons.check_circle_rounded),
     _StatusFilterItem('Unlocked', Icons.lock_open_rounded),
     _StatusFilterItem('Generated', Icons.auto_awesome_rounded),
-    _StatusFilterItem('Needs Sync', Icons.sync_rounded),
   ];
 
   String _selectedStatusFilter = 'All';
@@ -121,6 +120,7 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
   String _selectedSubjectFilter = 'All';
   bool _filtersExpanded = true;
   bool _hasPlanForFilters = false;
+  bool _isExportingPdf = false;
   final Map<int, SchemeOfWorkData> _schemesById = {};
 
   /// Cache of lesson id → "content is an empty placeholder" computed once per
@@ -585,8 +585,6 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
         return lesson.status == 'completed';
       case 'Unlocked':
         return lesson.isUnlocked;
-      case 'Needs Sync':
-        return lesson.serverId == null;
       default:
         return true;
     }
@@ -811,77 +809,56 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
           backgroundColor: cs.surface,
           foregroundColor: cs.onSurface,
           surfaceTintColor: cs.surface,
+          actions: [
+            const SyncIndicator(),
+            const SizedBox(width: 4),
+            OfflineCreditCounter(
+              visible: ref.watch(isOfflineProvider),
+            ),
+            PopupMenuButton<String>(
+              onSelected: (option) => _handleCreateOption(option),
+              tooltip: 'Create',
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'single',
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.add_rounded),
+                    title: Text('✏️  Add Single Lesson'),
+                    dense: true,
+                  ),
+                ),
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'offline',
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.auto_awesome_rounded),
+                    title: const Text('📋  Bulk Generate'),
+                    dense: true,
+                  ),
+                ),
+                if (_hasPlanForFilters)
+                  PopupMenuItem(
+                    value: 'refresh',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.refresh_rounded),
+                      title: const Text('🔄  Refresh Plan'),
+                      dense: true,
+                    ),
+                  ),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Icon(Icons.add_circle_rounded, color: cs.primary),
+              ),
+            ),
+          ],
         ),
         body: Column(
           children: [
             const ConflictBanner(),
-            // Primary action — full width, directly under the banner so it no
-            // longer competes with the AppBar title. Same flyout as before.
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: PopupMenuButton<String>(
-                onSelected: (option) => _handleCreateOption(option),
-                tooltip: 'Create',
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'single',
-                    child: ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.add_rounded),
-                      title: Text('✏️  Add Single Lesson'),
-                      dense: true,
-                    ),
-                  ),
-                  const PopupMenuDivider(),
-                  PopupMenuItem(
-                    value: 'offline',
-                    child: ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.auto_awesome_rounded),
-                      title: const Text('📋  Bulk Generate'),
-                      dense: true,
-                    ),
-                  ),
-                  if (_hasPlanForFilters)
-                    PopupMenuItem(
-                      value: 'refresh',
-                      child: ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.refresh_rounded),
-                        title: const Text('🔄  Refresh Plan'),
-                        dense: true,
-                      ),
-                    ),
-                ],
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    color: cs.primary,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.add_rounded, size: 20, color: cs.onPrimary),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Create',
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: cs.onPrimary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Icon(
-                        Icons.arrow_drop_down_rounded,
-                        color: cs.onPrimary,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
             Expanded(
               child: lessonsAsync.when(
                 loading: () => ListView(
@@ -968,16 +945,7 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
                       onTermChanged: _setTermFilter,
                       onClassChanged: _setClassFilter,
                       onSubjectChanged: _setSubjectFilter,
-                      headerTrailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const SyncIndicator(),
-                          const SizedBox(width: 4),
-                          OfflineCreditCounter(
-                            visible: ref.watch(isOfflineProvider),
-                          ),
-                        ],
-                      ),
+                      headerTrailing: null,
                     ),
                   );
 
@@ -1116,7 +1084,8 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
                                   onTap: () => context.push('/lessons/${lesson.id}'),
                                   onEdit: () => context.push('/lessons/${lesson.id}'),
                                   onDelete: () => _confirmDeleteLesson(lesson),
-                                  onExport: () => _exportLesson(lesson),
+                                  isExportingPdf: _isExportingPdf,
+                                  onExport: _isExportingPdf ? null : () => _exportLesson(lesson),
                                 ),
                               );
                             },
@@ -1402,23 +1371,29 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
   }
 
   Future<void> _exportLesson(Lesson lesson) async {
-    final db = ref.read(databaseProvider);
-    final authState = ref.read(authProvider);
-    final school = authState.currentSchool ?? await db.schoolsDao.get();
-    if (school == null) {
-      _showToast('School data not available');
-      return;
+    if (_isExportingPdf) return;
+    setState(() => _isExportingPdf = true);
+    try {
+      final db = ref.read(databaseProvider);
+      final authState = ref.read(authProvider);
+      final school = authState.currentSchool ?? await db.schoolsDao.get();
+      if (school == null) {
+        _showToast('School data not available');
+        return;
+      }
+      final teacherId = authState.currentTeacher?.serverId;
+      final teacherEmail = authState.currentTeacher?.email;
+      await exportLessonPdf(
+        context,
+        ref,
+        lesson,
+        school,
+        teacherId,
+        teacherEmail,
+      );
+    } finally {
+      if (mounted) setState(() => _isExportingPdf = false);
     }
-    final teacherId = authState.currentTeacher?.serverId;
-    final teacherEmail = authState.currentTeacher?.email;
-    await exportLessonPdf(
-      context,
-      ref,
-      lesson,
-      school,
-      teacherId,
-      teacherEmail,
-    );
   }
 }
 
@@ -1514,13 +1489,14 @@ class _LessonFiltersPanel extends StatelessWidget {
             child: Row(
               children: statusFilters.map((item) {
                 final selected = item.label == selectedStatusFilter;
+                final accent = _statusFilterAccent(item.label, cs);
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: FilterChip(
                     avatar: Icon(
                       item.icon,
                       size: 18,
-                      color: selected ? cs.primary : cs.onSurfaceVariant,
+                      color: selected ? accent : cs.onSurfaceVariant,
                     ),
                     label: Text(item.label),
                     selected: selected,
@@ -1528,13 +1504,13 @@ class _LessonFiltersPanel extends StatelessWidget {
                     onSelected: (_) => onStatusChanged(item.label),
                     labelStyle: theme.textTheme.labelMedium?.copyWith(
                       fontWeight: FontWeight.w600,
-                      color: selected ? cs.primary : cs.onSurfaceVariant,
+                      color: selected ? accent : cs.onSurfaceVariant,
                     ),
                     backgroundColor: cs.surfaceContainerLow,
-                    selectedColor: cs.primaryContainer.withValues(alpha: 0.45),
+                    selectedColor: accent.withValues(alpha: 0.12),
                     side: BorderSide(
                       color: selected
-                          ? cs.primary.withValues(alpha: 0.25)
+                          ? accent.withValues(alpha: 0.4)
                           : cs.outlineVariant,
                     ),
                   ),
@@ -1586,6 +1562,16 @@ class _LessonFiltersPanel extends StatelessWidget {
     );
   }
 }
+
+/// Maps each status filter label to its accent color for the FilterChip
+/// selected state.
+Color _statusFilterAccent(String label, ColorScheme cs) => switch (label) {
+      'Draft' => kStatusDraftColor,
+      'Completed' => kStatusCompletedColor,
+      'Unlocked' => kStatusUnlockedColor,
+      'Generated' => kStatusGeneratedColor,
+      _ => cs.primary, // 'All'
+    };
 
 class _FilterDropdownField extends StatelessWidget {
   const _FilterDropdownField({
@@ -1674,6 +1660,9 @@ Future<void> exportLessonPdf(
       '${dir.path}/${safeName}_${DateTime.now().millisecondsSinceEpoch}.pdf',
     );
     await file.writeAsBytes(pdfBytes);
+
+    // Check context is still mounted after async work before any UI interaction
+    if (!context.mounted) return;
 
     if (kIsWeb || Platform.isAndroid || Platform.isIOS) {
       // Share via system share sheet
@@ -1772,6 +1761,7 @@ class _LessonCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final bool isExportingPdf;
   final VoidCallback? onExport;
 
   const _LessonCard({
@@ -1781,6 +1771,7 @@ class _LessonCard extends StatelessWidget {
     required this.onTap,
     required this.onEdit,
     required this.onDelete,
+    this.isExportingPdf = false,
     this.onExport,
   });
 
@@ -1789,36 +1780,33 @@ class _LessonCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
 
-    // Status / secondary chips — shared by both layouts. On wide (desktop)
-    // cards the chips sit inline at the start of the main row; on narrow
-    // cards they move to their own line so they can wrap without starving
-    // the text/actions siblings for width.
-    final chipsWrap = Wrap(
-      spacing: 6,
-      runSpacing: 6,
+    // Primary status color for the left accent strip.
+    final Color accentColor = switch (lesson.status) {
+      'completed' => kStatusCompletedColor,
+      'generated' when lesson.isUnlocked => kStatusUnlockedColor,
+      'generated' => kStatusGeneratedColor,
+      _ => lesson.isUnlocked ? kStatusUnlockedColor : kStatusDraftColor,
+    };
+
+    // Status chips — stacked vertically: primary first, Needs Sync below.
+    final chipsColumn = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         lessonRowStatusChip(
           completed: lesson.status == 'completed',
           unlocked: lesson.isUnlocked,
+          generated: lesson.status == 'generated',
         ),
-        // Secondary "Generated" chip — only when the lesson is
-        // generated but still locked; the Unlocked primary chip
-        // already conveys it once unlocked.
-        if (lesson.status == 'generated' && !lesson.isUnlocked)
-          const StatusChip(
-            label: 'Generated',
-            icon: Icons.lock_open_rounded,
-            color: kStatusGeneratedColor,
-            dense: true,
-          ),
-        if (lesson.serverId == null || lesson.serverId!.isEmpty)
+        if (lesson.serverId == null || lesson.serverId!.isEmpty) ...[
+          const SizedBox(height: 4),
           const StatusChip(
             label: 'Needs Sync',
             icon: Icons.sync_rounded,
             color: kStatusNeedsSyncColor,
             dense: true,
           ),
-        if (lesson.schemeOfWorkId != null) schemeLinkedChip(),
+        ],
       ],
     );
 
@@ -1922,7 +1910,19 @@ class _LessonCard extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (onExport != null)
+              if (isExportingPdf)
+                const SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                )
+              else if (onExport != null)
                 IconButton(
                   icon: Icon(Icons.picture_as_pdf_rounded, size: 20, color: cs.tertiary),
                   onPressed: onExport,
@@ -1961,7 +1961,7 @@ class _LessonCard extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.only(left: 0, right: 16, top: 14, bottom: 14),
         decoration: BoxDecoration(
           color: cs.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(16),
@@ -1976,30 +1976,47 @@ class _LessonCard extends StatelessWidget {
             ),
           ],
         ),
-        // Desktop (>= 480dp): chips inline where they originally sat, then
-        // the position/icon/text/actions row. Narrow (< 480dp): chips wrap
-        // on their own line above the same row, keeping 320dp safe.
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            if (constraints.maxWidth >= 480) {
-              return Row(
-                children: [
-                  chipsWrap,
-                  const SizedBox(width: 10),
-                  ...mainRowChildren,
-                ],
-              );
-            }
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                chipsWrap,
-                const SizedBox(height: 8),
-                Row(children: mainRowChildren),
-              ],
-            );
-          },
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 4px left accent strip
+            Container(
+              width: 4,
+              decoration: BoxDecoration(
+                color: accentColor,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  bottomLeft: Radius.circular(16),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Content area
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth >= 440) {
+                    return Row(
+                      children: [
+                        chipsColumn,
+                        const SizedBox(width: 10),
+                        ...mainRowChildren,
+                      ],
+                    );
+                  }
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      chipsColumn,
+                      const SizedBox(height: 8),
+                      Row(children: mainRowChildren),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );

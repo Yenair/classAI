@@ -43,7 +43,8 @@ void main() {
               children: [
                 examRowStatusChip(unlocked: false),
                 examRowStatusChip(unlocked: true),
-                lessonRowStatusChip(completed: true, unlocked: true),
+                lessonRowStatusChip(completed: true, unlocked: true, generated: false),
+                lessonRowStatusChip(completed: false, unlocked: false, generated: true),
                 lessonStatusChipFor('generated'),
                 schemeStatusChip('none', fallbackLabel: 'No Scheme'),
                 schemeLinkedChip(),
@@ -54,7 +55,7 @@ void main() {
       );
 
       final chips = tester.widgetList<StatusChip>(find.byType(StatusChip));
-      expect(chips, hasLength(6));
+      expect(chips, hasLength(7));
       for (final chip in chips) {
         expect(chip.label, isNotEmpty);
         expect(chip.icon, isNotNull);
@@ -62,7 +63,7 @@ void main() {
       expect(find.text('Draft'), findsOneWidget);
       expect(find.text('Unlocked'), findsOneWidget);
       expect(find.text('Completed'), findsOneWidget);
-      expect(find.text('Generated'), findsOneWidget);
+      expect(find.text('Generated'), findsWidgets);
       expect(find.text('No Scheme'), findsOneWidget);
       expect(find.text('Linked'), findsOneWidget);
     },

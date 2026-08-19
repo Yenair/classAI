@@ -1,0 +1,275 @@
+<!DOCTYPE html><html class="dark" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>ClassAI - Lesson Editor Deck</title>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            primary: "#8fa3ff",
+            "background-light": "#f4f4f5",
+            "background-dark": "#131315",
+            "card-dark": "#1c1c1f",
+            "border-dark": "#2d2d30",
+          },
+          fontFamily: {
+            display: ["Inter", "system-ui", "sans-serif"],
+          },
+          borderRadius: {
+            DEFAULT: "1rem",
+            'xl': '1.5rem',
+            '2xl': '2rem',
+          },
+        },
+      },
+    };
+  </script>
+<style>
+    body { font-family: 'Inter', sans-serif; overflow: hidden; }
+    .snap-container {
+      scroll-snap-type: x mandatory;
+      display: flex;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      height: calc(100vh - 80px);
+    }
+    .snap-container::-webkit-scrollbar { display: none; }
+    .snap-section {
+      scroll-snap-align: center;
+      min-width: 100%;
+      height: 100%;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+    }
+    .glass-card {
+      background: rgba(28, 28, 31, 0.8);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+  </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 h-screen flex flex-col">
+<header class="h-20 flex items-center justify-between px-8 border-b border-slate-200 dark:border-border-dark bg-white dark:bg-background-dark z-20">
+<div class="flex items-center gap-4">
+<button class="p-2 hover:bg-slate-100 dark:hover:bg-card-dark rounded-full transition-colors">
+<span class="material-icons-round text-slate-500">arrow_back</span>
+</button>
+<div>
+<h1 class="text-xl font-bold tracking-tight">Lesson Editor</h1>
+<p class="text-sm text-slate-500 dark:text-slate-400">English Studies • JSS 2 • Week 1</p>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="hidden md:flex gap-1">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span class="w-2 h-2 rounded-full bg-slate-700"></span>
+<span class="w-2 h-2 rounded-full bg-slate-700"></span>
+<span class="w-2 h-2 rounded-full bg-slate-700"></span>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-2 text-slate-500 hover:text-slate-200"><span class="material-icons-round">undo</span></button>
+<button class="p-2 text-slate-500 hover:text-slate-200"><span class="material-icons-round">redo</span></button>
+</div>
+</div>
+</header>
+<main class="snap-container flex-1 bg-slate-100 dark:bg-background-dark">
+<section class="snap-section" id="tile-generate">
+<div class="flex-1 max-w-5xl mx-auto w-full bg-white dark:bg-card-dark rounded-2xl shadow-2xl p-12 flex flex-col justify-center items-center text-center gap-8 border border-slate-200 dark:border-border-dark">
+<div class="bg-primary/10 p-6 rounded-full">
+<span class="material-icons-round text-primary text-6xl">auto_awesome</span>
+</div>
+<div class="max-w-2xl">
+<h2 class="text-4xl font-bold mb-4">Generate Lesson Content</h2>
+<p class="text-slate-500 dark:text-slate-400 text-lg">Choose your topic and let AI draft the perfect lesson structure for your students.</p>
+</div>
+<div class="w-full max-w-2xl relative">
+<input class="w-full h-20 px-8 bg-slate-50 dark:bg-background-dark border-2 border-slate-200 dark:border-border-dark rounded-2xl text-xl focus:border-primary focus:ring-0 outline-none transition-all" type="text" value="Revision of First Term Work and Introduction to Second Term">
+<label class="absolute -top-3 left-6 px-2 bg-white dark:bg-card-dark text-xs font-semibold text-primary uppercase tracking-wider">Lesson Topic</label>
+</div>
+<button class="w-full max-w-2xl h-20 bg-primary hover:opacity-90 text-white dark:text-[#131315] font-bold text-2xl rounded-2xl shadow-lg shadow-primary/20 flex items-center justify-center gap-4 transition-transform active:scale-[0.98]">
+<span class="material-icons-round text-3xl">refresh</span>
+          Regenerate Deck
+        </button>
+</div>
+</section>
+<section class="snap-section" id="tile-notes">
+<div class="flex-1 max-w-5xl mx-auto w-full bg-white dark:bg-card-dark rounded-2xl shadow-2xl p-12 flex flex-col border border-slate-200 dark:border-border-dark">
+<div class="flex justify-between items-center mb-8">
+<div class="flex items-center gap-4">
+<span class="material-icons-round text-primary text-3xl">description</span>
+<h2 class="text-3xl font-bold">Lesson Notes</h2>
+</div>
+<button class="flex items-center gap-2 text-primary font-semibold hover:underline">
+<span class="material-icons-round">edit</span> Edit Layout
+          </button>
+</div>
+<div class="flex-1 overflow-y-auto pr-4 space-y-8 custom-scrollbar">
+<div class="space-y-4">
+<h3 class="text-xl font-bold text-slate-400 uppercase tracking-widest text-sm">Objectives</h3>
+<ul class="space-y-4 text-xl leading-relaxed text-slate-700 dark:text-slate-300">
+<li class="flex gap-4"><span class="text-primary">•</span> Recall key concepts and skills from the first term's English Studies lessons.</li>
+<li class="flex gap-4"><span class="text-primary">•</span> Explain the importance of revision and how it helps in learning.</li>
+<li class="flex gap-4"><span class="text-primary">•</span> Apply prior knowledge to complete revision exercises accurately.</li>
+</ul>
+</div>
+<div class="space-y-4 pt-8 border-t border-slate-100 dark:border-border-dark">
+<h3 class="text-xl font-bold text-slate-400 uppercase tracking-widest text-sm">Introduction (10 mins)</h3>
+<p class="text-xl leading-relaxed text-slate-700 dark:text-slate-300">
+              Greet the students and welcome them back to school. Ask students to share one thing they remember learning in English Studies last term. Write their responses on the board and group them under topics like Grammar, Comprehension, and Literature.
+            </p>
+</div>
+</div>
+</div>
+</section>
+<section class="snap-section" id="tile-assessment">
+<div class="flex-1 max-w-5xl mx-auto w-full bg-white dark:bg-card-dark rounded-2xl shadow-2xl p-12 flex flex-col border border-slate-200 dark:border-border-dark">
+<div class="flex justify-between items-center mb-10">
+<div class="flex items-center gap-4">
+<span class="material-icons-round text-primary text-3xl">quiz</span>
+<h2 class="text-3xl font-bold">Assessment</h2>
+</div>
+<div class="flex bg-slate-100 dark:bg-background-dark p-1 rounded-xl">
+<button class="px-6 py-2 rounded-lg text-sm font-bold bg-white dark:bg-card-dark shadow-sm">MCQ</button>
+<button class="px-6 py-2 rounded-lg text-sm font-bold text-slate-500">Theory</button>
+<button class="px-6 py-2 rounded-lg text-sm font-bold text-slate-500">Both</button>
+</div>
+</div>
+<div class="space-y-10 overflow-y-auto flex-1 pr-4">
+<div class="space-y-6">
+<div class="flex gap-4 items-start">
+<span class="w-10 h-10 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-lg flex-shrink-0">1</span>
+<p class="text-2xl font-medium pt-1 leading-snug">In the sentence "The dog barked loudly at the stranger," which word is an adverb?</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 pl-14">
+<label class="flex items-center p-6 border-2 border-slate-100 dark:border-border-dark rounded-2xl cursor-pointer hover:border-primary/50 transition-all bg-slate-50 dark:bg-background-dark group">
+<input class="w-6 h-6 text-primary focus:ring-primary border-slate-300 dark:border-slate-600 dark:bg-card-dark" name="q1" type="radio">
+<span class="ml-4 text-xl">A. barked</span>
+</label>
+<label class="flex items-center p-6 border-2 border-primary rounded-2xl cursor-pointer bg-primary/5 transition-all group">
+<input checked="" class="w-6 h-6 text-primary focus:ring-primary border-primary dark:bg-card-dark" name="q1" type="radio">
+<span class="ml-4 text-xl font-semibold">B. loudly</span>
+<span class="ml-auto text-xs font-bold text-primary uppercase tracking-widest">Correct</span>
+</label>
+<label class="flex items-center p-6 border-2 border-slate-100 dark:border-border-dark rounded-2xl cursor-pointer hover:border-primary/50 transition-all bg-slate-50 dark:bg-background-dark group">
+<input class="w-6 h-6 text-primary focus:ring-primary border-slate-300 dark:border-slate-600 dark:bg-card-dark" name="q1" type="radio">
+<span class="ml-4 text-xl">C. stranger</span>
+</label>
+<label class="flex items-center p-6 border-2 border-slate-100 dark:border-border-dark rounded-2xl cursor-pointer hover:border-primary/50 transition-all bg-slate-50 dark:bg-background-dark group">
+<input class="w-6 h-6 text-primary focus:ring-primary border-slate-300 dark:border-slate-600 dark:bg-card-dark" name="q1" type="radio">
+<span class="ml-4 text-xl">D. dog</span>
+</label>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="snap-section" id="tile-diagrams">
+<div class="flex-1 max-w-5xl mx-auto w-full bg-white dark:bg-card-dark rounded-2xl shadow-2xl p-12 flex flex-col border border-slate-200 dark:border-border-dark">
+<div class="flex items-center gap-4 mb-10">
+<span class="material-icons-round text-primary text-3xl">analytics</span>
+<h2 class="text-3xl font-bold">Suggested Diagrams</h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8 flex-1">
+<div class="bg-slate-50 dark:bg-background-dark rounded-2xl p-8 flex flex-col border border-slate-100 dark:border-border-dark group hover:border-primary/40 transition-all">
+<div class="flex justify-between items-start mb-4">
+<span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Suggestion 1</span>
+<span class="material-icons-round text-slate-400 group-hover:text-primary">auto_fix_high</span>
+</div>
+<h3 class="text-xl font-bold mb-4">English Studies Mind Map</h3>
+<p class="text-slate-500 dark:text-slate-400 leading-relaxed mb-8 flex-1">A colorful mind map showing the main topics from first term: Grammar, Comprehension, Composition, and Literature.</p>
+<button class="w-full py-4 bg-primary/10 hover:bg-primary hover:text-white text-primary font-bold rounded-xl transition-all flex items-center justify-center gap-2">
+<span class="material-icons-round text-sm">rocket_launch</span>
+              Generate Image
+            </button>
+</div>
+<div class="bg-slate-50 dark:bg-background-dark rounded-2xl p-8 flex flex-col border border-slate-100 dark:border-border-dark group hover:border-primary/40 transition-all">
+<div class="flex justify-between items-start mb-4">
+<span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Suggestion 2</span>
+<span class="material-icons-round text-slate-400 group-hover:text-primary">table_chart</span>
+</div>
+<h3 class="text-xl font-bold mb-4">Parts of Speech Table</h3>
+<p class="text-slate-500 dark:text-slate-400 leading-relaxed mb-8 flex-1">A simple table chart illustrating the eight parts of speech with examples and sentence usage for each.</p>
+<button class="w-full py-4 bg-primary/10 hover:bg-primary hover:text-white text-primary font-bold rounded-xl transition-all flex items-center justify-center gap-2">
+<span class="material-icons-round text-sm">rocket_launch</span>
+              Generate Image
+            </button>
+</div>
+</div>
+</div>
+</section>
+</main>
+<div class="fixed bottom-10 right-10 z-50 flex flex-col-reverse items-end group">
+<button class="w-20 h-20 bg-primary text-[#131315] rounded-full shadow-2xl shadow-primary/40 flex items-center justify-center z-50 hover:scale-110 active:scale-95 transition-all">
+<span class="material-icons-round text-4xl group-hover:rotate-45 transition-transform duration-300">add</span>
+</button>
+<div class="mb-4 flex flex-col gap-3 opacity-0 translate-y-10 pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto transition-all duration-300">
+<button class="flex items-center gap-4 group/item">
+<span class="bg-white dark:bg-card-dark px-4 py-2 rounded-lg text-sm font-bold shadow-xl border border-slate-100 dark:border-border-dark whitespace-nowrap">Save Lesson</span>
+<div class="w-14 h-14 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform">
+<span class="material-icons-round">save</span>
+</div>
+</button>
+<button class="flex items-center gap-4 group/item">
+<span class="bg-white dark:bg-card-dark px-4 py-2 rounded-lg text-sm font-bold shadow-xl border border-slate-100 dark:border-border-dark whitespace-nowrap">Export PDF</span>
+<div class="w-14 h-14 bg-orange-500 text-white rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform">
+<span class="material-icons-round">picture_as_pdf</span>
+</div>
+</button>
+<button class="flex items-center gap-4 group/item">
+<span class="bg-white dark:bg-card-dark px-4 py-2 rounded-lg text-sm font-bold shadow-xl border border-slate-100 dark:border-border-dark whitespace-nowrap">Mark Completed</span>
+<div class="w-14 h-14 bg-sky-500 text-white rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform">
+<span class="material-icons-round">check_circle</span>
+</div>
+</button>
+<button class="flex items-center gap-4 group/item">
+<span class="bg-white dark:bg-card-dark px-4 py-2 rounded-lg text-sm font-bold shadow-xl border border-slate-100 dark:border-border-dark whitespace-nowrap">Visible Sections</span>
+<div class="w-14 h-14 bg-slate-600 text-white rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform">
+<span class="material-icons-round">visibility</span>
+</div>
+</button>
+</div>
+</div>
+<div class="fixed bottom-10 left-1/2 -translate-x-1/2 flex gap-3 px-6 py-3 bg-white/10 backdrop-blur-md rounded-full border border-white/5 z-40">
+<a class="w-3 h-3 rounded-full bg-primary shadow-[0_0_10px_#8fa3ff]" href="#tile-generate"></a>
+<a class="w-3 h-3 rounded-full bg-slate-600 hover:bg-slate-400 transition-colors" href="#tile-notes"></a>
+<a class="w-3 h-3 rounded-full bg-slate-600 hover:bg-slate-400 transition-colors" href="#tile-assessment"></a>
+<a class="w-3 h-3 rounded-full bg-slate-600 hover:bg-slate-400 transition-colors" href="#tile-diagrams"></a>
+</div>
+<script>
+    // Simple smooth scrolling for indicators
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        document.querySelector(this.getAttribute('href')).scrollIntoView({
+          behavior: 'smooth'
+        });
+      });
+    });
+    // Update indicators on scroll
+    const container = document.querySelector('.snap-container');
+    const dots = document.querySelectorAll('a[href^="#"]');
+    container.addEventListener('scroll', () => {
+      const scrollPos = container.scrollLeft;
+      const width = container.offsetWidth;
+      const activeIndex = Math.round(scrollPos / width);
+      dots.forEach((dot, index) => {
+        if (index === activeIndex) {
+          dot.classList.add('bg-primary', 'shadow-[0_0_10px_#8fa3ff]');
+          dot.classList.remove('bg-slate-600');
+        } else {
+          dot.classList.remove('bg-primary', 'shadow-[0_0_10px_#8fa3ff]');
+          dot.classList.add('bg-slate-600');
+        }
+      });
+    });
+  </script>
+
+
+
+</body></html>
