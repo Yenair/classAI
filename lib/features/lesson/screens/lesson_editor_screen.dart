@@ -159,6 +159,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
 
   // Floating action area: Review & Regenerate expandable state.
   bool _showReviewSection = false;
+  bool _showLessonActions = false;
   _LessonEditorCardKey? _regenerationCardKey;
   int? _regenerationDiagramIndex;
 
@@ -3574,12 +3575,18 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                 ),
 
                 // ── Floating Action Area ───────────────────────────
-                if (_hasGenerated)
+                if (_hasGenerated &&
+                    _isUnlocked &&
+                    _activeCardKey != _LessonEditorCardKey.generate)
                   _FloatingActionArea(
                     cs: cs,
                     theme: theme,
                     showReviewSection: _showReviewSection,
+                    showActionMenu: _showLessonActions,
                     onToggleReview: _toggleReviewSectionForActiveCard,
+                    onToggleActions: () => setState(
+                      () => _showLessonActions = !_showLessonActions,
+                    ),
                     reviewController: _reviewController,
                     isRegenerating: _isRegenerating,
                     onRegenerate: _isUnlocked &&
@@ -6881,7 +6888,9 @@ class _FloatingActionArea extends StatelessWidget {
   final ColorScheme cs;
   final ThemeData theme;
   final bool showReviewSection;
+  final bool showActionMenu;
   final VoidCallback onToggleReview;
+  final VoidCallback onToggleActions;
   final TextEditingController reviewController;
   final bool isRegenerating;
   final VoidCallback? onRegenerate;
@@ -6895,7 +6904,9 @@ class _FloatingActionArea extends StatelessWidget {
     required this.cs,
     required this.theme,
     required this.showReviewSection,
+    required this.showActionMenu,
     required this.onToggleReview,
+    required this.onToggleActions,
     required this.reviewController,
     required this.isRegenerating,
     this.onRegenerate,
@@ -6928,10 +6939,14 @@ class _FloatingActionArea extends StatelessWidget {
       ),
       child: SafeArea(
         top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
             // Expandable Review & Regenerate section
             if (showReviewSection)
               Container(
@@ -7019,16 +7034,21 @@ class _FloatingActionArea extends StatelessWidget {
                   ],
                 ),
               ),
-            // Action buttons row
-            Wrap(
+                // Action buttons row
+            if (showActionMenu && !showReviewSection)
+              Wrap(
               alignment: WrapAlignment.end,
               spacing: 8,
               runSpacing: 8,
               children: [
                 // Regenerate (opens review section)
-                if (!showReviewSection && onRegenerate != null)
-                  FilledButton.tonalIcon(
-                    onPressed: onToggleReview,
+                FilledButton.tonalIcon(
+                    onPressed: onRegenerate == null
+                        ? null
+                        : () {
+                            onToggleActions();
+                            onToggleReview();
+                          },
                     icon: const Icon(Icons.refresh_rounded, size: 18),
                     label: const Text('Regenerate'),
                     style: FilledButton.styleFrom(
@@ -7038,11 +7058,15 @@ class _FloatingActionArea extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       minimumSize: const Size(0, AppTheme.touchTarget),
                     ),
-                  ),
+                ),
                 // Mark Completed
-                if (onMarkCompleted != null)
-                  FilledButton.tonalIcon(
-                    onPressed: onMarkCompleted,
+                FilledButton.tonalIcon(
+                    onPressed: onMarkCompleted == null
+                        ? null
+                        : () {
+                            onToggleActions();
+                            onMarkCompleted!();
+                          },
                     icon: const Icon(Icons.check_circle, size: 18),
                     label: Text(lessonStatus == 'completed' ? 'Completed' : 'Mark Completed'),
                     style: FilledButton.styleFrom(
@@ -7052,11 +7076,15 @@ class _FloatingActionArea extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       minimumSize: const Size(0, AppTheme.touchTarget),
                     ),
-                  ),
+                ),
                 // Export PDF
-                if (onExportPdf != null)
-                  OutlinedButton.icon(
-                    onPressed: isExporting ? null : onExportPdf,
+                OutlinedButton.icon(
+                    onPressed: onExportPdf == null || isExporting
+                        ? null
+                        : () {
+                            onToggleActions();
+                            onExportPdf!();
+                          },
                     style: OutlinedButton.styleFrom(
                       foregroundColor: cs.tertiary,
                       side: BorderSide(color: cs.tertiary.withValues(alpha: 0.5)),
@@ -7075,11 +7103,15 @@ class _FloatingActionArea extends StatelessWidget {
                           )
                         : const Icon(Icons.picture_as_pdf_rounded, size: 18),
                     label: Text(isExporting ? 'Exporting...' : 'Export PDF'),
-                  ),
+                ),
                 // Visible Sections
-                if (onShowVisibleSections != null)
-                  OutlinedButton.icon(
-                    onPressed: onShowVisibleSections,
+                OutlinedButton.icon(
+                    onPressed: onShowVisibleSections == null
+                        ? null
+                        : () {
+                            onToggleActions();
+                            onShowVisibleSections!();
+                          },
                     icon: const Icon(Icons.visibility_rounded, size: 18),
                     label: const Text('Visible Sections'),
                     style: OutlinedButton.styleFrom(
@@ -7089,12 +7121,32 @@ class _FloatingActionArea extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       minimumSize: const Size(0, AppTheme.touchTarget),
                     ),
-                  ),
+                ),
               ],
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FloatingActionButton(
+                heroTag: 'lesson-editor-actions',
+                tooltip: showActionMenu || showReviewSection
+                    ? 'Close lesson actions'
+                    : 'Lesson actions',
+                onPressed: showReviewSection
+                    ? onToggleReview
+                    : onToggleActions,
+                child: Icon(
+                  showActionMenu || showReviewSection
+                      ? Icons.close_rounded
+                      : Icons.add_rounded,
+                ),
+              ),
             ),
           ],
         ),
       ),
+    ),
+  ),
     );
   }
 }
