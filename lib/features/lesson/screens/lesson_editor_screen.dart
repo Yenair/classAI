@@ -2962,89 +2962,94 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                       if (_hasGenerated) ...[
                                         const SizedBox(height: 24),
                                         // 3. Preview Generated Content
-                                        _PreviewColumn(
-                                        key: ValueKey(_previewRevision),
-                                        cs: cs,
-                                        theme: theme,
-                                        hasGenerated: _hasGenerated,
-                                        isUnlocked: _isUnlocked,
-                                        isOnline: _isOnline,
-                                        subscriptionTier: _subscriptionTier,
-                                        remainingDailyPreviews: _remainingDailyPreviews,
-                                        isRegenerating: _isRegenerating,
-                                        diagramResults: _diagramResults,
-                                        isGeneratingDiagrams: _isGeneratingDiagrams,
-                                        generatingDiagramIndex: _generatingDiagramIndex,
-                                        onRegenerateDiagram: _generateSuggestedImage,
-                                        onActiveCardChanged: _onPreviewCardChanged,
-                                        objectivesController: _objectivesController,
-                                        vocabularyController: _vocabularyController,
-                                        materialsController: _materialsController,
-                                        presentationController: _presentationController,
-                                        introController: _introController,
-                                        devController: _devController,
-                                        conclusionController: _conclusionController,
-                                        assessmentController: _assessmentController,
-                                        homeworkController: _homeworkController,
-                                        questionSummary: questionSummary,
-                                        reviewController: _reviewController,
-                                        undoController: _undoController,
-                                        onUnlock: _handleUnlock,
-                                        onSave: _saveLesson,
-                                        onDiscard: _discard,
-                                        onRegenerate: _isUnlocked ? _handleRegenerate : null,
-                                        lessonStatus: _lessonStatus,
-                                        onMarkCompleted: _isUnlocked ? _handleMarkCompleted : null,
-                                        onToggleComplete: _isUnlocked ? _handleToggleComplete : null,
-                                        onExportPdf: _hasGenerated ? _handleExportPdf : null,
-                                        isExporting: _isExporting,
-                                        assessmentFormat: _assessmentFormat,
-                                        onAssessmentFormatChanged: (v) => setState(() => _assessmentFormat = v),
-                                        mcqs: _mcqs,
-                                        theoryQuestions: _theoryQuestions,
-                                        subjectiveQuestions: _subjectiveQuestions,
-                                        droppedQuestionCount: _droppedQuestionCount,
-                                        onUpdateMcq: _updateMcq,
-                                        onUpdateMcqOption: _updateMcqOption,
-                                        onUpdateTheory: _updateTheory,
-                                        onUpdateSubjective: _updateSubjective,
-                                        onDeleteMcq: _deleteMcq,
-                                        onDeleteTheory: _deleteTheory,
-                                        onDeleteSubjective: _deleteSubjective,
-                                        onShowUpgradeRequired: _showUpgradeRequiredDialog,
-                                        onShowReferences: _showReferencesSheet,
-                                        onRegenerateHomework: _handleRegenerateHomework,
-                                        isRegeneratingHomework: _isRegeneratingHomework,
-                                        visibleVocabulary: _visibleVocabulary,
-                                        visibleMaterials: _visibleMaterials,
-                                        visibleSuggestedImages: _visibleSuggestedImages,
-                                        onShowVisibleSections: _showVisibleSectionsSheet,
-                                        topicText: _topicController.text,
-                                        subject: _subject,
-                                        classLevel: _classLevel,
-                                        week: _week,
-                                        visibleReferences: _visibleReferences,
-                                        references: _references,
-                                        schemeReference: _buildSchemeReference(),
-                                        onAddReference: (text) {
-                                          setState(() {
-                                            _references.add({'text': text, 'origin': 'teacher'});
-                                          });
-                                        },
-                                        onRemoveReference: (index) {
-                                          setState(() {
-                                            if (index >= 0 && index < _references.length) {
-                                              _references.removeAt(index);
-                                            }
-                                          });
-                                        },
-                                        mcqCount: _mcqCount,
-                                        theoryCount: _theoryCount,
-                                        onMcqCountChanged: (v) => setState(() => _mcqCount = v),
-                                        onTheoryCountChanged: (v) => setState(() => _theoryCount = v),
-                                         includeDiagrams: _includeDiagrams,
-                                         onIncludeDiagramsChanged: (v) => setState(() => _includeDiagrams = v),
-                                       ),
+                                        SizedBox(
+                                          height: _isUnlocked && constraints.maxHeight.isFinite
+                                              ? constraints.maxHeight
+                                              : null,
+                                          child: _PreviewColumn(
+                                            key: ValueKey(_previewRevision),
+                                            cs: cs,
+                                            theme: theme,
+                                            hasGenerated: _hasGenerated,
+                                            isUnlocked: _isUnlocked,
+                                            isOnline: _isOnline,
+                                            subscriptionTier: _subscriptionTier,
+                                            remainingDailyPreviews: _remainingDailyPreviews,
+                                            isRegenerating: _isRegenerating,
+                                            diagramResults: _diagramResults,
+                                            isGeneratingDiagrams: _isGeneratingDiagrams,
+                                            generatingDiagramIndex: _generatingDiagramIndex,
+                                            onRegenerateDiagram: _generateSuggestedImage,
+                                            onActiveCardChanged: _onPreviewCardChanged,
+                                            objectivesController: _objectivesController,
+                                            vocabularyController: _vocabularyController,
+                                            materialsController: _materialsController,
+                                            presentationController: _presentationController,
+                                            introController: _introController,
+                                            devController: _devController,
+                                            conclusionController: _conclusionController,
+                                            assessmentController: _assessmentController,
+                                            homeworkController: _homeworkController,
+                                            questionSummary: questionSummary,
+                                            reviewController: _reviewController,
+                                            undoController: _undoController,
+                                            onUnlock: _handleUnlock,
+                                            onSave: _saveLesson,
+                                            onDiscard: _discard,
+                                            onRegenerate: _isUnlocked ? _handleRegenerate : null,
+                                            lessonStatus: _lessonStatus,
+                                            onMarkCompleted: _isUnlocked ? _handleMarkCompleted : null,
+                                            onToggleComplete: _isUnlocked ? _handleToggleComplete : null,
+                                            onExportPdf: _hasGenerated ? _handleExportPdf : null,
+                                            isExporting: _isExporting,
+                                            assessmentFormat: _assessmentFormat,
+                                            onAssessmentFormatChanged: (v) => setState(() => _assessmentFormat = v),
+                                            mcqs: _mcqs,
+                                            theoryQuestions: _theoryQuestions,
+                                            subjectiveQuestions: _subjectiveQuestions,
+                                            droppedQuestionCount: _droppedQuestionCount,
+                                            onUpdateMcq: _updateMcq,
+                                            onUpdateMcqOption: _updateMcqOption,
+                                            onUpdateTheory: _updateTheory,
+                                            onUpdateSubjective: _updateSubjective,
+                                            onDeleteMcq: _deleteMcq,
+                                            onDeleteTheory: _deleteTheory,
+                                            onDeleteSubjective: _deleteSubjective,
+                                            onShowUpgradeRequired: _showUpgradeRequiredDialog,
+                                            onShowReferences: _showReferencesSheet,
+                                            onRegenerateHomework: _handleRegenerateHomework,
+                                            isRegeneratingHomework: _isRegeneratingHomework,
+                                            visibleVocabulary: _visibleVocabulary,
+                                            visibleMaterials: _visibleMaterials,
+                                            visibleSuggestedImages: _visibleSuggestedImages,
+                                            onShowVisibleSections: _showVisibleSectionsSheet,
+                                            topicText: _topicController.text,
+                                            subject: _subject,
+                                            classLevel: _classLevel,
+                                            week: _week,
+                                            visibleReferences: _visibleReferences,
+                                            references: _references,
+                                            schemeReference: _buildSchemeReference(),
+                                            onAddReference: (text) {
+                                              setState(() {
+                                                _references.add({'text': text, 'origin': 'teacher'});
+                                              });
+                                            },
+                                            onRemoveReference: (index) {
+                                              setState(() {
+                                                if (index >= 0 && index < _references.length) {
+                                                  _references.removeAt(index);
+                                                }
+                                              });
+                                            },
+                                            mcqCount: _mcqCount,
+                                            theoryCount: _theoryCount,
+                                            onMcqCountChanged: (v) => setState(() => _mcqCount = v),
+                                            onTheoryCountChanged: (v) => setState(() => _theoryCount = v),
+                                            includeDiagrams: _includeDiagrams,
+                                            onIncludeDiagramsChanged: (v) => setState(() => _includeDiagrams = v),
+                                          ),
+                                        ),
                                      ],
                                     ],
                                   ),
@@ -3891,18 +3896,12 @@ class _PreviewColumnState extends State<_PreviewColumn> {
     if (_isTextFocused()) return KeyEventResult.ignored;
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
       if (_activeDeckIndex > 0) {
-        _deckController.previousPage(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeInOut,
-        );
+        _goToDeckSlide(_activeDeckIndex - 1);
         return KeyEventResult.handled;
       }
     } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
       if (_activeDeckIndex < _cardKeys(widget.visibleReferences).length - 1) {
-        _deckController.nextPage(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeInOut,
-        );
+        _goToDeckSlide(_activeDeckIndex + 1);
         return KeyEventResult.handled;
       }
     }
@@ -3935,7 +3934,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
         .toList();
   }
 
-  void _onTabTapped(int index) {
+  void _goToDeckSlide(int index) {
     final keys = _cardKeys(widget.visibleReferences);
     if (index < 0 || index >= keys.length) return;
     setState(() {
@@ -3943,10 +3942,96 @@ class _PreviewColumnState extends State<_PreviewColumn> {
       _activeCardKey = keys[index];
     });
     widget.onActiveCardChanged?.call(_activeCardKey);
-    _deckController.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeInOut,
+    if (_deckController.hasClients) {
+      _deckController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  void _onTabTapped(int index) {
+    _goToDeckSlide(index);
+  }
+
+  Widget _buildDeckArrow({required bool isPrevious}) {
+    final keys = _cardKeys(widget.visibleReferences);
+    final canMove = isPrevious
+        ? _activeDeckIndex > 0
+        : _activeDeckIndex < keys.length - 1;
+    final label = isPrevious
+        ? 'Previous lesson section'
+        : 'Next lesson section';
+    return Semantics(
+      button: true,
+      label: label,
+      child: IconButton(
+        tooltip: label,
+        onPressed: canMove
+            ? () => _goToDeckSlide(
+                  isPrevious ? _activeDeckIndex - 1 : _activeDeckIndex + 1,
+                )
+            : null,
+        icon: Icon(
+          isPrevious ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
+        ),
+        style: IconButton.styleFrom(
+          minimumSize: const Size(AppTheme.touchTarget, AppTheme.touchTarget),
+          foregroundColor: cs.onSurface,
+          backgroundColor: cs.surfaceContainerLow,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeckIndicator() {
+    final keys = _cardKeys(widget.visibleReferences);
+    final total = keys.length;
+    if (total == 0) return const SizedBox.shrink();
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Card ${_activeDeckIndex + 1} of $total',
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: cs.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(total, (index) {
+            final selected = index == _activeDeckIndex;
+            return Semantics(
+              button: true,
+              label: 'Go to ${_tabLabels[index]}',
+              selected: selected,
+              child: InkWell(
+                onTap: () => _onTabTapped(index),
+                borderRadius: BorderRadius.circular(24),
+                child: SizedBox(
+                  width: AppTheme.touchTarget,
+                  height: AppTheme.touchTarget,
+                  child: Center(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      width: selected ? 22 : 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: selected ? cs.primary : cs.outlineVariant,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+        ),
+      ],
     );
   }
 
@@ -4261,9 +4346,10 @@ class _PreviewColumnState extends State<_PreviewColumn> {
 
           // ── 4-panel tabbed preview (unlocked only) ───────────
           if (hasGenerated && isUnlocked)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // Tab chips
@@ -4305,39 +4391,63 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                       },
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  // Tab content (swipeable PageView)
-                  SizedBox(
-                    height: 600,
-                    child: PageView.builder(
-                      controller: _deckController,
-                      itemCount: _cardKeys(visibleReferences).length,
-                      onPageChanged: (i) {
-                        final keys = _cardKeys(visibleReferences);
-                        if (i < 0 || i >= keys.length) return;
-                        setState(() {
-                          _activeDeckIndex = i;
-                          _activeCardKey = keys[i];
-                        });
-                        widget.onActiveCardChanged?.call(_activeCardKey);
-                      },
-                      itemBuilder: (context, index) {
-                        switch (_cardKeys(visibleReferences)[index]) {
-                          case _LessonEditorCardKey.lessonNotes:
-                            return _buildLessonNoteTab();
-                          case _LessonEditorCardKey.assessment:
-                            return _buildAssessmentTab();
-                          case _LessonEditorCardKey.diagrams:
-                            return _buildDiagramsTab();
-                          case _LessonEditorCardKey.references:
-                            return _buildReferencesTab();
-                          case _LessonEditorCardKey.generate:
-                            return const SizedBox.shrink();
-                        }
-                      },
+                  const SizedBox(height: 8),
+                  _buildDeckIndicator(),
+                  const SizedBox(height: 8),
+                  // The viewport is bounded by the parent SizedBox. Each
+                  // card keeps its own vertical scroll for long content.
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 52),
+                          child: PageView.builder(
+                            controller: _deckController,
+                            itemCount: _cardKeys(visibleReferences).length,
+                            onPageChanged: (i) {
+                              final keys = _cardKeys(visibleReferences);
+                              if (i < 0 || i >= keys.length) return;
+                              setState(() {
+                                _activeDeckIndex = i;
+                                _activeCardKey = keys[i];
+                              });
+                              widget.onActiveCardChanged?.call(_activeCardKey);
+                            },
+                            itemBuilder: (context, index) {
+                              switch (_cardKeys(visibleReferences)[index]) {
+                                case _LessonEditorCardKey.lessonNotes:
+                                  return _buildLessonNoteTab();
+                                case _LessonEditorCardKey.assessment:
+                                  return _buildAssessmentTab();
+                                case _LessonEditorCardKey.diagrams:
+                                  return _buildDiagramsTab();
+                                case _LessonEditorCardKey.references:
+                                  return _buildReferencesTab();
+                                case _LessonEditorCardKey.generate:
+                                  return const SizedBox.shrink();
+                              }
+                            },
+                          ),
+                        ),
+                        // Equal insets and centered alignment keep both
+                        // assessment arrows at the same vertical position.
+                        Positioned.fill(
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: _buildDeckArrow(isPrevious: true),
+                          ),
+                        ),
+                        Positioned.fill(
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: _buildDeckArrow(isPrevious: false),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
+                ),
               ),
             ),          // Save footer
           if (hasGenerated)
