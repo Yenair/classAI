@@ -81,6 +81,10 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   int? _lessonId;
   // Phase 1: stable target for the draft generation tab.
   int? _selectedDraftLessonId;
+  List<_DraftTopicOption> _draftTopicOptions = [];
+  _DraftTopicOption? _selectedDraftTopic;
+  bool _isLoadingDraftTopics = false;
+  String? _draftLoadedSnapshot;
   String _lessonStatus = 'draft';
   int _week = 1;
   String _subject = 'Mathematics';
@@ -272,6 +276,171 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     });
   }
 
+  String _editorSnapshot() {
+    return jsonEncode({
+      'topic': _topicController.text,
+      'subject': _subject,
+      'classLevel': _classLevel,
+      'week': _week,
+      'difficulty': _difficulty,
+      'blooms': _selectedBlooms.toList()..sort(),
+      'assessmentFormat': _assessmentFormat,
+      'includeDiagrams': _includeDiagrams,
+      'objectives': _objectivesController.text,
+      'vocabulary': _vocabularyController.text,
+      'materials': _materialsController.text,
+      'presentation': _presentationController.text,
+      'assessment': _assessmentController.text,
+      'homework': _homeworkController.text,
+    });
+  }
+
+  bool get _hasUnsavedDraftChanges =>
+      _draftLoadedSnapshot != null && _draftLoadedSnapshot != _editorSnapshot();
+
+  Future<void> _loadDraftTopicOptions() async {
+    final teacherId = _teacherId;
+    final schoolId = _schoolId;
+    if (teacherId == null || schoolId == null) return;
+
+    if (mounted) setState(() => _isLoadingDraftTopics = true);
+    try {
+      final db = ref.read(databaseProvider);
+      final lessons = await db.lessonsDao.getAllForTeacher(teacherId, schoolId);
+      final options = lessons
+          .where(
+            (lesson) =>
+                lesson.status == 'draft' &&
+                !lesson.isUnlocked &&
+                lesson.subject == _subject &&
+                lesson.classLevel == _classLevel,
+          )
+          .map(_DraftTopicOption.fromLesson)
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _draftTopicOptions = options;
+        _selectedDraftTopic = options
+            .where((option) => option.lessonId == _selectedDraftLessonId)
+            .firstOrNull;
+        _isLoadingDraftTopics = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _draftTopicOptions = [];
+          _selectedDraftTopic = null;
+          _isLoadingDraftTopics = false;
+        });
+      }
+    }
+  }
+
+  Future<bool> _confirmDraftSwitch(String topic) async {
+    final switchTopic = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Unsaved changes'),
+        content: Text(
+          'Keep editing this lesson or switch to "$topic"? '
+          'Your unsaved changes will be discarded when you switch.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Keep editing'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Switch topic'),
+          ),
+        ],
+      ),
+    );
+    return switchTopic == true;
+  }
+
+  Future<void> _handleDraftTopicChanged(_DraftTopicOption? option) async {
+    if (option == null) return;
+
+    if (option.isCreateNew) {
+      if (_hasUnsavedDraftChanges &&
+          !await _confirmDraftSwitch('a new topic')) {
+        return;
+      }
+      if (mounted) context.go('/lessons');
+      return;
+    }
+
+    final lessonId = option.lessonId;
+    if (lessonId == null) return;
+    if (lessonId == _selectedDraftLessonId) {
+      setState(() => _selectedDraftTopic = option);
+      return;
+    }
+
+    if (_hasUnsavedDraftChanges && !await _confirmDraftSwitch(option.topic)) {
+      return;
+    }
+
+    _clearDraftEditorForSwitch();
+    setState(() {
+      _selectedDraftTopic = option;
+      _selectedDraftLessonId = lessonId;
+      _lessonId = lessonId;
+      _isLoadingLesson = true;
+      _draftLoadedSnapshot = null;
+    });
+    await _loadLesson(lessonId);
+  }
+
+  void _clearDraftEditorForSwitch() {
+    _topicController.clear();
+    _objectivesController.clear();
+    _vocabularyController.clear();
+    _materialsController.clear();
+    _presentationController.clear();
+    _assessmentController.clear();
+    _homeworkController.clear();
+    _introController.clear();
+    _devController.clear();
+    _conclusionController.clear();
+    setState(() {
+      _objectivesText = '';
+      _vocabularyText = '';
+      _materialsText = '';
+      _presentationText = '';
+      _assessmentText = '';
+      _homeworkText = '';
+      _mcqs = [];
+      _theoryQuestions = [];
+      _subjectiveQuestions = [];
+      _references = [];
+      _diagramResults = [];
+      _lessonStatus = 'draft';
+      _isUnlocked = true;
+      _topicEditable = true;
+    });
+  }
+
+  void _handleDraftGenerate() {
+    final selected = _selectedDraftTopic;
+    if (selected == null || selected.isCreateNew || selected.lessonId == null) {
+      return;
+    }
+    setState(() {
+      _topicController.text = selected.topic;
+      _week = selected.week;
+      _selectedDraftLessonId = selected.lessonId;
+      _lessonId = selected.lessonId;
+    });
+    _handleGenerate();
+  }
+
+  void _handleCreateNewTopic() {
+    _handleDraftTopicChanged(const _DraftTopicOption.createNew());
+  }
+
   /// Combine the three presentation sub-sections back into the single
   /// [_presentationController] text so the content model stays intact.
   void _combinePresentation() {
@@ -416,6 +585,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         final bool needsLegacyFallback =
             legacyDifficulty || legacyBlooms || legacyAssessmentFormat;
         setState(() {
+          _lessonId = lesson.id;
           _selectedDraftLessonId = lesson.id;
           _topicController.text = lesson.topic;
           _lessonStatus = lesson.status;
@@ -503,6 +673,10 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                 'Some lesson settings were missing and restored to defaults.';
           });
         }
+        if (mounted) {
+          _draftLoadedSnapshot = _editorSnapshot();
+          await _loadDraftTopicOptions();
+        }
       }
     } catch (_) {
       // Lesson not found — continue with empty form
@@ -552,6 +726,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         }
       }
       if (mounted) setState(() {});
+      await _loadDraftTopicOptions();
       await _refreshSourceMissing();
     } catch (_) {}
   }
@@ -1827,51 +2002,62 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       int id;
 
       // Dedup: check for existing lesson with same topic/subject/week/teacher/school
-      if (_teacherId != null && _schoolId != null) {
-        final existing = await db.lessonsDao.findByTopicSubjectWeekTeacher(
+      Lesson? existing;
+      final selectedDraft = _selectedDraftLessonId == null
+          ? null
+          : await db.lessonsDao.getById(_selectedDraftLessonId!);
+      if (selectedDraft != null &&
+          !selectedDraft.isDeleted &&
+          selectedDraft.topic == topic &&
+          selectedDraft.subject == _subject &&
+          selectedDraft.classLevel == _classLevel &&
+          selectedDraft.week == _week) {
+        existing = selectedDraft;
+      } else if (_teacherId != null && _schoolId != null) {
+        existing = await db.lessonsDao.findByTopicSubjectWeekTeacher(
           topic: topic,
           subject: _subject,
           week: _week,
           teacherServerId: _teacherId!,
           schoolServerId: _schoolId!,
         );
-        if (existing != null) {
-          // Update existing lesson
-          id = existing.id;
-          _selectedDraftLessonId = id;
-          await db.lessonsDao.updateLesson(id, companion);
+      }
+      if (existing != null) {
+        // Update existing lesson
+        id = existing.id;
+        _selectedDraftLessonId = id;
+        await db.lessonsDao.updateLesson(id, companion);
 
-          // Queue UPDATE sync entry
-          final lessonContent = jsonEncode(content);
-          await db.syncQueueDao.insertEntry(
-            queueTable: 'lessons',
-            recordLocalId: id,
-            operation: 'UPDATE',
-            payload: {
-              'subject': _subject,
-              'classLevel': _classLevel,
-              'week': _week,
-              'topic': topic,
-              'difficulty': _difficulty,
-              'bloomsVerbs': _selectedBlooms.join(', '),
-              'curriculum': 'NERDC',
-              'teacher_server_id': _teacherId,
-              'school_server_id': _schoolId,
-              'content': lessonContent,
-              'is_unlocked': _isUnlocked,
-              'status': _lessonStatus,
-              if (schemeOfWorkIdStr != null) 'scheme_of_work_id': schemeOfWorkIdStr,
-              'week_number': _week,
-              if (termLabel != null) 'term': termLabel,
-            },
-          );
+        // Queue UPDATE sync entry
+        final lessonContent = jsonEncode(content);
+        await db.syncQueueDao.insertEntry(
+          queueTable: 'lessons',
+          recordLocalId: id,
+          operation: 'UPDATE',
+          payload: {
+            'subject': _subject,
+            'classLevel': _classLevel,
+            'week': _week,
+            'topic': topic,
+            'difficulty': _difficulty,
+            'bloomsVerbs': _selectedBlooms.join(', '),
+            'curriculum': 'NERDC',
+            'teacher_server_id': _teacherId,
+            'school_server_id': _schoolId,
+            'content': lessonContent,
+            'is_unlocked': _isUnlocked,
+            'status': _lessonStatus,
+            if (schemeOfWorkIdStr != null) 'scheme_of_work_id': schemeOfWorkIdStr,
+            'week_number': _week,
+            if (termLabel != null) 'term': termLabel,
+          },
+        );
 
-          if (notify && mounted) {
-            ref.invalidate(lessonsListProvider);
-            showInfoToast(context: context, message: 'Lesson updated (id=$id)');
-          }
-          return;
+        if (notify && mounted) {
+          ref.invalidate(lessonsListProvider);
+          showInfoToast(context: context, message: 'Lesson updated (id=$id)');
         }
+        return;
       }
 
       // Check storage limit before inserting new lesson
@@ -2563,6 +2749,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     }
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
+    final showDraftGenerateTab =
+        widget.lessonId != null && _lessonStatus == 'draft' && !_hasGenerated;
     final showEntryScreen =
         widget.lessonId == null && !_hasGenerated && !_isGenerating;
 
@@ -2631,6 +2819,30 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       final isWide = constraints.maxWidth >= 1024;
+                      if (showDraftGenerateTab) {
+                        return Padding(
+                          padding: EdgeInsets.all(
+                            isWide
+                                ? AppTheme.spacingMarginTablet
+                                : AppTheme.spacingMarginMobile,
+                          ),
+                          child: Align(
+                            alignment: Alignment.topCenter,
+                            child: _DraftGenerateTab(
+                              cs: cs,
+                              theme: theme,
+                              options: _draftTopicOptions,
+                              selectedOption: _selectedDraftTopic,
+                              isLoadingOptions: _isLoadingDraftTopics,
+                              isGenerating: _isGenerating,
+                              isOnline: _isOnline,
+                              onChanged: _handleDraftTopicChanged,
+                              onGenerate: _handleDraftGenerate,
+                              onCreateNewTopic: _handleCreateNewTopic,
+                            ),
+                          ),
+                        );
+                      }
                       return SingleChildScrollView(
 
                         physics: (Platform.isAndroid || Platform.isIOS)
@@ -2640,6 +2852,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             // ── Entry screen for new blank lessons ──
+                            // ── Legacy settings note ──────────────
                             if (showEntryScreen)
                               Padding(
                                 padding: EdgeInsets.all(
@@ -2649,7 +2862,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                 ),
                                 child: _buildEntryScreenSkeleton(cs, theme),
                               ),
-                            // ── Legacy settings note ──────────────
                             if (_legacySettingsNote != null)
                               Padding(
                                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
@@ -2963,7 +3175,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                         const SizedBox(height: 24),
                                         // 3. Preview Generated Content
                                         SizedBox(
-                                          height: _isUnlocked && constraints.maxHeight.isFinite
+                                          height: _hasGenerated && constraints.maxHeight.isFinite
                                               ? constraints.maxHeight
                                               : null,
                                           child: _PreviewColumn(
@@ -3101,6 +3313,52 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
 // ═══════════════════════════════════════════════════════════════════════
 // Data classes
 // ═══════════════════════════════════════════════════════════════════════
+class _DraftTopicOption {
+  final int? lessonId;
+  final String topic;
+  final String subject;
+  final String classLevel;
+  final int week;
+  final bool isCreateNew;
+
+  const _DraftTopicOption({
+    required this.lessonId,
+    required this.topic,
+    required this.subject,
+    required this.classLevel,
+    required this.week,
+    this.isCreateNew = false,
+  });
+
+  const _DraftTopicOption.createNew()
+      : lessonId = null,
+        topic = '',
+        subject = '',
+        classLevel = '',
+        week = 1,
+        isCreateNew = true;
+
+  factory _DraftTopicOption.fromLesson(Lesson lesson) {
+    return _DraftTopicOption(
+      lessonId: lesson.id,
+      topic: lesson.topic,
+      subject: lesson.subject,
+      classLevel: lesson.classLevel,
+      week: lesson.week,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is _DraftTopicOption &&
+        other.lessonId == lessonId &&
+        other.isCreateNew == isCreateNew;
+  }
+
+  @override
+  int get hashCode => Object.hash(lessonId, isCreateNew);
+}
+
 class _NavItem {
   final String label;
   final IconData icon;
@@ -3635,6 +3893,166 @@ class _LinkedSchemeBanner extends ConsumerWidget {
 
 
 // ═══════════════════════════════════════════════════════════════════════
+class _DraftGenerateTab extends StatelessWidget {
+  final ColorScheme cs;
+  final ThemeData theme;
+  final List<_DraftTopicOption> options;
+  final _DraftTopicOption? selectedOption;
+  final bool isLoadingOptions;
+  final bool isGenerating;
+  final bool isOnline;
+  final ValueChanged<_DraftTopicOption?> onChanged;
+  final VoidCallback onGenerate;
+  final VoidCallback onCreateNewTopic;
+
+  const _DraftGenerateTab({
+    required this.cs,
+    required this.theme,
+    required this.options,
+    required this.selectedOption,
+    required this.isLoadingOptions,
+    required this.isGenerating,
+    required this.isOnline,
+    required this.onChanged,
+    required this.onGenerate,
+    required this.onCreateNewTopic,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxHeight.isFinite &&
+            constraints.maxHeight < 560;
+        final selected = options.contains(selectedOption) ? selectedOption : null;
+        final items = [
+          ...options.map(
+            (option) => DropdownMenuItem<_DraftTopicOption>(
+              value: option,
+              child: Text(option.topic, overflow: TextOverflow.ellipsis),
+            ),
+          ),
+          const DropdownMenuItem<_DraftTopicOption>(
+            value: _DraftTopicOption.createNew(),
+            child: Text('Create new topic'),
+          ),
+        ];
+        final canGenerate = selected != null &&
+            !selected.isCreateNew &&
+            isOnline &&
+            !isGenerating;
+
+        return Container(
+          constraints: const BoxConstraints(maxWidth: 760),
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+            border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+          ),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: compact ? 20 : 32,
+              vertical: compact ? 20 : 32,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircleAvatar(
+                  radius: compact ? 30 : 40,
+                  backgroundColor: cs.primary.withValues(alpha: 0.10),
+                  child: Icon(
+                    Icons.auto_awesome_rounded,
+                    color: cs.primary,
+                    size: compact ? 36 : 48,
+                  ),
+                ),
+                SizedBox(height: compact ? 16 : 24),
+                Text(
+                  'Generate Lesson Content',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: cs.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Choose a draft topic and let AI create the lesson content for your students.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+                SizedBox(height: compact ? 16 : 24),
+                DropdownButtonFormField<_DraftTopicOption>(
+                  value: selected,
+                  items: items,
+                  onChanged: isLoadingOptions
+                      ? null
+                      : (value) {
+                          if (value?.isCreateNew == true) {
+                            onCreateNewTopic();
+                          } else {
+                            onChanged(value);
+                          }
+                        },
+                  decoration: InputDecoration(
+                    labelText: 'LESSON TOPIC',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                    ),
+                    filled: true,
+                    fillColor: cs.surfaceBright,
+                  ),
+                ),
+                if (!isLoadingOptions && options.isEmpty) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'No draft topics are available for this class and subject.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+                SizedBox(height: compact ? 16 : 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: AppTheme.touchTarget,
+                  child: FilledButton.icon(
+                    onPressed: canGenerate ? onGenerate : null,
+                    icon: isGenerating
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: cs.onPrimary,
+                            ),
+                          )
+                        : const Icon(Icons.auto_awesome_rounded),
+                    label: Text(isGenerating ? 'Generating...' : 'Create with AI'),
+                  ),
+                ),
+                if (!isOnline) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Generation requires an internet connection.',
+                    style: theme.textTheme.bodySmall?.copyWith(color: cs.error),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 // Preview Column (right side)
 // ═══════════════════════════════════════════════════════════════════════
 class _PreviewColumn extends StatefulWidget {
@@ -4282,34 +4700,6 @@ class _PreviewColumnState extends State<_PreviewColumn> {
               ),
             ),
 
-          // ── Locked preview (full content, read-only) ────────────
-          if (hasGenerated && !isUnlocked)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildLockedPreviewSection('Objectives', objectivesController.text),
-                  if (visibleVocabulary)
-                    _buildLockedPreviewSection(
-                        'Vocabulary', vocabularyController.text),
-                  if (visibleMaterials)
-                    _buildLockedPreviewSection('Materials', materialsController.text),
-                  _buildLockedPreviewSection('Presentation', presentationController.text,
-                      introController: introController,
-                      devController: devController,
-                      conclusionController: conclusionController),
-                  _buildLockedPreviewSection('Assessment', assessmentController.text),
-                  _buildLockedPreviewSection('Homework', homeworkController.text),
-                  // ── Suggested Images section (Stage 4) — read-only in
-                  // the locked preview; the same default-collapsed
-                  // _DocumentSection used in the unlocked document.
-                  if (visibleSuggestedImages)
-                    _buildSuggestedImagesSection(context, readOnly: true),
-                ],
-              ),
-            ),
-
           // ── Unlocked banner ─────────────────────────────────────
           if (hasGenerated && isUnlocked)
             Padding(
@@ -4344,8 +4734,8 @@ class _PreviewColumnState extends State<_PreviewColumn> {
               ),
             ),
 
-          // ── 4-panel tabbed preview (unlocked only) ───────────
-          if (hasGenerated && isUnlocked)
+          // ── Numbered content tabs ─────────────────────────────
+          if (hasGenerated)
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -4416,11 +4806,11 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                             itemBuilder: (context, index) {
                               switch (_cardKeys(visibleReferences)[index]) {
                                 case _LessonEditorCardKey.lessonNotes:
-                                  return _buildLessonNoteTab();
+                                  return _buildLessonNoteTab(readOnly: !isUnlocked);
                                 case _LessonEditorCardKey.assessment:
-                                  return _buildAssessmentTab();
+                                  return _buildAssessmentTab(readOnly: !isUnlocked);
                                 case _LessonEditorCardKey.diagrams:
-                                  return _buildDiagramsTab();
+                                  return _buildDiagramsTab(readOnly: !isUnlocked);
                                 case _LessonEditorCardKey.references:
                                   return _buildReferencesTab();
                                 case _LessonEditorCardKey.generate:
@@ -4623,7 +5013,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   // 4-panel tab content builders
   // ═══════════════════════════════════════════════════════════════════════
 
-  Widget _buildLessonNoteTab() {
+  Widget _buildLessonNoteTab({required bool readOnly}) {
     final cs = widget.cs;
     final theme = widget.theme;
     return SingleChildScrollView(
@@ -4663,33 +5053,33 @@ class _PreviewColumnState extends State<_PreviewColumn> {
           _buildCollapsibleSection(
             title: 'Objectives',
             controller: widget.objectivesController,
-            readOnly: false,
-            undoController: widget.undoController,
+            readOnly: readOnly,
+            undoController: readOnly ? null : widget.undoController,
           ),
           // Vocabulary (if visible)
           if (widget.visibleVocabulary)
             _buildCollapsibleSection(
               title: 'Vocabulary',
               controller: widget.vocabularyController,
-              readOnly: false,
-              undoController: widget.undoController,
+              readOnly: readOnly,
+              undoController: readOnly ? null : widget.undoController,
             ),
           // Materials (if visible)
           if (widget.visibleMaterials)
             _buildCollapsibleSection(
               title: 'Materials',
               controller: widget.materialsController,
-              readOnly: false,
-              undoController: widget.undoController,
+              readOnly: readOnly,
+              undoController: readOnly ? null : widget.undoController,
             ),
           // Presentation
-          _buildPresentationSection(readOnly: false),
+          _buildPresentationSection(readOnly: readOnly),
         ],
       ),
     );
   }
 
-  Widget _buildAssessmentTab() {
+  Widget _buildAssessmentTab({required bool readOnly}) {
     final cs = widget.cs;
     final theme = widget.theme;
     final tierBlocked = widget.subscriptionTier.toLowerCase() != 'standard' &&
@@ -4751,6 +5141,15 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                     ),
                 ],
               ),
+            ),
+          ] else if (readOnly) ...[
+            _buildLockedPreviewSection(
+              'Assessment',
+              widget.assessmentController.text,
+            ),
+            _buildLockedPreviewSection(
+              'Homework',
+              widget.homeworkController.text,
             ),
           ] else ...[
             // Unlocked assessment controls
@@ -4840,9 +5239,9 @@ class _PreviewColumnState extends State<_PreviewColumn> {
     );
   }
 
-  Widget _buildDiagramsTab() {
+  Widget _buildDiagramsTab({required bool readOnly}) {
     return SingleChildScrollView(
-      child: _buildSuggestedImagesSection(context),
+      child: _buildSuggestedImagesSection(context, readOnly: readOnly),
     );
   }
 
@@ -5318,6 +5717,10 @@ class _PreviewColumnState extends State<_PreviewColumn> {
       undoController: undoController,
       maxLines: null,
       minLines: minLines,
+      style: theme.textTheme.bodyLarge?.copyWith(
+        color: cs.onSurface,
+        height: 1.5,
+      ),
       decoration: InputDecoration(
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
