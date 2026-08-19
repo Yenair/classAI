@@ -96,6 +96,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   List<Map<String, dynamic>> _diagramResults = [];
   bool _isGeneratingDiagrams = false;
   int? _generatingDiagramIndex;
+  int? _activeDiagramIndex;
   bool _isGenerating = false;
   bool _isRegenerating = false;
   bool _hasGenerated = false;
@@ -158,6 +159,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
 
   // Floating action area: Review & Regenerate expandable state.
   bool _showReviewSection = false;
+  _LessonEditorCardKey? _regenerationCardKey;
+  int? _regenerationDiagramIndex;
 
   // Question count controls for generation.
   int _mcqCount = 5;
@@ -274,6 +277,97 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       _activeCardKey = cardKey;
       _activeDeckIndex = index;
     });
+  }
+
+  void _openReviewSectionForCard(
+    _LessonEditorCardKey cardKey, {
+    int? diagramIndex,
+  }) {
+    if (cardKey == _LessonEditorCardKey.generate ||
+        cardKey == _LessonEditorCardKey.references) {
+      return;
+    }
+    setState(() {
+      _regenerationCardKey = cardKey;
+      _regenerationDiagramIndex =
+          cardKey == _LessonEditorCardKey.diagrams ? diagramIndex : null;
+      _showReviewSection = true;
+    });
+  }
+
+  void _toggleReviewSectionForActiveCard() {
+    if (_showReviewSection) {
+      setState(() => _showReviewSection = false);
+      return;
+    }
+    _openReviewSectionForCard(
+      _activeCardKey,
+      diagramIndex: _activeDiagramIndex,
+    );
+  }
+
+  Future<void> _handleDiagramAction(
+    int index, {
+    bool fromReview = false,
+  }) async {
+    if (index < 0 || index >= _diagramResults.length) return;
+
+    final imageUrl = _diagramResults[index]['imageUrl'] as String?;
+    setState(() {
+      _activeDiagramIndex = index;
+      _regenerationCardKey = _LessonEditorCardKey.diagrams;
+      _regenerationDiagramIndex = index;
+    });
+    if (!fromReview && imageUrl != null && imageUrl.isNotEmpty) {
+      _openReviewSectionForCard(
+        _LessonEditorCardKey.diagrams,
+        diagramIndex: index,
+      );
+      return;
+    }
+    await _snapshotForUndo();
+    await _generateSuggestedImage(index);
+    if (fromReview && mounted) {
+      _reviewController.clear();
+      setState(() {
+        _showReviewSection = false;
+        _showRegenerationBanner = true;
+      });
+      showInfoToast(context: context, message: 'Image ${index + 1} regenerated.');
+    }
+  }
+
+  Future<void> _regenerateCurrentCard({
+    required _LessonEditorCardKey cardKey,
+    int? diagramIndex,
+  }) async {
+    switch (cardKey) {
+      case _LessonEditorCardKey.lessonNotes:
+        await _regenerateLessonNotesOnly();
+        return;
+      case _LessonEditorCardKey.assessment:
+        await _regenerateAssessmentOnly();
+        return;
+      case _LessonEditorCardKey.diagrams:
+        final selectedIndex = diagramIndex ?? _activeDiagramIndex;
+        if (selectedIndex == null) {
+          if (mounted) {
+            showInfoToast(
+              context: context,
+              message: 'Select an image before regenerating it.',
+            );
+          }
+          return;
+        }
+        await _handleDiagramAction(selectedIndex, fromReview: true);
+        return;
+      case _LessonEditorCardKey.generate:
+      case _LessonEditorCardKey.references:
+        // Generate is not a generated card, and References-only regeneration
+        // belongs to Phase 6. Neither card may fall through to whole-lesson
+        // regeneration.
+        return;
+    }
   }
 
   String _editorSnapshot() {
@@ -417,6 +511,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       _subjectiveQuestions = [];
       _references = [];
       _diagramResults = [];
+      _activeDiagramIndex = null;
       _lessonStatus = 'draft';
       _isUnlocked = true;
       _topicEditable = true;
@@ -1329,35 +1424,175 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     }
   }
 
-  Future<void> _handleRegenerate({bool skipConfirmation = false}) async {
-    // Show blocking confirmation dialog.
+  Future<void> _regenerateLessonNotesOnly() async {
+    await _snapshotForUndo();
     if (!mounted) return;
-    if (!skipConfirmation) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Regenerate Lesson'),
-          content: const Text(
-            'Regenerating will replace your current lesson content, '
-            'including any manual edits you\u2019ve made. This cannot be undone '
-            'unless you use Undo immediately after. Continue?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Regenerate'),
-            ),
-          ],
-        ),
+    setState(() {
+      _isRegenerating = true;
+      _showRegenerationBanner = false;
+    });
+
+    try {
+      final db = ref.read(databaseProvider);
+      final topic = _topicController.text.trim();
+      final review = _reviewController.text.trim();
+      final bloomsStr =
+          _selectedBlooms.isEmpty ? 'All levels' : _selectedBlooms.join(', ');
+      final basePrompt = PromptTemplates.lessonNote(
+        _subject,
+        'NERDC',
+        _classLevel,
+        _week,
+        topic,
+        _difficulty,
+        bloomsStr,
+        teacherName: _teacherName,
+        schoolName: _schoolName,
       );
-      if (confirmed != true) return;
+      final prompt = review.isEmpty
+          ? basePrompt
+          : '$basePrompt\n\nTeacher feedback: $review';
+      final result = widget.generateCallback != null
+          ? await widget.generateCallback!(prompt)
+          : await AiService(db: db).generate(prompt);
+      final raw = result['raw'] as Map<String, dynamic>? ?? result;
+
+      if (!mounted) return;
+      setState(() {
+        _objectivesText = _formatList(raw['objectives']);
+        _objectivesController.text = _objectivesText;
+        _vocabularyText = _formatList(raw['vocabulary']);
+        _vocabularyController.text = _vocabularyText;
+        _materialsText = _formatList(raw['materials']);
+        _materialsController.text = _materialsText;
+        _presentationText = _formatJson(raw['presentation']);
+        _presentationController.text = _presentationText;
+        _parsePresentationSubSections();
+        _isRegenerating = false;
+        _previewRevision++;
+      });
+      await _saveLesson(notify: false);
+      _reviewController.clear();
+      if (mounted) {
+        setState(() {
+          _showReviewSection = false;
+          _showRegenerationBanner = true;
+        });
+        showInfoToast(context: context, message: 'Lesson notes regenerated.');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isRegenerating = false);
+        showErrorToast(context: context, message: 'Regeneration failed: $e');
+      }
+    }
+  }
+
+  Future<void> _regenerateAssessmentOnly() async {
+    final authTier =
+        (ref.read(authProvider).currentSchool?.subscriptionTier ??
+                _subscriptionTier)
+            .toLowerCase();
+    final questionsEnabled = ref
+        .read(configServiceProvider)
+        .assessmentGenerationAllowedTiers
+        .contains(authTier);
+    if (!questionsEnabled) {
+      if (mounted) await _showUpgradeRequiredDialog();
+      return;
     }
 
+    await _snapshotForUndo();
+    if (!mounted) return;
+    setState(() {
+      _isRegenerating = true;
+      _showRegenerationBanner = false;
+    });
+
+    try {
+      final db = ref.read(databaseProvider);
+      final topic = _topicController.text.trim();
+      final review = _reviewController.text.trim();
+      final bloomsStr =
+          _selectedBlooms.isEmpty ? 'All levels' : _selectedBlooms.join(', ');
+      final basePrompt = PromptTemplates.lessonQuestions(
+        _subject,
+        _classLevel,
+        topic,
+        _difficulty,
+        bloomsStr,
+        _questionCountsForFormat(_assessmentFormat),
+        teacherName: _teacherName,
+        schoolName: _schoolName,
+      );
+      final prompt = review.isEmpty
+          ? basePrompt
+          : '$basePrompt\n\nTeacher feedback: $review';
+      final result = widget.generateCallback != null
+          ? await widget.generateCallback!(prompt)
+          : await AiService(db: db).generate(prompt);
+      final raw = result['raw'] as Map<String, dynamic>? ?? result;
+      final rawMcqs =
+          (raw['mcq'] ?? raw['mcqs']) as List<dynamic>? ?? const [];
+      final rawTheory = raw['theory'] as List<dynamic>? ?? const [];
+      final rawSubjective = raw['subjective'] as List<dynamic>? ?? const [];
+      final parsedQuestions = parseLessonQuestions(raw);
+      final validCount = parsedQuestions['mcqs']!.length +
+          parsedQuestions['theory']!.length +
+          parsedQuestions['subjective']!.length;
+      final droppedQuestionCount =
+          rawMcqs.length + rawTheory.length + rawSubjective.length - validCount;
+
+      if (!mounted) return;
+      setState(() {
+        _mcqs = parsedQuestions['mcqs']!;
+        _theoryQuestions = parsedQuestions['theory']!;
+        _subjectiveQuestions = parsedQuestions['subjective']!;
+        _droppedQuestionCount = droppedQuestionCount;
+        _isRegenerating = false;
+        _previewRevision++;
+      });
+      await _saveLesson(notify: false);
+      _reviewController.clear();
+      if (mounted) {
+        setState(() {
+          _showReviewSection = false;
+          _showRegenerationBanner = true;
+        });
+        showInfoToast(context: context, message: 'Assessment regenerated.');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isRegenerating = false);
+        showErrorToast(
+          context: context,
+          message: 'Assessment regeneration failed: $e',
+        );
+      }
+    }
+  }
+
+  Future<void> _handleRegenerate({
+    bool skipConfirmation = false,
+    _LessonEditorCardKey? cardKey,
+    int? diagramIndex,
+  }) async {
+    final targetCard = cardKey ?? _regenerationCardKey ?? _activeCardKey;
+    if (!mounted) return;
+    if (!skipConfirmation) {
+      _openReviewSectionForCard(
+        targetCard,
+        diagramIndex: diagramIndex ?? _activeDiagramIndex,
+      );
+      return;
+    }
+    if (targetCard != _LessonEditorCardKey.generate) {
+      await _regenerateCurrentCard(
+        cardKey: targetCard,
+        diagramIndex: diagramIndex ?? _regenerationDiagramIndex,
+      );
+      return;
+    }
     // Snapshot current content for undo before overwriting.
     await _snapshotForUndo();
 
@@ -2342,6 +2577,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       _droppedQuestionCount = 0;
       _references = [];
       _hasGenerated = false;
+      _activeDiagramIndex = null;
       _activeCardKey = _LessonEditorCardKey.generate;
       _activeDeckIndex = 0;
       _topicEditable = true;
@@ -3191,7 +3427,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                             diagramResults: _diagramResults,
                                             isGeneratingDiagrams: _isGeneratingDiagrams,
                                             generatingDiagramIndex: _generatingDiagramIndex,
-                                            onRegenerateDiagram: _generateSuggestedImage,
+                                            onRegenerateDiagram: _handleDiagramAction,
                                             onActiveCardChanged: _onPreviewCardChanged,
                                             objectivesController: _objectivesController,
                                             vocabularyController: _vocabularyController,
@@ -3280,11 +3516,20 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                     cs: cs,
                     theme: theme,
                     showReviewSection: _showReviewSection,
-                    onToggleReview: () => setState(() => _showReviewSection = !_showReviewSection),
+                    onToggleReview: _toggleReviewSectionForActiveCard,
                     reviewController: _reviewController,
                     isRegenerating: _isRegenerating,
-                    onRegenerate: _isUnlocked
-                        ? () => _handleRegenerate(skipConfirmation: true)
+                    onRegenerate: _isUnlocked &&
+                            (_activeCardKey == _LessonEditorCardKey.lessonNotes ||
+                                _activeCardKey == _LessonEditorCardKey.assessment ||
+                                (_activeCardKey == _LessonEditorCardKey.diagrams &&
+                                    _activeDiagramIndex != null))
+                        ? () => _handleRegenerate(
+                              skipConfirmation: true,
+                              cardKey: _regenerationCardKey ?? _activeCardKey,
+                              diagramIndex: _regenerationDiagramIndex ??
+                                  _activeDiagramIndex,
+                            )
                         : null,
                     lessonStatus: _lessonStatus,
                     onMarkCompleted: _isUnlocked && _lessonStatus != 'completed'
@@ -5643,8 +5888,10 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                                               ),
                                         label: Text(
                                           isGeneratingThisItem
-                                              ? 'Generating...'
-                                              : 'Generate Image',
+                                              ? 'Generating Image ${index + 1}...'
+                                              : imageUrl == null
+                                                  ? 'Generate Image ${index + 1}'
+                                                  : 'Regenerate Image ${index + 1}',
                                           style: theme.textTheme.labelSmall
                                               ?.copyWith(
                                             fontWeight: FontWeight.w600,
@@ -5661,7 +5908,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                                             size: 16,
                                           ),
                                           label: Text(
-                                            'Generate Image',
+                                            'Generate Image ${index + 1}',
                                             style: theme.textTheme.labelSmall
                                                 ?.copyWith(
                                               fontWeight: FontWeight.w600,
