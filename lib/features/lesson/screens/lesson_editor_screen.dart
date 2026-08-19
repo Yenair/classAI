@@ -33,6 +33,14 @@ import 'package:classai/core/services/diagram_service.dart'
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
+enum _LessonEditorCardKey {
+  generate,
+  lessonNotes,
+  assessment,
+  diagrams,
+  references,
+}
+
 /// Stitch‑designed lesson note editor with AI generation.
 ///
 /// Form fields: Subject dropdown, Class dropdown, Week spinbox,
@@ -71,6 +79,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   final _devController = TextEditingController();
   final _conclusionController = TextEditingController();
   int? _lessonId;
+  // Phase 1: stable target for the draft generation tab.
+  int? _selectedDraftLessonId;
   String _lessonStatus = 'draft';
   int _week = 1;
   String _subject = 'Mathematics';
@@ -86,6 +96,11 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   bool _isRegenerating = false;
   bool _hasGenerated = false;
   bool _isLoadingLesson = false;
+  // Phase 1: card-specific regeneration state; the callback is added later.
+  int _activeDeckIndex = 0;
+  _LessonEditorCardKey _activeCardKey = _LessonEditorCardKey.generate;
+  bool _isRegeneratingReferences = false;
+  String? _referencesRegenerationError;
   int _previewRevision = 0;
   final _reviewController = TextEditingController();
   bool _isUnlocked = false;
@@ -186,6 +201,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   void initState() {
     super.initState();
     _lessonId = widget.lessonId;
+    _selectedDraftLessonId = widget.lessonId;
     _isLoadingLesson = widget.lessonId != null;
     // A brand-new (blank) lesson opens with the config form expanded so the
     // fields are immediately visible/interactive; a reopened existing lesson
@@ -214,6 +230,46 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     _introController.addListener(_combinePresentation);
     _devController.addListener(_combinePresentation);
     _conclusionController.addListener(_combinePresentation);
+  }
+
+  List<_LessonEditorCardKey> get _visibleDeckCardKeys => [
+        if (!_hasGenerated) _LessonEditorCardKey.generate,
+        _LessonEditorCardKey.lessonNotes,
+        _LessonEditorCardKey.assessment,
+        _LessonEditorCardKey.diagrams,
+        if (_visibleReferences) _LessonEditorCardKey.references,
+      ];
+
+  void _clampActiveDeckState() {
+    final keys = _visibleDeckCardKeys;
+    if (keys.isEmpty) return;
+
+    final currentIndex = keys.indexOf(_activeCardKey);
+    if (currentIndex >= 0) {
+      _activeDeckIndex = currentIndex;
+      return;
+    }
+
+    final clampedIndex = _activeDeckIndex < 0
+        ? 0
+        : (_activeDeckIndex >= keys.length ? keys.length - 1 : _activeDeckIndex);
+    _activeDeckIndex = clampedIndex;
+    _activeCardKey = keys[clampedIndex];
+  }
+
+  void _setGeneratedDeckState() {
+    _hasGenerated = true;
+    _activeCardKey = _LessonEditorCardKey.lessonNotes;
+    _activeDeckIndex = 0;
+  }
+
+  void _onPreviewCardChanged(_LessonEditorCardKey cardKey) {
+    final index = _visibleDeckCardKeys.indexOf(cardKey);
+    if (index < 0 || !mounted) return;
+    setState(() {
+      _activeCardKey = cardKey;
+      _activeDeckIndex = index;
+    });
   }
 
   /// Combine the three presentation sub-sections back into the single
@@ -360,6 +416,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         final bool needsLegacyFallback =
             legacyDifficulty || legacyBlooms || legacyAssessmentFormat;
         setState(() {
+          _selectedDraftLessonId = lesson.id;
           _topicController.text = lesson.topic;
           _lessonStatus = lesson.status;
           _week = lesson.week;
@@ -409,6 +466,10 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             // Drafts are editable generation inputs, even if an autosave or
             // interrupted generation left partial content in the JSON column.
             _hasGenerated = lesson.status != 'draft' && hasStoredGeneratedContent;
+            _activeCardKey = _hasGenerated
+                ? _LessonEditorCardKey.lessonNotes
+                : _LessonEditorCardKey.generate;
+            _activeDeckIndex = 0;
             _isUnlocked = lesson.status == 'draft' ||
                 (lesson.isUnlocked && _hasGenerated);
             _topicEditable = true;
@@ -991,7 +1052,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             _references =
                 _parseReferences(parsedRaw['references'], forceAiOrigin: true);
             _diagramResults = generatedDiagrams;
-            _hasGenerated = true;
+            _setGeneratedDeckState();
             _topicEditable = false;
             _topicConfirmShown = false;
             if (_lessonStatus == 'draft') _lessonStatus = 'generated';
@@ -1263,7 +1324,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         _droppedQuestionCount = droppedQuestionCount;
         _references =
             _parseReferences(raw['references'], forceAiOrigin: true);
-        _hasGenerated = true;
+        _setGeneratedDeckState();
         if (_lessonStatus == 'draft') _lessonStatus = 'generated';
         _isRegenerating = false;
         _previewRevision++;
@@ -1644,6 +1705,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                   _visibleSectionPrefKey('lesson_visible_references'),
                 ) ??
                 false;
+        _clampActiveDeckState();
       });
     } catch (_) {
       // Preferences unavailable — keep the defaults (sections hidden).
@@ -1693,7 +1755,10 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         },
         visibleReferences: _visibleReferences,
         onReferencesChanged: (v) {
-          setState(() => _visibleReferences = v);
+          setState(() {
+            _visibleReferences = v;
+            _clampActiveDeckState();
+          });
           _persistVisibleSection(
               _visibleSectionPrefKey('lesson_visible_references'), v);
         },
@@ -1773,6 +1838,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         if (existing != null) {
           // Update existing lesson
           id = existing.id;
+          _selectedDraftLessonId = id;
           await db.lessonsDao.updateLesson(id, companion);
 
           // Queue UPDATE sync entry
@@ -1846,6 +1912,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       );
       // Remember the new lesson ID so undo and subsequent saves work.
       _lessonId = id;
+      _selectedDraftLessonId = id;
 
       // Queue sync entry
       final lessonContent = jsonEncode(content);
@@ -2089,6 +2156,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       _droppedQuestionCount = 0;
       _references = [];
       _hasGenerated = false;
+      _activeCardKey = _LessonEditorCardKey.generate;
+      _activeDeckIndex = 0;
       _topicEditable = true;
       _topicConfirmShown = false;
       _schemeOfWorkLocalId = null;
@@ -2907,6 +2976,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                         isGeneratingDiagrams: _isGeneratingDiagrams,
                                         generatingDiagramIndex: _generatingDiagramIndex,
                                         onRegenerateDiagram: _generateSuggestedImage,
+                                        onActiveCardChanged: _onPreviewCardChanged,
                                         objectivesController: _objectivesController,
                                         vocabularyController: _vocabularyController,
                                         materialsController: _materialsController,
@@ -3575,6 +3645,7 @@ class _PreviewColumn extends StatefulWidget {
   final bool isGeneratingDiagrams;
   final int? generatingDiagramIndex;
   final ValueChanged<int>? onRegenerateDiagram;
+  final ValueChanged<_LessonEditorCardKey>? onActiveCardChanged;
   final TextEditingController objectivesController;
   final TextEditingController vocabularyController;
   final TextEditingController materialsController;
@@ -3659,6 +3730,7 @@ class _PreviewColumn extends StatefulWidget {
     this.isGeneratingDiagrams = false,
     this.generatingDiagramIndex,
     this.onRegenerateDiagram,
+    this.onActiveCardChanged,
     required this.objectivesController,
     required this.vocabularyController,
     required this.materialsController,
@@ -3732,9 +3804,10 @@ class _PreviewColumn extends StatefulWidget {
 }
 
 class _PreviewColumnState extends State<_PreviewColumn> {
-  late final PageController _pageController;
+  late PageController _deckController;
   final FocusNode _tabFocusNode = FocusNode();
-  int _tabIndex = 0;
+  int _activeDeckIndex = 0;
+  _LessonEditorCardKey _activeCardKey = _LessonEditorCardKey.lessonNotes;
   bool _tabAutoFocused = false;
 
   // Shorthand getters for ColorScheme and ThemeData from widget.
@@ -3745,22 +3818,51 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
+    _deckController = PageController();
   }
 
   @override
   void didUpdateWidget(covariant _PreviewColumn oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.key != widget.key) {
-      _pageController.dispose();
-      _pageController = PageController();
-      _tabIndex = 0;
+      _deckController.dispose();
+      _deckController = PageController();
+      _activeDeckIndex = 0;
+      _activeCardKey = _LessonEditorCardKey.lessonNotes;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onActiveCardChanged?.call(_activeCardKey);
+      });
+      return;
+    }
+
+    final oldKeys = _cardKeys(oldWidget.visibleReferences);
+    final newKeys = _cardKeys(widget.visibleReferences);
+    final oldIndex = _activeDeckIndex < 0
+        ? 0
+        : (_activeDeckIndex >= oldKeys.length
+            ? oldKeys.length - 1
+            : _activeDeckIndex);
+    final oldCardKey = oldKeys[oldIndex];
+    final newIndex = newKeys.indexOf(oldCardKey);
+    final clampedIndex = newIndex < 0
+        ? (_activeDeckIndex >= newKeys.length ? newKeys.length - 1 : _activeDeckIndex)
+        : newIndex;
+    if (clampedIndex != _activeDeckIndex) {
+      _activeDeckIndex = clampedIndex;
+      _activeCardKey = newKeys[clampedIndex];
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_deckController.hasClients) return;
+        _deckController.jumpToPage(clampedIndex);
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onActiveCardChanged?.call(_activeCardKey);
+      });
     }
   }
 
   @override
   void dispose() {
-    _pageController.dispose();
+    _deckController.dispose();
     _tabFocusNode.dispose();
     super.dispose();
   }
@@ -3788,17 +3890,16 @@ class _PreviewColumnState extends State<_PreviewColumn> {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     if (_isTextFocused()) return KeyEventResult.ignored;
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      if (_tabIndex > 0) {
-        _pageController.previousPage(
+      if (_activeDeckIndex > 0) {
+        _deckController.previousPage(
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeInOut,
         );
         return KeyEventResult.handled;
       }
     } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      final maxTab = (widget.visibleReferences) ? 3 : 2;
-      if (_tabIndex < maxTab) {
-        _pageController.nextPage(
+      if (_activeDeckIndex < _cardKeys(widget.visibleReferences).length - 1) {
+        _deckController.nextPage(
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeInOut,
         );
@@ -3808,15 +3909,41 @@ class _PreviewColumnState extends State<_PreviewColumn> {
     return KeyEventResult.ignored;
   }
 
+  List<_LessonEditorCardKey> _cardKeys(bool includeReferences) => [
+        _LessonEditorCardKey.lessonNotes,
+        _LessonEditorCardKey.assessment,
+        _LessonEditorCardKey.diagrams,
+        if (includeReferences) _LessonEditorCardKey.references,
+      ];
+
   List<String> get _tabLabels {
-    final labels = ['Lesson Note', 'Assessment', 'Diagrams'];
-    if (widget.visibleReferences) labels.add('References');
-    return labels;
+    return _cardKeys(widget.visibleReferences)
+        .map((key) {
+          switch (key) {
+            case _LessonEditorCardKey.lessonNotes:
+              return 'Lesson Note';
+            case _LessonEditorCardKey.assessment:
+              return 'Assessment';
+            case _LessonEditorCardKey.diagrams:
+              return 'Diagrams';
+            case _LessonEditorCardKey.references:
+              return 'References';
+            case _LessonEditorCardKey.generate:
+              return 'Generate';
+          }
+        })
+        .toList();
   }
 
   void _onTabTapped(int index) {
-    setState(() => _tabIndex = index);
-    _pageController.animateToPage(
+    final keys = _cardKeys(widget.visibleReferences);
+    if (index < 0 || index >= keys.length) return;
+    setState(() {
+      _activeDeckIndex = index;
+      _activeCardKey = keys[index];
+    });
+    widget.onActiveCardChanged?.call(_activeCardKey);
+    _deckController.animateToPage(
       index,
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeInOut,
@@ -4157,7 +4284,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                             scrollDirection: Axis.horizontal,
                             child: Row(
                               children: List.generate(_tabLabels.length, (i) {
-                                final selected = _tabIndex == i;
+                                final selected = _activeDeckIndex == i;
                                 return Padding(
                                   padding: const EdgeInsets.only(right: 8),
                                   child: ChoiceChip(
@@ -4182,19 +4309,32 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                   // Tab content (swipeable PageView)
                   SizedBox(
                     height: 600,
-                    child: PageView(
-                      controller: _pageController,
-                      onPageChanged: (i) => setState(() => _tabIndex = i),
-                      children: [
-                        // Tab 0: Lesson Note
-                        _buildLessonNoteTab(),
-                        // Tab 1: Assessment
-                        _buildAssessmentTab(),
-                        // Tab 2: Diagrams
-                        _buildDiagramsTab(),
-                        // Tab 3: References (only if visibleReferences)
-                        if (visibleReferences) _buildReferencesTab(),
-                      ],
+                    child: PageView.builder(
+                      controller: _deckController,
+                      itemCount: _cardKeys(visibleReferences).length,
+                      onPageChanged: (i) {
+                        final keys = _cardKeys(visibleReferences);
+                        if (i < 0 || i >= keys.length) return;
+                        setState(() {
+                          _activeDeckIndex = i;
+                          _activeCardKey = keys[i];
+                        });
+                        widget.onActiveCardChanged?.call(_activeCardKey);
+                      },
+                      itemBuilder: (context, index) {
+                        switch (_cardKeys(visibleReferences)[index]) {
+                          case _LessonEditorCardKey.lessonNotes:
+                            return _buildLessonNoteTab();
+                          case _LessonEditorCardKey.assessment:
+                            return _buildAssessmentTab();
+                          case _LessonEditorCardKey.diagrams:
+                            return _buildDiagramsTab();
+                          case _LessonEditorCardKey.references:
+                            return _buildReferencesTab();
+                          case _LessonEditorCardKey.generate:
+                            return const SizedBox.shrink();
+                        }
+                      },
                     ),
                   ),
                 ],
