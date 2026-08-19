@@ -3021,7 +3021,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     _NavItem('Lessons', Icons.menu_book_rounded, true),
     _NavItem('Exams', Icons.quiz_rounded, false),
     // _NavItem('Vault', Icons.inventory_2_rounded, false), // Vault feature disabled
-    _NavItem('Admin', Icons.admin_panel_settings_rounded, false),
   ];
 
   // ── Bottom nav items (mobile) ────────────────────────────────────────
