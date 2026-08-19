@@ -101,7 +101,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   bool _isRegenerating = false;
   bool _hasGenerated = false;
   bool _isLoadingLesson = false;
-  // Phase 1: card-specific regeneration state; the callback is added later.
+  // Phase 1/6: card-specific regeneration state.
   int _activeDeckIndex = 0;
   _LessonEditorCardKey _activeCardKey = _LessonEditorCardKey.generate;
   bool _isRegeneratingReferences = false;
@@ -283,8 +283,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     _LessonEditorCardKey cardKey, {
     int? diagramIndex,
   }) {
-    if (cardKey == _LessonEditorCardKey.generate ||
-        cardKey == _LessonEditorCardKey.references) {
+    if (cardKey == _LessonEditorCardKey.generate) {
       return;
     }
     setState(() {
@@ -362,10 +361,10 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         await _handleDiagramAction(selectedIndex, fromReview: true);
         return;
       case _LessonEditorCardKey.generate:
+        // Generate is not a generated card.
+        return;
       case _LessonEditorCardKey.references:
-        // Generate is not a generated card, and References-only regeneration
-        // belongs to Phase 6. Neither card may fall through to whole-lesson
-        // regeneration.
+        await _handleRegenerateReferences();
         return;
     }
   }
@@ -1567,6 +1566,62 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         showErrorToast(
           context: context,
           message: 'Assessment regeneration failed: $e',
+        );
+      }
+    }
+  }
+
+  Future<void> _handleRegenerateReferences() async {
+    if (!_isUnlocked || _lessonId == null || _isRegeneratingReferences) return;
+
+    setState(() {
+      _isRegeneratingReferences = true;
+      _referencesRegenerationError = null;
+    });
+
+    try {
+      final db = ref.read(databaseProvider);
+      final topic = _topicController.text.trim();
+      final review = _reviewController.text.trim();
+      final basePrompt = PromptTemplates.referencesOnly(
+        _subject,
+        _classLevel,
+        _week,
+        topic,
+        teacherName: _teacherName,
+        schoolName: _schoolName,
+      );
+      final prompt = review.isEmpty
+          ? basePrompt
+          : '$basePrompt\n\nTeacher feedback: $review';
+      final result = widget.generateCallback != null
+          ? await widget.generateCallback!(prompt)
+          : await AiService(db: db).generate(prompt);
+      final raw = result['raw'] as Map<String, dynamic>? ?? result;
+      final references =
+          _parseReferences(raw['references'], forceAiOrigin: true);
+
+      if (!mounted) return;
+      setState(() {
+        _references = references;
+        _isRegeneratingReferences = false;
+        _referencesRegenerationError = null;
+      });
+      await _saveLesson(notify: false);
+      _reviewController.clear();
+      if (mounted) {
+        setState(() => _showReviewSection = false);
+        showInfoToast(context: context, message: 'References regenerated.');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isRegeneratingReferences = false;
+          _referencesRegenerationError = 'References regeneration failed: $e';
+        });
+        showErrorToast(
+          context: context,
+          message: 'References regeneration failed: $e',
         );
       }
     }
@@ -3445,6 +3500,14 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                             onSave: _saveLesson,
                                             onDiscard: _discard,
                                             onRegenerate: _isUnlocked ? _handleRegenerate : null,
+                                            onRegenerateReferences:
+                                                _isUnlocked && _lessonId != null
+                                                    ? _handleRegenerateReferences
+                                                    : null,
+                                            isRegeneratingReferences:
+                                                _isRegeneratingReferences,
+                                            referencesRegenerationError:
+                                                _referencesRegenerationError,
                                             lessonStatus: _lessonStatus,
                                             onMarkCompleted: _isUnlocked ? _handleMarkCompleted : null,
                                             onToggleComplete: _isUnlocked ? _handleToggleComplete : null,
@@ -3522,6 +3585,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                     onRegenerate: _isUnlocked &&
                             (_activeCardKey == _LessonEditorCardKey.lessonNotes ||
                                 _activeCardKey == _LessonEditorCardKey.assessment ||
+                                _activeCardKey == _LessonEditorCardKey.references ||
                                 (_activeCardKey == _LessonEditorCardKey.diagrams &&
                                     _activeDiagramIndex != null))
                         ? () => _handleRegenerate(
@@ -4313,6 +4377,9 @@ class _PreviewColumn extends StatefulWidget {
   final bool isGeneratingDiagrams;
   final int? generatingDiagramIndex;
   final ValueChanged<int>? onRegenerateDiagram;
+  final Future<void> Function()? onRegenerateReferences;
+  final bool isRegeneratingReferences;
+  final String? referencesRegenerationError;
   final ValueChanged<_LessonEditorCardKey>? onActiveCardChanged;
   final TextEditingController objectivesController;
   final TextEditingController vocabularyController;
@@ -4398,6 +4465,9 @@ class _PreviewColumn extends StatefulWidget {
     this.isGeneratingDiagrams = false,
     this.generatingDiagramIndex,
     this.onRegenerateDiagram,
+    this.onRegenerateReferences,
+    this.isRegeneratingReferences = false,
+    this.referencesRegenerationError,
     this.onActiveCardChanged,
     required this.objectivesController,
     required this.vocabularyController,
@@ -4709,6 +4779,11 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   bool get isGeneratingDiagrams => widget.isGeneratingDiagrams;
   int? get generatingDiagramIndex => widget.generatingDiagramIndex;
   ValueChanged<int>? get onRegenerateDiagram => widget.onRegenerateDiagram;
+  Future<void> Function()? get onRegenerateReferences =>
+      widget.onRegenerateReferences;
+  bool get isRegeneratingReferences => widget.isRegeneratingReferences;
+  String? get referencesRegenerationError =>
+      widget.referencesRegenerationError;
   TextEditingController get objectivesController => widget.objectivesController;
   TextEditingController get vocabularyController => widget.vocabularyController;
   TextEditingController get materialsController => widget.materialsController;
@@ -5524,6 +5599,39 @@ class _PreviewColumnState extends State<_PreviewColumn> {
             'Source references used for this lesson.',
             style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
           ),
+          if (!readOnly && onRegenerateReferences != null) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                onPressed: isRegeneratingReferences
+                    ? null
+                    : () => onRegenerateReferences!.call(),
+                icon: isRegeneratingReferences
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh_rounded, size: 18),
+                label: Text(
+                  isRegeneratingReferences
+                      ? 'Regenerating...'
+                      : 'Regenerate references',
+                ),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, AppTheme.touchTarget),
+                ),
+              ),
+            ),
+          ],
+          if (referencesRegenerationError != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              referencesRegenerationError!,
+              style: theme.textTheme.bodySmall?.copyWith(color: cs.error),
+            ),
+          ],
           const SizedBox(height: 12),
           if (displayItems.isEmpty)
             Container(

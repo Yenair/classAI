@@ -53,6 +53,25 @@ class PromptTemplates {
         '$_selfCheckInstruction';
   }
 
+  /// Generate only the source references for an existing lesson.
+  static String referencesOnly(
+      String subject, String classLevel, int week, String topic,
+      {String teacherName = 'Teacher', String schoolName = 'School'}) {
+    final attribution =
+        '— Generated for $teacherName, $schoolName. Not for redistribution.';
+    return 'Generate source references for $subject, $classLevel, Week $week, '
+        'Topic: "$topic". Return only references relevant to this lesson. '
+        'Do NOT change or generate lesson objectives, vocabulary, materials, '
+        'presentation, assessment, homework, or diagrams. '
+        'Only return references from this curated list of real Nigerian textbooks: '
+        '${curatedTextbookTitles.join('; ')}. '
+        'Do NOT invent textbook titles, chapter numbers, page numbers, or authors. '
+        'Return a reference object {"title":"..."} only when a curated title '
+        'is relevant to the topic. Return "references": [] when none apply. '
+        'Return ONLY valid JSON: '
+        '{"references":[{"title":"..."}],"attribution":"$attribution"}';
+  }
+
   /// Generate a combined exam prompt that supports MCQ, Theory, and Subjective.
   /// [typeCounts] maps question type names ("MCQ", "Theory", "Subjective") to their counts.
   static String examQuestions(
