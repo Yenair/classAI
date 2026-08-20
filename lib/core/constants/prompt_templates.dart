@@ -17,7 +17,53 @@ class PromptTemplates {
     'Further Mathematics for Senior Secondary Schools',
     'Comprehensive Physical and Health Education for Senior Secondary Schools',
     'Computer Studies for Senior Secondary Schools',
+    'New Oxford Secondary English Course for Junior Secondary Schools '
+        '(Upper Basic Education)',
+    'Oxford Advanced Learner\'s Dictionary, International Student\'s Edition',
+    'Excellence in Basic Science and Technology Book 1–3',
+    'WABP Basic Technology for Junior Secondary Schools 1–3',
+    'New Computer Studies for Junior Secondary Schools 1–3',
+    'Spectrum Social Studies for Junior Secondary Schools '
+        '(Upper Basic Education)',
+    'The Basic Concepts of Civic Education for Upper Levels, Junior '
+        'Secondary Schools',
   ];
+
+  static const String _curatedTextbookCatalog =
+      'New General Mathematics for Junior Secondary Schools — authors M. F. '
+      'Macrae, A. O. Kalejaiye, Z. I. Chima, G. U. Garba, and M. O. Ademosu; '
+      'publisher Pearson Education Limited; 2013 NERDC curriculum edition. '
+      'New Oxford Secondary English Course for Junior Secondary Schools '
+      '(Upper Basic Education) — author Ayo Banjo et al.; publisher University '
+      'Press PLC; 2014 UBE edition. Oxford Advanced Learner\'s Dictionary, '
+      'International Student\'s Edition — author A. S. Hornby; publisher Oxford '
+      'University Press; 8th edition, 2014. Excellence in Basic Science and '
+      'Technology Book 1–3 — authors M. O. Olaitan, A. H. Iyabo, and '
+      'S. Olatunde; publisher Cambridge University Press. WABP Basic '
+      'Technology for Junior Secondary Schools 1–3 — authors M. B. Adeyemi, '
+      'M. Ukadiko, and S. Danladi; publisher Melrose Publication. New '
+      'Computer Studies for Junior Secondary Schools 1–3 — authors J. O. E. '
+      'Otuka, A. F. Akande, and S. L. Iginla. Home Economics for Junior '
+      'Secondary Schools — author E. U. Anyakola; publisher Africana First '
+      'Publishers. Spectrum Social Studies for Junior Secondary Schools '
+      '(Upper Basic Education) — authors Dayo Ogunniyi, G. I. Ehon, Abbas '
+      'Mohammed, and Nwakaego U. Ogbajie; publisher Spectrum Books Limited. '
+      'The Basic Concepts of Civic Education for Upper Levels, Junior '
+      'Secondary Schools — author Oladele Odanye; publisher Holad Publishers.';
+
+  static String _referenceInstructions() {
+    return 'Use only the verified catalog records below. $_curatedTextbookCatalog '
+        'First identify the distinct curriculum subtopics directly related to '
+        'the lesson topic, then return every catalog record that genuinely '
+        'supports one of those subtopics. Do not return unrelated books. For '
+        'each returned record, include the exact title, author or authors, '
+        'publisher, edition or year when known, ISBN only when known for that '
+        'exact edition, a relatedTopics array, and a searchQuery containing '
+        'the title plus the strongest author/publisher identifier. Never '
+        'invent an author, publisher, edition, ISBN, chapter, page, or URL. '
+        'If a field is not verified, omit it. Return an empty array when no '
+        'catalog record is relevant. Return only valid JSON.';
+  }
 
   static const String _selfCheckInstruction =
       'After generating the questions, double-check each answer. If any answer is likely incorrect, replace it with a correct one. Do not output questions you are unsure about - omit them and reduce the count accordingly. Return only valid JSON.';
@@ -39,17 +85,14 @@ class PromptTemplates {
         '## Homework\n'
         'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
         'Return ONLY valid JSON: '
-        '{"objectives":[...],"vocabulary":[...],"materials":[...],"presentation":{...},"assessment":"...","homework":"...","diagrams":[{"description":"..."}],"references":[{"title":"...","author":"...","chapter":"...","page":"..."}],"attribution":"$attribution"} '
+        '{"objectives":[...],"vocabulary":[...],"materials":[...],"presentation":{...},"assessment":"...","homework":"...","diagrams":[{"description":"..."}],"references":[{"title":"...","author":"...","publisher":"...","edition":"...","isbn":"...","relatedTopics":["..."],"searchQuery":"..."}],"attribution":"$attribution"} '
         'Include between 1 and 3 diagram descriptions in the "diagrams" array. '
         'Use 1 prompt for simple topics, 2 for moderately complex topics, and 3 for complex topics. '
         'Each description should be a concise prompt for generating a single educational image relevant to the topic. '
-        'For the "references" array: do NOT invent textbook titles, chapter numbers, or page numbers. '
-        'Do NOT include author names unless you are certain they are correct. '
-        'Only return references from this curated list of real Nigerian textbooks: '
-        '${curatedTextbookTitles.join('; ')}. '
-        'Return a reference object {"title":"..."} only when a curated title is relevant to the topic. '
-        'Do NOT add chapter, page, or author fields — leave them out. '
-        'Return "references": [] when none of the curated titles are relevant. '
+        '${_referenceInstructions()} '
+        ''
+        'The verified catalog instructions override any earlier generic '
+        'reference wording; include verified author and publisher fields. '
         '$_selfCheckInstruction';
   }
 
@@ -63,13 +106,9 @@ class PromptTemplates {
         'Topic: "$topic". Return only references relevant to this lesson. '
         'Do NOT change or generate lesson objectives, vocabulary, materials, '
         'presentation, assessment, homework, or diagrams. '
-        'Only return references from this curated list of real Nigerian textbooks: '
-        '${curatedTextbookTitles.join('; ')}. '
-        'Do NOT invent textbook titles, chapter numbers, page numbers, or authors. '
-        'Return a reference object {"title":"..."} only when a curated title '
-        'is relevant to the topic. Return "references": [] when none apply. '
+        '${_referenceInstructions()} '
         'Return ONLY valid JSON: '
-        '{"references":[{"title":"..."}],"attribution":"$attribution"}';
+        '{"references":[{"title":"...","author":"...","publisher":"...","edition":"...","isbn":"...","relatedTopics":["..."],"searchQuery":"..."}],"attribution":"$attribution"}';
   }
 
   /// Generate a combined exam prompt that supports MCQ, Theory, and Subjective.

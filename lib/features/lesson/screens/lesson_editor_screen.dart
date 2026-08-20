@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
@@ -33,12 +34,83 @@ import 'package:classai/core/services/diagram_service.dart'
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
+ColorScheme _lessonEditorStitchColorScheme(ColorScheme base) {
+  return base.copyWith(
+    primary: const Color(0xFFB8C3FF),
+    onPrimary: const Color(0xFF0B267E),
+    primaryContainer: const Color(0xFF8FA3FF),
+    onPrimaryContainer: const Color(0xFF1E358B),
+    secondary: const Color(0xFFD7BAFF),
+    onSecondary: const Color(0xFF401578),
+    secondaryContainer: const Color(0xFF5A3392),
+    onSecondaryContainer: const Color(0xFFCBA8FF),
+    tertiary: const Color(0xFF6BD2FF),
+    onTertiary: const Color(0xFF003547),
+    tertiaryContainer: const Color(0xFF00B6EA),
+    onTertiaryContainer: const Color(0xFF004358),
+    error: const Color(0xFFFFB4AB),
+    onError: const Color(0xFF690005),
+    errorContainer: const Color(0xFF93000A),
+    onErrorContainer: const Color(0xFFFFDAD6),
+    surface: const Color(0xFF131315),
+    onSurface: const Color(0xFFE5E1E4),
+    surfaceContainerLowest: const Color(0xFF0E0E10),
+    surfaceContainerLow: const Color(0xFF1B1B1D),
+    surfaceContainer: const Color(0xFF201F21),
+    surfaceContainerHigh: const Color(0xFF2A2A2C),
+    surfaceContainerHighest: const Color(0xFF353437),
+    surfaceBright: const Color(0xFF39393B),
+    surfaceDim: const Color(0xFF131315),
+    surfaceVariant: const Color(0xFF353437),
+    onSurfaceVariant: const Color(0xFFC5C5D3),
+    outline: const Color(0xFF8F909D),
+    outlineVariant: const Color(0xFF454652),
+    inverseSurface: const Color(0xFFE5E1E4),
+    inversePrimary: const Color(0xFF4358AE),
+    surfaceTint: const Color(0xFFB8C3FF),
+  );
+}
+
 enum _LessonEditorCardKey {
   generate,
   lessonNotes,
   assessment,
   diagrams,
   references,
+}
+
+String _referenceStringValue(Map<String, dynamic> reference, String key) {
+  final value = reference[key];
+  if (value is String) return value.trim();
+  if (value is List) {
+    return value
+        .map((item) => item.toString().trim())
+        .where((item) => item.isNotEmpty)
+        .join(', ');
+  }
+  return value?.toString().trim() ?? '';
+}
+
+String _referenceMetadataText(Map<String, dynamic> reference) {
+  final author = _referenceStringValue(reference, 'author').isNotEmpty
+      ? _referenceStringValue(reference, 'author')
+      : _referenceStringValue(reference, 'authors');
+  final publisher = _referenceStringValue(reference, 'publisher');
+  final edition = _referenceStringValue(reference, 'edition');
+  final isbn = _referenceStringValue(reference, 'isbn');
+  final searchQuery = _referenceStringValue(reference, 'searchQuery');
+  final parts = <String>[];
+  if (author.isNotEmpty) parts.add('Author: $author');
+  if (publisher.isNotEmpty) parts.add('Publisher: $publisher');
+  if (edition.isNotEmpty) parts.add(edition);
+  if (isbn.isNotEmpty) parts.add('ISBN: $isbn');
+  if (searchQuery.isNotEmpty) parts.add('Search: $searchQuery');
+  return parts.join(' • ');
+}
+
+String _referenceRelatedTopicsText(Map<String, dynamic> reference) {
+  final topics = _referenceStringValue(reference, 'relatedTopics');
+  return topics.isEmpty ? '' : 'Related topics: $topics';
 }
 
 /// Stitch‑designed lesson note editor with AI generation.
@@ -273,7 +345,10 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
 
   void _onPreviewCardChanged(_LessonEditorCardKey cardKey) {
     final index = _visibleDeckCardKeys.indexOf(cardKey);
-    if (index < 0 || !mounted) return;
+    if (index < 0 || !mounted ||
+        (_activeCardKey == cardKey && _activeDeckIndex == index)) {
+      return;
+    }
     setState(() {
       _activeCardKey = cardKey;
       _activeDeckIndex = index;
@@ -401,6 +476,15 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     try {
       final db = ref.read(databaseProvider);
       final lessons = await db.lessonsDao.getAllForTeacher(teacherId, schoolId);
+      final currentOption = lessons
+          .where(
+            (lesson) =>
+                lesson.id == _lessonId &&
+                lesson.subject == _subject &&
+                lesson.classLevel == _classLevel,
+          )
+          .map(_DraftTopicOption.fromLesson)
+          .firstOrNull;
       final options = lessons
           .where(
             (lesson) =>
@@ -411,6 +495,10 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           )
           .map(_DraftTopicOption.fromLesson)
           .toList();
+      if (currentOption != null &&
+          !options.any((option) => option.lessonId == currentOption.lessonId)) {
+        options.insert(0, currentOption);
+      }
       if (!mounted) return;
       setState(() {
         _draftTopicOptions = options;
@@ -520,15 +608,17 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
 
   void _handleDraftGenerate() {
     final selected = _selectedDraftTopic;
-    if (selected == null || selected.isCreateNew || selected.lessonId == null) {
+    if (selected != null && !selected.isCreateNew && selected.lessonId != null) {
+      setState(() {
+        _topicController.text = selected.topic;
+        _week = selected.week;
+        _selectedDraftLessonId = selected.lessonId;
+        _lessonId = selected.lessonId;
+      });
+    } else if (widget.lessonId == null &&
+        _topicController.text.trim().isEmpty) {
       return;
     }
-    setState(() {
-      _topicController.text = selected.topic;
-      _week = selected.week;
-      _selectedDraftLessonId = selected.lessonId;
-      _lessonId = selected.lessonId;
-    });
     _handleGenerate();
   }
 
@@ -1335,8 +1425,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             if (!questionsEnabled) {
               showInfoToast(
                 context: context,
-                message: 'Assessment questions require Standard or Elite — '
-                    'upgrade to include them.',
+                message: 'Assessment questions are not included in your '
+                    'current plan — upgrade to include them.',
               );
             } else if (questionsFailed) {
               showInfoToast(
@@ -1806,8 +1896,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         if (!questionsEnabled) {
           showInfoToast(
             context: context,
-            message: 'Assessment questions require Standard or Elite — '
-                'upgrade to include them.',
+            message: 'Assessment questions are not included in your current '
+                'plan — upgrade to include them.',
           );
         } else if (questionsFailed) {
           showInfoToast(
@@ -1988,10 +2078,32 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           );
           if (isCurated) origin = 'curated';
         }
-        result.add({
+        final parsedReference = <String, dynamic>{
           'text': text,
           'origin': origin,
-        });
+        };
+        for (final key in const [
+          'author',
+          'authors',
+          'publisher',
+          'edition',
+          'isbn',
+          'searchQuery',
+        ]) {
+          final value = map[key];
+          if (value is String && value.trim().isNotEmpty || value is List) {
+            parsedReference[key] = value;
+          }
+        }
+        final relatedTopics = map['relatedTopics'];
+        if (relatedTopics is List) {
+          final topics = relatedTopics
+              .map((topic) => topic.toString().trim())
+              .where((topic) => topic.isNotEmpty)
+              .toList();
+          if (topics.isNotEmpty) parsedReference['relatedTopics'] = topics;
+        }
+        result.add(parsedReference);
       }
     } catch (_) {
       return const [];
@@ -2102,8 +2214,15 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   /// the sheet opens in read-only mode: references can be viewed but not
   /// added or removed.
   void _showReferencesSheet() {
-    final cs = Theme.of(context).colorScheme;
-    final theme = Theme.of(context);
+    final cs = _lessonEditorStitchColorScheme(
+      Theme.of(context).colorScheme,
+    );
+    final theme = ThemeData(
+      colorScheme: cs,
+      textTheme: GoogleFonts.workSansTextTheme(
+        Theme.of(context).textTheme,
+      ),
+    );
     final readOnly = !_isUnlocked;
     // Priority order: (1) linked scheme, (2) source topic when manually
     // entered, then (3) stored AI / teacher references.
@@ -2193,8 +2312,15 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   /// (Vocabulary, Materials, Suggested Images / Diagrams) appear in the
   /// lesson document.
   void _showVisibleSectionsSheet() {
-    final cs = Theme.of(context).colorScheme;
-    final theme = Theme.of(context);
+    final cs = _lessonEditorStitchColorScheme(
+      Theme.of(context).colorScheme,
+    );
+    final theme = ThemeData(
+      colorScheme: cs,
+      textTheme: GoogleFonts.workSansTextTheme(
+        Theme.of(context).textTheme,
+      ),
+    );
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -2967,6 +3093,173 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     );
   }
 
+  Widget _buildStitchLessonFab() {
+    return Positioned(
+      left: 0,
+      right: 0,
+      // The bottom navigation is outside this Stack, so adding a fixed
+      // mobile offset here makes the menu float too high and worsens keyboard
+      // and short-screen collisions.
+      bottom: 0,
+      child: Align(
+        alignment: Alignment.bottomRight,
+        child: _StitchLessonFab(
+          cs: _lessonEditorStitchColorScheme(
+            Theme.of(context).colorScheme,
+          ),
+          theme: ThemeData(
+            colorScheme: _lessonEditorStitchColorScheme(
+              Theme.of(context).colorScheme,
+            ),
+            textTheme: GoogleFonts.workSansTextTheme(
+              Theme.of(context).textTheme,
+            ),
+          ),
+          showReviewSection: _showReviewSection,
+          showActionMenu: _showLessonActions,
+          onToggleReview: _toggleReviewSectionForActiveCard,
+          onToggleActions: () => setState(
+            () => _showLessonActions = !_showLessonActions,
+          ),
+          reviewController: _reviewController,
+          isRegenerating: _isRegenerating,
+          onRegenerate: _isUnlocked &&
+                  (_activeCardKey == _LessonEditorCardKey.lessonNotes ||
+                      _activeCardKey == _LessonEditorCardKey.assessment ||
+                      _activeCardKey == _LessonEditorCardKey.references ||
+                      (_activeCardKey == _LessonEditorCardKey.diagrams &&
+                          _activeDiagramIndex != null))
+              ? () => _handleRegenerate(
+                    skipConfirmation: true,
+                    cardKey: _regenerationCardKey ?? _activeCardKey,
+                    diagramIndex:
+                        _regenerationDiagramIndex ?? _activeDiagramIndex,
+                  )
+              : null,
+          lessonStatus: _lessonStatus,
+          onMarkCompleted: _isUnlocked && _lessonStatus != 'completed'
+              ? _handleMarkCompleted
+              : null,
+          onExportPdf: _handleExportPdf,
+          isExporting: _isExporting,
+          onShowVisibleSections: _showVisibleSectionsSheet,
+          onSave: _saveLesson,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPreviewColumn(
+    ColorScheme cs,
+    ThemeData theme,
+    String? questionSummary, {
+    required bool showGenerateSlide,
+    required bool allowManualTopic,
+  }) {
+    return _PreviewColumn(
+      key: ValueKey(_previewRevision),
+      cs: cs,
+      theme: theme,
+      hasGenerated: _hasGenerated,
+      showGenerateSlide: showGenerateSlide,
+      isGenerating: _isGenerating,
+      isUnlocked: _isUnlocked,
+      isOnline: _isOnline,
+      subscriptionTier: _subscriptionTier,
+      remainingDailyPreviews: _remainingDailyPreviews,
+      isRegenerating: _isRegenerating,
+      assessmentAllowedTiers: ref
+          .read(configServiceProvider)
+          .assessmentGenerationAllowedTiers,
+      diagramResults: _diagramResults,
+      isGeneratingDiagrams: _isGeneratingDiagrams,
+      generatingDiagramIndex: _generatingDiagramIndex,
+      onRegenerateDiagram: _handleDiagramAction,
+      onActiveCardChanged: _onPreviewCardChanged,
+      objectivesController: _objectivesController,
+      vocabularyController: _vocabularyController,
+      materialsController: _materialsController,
+      presentationController: _presentationController,
+      introController: _introController,
+      devController: _devController,
+      conclusionController: _conclusionController,
+      assessmentController: _assessmentController,
+      homeworkController: _homeworkController,
+      questionSummary: questionSummary,
+      reviewController: _reviewController,
+      undoController: _undoController,
+      onUnlock: _handleUnlock,
+      onDiscard: _discard,
+      onRegenerate: _isUnlocked ? _handleRegenerate : null,
+      onRegenerateReferences:
+          _isUnlocked && _lessonId != null ? _handleRegenerateReferences : null,
+      isRegeneratingReferences: _isRegeneratingReferences,
+      referencesRegenerationError: _referencesRegenerationError,
+      lessonStatus: _lessonStatus,
+      onMarkCompleted: _isUnlocked ? _handleMarkCompleted : null,
+      onToggleComplete: _isUnlocked ? _handleToggleComplete : null,
+      onExportPdf: _hasGenerated ? _handleExportPdf : null,
+      isExporting: _isExporting,
+      assessmentFormat: _assessmentFormat,
+      onAssessmentFormatChanged: (v) =>
+          setState(() => _assessmentFormat = v),
+      mcqs: _mcqs,
+      theoryQuestions: _theoryQuestions,
+      subjectiveQuestions: _subjectiveQuestions,
+      droppedQuestionCount: _droppedQuestionCount,
+      onUpdateMcq: _updateMcq,
+      onUpdateMcqOption: _updateMcqOption,
+      onUpdateTheory: _updateTheory,
+      onUpdateSubjective: _updateSubjective,
+      onDeleteMcq: _deleteMcq,
+      onDeleteTheory: _deleteTheory,
+      onDeleteSubjective: _deleteSubjective,
+      onShowUpgradeRequired: _showUpgradeRequiredDialog,
+      onShowReferences: _showReferencesSheet,
+      onRegenerateHomework: _handleRegenerateHomework,
+      isRegeneratingHomework: _isRegeneratingHomework,
+      visibleVocabulary: _visibleVocabulary,
+      visibleMaterials: _visibleMaterials,
+      visibleSuggestedImages: _visibleSuggestedImages,
+      onShowVisibleSections: _showVisibleSectionsSheet,
+      topicText: _topicController.text,
+      subject: _subject,
+      classLevel: _classLevel,
+      week: _week,
+      visibleReferences: _visibleReferences,
+      references: _references,
+      schemeReference: _buildSchemeReference(),
+      onAddReference: (text) {
+        setState(() {
+          _references.add({'text': text, 'origin': 'teacher'});
+        });
+      },
+      onRemoveReference: (index) {
+        setState(() {
+          if (index >= 0 && index < _references.length) {
+            _references.removeAt(index);
+          }
+        });
+      },
+      mcqCount: _mcqCount,
+      theoryCount: _theoryCount,
+      onMcqCountChanged: (v) => setState(() => _mcqCount = v),
+      onTheoryCountChanged: (v) => setState(() => _theoryCount = v),
+      includeDiagrams: _includeDiagrams,
+      onIncludeDiagramsChanged: (v) =>
+          setState(() => _includeDiagrams = v),
+      draftTopicOptions: _draftTopicOptions,
+      selectedDraftTopic: _selectedDraftTopic,
+      isLoadingDraftTopics: _isLoadingDraftTopics,
+      onDraftTopicChanged: _handleDraftTopicChanged,
+      onDraftGenerate: _handleDraftGenerate,
+      onCreateNewTopic: _handleCreateNewTopic,
+      allowManualTopic: allowManualTopic,
+      topicController: _topicController,
+      onTopicChanged: (_) => setState(() {}),
+    );
+  }
+
   @override
   void dispose() {
     _topicController.dispose();
@@ -3038,12 +3331,19 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         body: Center(child: CircularProgressIndicator()),
       );
     }
-    final cs = Theme.of(context).colorScheme;
-    final theme = Theme.of(context);
-    final showDraftGenerateTab =
-        widget.lessonId != null && _lessonStatus == 'draft' && !_hasGenerated;
-    final showEntryScreen =
-        widget.lessonId == null && !_hasGenerated && !_isGenerating;
+    final cs = _lessonEditorStitchColorScheme(
+      Theme.of(context).colorScheme,
+    );
+    final theme = ThemeData(
+      colorScheme: cs,
+      textTheme: GoogleFonts.workSansTextTheme(
+        Theme.of(context).textTheme,
+      ),
+    );
+    // Every lesson without generated content starts in the deck's Generate
+    // slide, including a brand-new lesson. Keeping this as the single entry
+    // path avoids bringing back the legacy form while an AI request is active.
+    final showDraftGenerateTab = !_hasGenerated;
 
     // Read-only summary of the stored structured assessment questions.
     final questionSummary =
@@ -3074,13 +3374,11 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ── Navigation Drawer (tablet+; never on Android) ────────
-          if (PlatformHelper.shouldShowSidebar(context))
-            _NavigationDrawer(
+          if (MediaQuery.sizeOf(context).width >= 768)
+            _StitchLessonSidebar(
               cs: cs,
               theme: theme,
-              isOpen: _editorSidebarOpen,
-              onToggleSidebar: () => setState(
-                  () => _editorSidebarOpen = !_editorSidebarOpen),
+              teacherName: _teacherName,
             ),
 
           // ── Main Content ────────────────────────────────────────
@@ -3088,27 +3386,46 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             child: Column(
               children: [
                 // ── Mobile Header ──────────────────────────────────
-                _MobileHeader(
+                _StitchLessonHeader(
                   cs: cs,
                   theme: theme,
-                  offlineCreditBalance: _offlineCreditBalance,
                   undoController: _undoController,
+                  contextLine: showDraftGenerateTab
+                      ? [
+                          _subject,
+                          _classLevel,
+                          'Week $_week',
+                        ].where((value) => value.trim().isNotEmpty).join(' • ')
+                      : null,
+                  deckIndicatorTotal: _visibleDeckCardKeys.length,
+                  deckIndicatorIndex: _activeDeckIndex,
                 ),
 
                 // ── Tool Header (static, above scrollable) ─────────
-                _ToolHeader(
-                  cs: cs,
-                  theme: theme,
-                  onToggleSidebar: () => setState(
-                      () => _editorSidebarOpen = !_editorSidebarOpen),
-                  sidebarOpen: _editorSidebarOpen,
-                  undoController: _undoController,
-                ),
+                // The responsive Stitch header above owns desktop and phone
+                // header rendering.
 
                 // ── Scrollable content ─────────────────────────────
                 Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
+                  child: Stack(
+                    children: [
+                      AnimatedPadding(
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeOut,
+                        padding: EdgeInsets.only(
+                          bottom: (_hasGenerated &&
+                                  _isUnlocked &&
+                                  (_showLessonActions || _showReviewSection))
+                              ? ((MediaQuery.sizeOf(context).height -
+                                          MediaQuery.viewInsetsOf(context)
+                                              .bottom -
+                                          96)
+                                      .clamp(96.0, 520.0))
+                                  .toDouble()
+                              : 0,
+                        ),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
                       final isWide = constraints.maxWidth >= 1024;
                       if (showDraftGenerateTab) {
                         return Padding(
@@ -3117,29 +3434,36 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                 ? AppTheme.spacingMarginTablet
                                 : AppTheme.spacingMarginMobile,
                           ),
-                          child: Align(
-                            alignment: Alignment.topCenter,
-                            child: _DraftGenerateTab(
-                              cs: cs,
-                              theme: theme,
-                              options: _draftTopicOptions,
-                              selectedOption: _selectedDraftTopic,
-                              isLoadingOptions: _isLoadingDraftTopics,
-                              isGenerating: _isGenerating,
-                              isOnline: _isOnline,
-                              onChanged: _handleDraftTopicChanged,
-                              onGenerate: _handleDraftGenerate,
-                              onCreateNewTopic: _handleCreateNewTopic,
+                          child: SizedBox.expand(
+                            child: _buildPreviewColumn(
+                              cs,
+                              theme,
+                              questionSummary,
+                              showGenerateSlide: true,
+                              allowManualTopic: widget.lessonId == null,
                             ),
                           ),
                         );
                       }
-                      return SingleChildScrollView(
-
-                        physics: (Platform.isAndroid || Platform.isIOS)
-                            ? const BouncingScrollPhysics()
-                            : null,
-                        child: Column(
+                      return Padding(
+                        padding: EdgeInsets.all(
+                          isWide
+                              ? AppTheme.spacingMarginTablet
+                              : AppTheme.spacingMarginMobile,
+                        ),
+                        child: SizedBox.expand(
+                          child: _buildPreviewColumn(
+                            cs,
+                            theme,
+                            questionSummary,
+                            showGenerateSlide: false,
+                            allowManualTopic: false,
+                          ),
+                        ),
+                      );
+                      /* Legacy editor layout retained below for reference
+                         while the deck is the active generated-editor shell.
+                      return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             // ── Entry screen for new blank lessons ──
@@ -3464,101 +3788,16 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                       ),
                                       if (_hasGenerated) ...[
                                         const SizedBox(height: 24),
-                                        // 3. Preview Generated Content
+                                        // 3. Generated lesson preview
                                         SizedBox(
                                           height: _hasGenerated && constraints.maxHeight.isFinite
                                               ? constraints.maxHeight
                                               : null,
-                                          child: _PreviewColumn(
-                                            key: ValueKey(_previewRevision),
-                                            cs: cs,
-                                            theme: theme,
-                                            hasGenerated: _hasGenerated,
-                                            isUnlocked: _isUnlocked,
-                                            isOnline: _isOnline,
-                                            subscriptionTier: _subscriptionTier,
-                                            remainingDailyPreviews: _remainingDailyPreviews,
-                                            isRegenerating: _isRegenerating,
-                                            diagramResults: _diagramResults,
-                                            isGeneratingDiagrams: _isGeneratingDiagrams,
-                                            generatingDiagramIndex: _generatingDiagramIndex,
-                                            onRegenerateDiagram: _handleDiagramAction,
-                                            onActiveCardChanged: _onPreviewCardChanged,
-                                            objectivesController: _objectivesController,
-                                            vocabularyController: _vocabularyController,
-                                            materialsController: _materialsController,
-                                            presentationController: _presentationController,
-                                            introController: _introController,
-                                            devController: _devController,
-                                            conclusionController: _conclusionController,
-                                            assessmentController: _assessmentController,
-                                            homeworkController: _homeworkController,
-                                            questionSummary: questionSummary,
-                                            reviewController: _reviewController,
-                                            undoController: _undoController,
-                                            onUnlock: _handleUnlock,
-                                            onSave: _saveLesson,
-                                            onDiscard: _discard,
-                                            onRegenerate: _isUnlocked ? _handleRegenerate : null,
-                                            onRegenerateReferences:
-                                                _isUnlocked && _lessonId != null
-                                                    ? _handleRegenerateReferences
-                                                    : null,
-                                            isRegeneratingReferences:
-                                                _isRegeneratingReferences,
-                                            referencesRegenerationError:
-                                                _referencesRegenerationError,
-                                            lessonStatus: _lessonStatus,
-                                            onMarkCompleted: _isUnlocked ? _handleMarkCompleted : null,
-                                            onToggleComplete: _isUnlocked ? _handleToggleComplete : null,
-                                            onExportPdf: _hasGenerated ? _handleExportPdf : null,
-                                            isExporting: _isExporting,
-                                            assessmentFormat: _assessmentFormat,
-                                            onAssessmentFormatChanged: (v) => setState(() => _assessmentFormat = v),
-                                            mcqs: _mcqs,
-                                            theoryQuestions: _theoryQuestions,
-                                            subjectiveQuestions: _subjectiveQuestions,
-                                            droppedQuestionCount: _droppedQuestionCount,
-                                            onUpdateMcq: _updateMcq,
-                                            onUpdateMcqOption: _updateMcqOption,
-                                            onUpdateTheory: _updateTheory,
-                                            onUpdateSubjective: _updateSubjective,
-                                            onDeleteMcq: _deleteMcq,
-                                            onDeleteTheory: _deleteTheory,
-                                            onDeleteSubjective: _deleteSubjective,
-                                            onShowUpgradeRequired: _showUpgradeRequiredDialog,
-                                            onShowReferences: _showReferencesSheet,
-                                            onRegenerateHomework: _handleRegenerateHomework,
-                                            isRegeneratingHomework: _isRegeneratingHomework,
-                                            visibleVocabulary: _visibleVocabulary,
-                                            visibleMaterials: _visibleMaterials,
-                                            visibleSuggestedImages: _visibleSuggestedImages,
-                                            onShowVisibleSections: _showVisibleSectionsSheet,
-                                            topicText: _topicController.text,
-                                            subject: _subject,
-                                            classLevel: _classLevel,
-                                            week: _week,
-                                            visibleReferences: _visibleReferences,
-                                            references: _references,
-                                            schemeReference: _buildSchemeReference(),
-                                            onAddReference: (text) {
-                                              setState(() {
-                                                _references.add({'text': text, 'origin': 'teacher'});
-                                              });
-                                            },
-                                            onRemoveReference: (index) {
-                                              setState(() {
-                                                if (index >= 0 && index < _references.length) {
-                                                  _references.removeAt(index);
-                                                }
-                                              });
-                                            },
-                                            mcqCount: _mcqCount,
-                                            theoryCount: _theoryCount,
-                                            onMcqCountChanged: (v) => setState(() => _mcqCount = v),
-                                            onTheoryCountChanged: (v) => setState(() => _theoryCount = v),
-                                            includeDiagrams: _includeDiagrams,
-                                            onIncludeDiagramsChanged: (v) => setState(() => _includeDiagrams = v),
+                                          child: _buildPreviewColumn(
+                                            cs,
+                                            theme,
+                                            questionSummary,
+                                            showGenerateSlide: false,
                                           ),
                                         ),
                                      ],
@@ -3567,50 +3806,42 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                               ),
                             ),
                           ],
+                        ); */
+                          },
                         ),
-                      );
-                    },
+                      ),
+                      if (_hasGenerated &&
+                          _isUnlocked &&
+                          MediaQuery.sizeOf(context).width < 768 &&
+                          _activeCardKey != _LessonEditorCardKey.generate)
+                        _buildStitchLessonFab(),
+                    ],
                   ),
                 ),
 
                 // ── Floating Action Area ───────────────────────────
+                // ── Bottom Navigation (mobile) ─────────────────────
                 if (_hasGenerated &&
                     _isUnlocked &&
+                    MediaQuery.sizeOf(context).width >= 768 &&
                     _activeCardKey != _LessonEditorCardKey.generate)
-                  _FloatingActionArea(
+                  _StitchLessonFooter(
                     cs: cs,
                     theme: theme,
-                    showReviewSection: _showReviewSection,
-                    showActionMenu: _showLessonActions,
-                    onToggleReview: _toggleReviewSectionForActiveCard,
-                    onToggleActions: () => setState(
-                      () => _showLessonActions = !_showLessonActions,
+                    onRegenerate: () => _handleRegenerate(
+                      skipConfirmation: true,
+                      cardKey: _regenerationCardKey ?? _activeCardKey,
+                      diagramIndex:
+                          _regenerationDiagramIndex ?? _activeDiagramIndex,
                     ),
-                    reviewController: _reviewController,
-                    isRegenerating: _isRegenerating,
-                    onRegenerate: _isUnlocked &&
-                            (_activeCardKey == _LessonEditorCardKey.lessonNotes ||
-                                _activeCardKey == _LessonEditorCardKey.assessment ||
-                                _activeCardKey == _LessonEditorCardKey.references ||
-                                (_activeCardKey == _LessonEditorCardKey.diagrams &&
-                                    _activeDiagramIndex != null))
-                        ? () => _handleRegenerate(
-                              skipConfirmation: true,
-                              cardKey: _regenerationCardKey ?? _activeCardKey,
-                              diagramIndex: _regenerationDiagramIndex ??
-                                  _activeDiagramIndex,
-                            )
-                        : null,
-                    lessonStatus: _lessonStatus,
-                    onMarkCompleted: _isUnlocked && _lessonStatus != 'completed'
+                    onMarkCompleted: _lessonStatus != 'completed'
                         ? _handleMarkCompleted
                         : null,
+                    lessonStatus: _lessonStatus,
                     onExportPdf: _handleExportPdf,
                     isExporting: _isExporting,
                     onShowVisibleSections: _showVisibleSectionsSheet,
                   ),
-
-                // ── Bottom Navigation (mobile) ─────────────────────
                 _BottomNavBar(cs: cs, theme: theme),
               ],
             ),
@@ -3691,6 +3922,182 @@ class _BottomNavDef {
 // ═══════════════════════════════════════════════════════════════════════
 // Navigation Drawer (tablet+)
 // ═══════════════════════════════════════════════════════════════════════
+/// Fixed Stitch navigation rail used by the responsive Lesson Editor shell.
+/// The older collapsible drawer remains available to other legacy callers,
+/// but this screen uses the fixed rail so desktop and tablet share one layout.
+class _StitchLessonSidebar extends StatelessWidget {
+  final ColorScheme cs;
+  final ThemeData theme;
+  final String teacherName;
+
+  const _StitchLessonSidebar({
+    required this.cs,
+    required this.theme,
+    required this.teacherName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.sizeOf(context).width < 768) {
+      return const SizedBox.shrink();
+    }
+    return SizedBox(
+      width: 256,
+      child: Container(
+        decoration: BoxDecoration(
+          color: cs.surface,
+          border: Border(right: BorderSide(color: cs.outlineVariant)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'ClassAI',
+                    style: theme.textTheme.displaySmall?.copyWith(
+                      color: cs.primary,
+                      fontWeight: FontWeight.w700,
+                      height: 1.1,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Nigerian Academic Partner',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 48),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: _LessonEditorScreenState._navItems.map((item) {
+                  final foreground = item.isActive
+                      ? cs.onSecondaryContainer
+                      : cs.onSurfaceVariant;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                    child: Semantics(
+                      button: true,
+                      selected: item.isActive,
+                      label: item.label,
+                      child: Tooltip(
+                        message: item.label,
+                        child: Material(
+                          color: item.isActive
+                              ? cs.secondaryContainer
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(16),
+                          child: InkWell(
+                            onTap: () => _navigateTo(context, item.label),
+                            borderRadius: BorderRadius.circular(16),
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                minHeight: AppTheme.touchTarget,
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(item.icon, size: 22, color: foreground),
+                                    const SizedBox(width: 16),
+                                    Text(
+                                      item.label,
+                                      style: theme.textTheme.labelLarge?.copyWith(
+                                        color: foreground,
+                                        fontWeight: item.isActive
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              height: 1,
+              color: cs.outlineVariant,
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: cs.surfaceContainerHigh,
+                    child: Text(
+                      _initials(teacherName),
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: cs.onSurfaceVariant,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      teacherName.trim().isEmpty ? 'Teacher' : teacherName,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: cs.onSurface,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty);
+    final values = parts.take(2).map((part) => part[0].toUpperCase()).join();
+    return values.isEmpty ? 'T' : values;
+  }
+
+  void _navigateTo(BuildContext context, String label) {
+    switch (label) {
+      case 'Home':
+        context.go('/');
+        break;
+      case 'Lessons':
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted) context.go('/lessons');
+        });
+        break;
+      case 'Exams':
+        context.go('/exams');
+        break;
+    }
+  }
+}
+
 class _NavigationDrawer extends StatelessWidget {
   final ColorScheme cs;
   final ThemeData theme;
@@ -3895,6 +4302,180 @@ class _NavigationDrawer extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════
 // Mobile Header
 // ═══════════════════════════════════════════════════════════════════════
+class _StitchLessonHeader extends StatelessWidget {
+  final ColorScheme cs;
+  final ThemeData theme;
+  final UndoHistoryController undoController;
+  final String? contextLine;
+  final int? deckIndicatorIndex;
+  final int? deckIndicatorTotal;
+
+  const _StitchLessonHeader({
+    required this.cs,
+    required this.theme,
+    required this.undoController,
+    this.contextLine,
+    this.deckIndicatorIndex,
+    this.deckIndicatorTotal,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 768;
+        return Container(
+          width: double.infinity,
+          padding: EdgeInsets.fromLTRB(
+            compact ? 12 : 32,
+            compact ? 8 : 16,
+            compact ? 12 : 32,
+            compact ? 8 : 16,
+          ),
+          decoration: BoxDecoration(
+            color: cs.surface,
+            border: Border(
+              bottom: BorderSide(
+                color: cs.outlineVariant.withValues(alpha: 0.35),
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              Semantics(
+                button: true,
+                label: 'Back',
+                child: compact
+                    ? IconButton(
+                        onPressed: () => Navigator.of(context).maybePop(),
+                        icon: const Icon(Icons.arrow_back_rounded),
+                        tooltip: 'Back',
+                        style: IconButton.styleFrom(
+                          minimumSize: const Size(
+                            AppTheme.touchTarget,
+                            AppTheme.touchTarget,
+                          ),
+                          foregroundColor: cs.onSurfaceVariant,
+                        ),
+                      )
+                    : TextButton.icon(
+                        onPressed: () => Navigator.of(context).maybePop(),
+                        icon: const Icon(Icons.arrow_back_rounded),
+                        label: const Text('Back'),
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(
+                            AppTheme.touchTarget,
+                            AppTheme.touchTarget,
+                          ),
+                          foregroundColor: cs.onSurfaceVariant,
+                        ),
+                      ),
+              ),
+              SizedBox(width: compact ? 4 : 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Lesson Editor',
+                      overflow: TextOverflow.ellipsis,
+                      style: (compact
+                              ? theme.textTheme.titleLarge
+                              : theme.textTheme.headlineLarge)
+                          ?.copyWith(
+                            color: cs.onSurface,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    if (contextLine != null && contextLine!.isNotEmpty)
+                      Text(
+                        contextLine!,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (!compact &&
+                  deckIndicatorTotal != null &&
+                  deckIndicatorTotal! > 0) ...[
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(deckIndicatorTotal!, (index) {
+                    return Container(
+                      width: 8,
+                      height: 8,
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      decoration: BoxDecoration(
+                        color: index == deckIndicatorIndex
+                            ? cs.primary
+                            : cs.surfaceContainerHighest,
+                        shape: BoxShape.circle,
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(width: 20),
+              ],
+              _buildHistoryButtons(),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildHistoryButtons() {
+    return ValueListenableBuilder<UndoHistoryValue>(
+      valueListenable: undoController,
+      builder: (context, value, child) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Semantics(
+              button: true,
+              enabled: value.canUndo,
+              label: 'Undo',
+              child: IconButton(
+                onPressed: value.canUndo ? undoController.undo : null,
+                icon: const Icon(Icons.undo_rounded),
+                tooltip: 'Undo (Ctrl+Z)',
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(
+                    AppTheme.touchTarget,
+                    AppTheme.touchTarget,
+                  ),
+                  foregroundColor: cs.onSurfaceVariant,
+                ),
+              ),
+            ),
+            Semantics(
+              button: true,
+              enabled: value.canRedo,
+              label: 'Redo',
+              child: IconButton(
+                onPressed: value.canRedo ? undoController.redo : null,
+                icon: const Icon(Icons.redo_rounded),
+                tooltip: 'Redo (Ctrl+Shift+Z)',
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(
+                    AppTheme.touchTarget,
+                    AppTheme.touchTarget,
+                  ),
+                  foregroundColor: cs.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class _MobileHeader extends StatelessWidget {
   final ColorScheme cs;
   final ThemeData theme;
@@ -4211,6 +4792,8 @@ class _LinkedSchemeBanner extends ConsumerWidget {
 class _DraftGenerateTab extends StatelessWidget {
   final ColorScheme cs;
   final ThemeData theme;
+  final String subject;
+  final String classLevel;
   final List<_DraftTopicOption> options;
   final _DraftTopicOption? selectedOption;
   final bool isLoadingOptions;
@@ -4219,10 +4802,15 @@ class _DraftGenerateTab extends StatelessWidget {
   final ValueChanged<_DraftTopicOption?> onChanged;
   final VoidCallback onGenerate;
   final VoidCallback onCreateNewTopic;
+  final bool allowManualTopic;
+  final TextEditingController? topicController;
+  final ValueChanged<String>? onTopicChanged;
 
   const _DraftGenerateTab({
     required this.cs,
     required this.theme,
+    required this.subject,
+    required this.classLevel,
     required this.options,
     required this.selectedOption,
     required this.isLoadingOptions,
@@ -4231,6 +4819,9 @@ class _DraftGenerateTab extends StatelessWidget {
     required this.onChanged,
     required this.onGenerate,
     required this.onCreateNewTopic,
+    this.allowManualTopic = false,
+    this.topicController,
+    this.onTopicChanged,
   });
 
   @override
@@ -4244,7 +4835,10 @@ class _DraftGenerateTab extends StatelessWidget {
           ...options.map(
             (option) => DropdownMenuItem<_DraftTopicOption>(
               value: option,
-              child: Text(option.topic, overflow: TextOverflow.ellipsis),
+              child: Text(
+                '${option.topic} • Week ${option.week}',
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
           const DropdownMenuItem<_DraftTopicOption>(
@@ -4252,12 +4846,14 @@ class _DraftGenerateTab extends StatelessWidget {
             child: Text('Create new topic'),
           ),
         ];
-        final canGenerate = selected != null &&
-            !selected.isCreateNew &&
+        final manualTopic = topicController?.text.trim() ?? '';
+        final canGenerate = ((selected != null && !selected.isCreateNew) ||
+                (allowManualTopic && manualTopic.isNotEmpty)) &&
             isOnline &&
             !isGenerating;
 
-        return Container(
+        return Center(
+          child: Container(
           constraints: const BoxConstraints(maxWidth: 760),
           decoration: BoxDecoration(
             color: cs.surface,
@@ -4274,53 +4870,136 @@ class _DraftGenerateTab extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 CircleAvatar(
-                  radius: compact ? 30 : 40,
+                  radius: compact ? 30 : 56,
                   backgroundColor: cs.primary.withValues(alpha: 0.10),
                   child: Icon(
                     Icons.auto_awesome_rounded,
                     color: cs.primary,
-                    size: compact ? 36 : 48,
+                    size: compact ? 36 : 64,
                   ),
                 ),
-                SizedBox(height: compact ? 16 : 24),
+                SizedBox(height: compact ? 16 : 32),
                 Text(
                   'Generate Lesson Content',
                   textAlign: TextAlign.center,
-                  style: theme.textTheme.headlineSmall?.copyWith(
+                  style: theme.textTheme.headlineLarge?.copyWith(
+                    fontSize: compact ? 28 : 40,
+                    height: 1.2,
                     fontWeight: FontWeight.w700,
                     color: cs.onSurface,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 Text(
                   'Choose a draft topic and let AI create the lesson content for your students.',
                   textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium?.copyWith(
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    fontSize: compact ? 16 : 18,
+                    height: 1.5,
                     color: cs.onSurfaceVariant,
                   ),
                 ),
-                SizedBox(height: compact ? 16 : 24),
-                DropdownButtonFormField<_DraftTopicOption>(
-                  value: selected,
-                  items: items,
-                  onChanged: isLoadingOptions
-                      ? null
-                      : (value) {
-                          if (value?.isCreateNew == true) {
-                            onCreateNewTopic();
-                          } else {
-                            onChanged(value);
-                          }
-                        },
-                  decoration: InputDecoration(
-                    labelText: 'LESSON TOPIC',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                SizedBox(height: compact ? 16 : 32),
+                if (options.isNotEmpty) ...[
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
                     ),
-                    filled: true,
-                    fillColor: cs.surfaceBright,
+                    decoration: BoxDecoration(
+                      color: cs.primaryContainer.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                      border: Border.all(
+                        color: cs.primary.withValues(alpha: 0.18),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.info_outline_rounded,
+                          size: 20,
+                          color: cs.primary,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Draft topics for $subject • $classLevel. '
+                            'The current lesson is included when applicable.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: cs.onPrimaryContainer,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                  DropdownButtonFormField<_DraftTopicOption>(
+                    value: selected,
+                    items: items,
+                    onChanged: isLoadingOptions
+                        ? null
+                        : (value) {
+                            if (value?.isCreateNew == true) {
+                              onCreateNewTopic();
+                            } else {
+                              onChanged(value);
+                            }
+                          },
+                    decoration: InputDecoration(
+                      labelText: 'LESSON TOPIC',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                      ),
+                      filled: true,
+                      fillColor: cs.surfaceBright,
+                    ),
+                  ),
+                ],
+                if (allowManualTopic)
+                  TextField(
+                    controller: topicController,
+                    textCapitalization: TextCapitalization.sentences,
+                    onChanged: onTopicChanged,
+                    decoration: InputDecoration(
+                      labelText: 'LESSON TOPIC',
+                      hintText: 'e.g. Introduction to Fractions',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                      ),
+                      filled: true,
+                      fillColor: cs.surfaceBright,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: compact ? 16 : 24,
+                        vertical: compact ? 16 : 24,
+                      ),
+                    ),
+                  )
+                else if (options.isEmpty)
+                  DropdownButtonFormField<_DraftTopicOption>(
+                    value: selected,
+                    items: items,
+                    onChanged: isLoadingOptions
+                        ? null
+                        : (value) {
+                            if (value?.isCreateNew == true) {
+                              onCreateNewTopic();
+                            } else {
+                              onChanged(value);
+                            }
+                          },
+                    decoration: InputDecoration(
+                      labelText: 'LESSON TOPIC',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                      ),
+                      filled: true,
+                      fillColor: cs.surfaceBright,
+                    ),
+                  ),
                 if (!isLoadingOptions && options.isEmpty) ...[
                   const SizedBox(height: 8),
                   Align(
@@ -4333,10 +5012,10 @@ class _DraftGenerateTab extends StatelessWidget {
                     ),
                   ),
                 ],
-                SizedBox(height: compact ? 16 : 24),
+                SizedBox(height: compact ? 16 : 32),
                 SizedBox(
                   width: double.infinity,
-                  height: AppTheme.touchTarget,
+                  height: compact ? 56 : 80,
                   child: FilledButton.icon(
                     onPressed: canGenerate ? onGenerate : null,
                     icon: isGenerating
@@ -4362,6 +5041,7 @@ class _DraftGenerateTab extends StatelessWidget {
               ],
             ),
           ),
+          ),
         );
       },
     );
@@ -4374,9 +5054,12 @@ class _PreviewColumn extends StatefulWidget {
   final ColorScheme cs;
   final ThemeData theme;
   final bool hasGenerated;
+  final bool showGenerateSlide;
+  final bool isGenerating;
   final bool isUnlocked;
   final bool isOnline;
   final String subscriptionTier;
+  final List<String> assessmentAllowedTiers;
   final int remainingDailyPreviews;
   final bool isRegenerating;
   final List<Map<String, dynamic>> diagramResults;
@@ -4400,7 +5083,6 @@ class _PreviewColumn extends StatefulWidget {
   final TextEditingController? reviewController;
   final UndoHistoryController undoController;
   final VoidCallback onUnlock;
-  final VoidCallback onSave;
   final VoidCallback? onMarkCompleted;
   final VoidCallback onDiscard;
   final VoidCallback? onRegenerate;
@@ -4456,15 +5138,27 @@ class _PreviewColumn extends StatefulWidget {
   // 4-panel tab: include diagram toggle moved from Advanced Settings
   final bool includeDiagrams;
   final ValueChanged<bool>? onIncludeDiagramsChanged;
+  final List<_DraftTopicOption> draftTopicOptions;
+  final _DraftTopicOption? selectedDraftTopic;
+  final bool isLoadingDraftTopics;
+  final ValueChanged<_DraftTopicOption?>? onDraftTopicChanged;
+  final VoidCallback? onDraftGenerate;
+  final VoidCallback? onCreateNewTopic;
+  final bool allowManualTopic;
+  final TextEditingController topicController;
+  final ValueChanged<String>? onTopicChanged;
 
   const _PreviewColumn({
     super.key,
     required this.cs,
     required this.theme,
     required this.hasGenerated,
+    this.showGenerateSlide = false,
+    this.isGenerating = false,
     required this.isUnlocked,
     required this.isOnline,
     required this.subscriptionTier,
+    required this.assessmentAllowedTiers,
     this.remainingDailyPreviews = 10,
     this.isRegenerating = false,
     this.diagramResults = const [],
@@ -4488,7 +5182,6 @@ class _PreviewColumn extends StatefulWidget {
     this.reviewController,
     required this.undoController,
     required this.onUnlock,
-    required this.onSave,
     this.onMarkCompleted,
     required this.onDiscard,
     this.onRegenerate,
@@ -4541,6 +5234,15 @@ class _PreviewColumn extends StatefulWidget {
     // 4-panel tab: diagram toggle
     this.includeDiagrams = false,
     this.onIncludeDiagramsChanged,
+    this.draftTopicOptions = const [],
+    this.selectedDraftTopic,
+    this.isLoadingDraftTopics = false,
+    this.onDraftTopicChanged,
+    this.onDraftGenerate,
+    this.onCreateNewTopic,
+    this.allowManualTopic = false,
+    required this.topicController,
+    this.onTopicChanged,
   });
 
   @override
@@ -4563,6 +5265,9 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   void initState() {
     super.initState();
     _deckController = PageController();
+    _activeCardKey = widget.showGenerateSlide
+        ? _LessonEditorCardKey.generate
+        : _LessonEditorCardKey.lessonNotes;
   }
 
   @override
@@ -4572,7 +5277,9 @@ class _PreviewColumnState extends State<_PreviewColumn> {
       _deckController.dispose();
       _deckController = PageController();
       _activeDeckIndex = 0;
-      _activeCardKey = _LessonEditorCardKey.lessonNotes;
+      _activeCardKey = widget.showGenerateSlide
+          ? _LessonEditorCardKey.generate
+          : _LessonEditorCardKey.lessonNotes;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) widget.onActiveCardChanged?.call(_activeCardKey);
       });
@@ -4648,6 +5355,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   }
 
   List<_LessonEditorCardKey> _cardKeys(bool includeReferences) => [
+        if (widget.showGenerateSlide) _LessonEditorCardKey.generate,
         _LessonEditorCardKey.lessonNotes,
         _LessonEditorCardKey.assessment,
         _LessonEditorCardKey.diagrams,
@@ -4673,20 +5381,30 @@ class _PreviewColumnState extends State<_PreviewColumn> {
         .toList();
   }
 
-  void _goToDeckSlide(int index) {
+  void _setActiveDeckSlide(int index) {
     final keys = _cardKeys(widget.visibleReferences);
     if (index < 0 || index >= keys.length) return;
+    if (index == _activeDeckIndex && _activeCardKey == keys[index]) return;
     setState(() {
       _activeDeckIndex = index;
       _activeCardKey = keys[index];
     });
     widget.onActiveCardChanged?.call(_activeCardKey);
+  }
+
+  void _goToDeckSlide(int index) {
+    final keys = _cardKeys(widget.visibleReferences);
+    if (index < 0 || index >= keys.length || index == _activeDeckIndex) {
+      return;
+    }
     if (_deckController.hasClients) {
       _deckController.animateToPage(
         index,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeInOut,
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
       );
+    } else {
+      _setActiveDeckSlide(index);
     }
   }
 
@@ -4696,6 +5414,8 @@ class _PreviewColumnState extends State<_PreviewColumn> {
 
   Widget _buildDeckArrow({required bool isPrevious}) {
     final keys = _cardKeys(widget.visibleReferences);
+    final compact = MediaQuery.sizeOf(context).width < 768;
+    final arrowSize = compact ? 48.0 : 56.0;
     final canMove = isPrevious
         ? _activeDeckIndex > 0
         : _activeDeckIndex < keys.length - 1;
@@ -4716,61 +5436,200 @@ class _PreviewColumnState extends State<_PreviewColumn> {
           isPrevious ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
         ),
         style: IconButton.styleFrom(
-          minimumSize: const Size(AppTheme.touchTarget, AppTheme.touchTarget),
+          minimumSize: Size(arrowSize, arrowSize),
           foregroundColor: cs.onSurface,
-          backgroundColor: cs.surfaceContainerLow,
+          backgroundColor: cs.surfaceContainerHigh,
+          side: BorderSide(color: cs.outlineVariant),
+          shape: const CircleBorder(),
         ),
       ),
     );
   }
 
-  Widget _buildDeckIndicator() {
-    final keys = _cardKeys(widget.visibleReferences);
-    final total = keys.length;
-    if (total == 0) return const SizedBox.shrink();
+  int _contentCardNumber(_LessonEditorCardKey key) {
+    final contentKeys = _cardKeys(widget.visibleReferences)
+        .where((item) => item != _LessonEditorCardKey.generate)
+        .toList();
+    final index = contentKeys.indexOf(key);
+    // Stitch treats Generate as slide 1 even after the generated content is
+    // open, so the visible content cards are numbered 2, 3, and 4.
+    return index < 0 ? 1 : index + 2;
+  }
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          'Card ${_activeDeckIndex + 1} of $total',
-          style: theme.textTheme.labelMedium?.copyWith(
-            color: cs.onSurfaceVariant,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(total, (index) {
-            final selected = index == _activeDeckIndex;
-            return Semantics(
-              button: true,
-              label: 'Go to ${_tabLabels[index]}',
-              selected: selected,
-              child: InkWell(
-                onTap: () => _onTabTapped(index),
-                borderRadius: BorderRadius.circular(24),
-                child: SizedBox(
-                  width: AppTheme.touchTarget,
-                  height: AppTheme.touchTarget,
-                  child: Center(
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      width: selected ? 22 : 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: selected ? cs.primary : cs.outlineVariant,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+  int _stitchCardTotal() {
+    final keys = _cardKeys(widget.visibleReferences);
+    return keys.contains(_LessonEditorCardKey.generate)
+        ? keys.length
+        : keys.length + 1;
+  }
+
+  Widget _buildCardMeta({
+    required String label,
+    required String title,
+    required _LessonEditorCardKey cardKey,
+    IconData? icon,
+    bool showProgress = false,
+  }) {
+    final total = _stitchCardTotal();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final heading = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: cs.primary.withValues(alpha: 0.13),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: cs.primary.withValues(alpha: 0.2),
                     ),
                   ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (icon != null) ...[
+                        Icon(icon, size: 18, color: cs.primary),
+                        const SizedBox(width: 8),
+                      ],
+                      Text(
+                        label,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          fontSize: 16,
+                          height: 1.5,
+                          color: cs.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(height: 16),
+                Text(
+                  title,
+                  style: (cardKey == _LessonEditorCardKey.lessonNotes
+                          ? theme.textTheme.displaySmall
+                          : theme.textTheme.headlineLarge)
+                      ?.copyWith(
+                    fontSize: constraints.maxWidth < 520
+                        ? 24
+                        : cardKey == _LessonEditorCardKey.lessonNotes
+                            ? 40
+                            : 32,
+                    height: 1.2,
+                    color: cs.onSurface,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+          );
+          final counterHasBorder =
+              cardKey != _LessonEditorCardKey.assessment;
+          final counter = Container(
+              padding: counterHasBorder
+                  ? const EdgeInsets.symmetric(horizontal: 16, vertical: 10)
+                  : EdgeInsets.zero,
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(24),
+                border: counterHasBorder
+                    ? Border.all(color: cs.outlineVariant)
+                    : null,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'Card ${_contentCardNumber(cardKey)} of $total',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontSize: 16,
+                      height: 1.5,
+                      color: cs.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (showProgress) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: List.generate(total, (index) {
+                        final selected =
+                            index == _contentCardNumber(cardKey) - 1;
+                        return Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            width: selected ? 32 : 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: selected ? cs.primary : cs.surfaceVariant,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: selected
+                                  ? [
+                                      BoxShadow(
+                                        color: cs.primary.withValues(alpha: 0.4),
+                                        blurRadius: 10,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ],
+                ],
               ),
             );
-          }),
-        ),
-      ],
+          if (constraints.maxWidth < 520) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                heading,
+                const SizedBox(height: 16),
+                Align(alignment: Alignment.centerRight, child: counter),
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: heading),
+              const SizedBox(width: 16),
+              counter,
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildContentCard({required Widget child}) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: cs.surfaceContainer,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.7)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.22),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      padding: EdgeInsets.all(
+        MediaQuery.sizeOf(context).width < 768 ? 16 : 32,
+      ),
+      child: child,
     );
   }
 
@@ -4779,6 +5638,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   bool get isUnlocked => widget.isUnlocked;
   bool get isOnline => widget.isOnline;
   String get subscriptionTier => widget.subscriptionTier;
+  List<String> get assessmentAllowedTiers => widget.assessmentAllowedTiers;
   int get remainingDailyPreviews => widget.remainingDailyPreviews;
   bool get isRegenerating => widget.isRegenerating;
   List<Map<String, dynamic>> get diagramResults => widget.diagramResults;
@@ -4803,7 +5663,6 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   TextEditingController? get reviewController => widget.reviewController;
   UndoHistoryController get undoController => widget.undoController;
   VoidCallback get onUnlock => widget.onUnlock;
-  VoidCallback get onSave => widget.onSave;
   VoidCallback? get onMarkCompleted => widget.onMarkCompleted;
   VoidCallback? get onRegenerate => widget.onRegenerate;
   String get lessonStatus => widget.lessonStatus;
@@ -4832,10 +5691,84 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   bool get visibleSuggestedImages => widget.visibleSuggestedImages;
   VoidCallback? get onShowVisibleSections => widget.onShowVisibleSections;
 
+  Widget _buildLockedPreviewOverlay() {
+    return Container(
+      color: Colors.black.withValues(alpha: 0.68),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+            border: Border.all(color: cs.tertiary.withValues(alpha: 0.45)),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black54,
+                blurRadius: 28,
+                offset: Offset(0, 12),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.lock_rounded, color: cs.tertiary, size: 32),
+              const SizedBox(height: 12),
+              Text(
+                'Locked — Preview only',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: cs.onSurface,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Review the generated lesson content. Unlock to edit, save, or regenerate.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                  height: 1.5,
+                ),
+              ),
+              if (onShowReferences != null) ...[
+                const SizedBox(height: 12),
+                TextButton.icon(
+                  onPressed: onShowReferences,
+                  icon: const Icon(Icons.menu_book_outlined, size: 18),
+                  label: const Text('View References'),
+                  style: TextButton.styleFrom(foregroundColor: cs.tertiary),
+                ),
+              ],
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                height: AppTheme.touchTarget,
+                child: FilledButton.icon(
+                  onPressed: onUnlock,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: cs.tertiary,
+                    foregroundColor: cs.onTertiary,
+                  ),
+                  icon: const Icon(Icons.lock_open_rounded),
+                  label: Text(_buildUnlockLabel()),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Empty state (before generation)
-    if (!widget.hasGenerated) {
+    // Empty state for a screen that has no deck yet. Draft lessons use the
+    // deck below so Generate remains the first slide before the content tabs.
+    if (!widget.hasGenerated && !widget.showGenerateSlide) {
       return Container(
         decoration: BoxDecoration(
           color: cs.surface,
@@ -4847,33 +5780,6 @@ class _PreviewColumnState extends State<_PreviewColumn> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Preview header
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(
-                    color: cs.outlineVariant.withValues(alpha: 0.2),
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.visibility_rounded, color: cs.primary, size: 20),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      'Preview Generated Content',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: cs.onSurface,
-                        overflow: TextOverflow.clip,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
             // Empty body
             SizedBox(
               height: 300,
@@ -4912,45 +5818,12 @@ class _PreviewColumnState extends State<_PreviewColumn> {
           color: cs.outlineVariant.withValues(alpha: 0.3),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Stack(
+        clipBehavior: Clip.antiAlias,
         children: [
-          // Preview header
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: cs.outlineVariant.withValues(alpha: 0.2),
-                ),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.visibility_rounded, color: cs.primary, size: 20),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    'Preview Generated Content',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: cs.onSurface,
-                      overflow: TextOverflow.clip,
-                    ),
-                  ),
-                ),
-                // Stage 4: choose which optional sections appear.
-                if (onShowVisibleSections != null)
-                  IconButton(
-                    onPressed: onShowVisibleSections,
-                    icon: const Icon(Icons.settings_rounded, size: 20),
-                    color: cs.onSurfaceVariant,
-                    tooltip: 'Visible sections',
-                    visualDensity: VisualDensity.compact,
-                  ),
-              ],
-            ),
-          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
           // ── Locked overlay (generated but not yet unlocked) ─────
           if (hasGenerated && !isUnlocked)
             Padding(
@@ -5027,7 +5900,9 @@ class _PreviewColumnState extends State<_PreviewColumn> {
             ),
 
           // ── Unlocked banner ─────────────────────────────────────
-          if (hasGenerated && isUnlocked)
+          if (hasGenerated &&
+              isUnlocked &&
+              _activeCardKey == _LessonEditorCardKey.diagrams)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               child: Container(
@@ -5061,14 +5936,16 @@ class _PreviewColumnState extends State<_PreviewColumn> {
             ),
 
           // ── Numbered content tabs ─────────────────────────────
-          if (hasGenerated)
+          if (hasGenerated || widget.showGenerateSlide)
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Tab chips
+                  if (_activeCardKey == _LessonEditorCardKey.diagrams) ...[
+                  // Tab chips are part of the diagrams card chrome in the
+                  // Stitch reference, rather than shared deck chrome.
                   Focus(
                     focusNode: _tabFocusNode,
                     onKeyEvent: _handleKeyEvent,
@@ -5107,9 +5984,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                       },
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  _buildDeckIndicator(),
-                  const SizedBox(height: 8),
+                  ],
                   // The viewport is bounded by the parent SizedBox. Each
                   // card keeps its own vertical scroll for long content.
                   Expanded(
@@ -5121,16 +5996,32 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                             controller: _deckController,
                             itemCount: _cardKeys(visibleReferences).length,
                             onPageChanged: (i) {
-                              final keys = _cardKeys(visibleReferences);
-                              if (i < 0 || i >= keys.length) return;
-                              setState(() {
-                                _activeDeckIndex = i;
-                                _activeCardKey = keys[i];
-                              });
-                              widget.onActiveCardChanged?.call(_activeCardKey);
+                              _setActiveDeckSlide(i);
                             },
                             itemBuilder: (context, index) {
                               switch (_cardKeys(visibleReferences)[index]) {
+                                case _LessonEditorCardKey.generate:
+                                  return _DraftGenerateTab(
+                                    cs: cs,
+                                    theme: theme,
+                                    subject: widget.subject,
+                                    classLevel: widget.classLevel,
+                                    options: widget.draftTopicOptions,
+                                    selectedOption: widget.selectedDraftTopic,
+                                    isLoadingOptions:
+                                        widget.isLoadingDraftTopics,
+                                    isGenerating: widget.isGenerating,
+                                    isOnline: isOnline,
+                                    onChanged:
+                                        widget.onDraftTopicChanged ?? (_) {},
+                                    onGenerate:
+                                        widget.onDraftGenerate ?? () {},
+                                    onCreateNewTopic:
+                                        widget.onCreateNewTopic ?? () {},
+                                    allowManualTopic: widget.allowManualTopic,
+                                    topicController: widget.topicController,
+                                    onTopicChanged: widget.onTopicChanged,
+                                  );
                                 case _LessonEditorCardKey.lessonNotes:
                                   return _buildLessonNoteTab(readOnly: !isUnlocked);
                                 case _LessonEditorCardKey.assessment:
@@ -5139,8 +6030,6 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                                   return _buildDiagramsTab(readOnly: !isUnlocked);
                                 case _LessonEditorCardKey.references:
                                   return _buildReferencesTab();
-                                case _LessonEditorCardKey.generate:
-                                  return const SizedBox.shrink();
                               }
                             },
                           ),
@@ -5165,25 +6054,9 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                 ],
                 ),
               ),
-            ),          // Save footer
-          if (hasGenerated)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton(
-                  onPressed: onSave,
-                  style: FilledButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 32),
-                    minimumSize: const Size(100, AppTheme.touchTarget),
-                  ),
-                  child: const Text('Save'),
-                ),
-              ),
             ),
+            ],
+          ),
         ],
       ),
     );
@@ -5306,7 +6179,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
       styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
         p: theme.textTheme.bodyLarge?.copyWith(
           color: cs.onSurface,
-          height: 1.5,
+          height: 1.55,
         ),
         h1: theme.textTheme.headlineSmall?.copyWith(
           color: cs.onSurface,
@@ -5326,7 +6199,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
         h1Padding: const EdgeInsets.only(top: 16, bottom: 8),
         h2Padding: const EdgeInsets.only(top: 14, bottom: 6),
         h3Padding: const EdgeInsets.only(top: 12, bottom: 4),
-        blockSpacing: 8,
+        blockSpacing: 12,
         listBullet: theme.textTheme.bodyLarge?.copyWith(
           color: cs.onSurface,
         ),
@@ -5339,81 +6212,287 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   // 4-panel tab content builders
   // ═══════════════════════════════════════════════════════════════════════
 
-  Widget _buildLessonNoteTab({required bool readOnly}) {
-    final cs = widget.cs;
-    final theme = widget.theme;
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Topic / context summary
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(12),
+  String _stripInlineDocumentMarkup(String value) {
+    return value
+        .replaceAll(RegExp(r'\[([^\]]+)\]\([^)]*\)'), r'$1')
+        .replaceAll(RegExp(r'(\*\*|__|`|~~)'), '')
+        .replaceFirst(RegExp(r'^>\s*'), '')
+        .trim();
+  }
+
+  Widget _renderReadableLockedContent(String content) {
+    final children = <Widget>[];
+    for (final rawLine in content.replaceAll('\r\n', '\n').split('\n')) {
+      final line = rawLine.trim();
+      if (line.isEmpty) {
+        children.add(const SizedBox(height: 8));
+        continue;
+      }
+      final heading = RegExp(r'^#{1,6}\s+(.+)$').firstMatch(line);
+      if (heading != null) {
+        children.add(
+          Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 4),
+            child: Text(
+              _stripInlineDocumentMarkup(heading.group(1)!),
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: cs.onSurface,
+                fontWeight: FontWeight.w700,
+                height: 1.3,
+              ),
             ),
-            child: Column(
+          ),
+        );
+        continue;
+      }
+      final bullet = RegExp(r'^[-*+]\s+(.+)$').firstMatch(line);
+      final numbered = RegExp(r'^(\d+)[.)]\s+(.+)$').firstMatch(line);
+      if (bullet != null || numbered != null) {
+        final marker = numbered?.group(1) ?? '•';
+        final text = _stripInlineDocumentMarkup(
+          numbered?.group(2) ?? bullet!.group(1)!,
+        );
+        children.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  widget.topicText,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: cs.onSurface,
+                SizedBox(
+                  width: numbered == null ? 18 : 24,
+                  child: Text(
+                    numbered == null ? '•' : '$marker.',
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: cs.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  '${widget.subject} \u00b7 ${widget.classLevel} \u00b7 Week ${widget.week}',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: cs.onSurfaceVariant,
+                Expanded(
+                  child: Text(
+                    text,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: cs.onSurface,
+                      height: 1.5,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          // Objectives
-          _buildCollapsibleSection(
-            title: 'Objectives',
-            controller: widget.objectivesController,
-            readOnly: readOnly,
-            undoController: readOnly ? null : widget.undoController,
+        );
+        continue;
+      }
+      children.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            _stripInlineDocumentMarkup(line),
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: cs.onSurface,
+              height: 1.55,
+            ),
           ),
-          // Vocabulary (if visible)
-          if (widget.visibleVocabulary)
-            _buildCollapsibleSection(
-              title: 'Vocabulary',
-              controller: widget.vocabularyController,
-              readOnly: readOnly,
-              undoController: readOnly ? null : widget.undoController,
+        ),
+      );
+    }
+    if (children.isEmpty) return const SizedBox.shrink();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
+    );
+  }
+
+  Widget _buildLessonNoteTab({required bool readOnly}) {
+    final contextLabel = '${widget.subject} • ${widget.classLevel}';
+    return _buildContentCard(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildCardMeta(
+              label: contextLabel,
+              title: 'Presentation',
+              cardKey: _LessonEditorCardKey.lessonNotes,
             ),
-          // Materials (if visible)
-          if (widget.visibleMaterials)
-            _buildCollapsibleSection(
-              title: 'Materials',
-              controller: widget.materialsController,
+            _buildLessonField(
+              title: 'Objectives',
+              controller: widget.objectivesController,
               readOnly: readOnly,
-              undoController: readOnly ? null : widget.undoController,
+              minLines: 4,
             ),
-          // Presentation
-          _buildPresentationSection(readOnly: readOnly),
+            if (widget.visibleVocabulary)
+              _buildCollapsibleSection(
+                title: 'Vocabulary',
+                controller: widget.vocabularyController,
+                readOnly: readOnly,
+                undoController: readOnly ? null : widget.undoController,
+              ),
+            if (widget.visibleMaterials)
+              _buildCollapsibleSection(
+                title: 'Materials',
+                controller: widget.materialsController,
+                readOnly: readOnly,
+                undoController: readOnly ? null : widget.undoController,
+              ),
+            _buildPresentationSection(readOnly: readOnly),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLessonField({
+    required String title,
+    required TextEditingController controller,
+    required bool readOnly,
+    int minLines = 4,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            title,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: cs.onSurface,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (readOnly)
+            _buildLessonParagraphContent(controller.text)
+          else
+            _buildDocumentTextField(
+              controller,
+              undoController: undoController,
+              minLines: minLines,
+            ),
         ],
       ),
+    );
+  }
+
+  Widget _buildLessonParagraphContent(String content) {
+    if (content.trim().isEmpty) {
+      return Text(
+        'No content yet.',
+        style: theme.textTheme.bodyLarge?.copyWith(
+          color: cs.onSurfaceVariant,
+          height: 1.55,
+        ),
+      );
+    }
+
+    final blocks = <Widget>[];
+    final normalLines = <String>[];
+    final keyLines = <String>[];
+    var inKeyExample = false;
+
+    void flushNormal() {
+      final text = normalLines.join('\n').trim();
+      if (text.isNotEmpty) {
+        blocks.add(_renderMarkdownContent(text));
+      }
+      normalLines.clear();
+    }
+
+    void flushKeyExample() {
+      final text = keyLines.join('\n').trim();
+      if (text.isNotEmpty) {
+        blocks.add(
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(12),
+              border: Border(
+                left: BorderSide(color: cs.primary, width: 4),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Key Example',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    color: cs.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _renderMarkdownContent(text),
+              ],
+            ),
+          ),
+        );
+      }
+      keyLines.clear();
+    }
+
+    for (final line in content.replaceAll('\r\n', '\n').split('\n')) {
+      final trimmed = line.trim();
+      final keyHeader = trimmed
+          .replaceFirst(RegExp(r'^#{1,6}\s*'), '')
+          .toLowerCase()
+          .startsWith('key example');
+      if (keyHeader) {
+        flushNormal();
+        flushKeyExample();
+        inKeyExample = true;
+        final colon = trimmed.indexOf(':');
+        if (colon >= 0 && colon + 1 < trimmed.length) {
+          keyLines.add(trimmed.substring(colon + 1).trim());
+        }
+      } else if (inKeyExample && trimmed.isEmpty) {
+        flushKeyExample();
+        inKeyExample = false;
+      } else if (inKeyExample) {
+        keyLines.add(line);
+      } else {
+        normalLines.add(line);
+      }
+    }
+    if (inKeyExample) {
+      flushKeyExample();
+    } else {
+      flushNormal();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < blocks.length; i++) ...[
+          if (i > 0) const SizedBox(height: 12),
+          blocks[i],
+        ],
+      ],
     );
   }
 
   Widget _buildAssessmentTab({required bool readOnly}) {
     final cs = widget.cs;
     final theme = widget.theme;
-    final tierBlocked = widget.subscriptionTier.toLowerCase() != 'standard' &&
-        widget.subscriptionTier.toLowerCase() != 'elite';
-    return SingleChildScrollView(
-      child: Column(
+    final tierBlocked = !assessmentAllowedTiers
+        .map((tier) => tier.trim().toLowerCase())
+        .contains(widget.subscriptionTier.trim().toLowerCase());
+    return _buildContentCard(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+            _buildCardMeta(
+              label: 'Assessment',
+              title: '${widget.classLevel} ${widget.subject}',
+              cardKey: _LessonEditorCardKey.assessment,
+              showProgress: true,
+            ),
           if (tierBlocked) ...[
             // Tier-locked state
             Container(
@@ -5422,6 +6501,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
               decoration: BoxDecoration(
                 color: cs.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: cs.outlineVariant),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -5488,7 +6568,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
               value: widget.assessmentFormat,
               onChanged: widget.onAssessmentFormatChanged ?? (v) {},
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             // Question counts
             Text(
               'Question Counts',
@@ -5561,13 +6641,26 @@ class _PreviewColumnState extends State<_PreviewColumn> {
             _buildHomeworkSection(),
           ],
         ],
+        ),
       ),
     );
   }
 
   Widget _buildDiagramsTab({required bool readOnly}) {
-    return SingleChildScrollView(
-      child: _buildSuggestedImagesSection(context, readOnly: readOnly),
+    return _buildContentCard(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildSuggestedImagesSection(
+              context,
+              readOnly: readOnly,
+              collapsible: false,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -5576,17 +6669,38 @@ class _PreviewColumnState extends State<_PreviewColumn> {
     final theme = widget.theme;
     final readOnly = !widget.isUnlocked;
     // Build priority-ordered list
-    final displayItems = <({String text, String origin, bool removable, int? storedIndex})>[];
+    final displayItems = <({
+      String text,
+      String origin,
+      String metadata,
+      String relatedTopics,
+      bool removable,
+      int? storedIndex,
+    })>[];
     final schemeRef = widget.schemeReference?.trim() ?? '';
     if (schemeRef.isNotEmpty) {
-      displayItems.add((text: schemeRef, origin: 'scheme', removable: false, storedIndex: null));
+      displayItems.add((
+        text: schemeRef,
+        origin: 'scheme',
+        metadata: '',
+        relatedTopics: '',
+        removable: false,
+        storedIndex: null,
+      ));
     }
     var storedIdx = 0;
     for (final item in widget.references) {
       final text = (item['text'] ?? '').toString().trim();
       if (text.isEmpty) continue;
       final origin = (item['origin'] ?? 'ai').toString();
-      displayItems.add((text: text, origin: origin, removable: !readOnly, storedIndex: storedIdx));
+      displayItems.add((
+        text: text,
+        origin: origin,
+        metadata: _referenceMetadataText(item),
+        relatedTopics: _referenceRelatedTopicsText(item),
+        removable: !readOnly,
+        storedIndex: storedIdx,
+      ));
       storedIdx++;
     }
     String originLabel(String origin) {
@@ -5597,13 +6711,23 @@ class _PreviewColumnState extends State<_PreviewColumn> {
         default: return 'AI-generated';
       }
     }
-    return SingleChildScrollView(
-      child: Column(
+    return _buildContentCard(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+            _buildCardMeta(
+              label: 'References',
+              title: 'Source References',
+              cardKey: _LessonEditorCardKey.references,
+            ),
           Text(
             'Source references used for this lesson.',
-            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: cs.onSurfaceVariant,
+              height: 1.5,
+            ),
           ),
           if (!readOnly && onRegenerateReferences != null) ...[
             const SizedBox(height: 8),
@@ -5627,6 +6751,11 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                 ),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(0, AppTheme.touchTarget),
+                  foregroundColor: cs.primary,
+                  side: BorderSide(color: cs.primary),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
             ),
@@ -5646,22 +6775,33 @@ class _PreviewColumnState extends State<_PreviewColumn> {
               decoration: BoxDecoration(
                 color: cs.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: cs.outlineVariant),
               ),
-              child: Text(
-                'No source references available yet.',
-                style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+              child: Column(
+                children: [
+                  Icon(Icons.menu_book_outlined,
+                      size: 28, color: cs.onSurfaceVariant),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No source references available yet.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
             )
           else
             ...displayItems.map((item) {
               return Container(
                 width: double.infinity,
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: cs.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
+                  border: Border.all(color: cs.outlineVariant),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -5672,7 +6812,33 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(item.text, style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurface)),
+                          Text(
+                            item.text,
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              color: cs.onSurface,
+                              height: 1.5,
+                            ),
+                          ),
+                          if (item.metadata.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              item.metadata,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                          if (item.relatedTopics.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              item.relatedTopics,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -5711,6 +6877,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
             ),
           ],
         ],
+        ),
       ),
     );
   }
@@ -5746,13 +6913,16 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                 ),
                 const SizedBox(height: 6),
                 if (readOnly)
-                  _renderMarkdownContent(controller.text)
+                  _buildLessonParagraphContent(controller.text)
                 else
                   _buildDocumentTextField(
                     controller,
                     undoController: undoController,
                     minLines: 3,
                     hintText: '$label content...',
+                    highlightKeyExample: controller.text
+                        .toLowerCase()
+                        .contains('key example'),
                   ),
               ],
             ),
@@ -5762,20 +6932,188 @@ class _PreviewColumnState extends State<_PreviewColumn> {
     );
   }
 
+  Widget _buildAssessmentMcqCard(int index) {
+    final question = mcqs[index];
+    final options = Map<String, dynamic>.from(
+      question['options'] as Map? ?? const <String, dynamic>{},
+    );
+    final correct = question['correct']?.toString() ?? 'A';
+    final optionKeys = ['A', 'B', 'C', 'D'];
+
+    InputDecoration fieldDecoration({String? label}) {
+      return InputDecoration(
+        labelText: label,
+        labelStyle: theme.textTheme.labelMedium?.copyWith(
+          color: cs.onSurfaceVariant,
+        ),
+        filled: true,
+        fillColor: cs.surface,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: cs.outlineVariant),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: cs.outlineVariant),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: cs.primary, width: 2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      );
+    }
+
+    Widget optionButton(String key) {
+      final selected = key == correct;
+      final optionText = options[key]?.toString() ?? '';
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: isUnlocked
+                ? () => onUpdateMcq?.call(index, 'correct', key)
+                : null,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 80),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: selected ? cs.surfaceContainerHigh : cs.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: selected ? cs.primary : cs.outlineVariant,
+                  width: selected ? 2 : 1,
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: selected ? cs.primary : Colors.transparent,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: selected ? cs.primary : cs.outlineVariant,
+                        width: 2,
+                      ),
+                    ),
+                    child: Text(
+                      key,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: selected ? cs.onPrimary : cs.onSurfaceVariant,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: TextFormField(
+                      initialValue: optionText,
+                      undoController: undoController,
+                      readOnly: !isUnlocked,
+                      onChanged: (value) =>
+                          onUpdateMcqOption?.call(index, key, value),
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: cs.onSurface,
+                        height: 1.45,
+                      ),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        disabledBorder: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      key: ValueKey(question),
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  '${index + 1}',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: cs.onPrimaryContainer,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextFormField(
+                  initialValue: question['question']?.toString() ?? '',
+                  undoController: undoController,
+                  maxLines: 3,
+                  onChanged: (value) => onUpdateMcq?.call(index, 'question', value),
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: cs.onSurface,
+                    height: 1.45,
+                  ),
+                  decoration: fieldDecoration(label: 'Question'),
+                ),
+              ),
+              if (onDeleteMcq != null)
+                IconButton(
+                  onPressed: () => onDeleteMcq!(index),
+                  icon: const Icon(Icons.delete_outline_rounded),
+                  color: cs.error,
+                  tooltip: 'Delete question',
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Select the correct answer',
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: cs.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...optionKeys.map(optionButton),
+        ],
+      ),
+    );
+  }
+
   List<Widget> _buildQuestionCards() {
     final widgets = <Widget>[];
     // MCQs
     for (int i = 0; i < mcqs.length; i++) {
-      widgets.add(McqQuestionCard(
-        index: i,
-        mcq: mcqs[i],
-        cs: cs,
-        theme: theme,
-        undoController: undoController,
-        onUpdateMcq: onUpdateMcq,
-        onUpdateMcqOption: onUpdateMcqOption,
-        onDelete: onDeleteMcq != null ? () => onDeleteMcq!(i) : null,
-      ));
+      widgets.add(_buildAssessmentMcqCard(i));
     }
     // Theory
     for (int i = 0; i < theoryQuestions.length; i++) {
@@ -5878,18 +7216,31 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   Widget _buildSuggestedImagesSection(
     BuildContext context, {
     bool readOnly = false,
+    bool collapsible = true,
   }) {
-    return _DocumentSection(
-      title: 'Suggested Images',
-      icon: Icons.image_outlined,
-      initiallyExpanded: true,
-      child: diagramResults.isEmpty
+    final content = diagramResults.isEmpty
           ? Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Text(
-                'No images generated yet.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: cs.onSurfaceVariant,
+              padding: const EdgeInsets.all(20),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: cs.outlineVariant),
+                ),
+                child: Column(
+                  children: [
+                    Icon(Icons.image_not_supported_outlined,
+                        size: 28, color: cs.onSurfaceVariant),
+                    const SizedBox(height: 8),
+                    Text(
+                      'No suggested images yet.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             )
@@ -5910,39 +7261,39 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                     child: Card(
                       margin: EdgeInsets.zero,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                        borderRadius: BorderRadius.circular(16),
                         side: BorderSide(
-                          color: cs.outlineVariant.withValues(alpha: 0.4),
+                          color: cs.outlineVariant,
                         ),
                       ),
-                      color: cs.surfaceBright,
+                      color: cs.surfaceContainerLow,
                       clipBehavior: Clip.antiAlias,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                             child: Text(
                               'Suggestion ${index + 1}',
                               style: theme.textTheme.labelMedium?.copyWith(
                                 fontWeight: FontWeight.w600,
                                 color: cs.onSurfaceVariant,
+                                letterSpacing: 1.2,
                               ),
                             ),
                           ),
                           if (desc.isNotEmpty)
                             Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                               child: Text(
                                 desc,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: cs.onSurfaceVariant,
+                                style: theme.textTheme.bodyLarge?.copyWith(
+                                  color: cs.onSurface,
+                                  height: 1.5,
                                 ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 16),
                           if (imageUrl != null)
                             GestureDetector(
                               onTap: () => _openDiagramViewer(
@@ -5974,13 +7325,11 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                           // Generate button for this suggestion (hidden in
                           // the read-only locked preview).
                           if (!readOnly && onRegenerateDiagram != null) ...[
-                            const Divider(height: 1),
                             Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                               child: SizedBox(
                                 width: double.infinity,
-                                height: 40,
+                                height: 48,
                                 child: isElite
                                     ? FilledButton.icon(
                                         onPressed: !isGeneratingDiagrams &&
@@ -6006,7 +7355,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                                               : imageUrl == null
                                                   ? 'Generate Image ${index + 1}'
                                                   : 'Regenerate Image ${index + 1}',
-                                          style: theme.textTheme.labelSmall
+                                          style: theme.textTheme.labelLarge
                                               ?.copyWith(
                                             fontWeight: FontWeight.w600,
                                           ),
@@ -6038,8 +7387,37 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                     ),
                   );
                 }).toList(),
-              ],
-            ),
+            ],
+          );
+    if (!collapsible) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.image_outlined, size: 18, color: cs.onSurface),
+              const SizedBox(width: 8),
+              Text(
+                'Suggested Images',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: cs.onSurface,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Divider(height: 1, color: cs.outlineVariant),
+          const SizedBox(height: 16),
+          content,
+        ],
+      );
+    }
+    return _DocumentSection(
+      title: 'Suggested Images',
+      icon: Icons.image_outlined,
+      initiallyExpanded: true,
+      child: content,
     );
   }
 
@@ -6057,7 +7435,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                     title == 'Vocabulary' ||
                     title == 'Materials'
                 ? _renderBulletedList(controller.text)
-                : _renderMarkdownContent(controller.text))
+                : _buildLessonParagraphContent(controller.text))
           : _buildDocumentTextField(
               controller,
               undoController: undoController,
@@ -6072,8 +7450,9 @@ class _PreviewColumnState extends State<_PreviewColumn> {
     UndoHistoryController? undoController,
     int minLines = 4,
     String? hintText,
+    bool highlightKeyExample = false,
   }) {
-    return TextFormField(
+    final field = TextFormField(
       controller: controller,
       undoController: undoController,
       maxLines: null,
@@ -6083,22 +7462,39 @@ class _PreviewColumnState extends State<_PreviewColumn> {
         height: 1.5,
       ),
       decoration: InputDecoration(
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          borderSide: BorderSide(color: cs.outlineVariant),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          borderSide: BorderSide(
-            color: cs.outlineVariant.withValues(alpha: 0.5),
-          ),
-        ),
+        border: highlightKeyExample
+            ? InputBorder.none
+            : OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                borderSide: BorderSide(color: cs.outlineVariant),
+              ),
+        enabledBorder: highlightKeyExample
+            ? InputBorder.none
+            : OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                borderSide: BorderSide(
+                  color: cs.outlineVariant.withValues(alpha: 0.5),
+                ),
+              ),
+        focusedBorder: highlightKeyExample ? InputBorder.none : null,
         contentPadding: const EdgeInsets.all(12),
         hintText: hintText ?? 'No content yet.',
         hintStyle: theme.textTheme.bodySmall?.copyWith(
           color: cs.onSurfaceVariant.withValues(alpha: 0.5),
         ),
       ),
+    );
+    if (!highlightKeyExample) return field;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border(
+          left: BorderSide(color: cs.primary, width: 4),
+        ),
+      ),
+      child: field,
     );
   }
 
@@ -6145,7 +7541,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  _renderMarkdownContent(text),
+                  _renderReadableLockedContent(text),
                 ],
               ),
             );
@@ -6160,7 +7556,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
               title == 'Vocabulary' ||
               title == 'Materials')
           ? _renderBulletedList(content)
-          : _renderMarkdownContent(content),
+          : _renderReadableLockedContent(content),
     );
   }
 
@@ -6211,8 +7607,15 @@ class _DocumentSectionState extends State<_DocumentSection> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final theme = Theme.of(context);
+    final cs = _lessonEditorStitchColorScheme(
+      Theme.of(context).colorScheme,
+    );
+    final theme = ThemeData(
+      colorScheme: cs,
+      textTheme: GoogleFonts.workSansTextTheme(
+        Theme.of(context).textTheme,
+      ),
+    );
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -6221,31 +7624,34 @@ class _DocumentSectionState extends State<_DocumentSection> {
         InkWell(
           onTap: () => setState(() => _expanded = !_expanded),
           borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-            child: Row(
-              children: [
-                if (widget.icon != null) ...[
-                  Icon(widget.icon, size: 18, color: cs.onSurfaceVariant),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(
-                  child: Text(
-                    widget.title,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: cs.onSurface,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: AppTheme.touchTarget),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+              child: Row(
+                children: [
+                  if (widget.icon != null) ...[
+                    Icon(widget.icon, size: 18, color: cs.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                  ],
+                  Expanded(
+                    child: Text(
+                      widget.title,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: cs.onSurface,
+                      ),
                     ),
                   ),
-                ),
-                Icon(
-                  _expanded
-                      ? Icons.keyboard_arrow_up
-                      : Icons.keyboard_arrow_down,
-                  size: 22,
-                  color: cs.onSurfaceVariant,
-                ),
-              ],
+                  Icon(
+                    _expanded
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    size: 22,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -6523,17 +7929,35 @@ class _ReferencesSheetState extends State<_ReferencesSheet> {
 
     // Build the display list in priority order. Only stored items
     // (AI-generated / teacher-entered) are removable.
-    final displayItems =
-        <({String text, String origin, bool removable, int? storedIndex})>[];
+    final displayItems = <({
+      String text,
+      String origin,
+      String metadata,
+      String relatedTopics,
+      bool removable,
+      int? storedIndex,
+    })>[];
     final schemeRef = widget.schemeReference?.trim() ?? '';
     final topicRef = widget.topicReference?.trim() ?? '';
     if (schemeRef.isNotEmpty) {
-      displayItems.add(
-          (text: schemeRef, origin: 'scheme', removable: false, storedIndex: null));
+      displayItems.add((
+        text: schemeRef,
+        origin: 'scheme',
+        metadata: '',
+        relatedTopics: '',
+        removable: false,
+        storedIndex: null,
+      ));
     }
     if (topicRef.isNotEmpty) {
-      displayItems.add(
-          (text: topicRef, origin: 'teacher', removable: false, storedIndex: null));
+      displayItems.add((
+        text: topicRef,
+        origin: 'teacher',
+        metadata: '',
+        relatedTopics: '',
+        removable: false,
+        storedIndex: null,
+      ));
     }
     var storedIndex = 0;
     for (final item in _items) {
@@ -6543,6 +7967,8 @@ class _ReferencesSheetState extends State<_ReferencesSheet> {
       displayItems.add((
         text: text,
         origin: origin,
+        metadata: _referenceMetadataText(item),
+        relatedTopics: _referenceRelatedTopicsText(item),
         removable: !widget.readOnly,
         storedIndex: storedIndex,
       ));
@@ -6632,6 +8058,26 @@ class _ReferencesSheetState extends State<_ReferencesSheet> {
                                 color: cs.onSurface,
                               ),
                             ),
+                            if (item.metadata.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                item.metadata,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
+                            if (item.relatedTopics.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                item.relatedTopics,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: 6),
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -6783,7 +8229,7 @@ class _BottomNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (!Platform.isAndroid && constraints.maxWidth >= 768) return const SizedBox.shrink();
+        if (constraints.maxWidth >= 768) return const SizedBox.shrink();
         return Container(
           padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
           decoration: BoxDecoration(
@@ -6811,7 +8257,9 @@ class _BottomNavBar extends StatelessWidget {
               },
               items: _LessonEditorScreenState._bottomNavItems.map((item) {
                 return BottomNavigationBarItem(
-                  icon: item.isActive
+                  icon: Tooltip(
+                    message: item.label,
+                    child: item.isActive
                       ? Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 20,
@@ -6852,6 +8300,7 @@ class _BottomNavBar extends StatelessWidget {
                           size: 22,
                           color: cs.onSurfaceVariant,
                         ),
+                  ),
                   label: '',
                 );
               }).toList(),
@@ -6883,6 +8332,444 @@ class _BottomNavBar extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════
 // Floating Action Area (fixed at bottom)
 // ═══════════════════════════════════════════════════════════════════════
+class _StitchLessonFooter extends StatelessWidget {
+  final ColorScheme cs;
+  final ThemeData theme;
+  final VoidCallback? onRegenerate;
+  final VoidCallback? onMarkCompleted;
+  final String lessonStatus;
+  final VoidCallback? onExportPdf;
+  final bool isExporting;
+  final VoidCallback? onShowVisibleSections;
+
+  const _StitchLessonFooter({
+    required this.cs,
+    required this.theme,
+    this.onRegenerate,
+    this.onMarkCompleted,
+    required this.lessonStatus,
+    this.onExportPdf,
+    this.isExporting = false,
+    this.onShowVisibleSections,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final labelStyle = theme.textTheme.labelLarge?.copyWith(
+      fontWeight: FontWeight.w600,
+    );
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainer,
+          border: Border(top: BorderSide(color: cs.outlineVariant)),
+        ),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              FilledButton.tonalIcon(
+                onPressed: onRegenerate,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Regenerate'),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, AppTheme.touchTarget),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  textStyle: labelStyle,
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                onPressed: onMarkCompleted,
+                icon: const Icon(Icons.check_circle_rounded),
+                label: Text(
+                  lessonStatus == 'completed' ? 'Completed' : 'Mark Completed',
+                ),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, AppTheme.touchTarget),
+                  backgroundColor: cs.primaryContainer,
+                  foregroundColor: cs.onPrimaryContainer,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  textStyle: labelStyle,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: SizedBox(
+                  height: 32,
+                  child: VerticalDivider(
+                    width: 1,
+                    color: cs.outlineVariant,
+                  ),
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: onExportPdf == null || isExporting
+                    ? null
+                    : onExportPdf,
+                icon: isExporting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.picture_as_pdf_rounded),
+                label: Text(isExporting ? 'Exporting...' : 'Export PDF'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, AppTheme.touchTarget),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  textStyle: labelStyle,
+                ),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: onShowVisibleSections,
+                icon: const Icon(Icons.visibility_rounded),
+                label: const Text('Visible Sections'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, AppTheme.touchTarget),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  textStyle: labelStyle,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StitchLessonFab extends StatelessWidget {
+  final ColorScheme cs;
+  final ThemeData theme;
+  final bool showReviewSection;
+  final bool showActionMenu;
+  final VoidCallback onToggleReview;
+  final VoidCallback onToggleActions;
+  final TextEditingController reviewController;
+  final bool isRegenerating;
+  final VoidCallback? onRegenerate;
+  final VoidCallback? onMarkCompleted;
+  final String lessonStatus;
+  final VoidCallback? onSave;
+  final VoidCallback? onExportPdf;
+  final bool isExporting;
+  final VoidCallback? onShowVisibleSections;
+
+  const _StitchLessonFab({
+    required this.cs,
+    required this.theme,
+    required this.showReviewSection,
+    required this.showActionMenu,
+    required this.onToggleReview,
+    required this.onToggleActions,
+    required this.reviewController,
+    required this.isRegenerating,
+    this.onRegenerate,
+    this.onMarkCompleted,
+    required this.lessonStatus,
+    this.onSave,
+    this.onExportPdf,
+    this.isExporting = false,
+    this.onShowVisibleSections,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final desktop = screenWidth >= 768;
+    final isMobile = !desktop;
+    final menuWidth = screenWidth < 352 ? screenWidth - 32 : 320.0;
+    return SafeArea(
+      top: false,
+      minimum: EdgeInsets.fromLTRB(
+            desktop ? 40 : 16,
+        8,
+        desktop ? 40 : 16,
+        desktop ? 40 : 16,
+      ),
+      child: SizedBox(
+        width: menuWidth,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (showReviewSection || (showActionMenu && !showReviewSection))
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: ((MediaQuery.sizeOf(context).height -
+                              MediaQuery.viewInsetsOf(context).bottom -
+                              (isMobile ? 104 : 96))
+                          .clamp(96.0, 520.0))
+                      .toDouble(),
+                ),
+                child: SingleChildScrollView(
+                  physics: const ClampingScrollPhysics(),
+                  child: showReviewSection
+                      ? _buildReviewPanel()
+                      : _buildActionMenu(),
+                ),
+              ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Semantics(
+                button: true,
+                label: showActionMenu || showReviewSection
+                    ? 'Close lesson actions'
+                    : 'Lesson actions',
+                child: SizedBox(
+                  width: 80,
+                  height: 80,
+                  child: FloatingActionButton(
+                    heroTag: 'lesson-editor-actions',
+                    tooltip: showActionMenu || showReviewSection
+                        ? 'Close lesson actions'
+                        : 'Lesson actions',
+                    onPressed: showReviewSection
+                        ? onToggleReview
+                        : onToggleActions,
+                    child: Icon(
+                      showActionMenu || showReviewSection
+                          ? Icons.close_rounded
+                          : Icons.add_rounded,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReviewPanel() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Feedback for regeneration',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: cs.onSurface,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: onToggleReview,
+                icon: const Icon(Icons.close_rounded),
+                tooltip: 'Close feedback',
+                color: cs.onSurfaceVariant,
+              ),
+            ],
+          ),
+          TextField(
+            controller: reviewController,
+            minLines: 1,
+            maxLines: 3,
+            decoration: InputDecoration(
+              hintText: 'Type feedback to guide regeneration...',
+              filled: true,
+              fillColor: cs.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: cs.outlineVariant),
+              ),
+              contentPadding: const EdgeInsets.all(12),
+            ),
+            style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurface),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: AppTheme.touchTarget,
+            child: FilledButton.icon(
+              onPressed: isRegenerating ? null : onRegenerate,
+              icon: isRegenerating
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh_rounded),
+              label: Text(isRegenerating ? 'Regenerating...' : 'Regenerate'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionMenu() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _actionButton(
+            label: 'Save',
+            icon: Icons.save_rounded,
+            filled: true,
+            onPressed: onSave == null
+                ? null
+                : () {
+                    onToggleActions();
+                    onSave!();
+                  },
+          ),
+          const SizedBox(height: 8),
+          _actionButton(
+            label: 'Regenerate',
+            icon: Icons.refresh_rounded,
+            filled: true,
+            onPressed: onRegenerate == null || isRegenerating
+                ? null
+                : () {
+                    onToggleActions();
+                    onToggleReview();
+                  },
+          ),
+          const SizedBox(height: 8),
+          _actionButton(
+            label: lessonStatus == 'completed'
+                ? 'Completed'
+                : 'Mark Completed',
+            icon: Icons.check_circle_rounded,
+            filled: true,
+            onPressed: onMarkCompleted == null
+                ? null
+                : () {
+                    onToggleActions();
+                    onMarkCompleted!();
+                  },
+          ),
+          const SizedBox(height: 8),
+          _actionButton(
+            label: isExporting ? 'Exporting...' : 'Export PDF',
+            icon: Icons.picture_as_pdf_rounded,
+            onPressed: onExportPdf == null || isExporting
+                ? null
+                : () {
+                    onToggleActions();
+                    onExportPdf!();
+                  },
+          ),
+          const SizedBox(height: 8),
+          _actionButton(
+            label: 'Visible Sections',
+            icon: Icons.visibility_rounded,
+            onPressed: onShowVisibleSections == null
+                ? null
+                : () {
+                    onToggleActions();
+                    onShowVisibleSections!();
+                  },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _actionButton({
+    required String label,
+    required IconData icon,
+    required VoidCallback? onPressed,
+    bool filled = false,
+  }) {
+    final child = Align(
+      alignment: Alignment.centerRight,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 220),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: cs.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: cs.outlineVariant),
+              ),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: cs.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            onPressed: onPressed,
+            tooltip: label,
+            icon: Icon(icon),
+            style: IconButton.styleFrom(
+              minimumSize: const Size(56, 56),
+              backgroundColor: filled ? cs.primary : cs.surfaceContainerHigh,
+              foregroundColor: filled ? cs.onPrimary : cs.onSurface,
+              disabledBackgroundColor: cs.surfaceContainerLow,
+              disabledForegroundColor: cs.onSurfaceVariant,
+              shape: const CircleBorder(),
+            ),
+          ),
+        ],
+      ),
+    );
+    return Semantics(
+      button: true,
+      enabled: onPressed != null,
+      label: label,
+      child: Tooltip(message: label, child: child),
+    );
+  }
+}
+
 class _FloatingActionArea extends StatelessWidget {
   final ColorScheme cs;
   final ThemeData theme;
@@ -7184,9 +9071,9 @@ class _NumberControl extends StatelessWidget {
         Container(
           height: AppTheme.touchTarget,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-            border: Border.all(color: cs.outline),
-            color: cs.surfaceBright,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: cs.outlineVariant),
+            color: cs.surfaceContainerLow,
           ),
           child: Row(
             children: [
@@ -7315,9 +9202,9 @@ class _SegmentedControl extends StatelessWidget {
         Container(
           height: AppTheme.touchTarget,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-            border: Border.all(color: cs.outline),
-            color: cs.surfaceBright,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: cs.outlineVariant),
+            color: cs.surfaceContainerLow,
           ),
           padding: const EdgeInsets.all(4),
           child: Row(
@@ -7335,24 +9222,26 @@ class _SegmentedControl extends StatelessWidget {
               return Expanded(
                 child: InkWell(
                   onTap: () => onChanged(option),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusLg - 2),
+                  borderRadius: BorderRadius.circular(8),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: isSelected
-                          ? cs.secondaryContainer
-                          : Colors.transparent,
+                      color: isSelected ? cs.primary : Colors.transparent,
                       borderRadius:
-                          BorderRadius.circular(AppTheme.radiusLg - 2),
+                          BorderRadius.circular(8),
                     ),
                     alignment: Alignment.center,
-                    child: Text(
-                      option,
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        fontWeight:
-                            isSelected ? FontWeight.w600 : FontWeight.w500,
-                        color: isSelected
-                            ? cs.onSecondaryContainer
-                            : cs.onSurfaceVariant,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        option,
+                        maxLines: 1,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          fontWeight:
+                              isSelected ? FontWeight.w600 : FontWeight.w500,
+                          color: isSelected
+                              ? cs.onPrimary
+                              : cs.onSurfaceVariant,
+                        ),
                       ),
                     ),
                   ),
