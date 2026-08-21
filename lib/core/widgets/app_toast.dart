@@ -230,9 +230,24 @@ void showErrorToast({required BuildContext context, required String message}) {
 
 /// Shows an info toast.
 void showInfoToast({required BuildContext context, required String message}) {
+  final cs = Theme.of(context).colorScheme;
   AppToast.instance.showToast(
     context: context,
     message: message,
     icon: Icons.info_outline,
+    backgroundColor: cs.surfaceContainerHigh,
+    foregroundColor: cs.onSurface,
+  );
+}
+
+/// Shows a successful operation toast using the active theme's positive colors.
+void showSuccessToast({required BuildContext context, required String message}) {
+  final cs = Theme.of(context).colorScheme;
+  AppToast.instance.showToast(
+    context: context,
+    message: message,
+    icon: Icons.check_circle_outline,
+    backgroundColor: cs.secondaryContainer,
+    foregroundColor: cs.onSecondaryContainer,
   );
 }

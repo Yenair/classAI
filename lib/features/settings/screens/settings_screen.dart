@@ -1,7 +1,9 @@
 
 import 'dart:io' ;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:classai/core/widgets/app_toast.dart';
@@ -27,12 +29,28 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  static const _fontScaleKey = 'settings_font_scale';
+  double _fontScale = 0.9;
   String _appVersion = '';
 
   @override
   void initState() {
     super.initState();
     _loadAppVersion();
+    _loadFontScale();
+  }
+
+  Future<void> _loadFontScale() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() => _fontScale = prefs.getDouble(_fontScaleKey) ?? 0.9);
+    }
+  }
+
+  Future<void> _setFontScale(double value) async {
+    setState(() => _fontScale = value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_fontScaleKey, value);
   }
 
   Future<void> _loadAppVersion() async {
@@ -128,6 +146,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  void _handleBack() {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final authData = ref.watch(authProvider);
@@ -137,7 +163,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isWide = MediaQuery.of(context).size.width >= 768;
 
-    return Scaffold(
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): _handleBack,
+      },
+      child: Focus(
+        autofocus: true,
+        child: MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(_fontScale),
+          ),
+          child: Scaffold(
       backgroundColor: cs.surface,
       body: SafeArea(
         child: Row(
@@ -151,7 +187,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               child: Column(
                 children: [
                   // === TopAppBar (mobile + desktop) ===
-                  _buildTopAppBar(cs, textTheme, authData, isWide),
+                  _buildTopAppBar(cs, textTheme, authData, isWide, onBack: _handleBack),
 
                   // === Canvas ===
                   Expanded(
@@ -188,6 +224,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ],
         ),
+      ),
+        ),
+      ),
       ),
     );
   }
@@ -340,7 +379,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // Top App Bar
   // ---------------------------------------------------------------
   Widget _buildTopAppBar(ColorScheme cs, TextTheme textTheme,
-      AuthStateData authData, bool isWide) {
+      AuthStateData authData, bool isWide, {VoidCallback? onBack}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
@@ -353,6 +392,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
       child: Row(
         children: [
+          // Back button (top left)
+          if (onBack != null)
+            IconButton(
+              onPressed: onBack,
+              icon: const Icon(Icons.arrow_back_rounded),
+              color: cs.onSurface,
+              tooltip: 'Back',
+            ),
           // Mobile: avatar
           if (!isWide)
             Container(
@@ -466,6 +513,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 16),
+          Text(
+            'Text size',
+            style: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          Row(
+            children: [
+              const Icon(Icons.text_decrease_rounded, size: 18),
+              Expanded(
+                child: Slider(
+                  value: _fontScale,
+                  min: 0.8,
+                  max: 1.0,
+                  divisions: 4,
+                  label: '${(_fontScale * 100).round()}%',
+                  onChanged: _setFontScale,
+                ),
+              ),
+              const Icon(Icons.text_increase_rounded, size: 18),
+            ],
+          ),
+          const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(

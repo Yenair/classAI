@@ -35,6 +35,44 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
 ColorScheme _lessonEditorStitchColorScheme(ColorScheme base) {
+  // Follow the app's active theme brightness so the editor switches between
+  // a light and a dark palette instead of always rendering a fixed dark one.
+  if (base.brightness == Brightness.light) {
+    return base.copyWith(
+      primary: const Color(0xFF4B53BA),
+      onPrimary: const Color(0xFFFFFFFF),
+      primaryContainer: const Color(0xFF8C94FF),
+      onPrimaryContainer: const Color(0xFF1E258F),
+      secondary: const Color(0xFF4B53BA),
+      onSecondary: const Color(0xFFFFFFFF),
+      secondaryContainer: const Color(0xFFE0E0FF),
+      onSecondaryContainer: const Color(0xFF1E258F),
+      tertiary: const Color(0xFF344EBF),
+      onTertiary: const Color(0xFFFFFFFF),
+      tertiaryContainer: const Color(0xFF5068D9),
+      onTertiaryContainer: const Color(0xFFF8F6FF),
+      error: const Color(0xFFBA1A1A),
+      onError: const Color(0xFFFFFFFF),
+      errorContainer: const Color(0xFFFFDAD6),
+      onErrorContainer: const Color(0xFF93000A),
+      surface: const Color(0xFFF8F9FF),
+      onSurface: const Color(0xFF191C20),
+      surfaceContainerLowest: const Color(0xFFFFFFFF),
+      surfaceContainerLow: const Color(0xFFF2F3F9),
+      surfaceContainer: const Color(0xFFEDEDF3),
+      surfaceContainerHigh: const Color(0xFFE7E8EE),
+      surfaceContainerHighest: const Color(0xFFE1E2E8),
+      surfaceBright: const Color(0xFFF8F9FF),
+      surfaceDim: const Color(0xFFD9DAE0),
+      surfaceVariant: const Color(0xFFE1E2E8),
+      onSurfaceVariant: const Color(0xFF414750),
+      outline: const Color(0xFF727781),
+      outlineVariant: const Color(0xFFC1C7D2),
+      inverseSurface: const Color(0xFF2E3035),
+      inversePrimary: const Color(0xFFA1C9FF),
+      surfaceTint: const Color(0xFF4B53BA),
+    );
+  }
   return base.copyWith(
     primary: const Color(0xFFB8C3FF),
     onPrimary: const Color(0xFF0B267E),
@@ -1974,7 +2012,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       ref.read(offlineCreditStateProvider.notifier).refresh();
 
       if (mounted) {
-        showInfoToast(context: context, message: 'Lesson unlocked!');
+        showSuccessToast(context: context, message: 'Lesson unlocked!');
       }
     } catch (e) {
       if (mounted) {
@@ -2927,7 +2965,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         }
       }
       if (mounted) {
-        showInfoToast(context: context, message: 'Homework regenerated.');
+        showSuccessToast(context: context, message: 'Homework regenerated.');
       }
     } catch (e) {
       if (mounted) {
@@ -3338,7 +3376,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       colorScheme: cs,
       textTheme: GoogleFonts.workSansTextTheme(
         Theme.of(context).textTheme,
-      ),
+      ).apply(fontSizeFactor: 0.9),
     );
     // Every lesson without generated content starts in the deck's Generate
     // slide, including a brand-new lesson. Keeping this as the single entry
@@ -3379,6 +3417,10 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
               cs: cs,
               theme: theme,
               teacherName: _teacherName,
+              isOpen: _editorSidebarOpen,
+              onToggle: () => setState(
+                () => _editorSidebarOpen = !_editorSidebarOpen,
+              ),
             ),
 
           // ── Main Content ────────────────────────────────────────
@@ -3929,11 +3971,15 @@ class _StitchLessonSidebar extends StatelessWidget {
   final ColorScheme cs;
   final ThemeData theme;
   final String teacherName;
+  final bool isOpen;
+  final VoidCallback onToggle;
 
   const _StitchLessonSidebar({
     required this.cs,
     required this.theme,
     required this.teacherName,
+    required this.isOpen,
+    required this.onToggle,
   });
 
   @override
@@ -3941,8 +3987,9 @@ class _StitchLessonSidebar extends StatelessWidget {
     if (MediaQuery.sizeOf(context).width < 768) {
       return const SizedBox.shrink();
     }
-    return SizedBox(
-      width: 256,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      width: isOpen ? 256 : 72,
       child: Container(
         decoration: BoxDecoration(
           color: cs.surface,
@@ -3951,28 +3998,39 @@ class _StitchLessonSidebar extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'ClassAI',
-                    style: theme.textTheme.displaySmall?.copyWith(
-                      color: cs.primary,
-                      fontWeight: FontWeight.w700,
-                      height: 1.1,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Nigerian Academic Partner',
-                    style: theme.textTheme.labelLarge?.copyWith(
+            InkWell(
+              onTap: onToggle,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(isOpen ? 24 : 12, 24, 12, 0),
+                child: Row(
+                  mainAxisAlignment: isOpen
+                      ? MainAxisAlignment.start
+                      : MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.school_rounded, color: cs.primary, size: 28),
+                    if (isOpen) ...[
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('ClassAI', style: theme.textTheme.titleLarge?.copyWith(
+                              color: cs.primary,
+                              fontWeight: FontWeight.w700,
+                            )),
+                            Text('Nigerian Academic Partner', style: theme.textTheme.labelSmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            )),
+                          ],
+                        ),
+                      ),
+                    ],
+                    Icon(
+                      isOpen ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
                       color: cs.onSurfaceVariant,
-                      height: 1.4,
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 48),
@@ -4013,16 +4071,18 @@ class _StitchLessonSidebar extends StatelessWidget {
                                 child: Row(
                                   children: [
                                     Icon(item.icon, size: 22, color: foreground),
-                                    const SizedBox(width: 16),
-                                    Text(
-                                      item.label,
-                                      style: theme.textTheme.labelLarge?.copyWith(
-                                        color: foreground,
-                                        fontWeight: item.isActive
-                                            ? FontWeight.w700
-                                            : FontWeight.w500,
+                                    if (isOpen) ...[
+                                      const SizedBox(width: 16),
+                                      Text(
+                                        item.label,
+                                        style: theme.textTheme.labelLarge?.copyWith(
+                                          color: foreground,
+                                          fontWeight: item.isActive
+                                              ? FontWeight.w700
+                                              : FontWeight.w500,
+                                        ),
                                       ),
-                                    ),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -4448,7 +4508,8 @@ class _StitchLessonHeader extends StatelessWidget {
                     AppTheme.touchTarget,
                     AppTheme.touchTarget,
                   ),
-                  foregroundColor: cs.onSurfaceVariant,
+                  foregroundColor: value.canUndo ? cs.primary : cs.onSurfaceVariant,
+                  disabledForegroundColor: cs.onSurfaceVariant.withValues(alpha: 0.45),
                 ),
               ),
             ),
@@ -4465,7 +4526,8 @@ class _StitchLessonHeader extends StatelessWidget {
                     AppTheme.touchTarget,
                     AppTheme.touchTarget,
                   ),
-                  foregroundColor: cs.onSurfaceVariant,
+                  foregroundColor: value.canRedo ? cs.primary : cs.onSurfaceVariant,
+                  disabledForegroundColor: cs.onSurfaceVariant.withValues(alpha: 0.45),
                 ),
               ),
             ),
@@ -5620,7 +5682,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.7)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.22),
+            color: cs.shadow.withValues(alpha: 0.22),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -5693,7 +5755,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
 
   Widget _buildLockedPreviewOverlay() {
     return Container(
-      color: Colors.black.withValues(alpha: 0.68),
+      color: cs.scrim.withValues(alpha: 0.68),
       alignment: Alignment.center,
       padding: const EdgeInsets.all(24),
       child: ConstrainedBox(
@@ -5704,11 +5766,11 @@ class _PreviewColumnState extends State<_PreviewColumn> {
             color: cs.surfaceContainerHigh,
             borderRadius: BorderRadius.circular(AppTheme.radiusXl),
             border: Border.all(color: cs.tertiary.withValues(alpha: 0.45)),
-            boxShadow: const [
+            boxShadow: [
               BoxShadow(
-                color: Colors.black54,
+                color: cs.shadow.withValues(alpha: 0.54),
                 blurRadius: 28,
-                offset: Offset(0, 12),
+                offset: const Offset(0, 12),
               ),
             ],
           ),
@@ -6069,11 +6131,12 @@ class _PreviewColumnState extends State<_PreviewColumn> {
     String url, {
     String desc = '',
   }) {
+    final cs = Theme.of(context).colorScheme;
     showDialog<void>(
       context: context,
       barrierDismissible: true,
       builder: (dialogContext) => Dialog.fullscreen(
-        backgroundColor: Colors.black,
+        backgroundColor: cs.inverseSurface,
         child: SafeArea(
           child: Column(
             children: [
@@ -6084,11 +6147,11 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                   horizontal: 12,
                   vertical: 8,
                 ),
-                color: Colors.black.withValues(alpha: 0.6),
+                color: cs.inverseSurface.withValues(alpha: 0.6),
                 child: Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white),
+                      icon: Icon(Icons.close, color: cs.onInverseSurface),
                       tooltip: 'Close',
                       onPressed: () => Navigator.of(dialogContext).pop(),
                     ),
@@ -6098,8 +6161,8 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                           desc,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: cs.onInverseSurface,
                             fontSize: 14,
                           ),
                         ),
@@ -6830,12 +6893,16 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                             ),
                           ],
                           if (item.relatedTopics.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              item.relatedTopics,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: cs.onSurfaceVariant,
-                                height: 1.4,
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: cs.secondaryContainer.withValues(alpha: 0.6),
+                                borderRadius: BorderRadius.circular(100),
+                              ),
+                              child: Text(
+                                item.relatedTopics,
+                                style: theme.textTheme.labelSmall?.copyWith(color: cs.onSecondaryContainer, fontWeight: FontWeight.w600),
                               ),
                             ),
                           ],
@@ -8565,7 +8632,7 @@ class _StitchLessonFab extends StatelessWidget {
         border: Border.all(color: cs.outlineVariant),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
+            color: cs.shadow.withValues(alpha: 0.25),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -8639,7 +8706,7 @@ class _StitchLessonFab extends StatelessWidget {
         border: Border.all(color: cs.outlineVariant),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
+            color: cs.shadow.withValues(alpha: 0.25),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
