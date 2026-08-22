@@ -2344,7 +2344,7 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
         context.go('/scheme-of-work');
         break;
       case '/settings':
-        context.go('/settings');
+        context.push('/settings');
         break;
     }
   }

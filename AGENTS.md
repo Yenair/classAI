@@ -19,3 +19,5 @@ try to run flutter test, as less often as possible, once confirmed a change, no 
 
 ## Communication
 - If you are ever confused or you meet a logic break, ask me. Do not assume.
+
+When you are done, audit the prompt i sent to you, then check if you have completed the task accurately. Then list what is left to do, from the prompt i gave you.

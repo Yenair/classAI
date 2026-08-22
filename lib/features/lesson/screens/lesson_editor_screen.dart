@@ -64,7 +64,7 @@ ColorScheme _lessonEditorStitchColorScheme(ColorScheme base) {
       surfaceContainerHighest: const Color(0xFFE1E2E8),
       surfaceBright: const Color(0xFFF8F9FF),
       surfaceDim: const Color(0xFFD9DAE0),
-      surfaceVariant: const Color(0xFFE1E2E8),
+
       onSurfaceVariant: const Color(0xFF414750),
       outline: const Color(0xFF727781),
       outlineVariant: const Color(0xFFC1C7D2),
@@ -99,7 +99,6 @@ ColorScheme _lessonEditorStitchColorScheme(ColorScheme base) {
     surfaceContainerHighest: const Color(0xFF353437),
     surfaceBright: const Color(0xFF39393B),
     surfaceDim: const Color(0xFF131315),
-    surfaceVariant: const Color(0xFF353437),
     onSurfaceVariant: const Color(0xFFC5C5D3),
     outline: const Color(0xFF8F909D),
     outlineVariant: const Color(0xFF454652),
@@ -237,32 +236,17 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   bool _visibleMaterials = false;
   bool _visibleSuggestedImages = false;
 
-  // Stage 1: legacy-settings fallback note.
-  String? _legacySettingsNote;
-
   // Stage 1: regeneration undo snapshot path.
   String? _regenerationSnapshotPath;
 
-  // Stage 1: persistent undo banner after regeneration.
-  bool _showRegenerationBanner = false;
   // Stage 2: homework regeneration.
   bool _isRegeneratingHomework = false;
   String? _homeworkSnapshotPath;
   // Stage 2: in-memory snapshot of the pre-regeneration homework. Serves as
   // a reliable fallback for Undo when the snapshot file write fails.
   String? _homeworkBeforeRegeneration;
-  // Stage 2: persistent undo banner after homework regeneration.
-  bool _showHomeworkRegenerationBanner = false;
 
-  // After generation, topic field must be double-tap confirmed before editing.
-  // Starts true (editable) for new lessons; set false after generation;
-  // set true for loaded existing lessons.
-  bool _topicEditable = true;
   bool _topicConfirmShown = false;
-  DateTime? _lastTopicTap;
-
-  // Advanced Settings card collapsible state (default closed).
-  bool _advancedSettingsOpen = false;
 
   // Stage 4: references visibility toggle (opt-in via Visible Sections sheet).
   bool _visibleReferences = false;
@@ -281,7 +265,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   List<SchemeOfWorkData> _schemes = [];
   int? _schemeOfWorkLocalId;
   bool _isManualTopicEntry = true;
-  bool _sourceMissing = false;
 
   // Generated content (editable after generation)
   String _objectivesText = '';
@@ -444,7 +427,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       _reviewController.clear();
       setState(() {
         _showReviewSection = false;
-        _showRegenerationBanner = true;
       });
       showInfoToast(context: context, message: 'Image ${index + 1} regenerated.');
     }
@@ -640,7 +622,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       _activeDiagramIndex = null;
       _lessonStatus = 'draft';
       _isUnlocked = true;
-      _topicEditable = true;
     });
   }
 
@@ -780,15 +761,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       final db = ref.read(databaseProvider);
       final lesson = await db.lessonsDao.getById(id);
       if (lesson != null && mounted) {
-        bool sourceMissing = false;
-        if (lesson.schemeOfWorkId != null) {
-          final schemeId = int.tryParse(lesson.schemeOfWorkId!);
-          if (schemeId != null) {
-            sourceMissing = await db.schemeOfWorkDao.getById(schemeId) == null;
-          } else {
-            sourceMissing = true;
-          }
-        }
+
         final rawContent = lesson.content;
         Map<String, dynamic>? parsedContent;
         try {
@@ -802,11 +775,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         // Detect legacy lessons missing settings for fallback defaults.
         final bool legacyDifficulty = lesson.difficulty.isEmpty;
         final bool legacyBlooms = lesson.bloomsVerbs.trim().isEmpty;
-        final bool legacyAssessmentFormat = parsedContent != null &&
-            parsedContent['assessmentFormat'] == null &&
-            parsedContent['objectives'] != null;
-        final bool needsLegacyFallback =
-            legacyDifficulty || legacyBlooms || legacyAssessmentFormat;
         setState(() {
           _lessonId = lesson.id;
           _selectedDraftLessonId = lesson.id;
@@ -833,7 +801,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           if (lesson.weekNumber != null) {
             _week = lesson.weekNumber!;
           }
-          _sourceMissing = sourceMissing;
+
           if (parsedContent != null) {
             _objectivesText = _formatList(parsedContent['objectives']);
             _objectivesController.text = _objectivesText;
@@ -865,7 +833,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             _activeDeckIndex = 0;
             _isUnlocked = lesson.status == 'draft' ||
                 (lesson.isUnlocked && _hasGenerated);
-            _topicEditable = true;
+
             _assessmentFormat =
                 parsedContent['assessmentFormat'] as String? ?? 'Both';
             // Restore structured questions if present in stored content.
@@ -890,12 +858,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             }
           }
         });
-        if (needsLegacyFallback && mounted) {
-          setState(() {
-            _legacySettingsNote =
-                'Some lesson settings were missing and restored to defaults.';
-          });
-        }
         if (mounted) {
           _draftLoadedSnapshot = _editorSnapshot();
           await _loadDraftTopicOptions();
@@ -1451,7 +1413,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                 _parseReferences(parsedRaw['references'], forceAiOrigin: true);
             _diagramResults = generatedDiagrams;
             _setGeneratedDeckState();
-            _topicEditable = false;
             _topicConfirmShown = false;
             if (_lessonStatus == 'draft') _lessonStatus = 'generated';
             _isUnlocked = false;
@@ -1557,7 +1518,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     if (!mounted) return;
     setState(() {
       _isRegenerating = true;
-      _showRegenerationBanner = false;
     });
 
     try {
@@ -1604,7 +1564,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       if (mounted) {
         setState(() {
           _showReviewSection = false;
-          _showRegenerationBanner = true;
         });
         showInfoToast(context: context, message: 'Lesson notes regenerated.');
       }
@@ -1634,7 +1593,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     if (!mounted) return;
     setState(() {
       _isRegenerating = true;
-      _showRegenerationBanner = false;
     });
 
     try {
@@ -1685,7 +1643,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       if (mounted) {
         setState(() {
           _showReviewSection = false;
-          _showRegenerationBanner = true;
         });
         showInfoToast(context: context, message: 'Assessment regenerated.');
       }
@@ -1740,7 +1697,12 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       _reviewController.clear();
       if (mounted) {
         setState(() => _showReviewSection = false);
-        showInfoToast(context: context, message: 'References regenerated.');
+        showInfoToast(
+          context: context,
+          message: 'References regenerated.',
+          barrierDismissible: true,
+          autoCloseDuration: const Duration(seconds: 2),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -1782,7 +1744,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
 
     setState(() {
       _isRegenerating = true;
-      _showRegenerationBanner = false;
     });
     try {
       final db = ref.read(databaseProvider);
@@ -1929,8 +1890,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       _reviewController.clear();
       if (mounted) {
         setState(() => _showReviewSection = false);
-        // Show persistent undo banner after regeneration.
-        setState(() => _showRegenerationBanner = true);
         if (!questionsEnabled) {
           showInfoToast(
             context: context,
@@ -2757,7 +2716,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       final exists = await db.schemeOfWorkDao.getById(_schemeOfWorkLocalId!) != null;
       if (mounted) {
         setState(() {
-          _sourceMissing = !exists;
           // Prevention: release the dead scheme link in-memory so the lesson
           // becomes fully editable (topic field) and the error banner clears.
           // No DB row is modified until the user explicitly saves.
@@ -2800,7 +2758,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       _activeDiagramIndex = null;
       _activeCardKey = _LessonEditorCardKey.generate;
       _activeDeckIndex = 0;
-      _topicEditable = true;
       _topicConfirmShown = false;
       _schemeOfWorkLocalId = null;
       _isManualTopicEntry = true;
@@ -2836,88 +2793,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       _regenerationSnapshotPath = file.path;
     } catch (_) {
       // Snapshot failure is non-fatal — regeneration proceeds without undo.
-    }
-  }
-
-  /// Restore the content from the undo snapshot, save the lesson, then
-  /// delete the snapshot file.
-  Future<void> _restoreFromUndo() async {
-    if (_regenerationSnapshotPath == null) return;
-    try {
-      final file = File(_regenerationSnapshotPath!);
-      if (!await file.exists()) return;
-      final snapshot =
-          jsonDecode(await file.readAsString()) as Map<String, dynamic>;
-      setState(() {
-        _objectivesText = snapshot['objectives'] as String? ?? '';
-        _objectivesController.text = _objectivesText;
-        _vocabularyText = snapshot['vocabulary'] as String? ?? '';
-        _vocabularyController.text = _vocabularyText;
-        _materialsText = snapshot['materials'] as String? ?? '';
-        _materialsController.text = _materialsText;
-        _presentationText = snapshot['presentation'] as String? ?? '';
-        _presentationController.text = _presentationText;
-        _parsePresentationSubSections();
-        _assessmentText = snapshot['assessment'] as String? ?? '';
-        _assessmentController.text = _assessmentText;
-        _homeworkText = snapshot['homework'] as String? ?? '';
-        _homeworkController.text = _homeworkText;
-        _mcqs = _castQuestionList(
-            (snapshot['questions'] as Map<String, dynamic>?)?['mcqs']);
-        _theoryQuestions = _castQuestionList(
-            (snapshot['questions'] as Map<String, dynamic>?)?['theory']);
-        _subjectiveQuestions = _castQuestionList(
-            (snapshot['questions'] as Map<String, dynamic>?)?['subjective']);
-        _diagramResults = (snapshot['diagrams'] as List<dynamic>? ?? [])
-            .whereType<Map>()
-            .map((m) => Map<String, dynamic>.from(m))
-            .toList();
-        _showRegenerationBanner = false;
-        _previewRevision++;
-      });
-      await _saveLesson(notify: false);
-      try {
-        await file.delete();
-      } catch (_) {}
-      _regenerationSnapshotPath = null;
-      if (mounted) {
-        showInfoToast(context: context, message: 'Lesson restored from undo.');
-      }
-    } catch (_) {
-      if (mounted) {
-        showErrorToast(context: context, message: 'Undo failed.');
-      }
-    }
-  }
-
-  // ── Topic edit confirmation dialog ──────────────────────────
-  Future<void> _showTopicEditDialog() async {
-    if (_topicConfirmShown) return;
-    final proceed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit Topic?'),
-        content: const Text(
-          'This topic is used to generate the lesson. '
-          'Editing it may affect the generated content.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Proceed to Edit'),
-          ),
-        ],
-      ),
-    );
-    if (proceed == true) {
-      setState(() {
-        _topicEditable = true;
-        _topicConfirmShown = true;
-      });
     }
   }
 
@@ -2958,11 +2833,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           _previewRevision++;
         });
         await _saveLesson(notify: false);
-        // Show the persistent undo banner only after the regenerated
-        // homework has actually been saved.
-        if (mounted) {
-          setState(() => _showHomeworkRegenerationBanner = true);
-        }
+
       }
       if (mounted) {
         showSuccessToast(context: context, message: 'Homework regenerated.');
@@ -2974,161 +2845,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     } finally {
       if (mounted) setState(() => _isRegeneratingHomework = false);
     }
-  }
-
-  /// Restore the previous homework, save the lesson, then delete the
-  /// snapshot. The in-memory snapshot ([_homeworkBeforeRegeneration]) is the
-  /// authoritative source; the snapshot file is a secondary fallback. Called
-  /// from the persistent undo banner.
-  Future<void> _restoreHomeworkUndo() async {
-    // Always hide the banner immediately, even when there is nothing to
-    // restore.
-    if (mounted) setState(() => _showHomeworkRegenerationBanner = false);
-
-    // Restore from the in-memory snapshot first; fall back to the file.
-    String? oldHomework = _homeworkBeforeRegeneration;
-    if (oldHomework == null && _homeworkSnapshotPath != null) {
-      try {
-        final file = File(_homeworkSnapshotPath!);
-        if (await file.exists()) {
-          final snapshot =
-              jsonDecode(await file.readAsString()) as Map<String, dynamic>;
-          oldHomework = snapshot['homework'] as String? ?? '';
-        }
-      } catch (_) {
-        oldHomework = null;
-      }
-    }
-
-    if (oldHomework != null) {
-      // Bind to a non-null local so the value is promoted inside the
-      // setState closure (oldHomework is written in the catch block above,
-      // which defeats flow analysis promotion for captured variables).
-      final restoredText = oldHomework;
-      if (mounted) {
-        setState(() {
-          _homeworkText = restoredText;
-          _homeworkController.text = restoredText;
-        });
-        await _saveLesson(notify: false);
-      }
-      if (mounted) {
-        showInfoToast(
-            context: context, message: 'Homework restored from undo.');
-      }
-    } else if (mounted) {
-      showInfoToast(context: context, message: 'Nothing to undo.');
-    }
-
-    // Delete the snapshot file (if any) and clear both snapshot sources.
-    if (_homeworkSnapshotPath != null) {
-      try {
-        final file = File(_homeworkSnapshotPath!);
-        if (await file.exists()) {
-          await file.delete();
-        }
-      } catch (_) {}
-    }
-    _homeworkSnapshotPath = null;
-    _homeworkBeforeRegeneration = null;
-  }
-
-  /// Deletes the homework undo snapshot file and clears the stored path.
-  /// Called when the banner is dismissed; also covered by
-  /// [_cleanupUndoSnapshot] on dispose / back navigation.
-  void _deleteHomeworkSnapshot() {
-    if (_homeworkSnapshotPath == null) return;
-    try {
-      final file = File(_homeworkSnapshotPath!);
-      if (file.existsSync()) {
-        file.deleteSync();
-      }
-    } catch (_) {}
-    _homeworkSnapshotPath = null;
-  }
-
-
-  // ── Entry screen skeleton for new blank lessons ──────────────
-
-  Widget _buildEntryScreenSkeleton(ColorScheme cs, ThemeData theme) {
-    final topicEmpty = _topicController.text.trim().isEmpty;
-    final canCreate = !topicEmpty && _isOnline && !_isGenerating;
-    String? disabledReason;
-    if (topicEmpty) {
-      disabledReason = null; // no reason text, just disabled
-    } else if (!_isOnline) {
-      disabledReason =
-          "You\u2019re offline \u2014 connect to the internet to generate a lesson.";
-    }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: 32),
-        Text(
-          'Lesson topic',
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: cs.onSurface,
-          ),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _topicController,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: InputDecoration(
-            hintText: 'e.g., Introduction to Fractions',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-            ),
-            filled: true,
-            fillColor: cs.surfaceBright,
-          ),
-          style: theme.textTheme.bodyLarge?.copyWith(color: cs.onSurface),
-          onChanged: (_) => setState(() {}),
-        ),
-        const SizedBox(height: 24),
-        // Create button
-        SizedBox(
-          width: double.infinity,
-          height: AppTheme.touchTarget,
-          child: FilledButton.icon(
-            onPressed: canCreate ? _handleGenerate : null,
-            style: FilledButton.styleFrom(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-              ),
-            ),
-            icon: _isGenerating
-                ? SizedBox(
-                    height: 22,
-                    width: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: cs.onPrimary,
-                    ),
-                  )
-                : const Icon(Icons.auto_awesome_rounded),
-            label: Text(
-              _isGenerating ? 'Generating...' : 'Generate with AI',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
-        if (disabledReason != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              disabledReason,
-              style: theme.textTheme.bodySmall?.copyWith(color: cs.error),
-            ),
-          ),
-      ],
-    );
   }
 
   Widget _buildStitchLessonFab() {
@@ -3322,7 +3038,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
 
   /// Delete the undo snapshot file if it exists and clear the banner.
   void _cleanupUndoSnapshot() {
-    _showRegenerationBanner = false;
     if (_regenerationSnapshotPath != null) {
       try {
         final file = File(_regenerationSnapshotPath!);
@@ -3915,8 +3630,7 @@ class _DraftTopicOption {
     required this.subject,
     required this.classLevel,
     required this.week,
-    this.isCreateNew = false,
-  });
+  }) : isCreateNew = false;
 
   const _DraftTopicOption.createNew()
       : lessonId = null,
@@ -4158,207 +3872,6 @@ class _StitchLessonSidebar extends StatelessWidget {
   }
 }
 
-class _NavigationDrawer extends StatelessWidget {
-  final ColorScheme cs;
-  final ThemeData theme;
-  final bool isOpen;
-  final VoidCallback? onToggleSidebar;
-  const _NavigationDrawer({
-    required this.cs,
-    required this.theme,
-    required this.isOpen,
-    this.onToggleSidebar,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 768 || Platform.isAndroid) return const SizedBox.shrink();
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeInOut,
-          width: isOpen ? 288 : 72,
-          decoration: BoxDecoration(
-            color: cs.surfaceContainerLow,
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            children: [
-              SizedBox(height: isOpen ? 24 : 16),
-              // Logo area — tapping toggles sidebar
-              InkWell(
-                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                onTap: onToggleSidebar,
-                child: Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isOpen ? 24 : 12,
-                  ),
-                  child: isOpen
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    color: cs.primaryContainer,
-                                    borderRadius: BorderRadius.circular(
-                                      AppTheme.radiusFull,
-                                    ),
-                                  ),
-                                  child: Icon(
-                                    Icons.person_rounded,
-                                    color: cs.onPrimaryContainer,
-                                    size: 22,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  'ClassAI',
-                                  style: theme.textTheme.headlineMedium?.copyWith(
-                                    fontWeight: FontWeight.w900,
-                                    color: cs.primary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Padding(
-                              padding: const EdgeInsets.only(left: 52),
-                              child: Text(
-                                'Nigerian Academic Partner',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                  color: cs.onSurfaceVariant,
-                                ),
-                              ),
-                            ),
-                          ],
-                        )
-                      : Center(
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: cs.primaryContainer,
-                              borderRadius: BorderRadius.circular(
-                                AppTheme.radiusFull,
-                              ),
-                            ),
-                            child: Icon(
-                              Icons.menu_rounded,
-                              color: cs.onPrimaryContainer,
-                              size: 22,
-                            ),
-                          ),
-                        ),
-                ),
-              ),
-              SizedBox(height: isOpen ? 32 : 16),
-              // Nav items
-              Expanded(
-                child: Column(
-                  children: _LessonEditorScreenState._navItems.map((item) {
-                    return Container(
-                        margin: EdgeInsets.symmetric(
-                          horizontal: isOpen ? 12 : 4,
-                        vertical: 2,
-                      ),
-                      transform: item.isActive
-                          ? Matrix4.translationValues(isOpen ? 4.0 : 0.0, 0.0, 0.0)
-                          : Matrix4.identity(),
-                      decoration: BoxDecoration(
-                        color: item.isActive
-                            ? cs.secondaryFixed
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(
-                          AppTheme.radiusFull,
-                        ),
-                      ),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                        onTap: () => _navigateTo(context, item.label),
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: isOpen ? 16 : 8,
-                            vertical: 12,
-                          ),
-                          child: isOpen
-                              ? Row(
-                                  children: [
-                                    Icon(
-                                      item.icon,
-                                      size: 22,
-                                      color: item.isActive
-                                          ? cs.onSecondaryFixed
-                                          : cs.onSurfaceVariant,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Text(
-                                      item.label,
-                                      style: theme.textTheme.labelLarge?.copyWith(
-                                        fontWeight: item.isActive
-                                            ? FontWeight.w700
-                                            : FontWeight.w500,
-                                        color: item.isActive
-                                            ? cs.onSecondaryFixed
-                                            : cs.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : Center(
-                                  child: Icon(
-                                    item.icon,
-                                    size: 22,
-                                    color: item.isActive
-                                        ? cs.onSecondaryFixed
-                                        : cs.onSurfaceVariant,
-                                  ),
-                                ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _navigateTo(BuildContext context, String label) {
-    switch (label) {
-      case 'Home':
-        context.go('/');
-        break;
-      case 'Lessons':
-        _goToLessonsDeferred(context);
-        break;
-      case 'Exams':
-        context.go('/exams');
-        break;
-      // case 'Vault':
-      //   context.go('/vault');
-      //   break;
-      case 'Admin':
-        context.go('/admin');
-        break;
-    }
-  }
-
-  void _goToLessonsDeferred(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!context.mounted) return;
-      context.go('/lessons');
-    });
-  }
-}
-
 // ═══════════════════════════════════════════════════════════════════════
 // Mobile Header
 // ═══════════════════════════════════════════════════════════════════════
@@ -4538,319 +4051,6 @@ class _StitchLessonHeader extends StatelessWidget {
   }
 }
 
-class _MobileHeader extends StatelessWidget {
-  final ColorScheme cs;
-  final ThemeData theme;
-  final int offlineCreditBalance;
-  final UndoHistoryController undoController;
-  const _MobileHeader({
-    required this.cs,
-    required this.theme,
-    required this.offlineCreditBalance,
-    required this.undoController,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth >= 768) return const SizedBox.shrink();
-        return Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppTheme.spacingMarginMobile,
-            vertical: 8,
-          ),
-          decoration: BoxDecoration(
-            color: cs.surface,
-            border: Border(
-              bottom: BorderSide(
-                color: cs.surfaceContainer.withValues(alpha: 1.0),
-              ),
-            ),
-          ),
-          child: Row(
-            children: [
-              if (Navigator.of(context).canPop())
-                IconButton(
-                  onPressed: () => Navigator.of(context).maybePop(),
-                  icon: const Icon(Icons.arrow_back_rounded),
-                  tooltip: 'Back',
-                  style: IconButton.styleFrom(
-                    foregroundColor: cs.onSurfaceVariant,
-                  ),
-                ),
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: cs.primaryContainer,
-                  borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                ),
-                child: Icon(Icons.person_rounded, size: 18, color: cs.onPrimaryContainer),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'ClassAI',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: cs.primary,
-                ),
-              ),
-              const Spacer(),
-              // Undo / Redo buttons
-              ValueListenableBuilder<UndoHistoryValue>(
-                valueListenable: undoController,
-                builder: (context, value, child) {
-                  return Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        onPressed: value.canUndo ? () => undoController.undo() : null,
-                        icon: const Icon(Icons.undo_rounded),
-                        tooltip: 'Undo (Ctrl+Z)',
-                        style: IconButton.styleFrom(
-                          foregroundColor: cs.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        onPressed: value.canRedo ? () => undoController.redo() : null,
-                        icon: const Icon(Icons.redo_rounded),
-                        tooltip: 'Redo (Ctrl+Shift+Z)',
-                        style: IconButton.styleFrom(
-                          foregroundColor: cs.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(width: 4),
-              RepaintBoundary(
-                child: Text(
-                  '$offlineCreditBalance',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w500,
-                    color: cs.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// Tool Header
-// ═══════════════════════════════════════════════════════════════════════
-class _ToolHeader extends StatelessWidget {
-  final ColorScheme cs;
-  final ThemeData theme;
-  final VoidCallback? onToggleSidebar;
-  final bool sidebarOpen;
-  final UndoHistoryController undoController;
-  const _ToolHeader({
-    required this.cs,
-    required this.theme,
-    this.onToggleSidebar,
-    required this.sidebarOpen,
-    required this.undoController,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppTheme.spacingMarginMobile,
-        vertical: 24,
-      ),
-      decoration: BoxDecoration(
-        color: cs.surfaceBright,
-        border: Border(
-          bottom: BorderSide(
-            color: cs.outlineVariant.withValues(alpha: 0.2),
-          ),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Back link + Toggle
-          Row(
-            children: [
-              // Back button (when navigable)
-              if (Navigator.of(context).canPop())
-                InkWell(
-                  borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                  onTap: () => Navigator.of(context).maybePop(),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.arrow_back_rounded,
-                          size: 20,
-                          color: cs.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Back',
-                          style: theme.textTheme.labelMedium?.copyWith(
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              const Spacer(),
-              // Undo / Redo buttons
-              ValueListenableBuilder<UndoHistoryValue>(
-                valueListenable: undoController,
-                builder: (context, value, child) {
-                  return Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        onPressed: value.canUndo ? () => undoController.undo() : null,
-                        icon: const Icon(Icons.undo_rounded),
-                        tooltip: 'Undo (Ctrl+Z)',
-                        style: IconButton.styleFrom(
-                          foregroundColor: cs.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        onPressed: value.canRedo ? () => undoController.redo() : null,
-                        icon: const Icon(Icons.redo_rounded),
-                        tooltip: 'Redo (Ctrl+Shift+Z)',
-                        style: IconButton.styleFrom(
-                          foregroundColor: cs.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(width: 8),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Lesson Editor',
-            style: theme.textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: cs.onSurface,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Data holder for a loaded scheme together with its resolved subject name.
-class _SchemeDisplayData {
-  final String subjectName;
-  final SchemeOfWorkData scheme;
-  const _SchemeDisplayData({required this.subjectName, required this.scheme});
-}
-
-class _LinkedSchemeBanner extends ConsumerWidget {
-  const _LinkedSchemeBanner({
-    required this.schemeId,
-    required this.classLevel,
-    required this.isSourceMissing,
-    required this.cs,
-    required this.theme,
-  });
-
-  final int schemeId;
-  final String classLevel;
-  final bool isSourceMissing;
-  final ColorScheme cs;
-  final ThemeData theme;
-
-  Future<_SchemeDisplayData?> _loadScheme(WidgetRef ref) async {
-    final db = ref.read(databaseProvider);
-    final scheme = await db.schemeOfWorkDao.getById(schemeId);
-    if (scheme == null) return null;
-
-    // Resolve subject name from the subjects table
-    final allSubjects = await db.subjectsDao.getAll();
-    final subject = allSubjects.where((s) => s.id == scheme.subjectId).firstOrNull;
-    final subjectName = subject?.name ?? 'Subject ${scheme.subjectId}';
-    return _SchemeDisplayData(subjectName: subjectName, scheme: scheme);
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return FutureBuilder<_SchemeDisplayData?>(
-      future: _loadScheme(ref),
-      builder: (context, snapshot) {
-        final display = snapshot.data;
-        if (display == null) {
-          if (!isSourceMissing) return const SizedBox.shrink();
-          return Container(
-            width: double.infinity,
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: cs.errorContainer,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              'The linked scheme of work is no longer available. You can still edit this lesson.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: cs.onErrorContainer,
-              ),
-            ),
-          );
-        }
-
-        final scheme = display.scheme;
-        return Container(
-          width: double.infinity,
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: cs.primaryContainer.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: cs.primary.withValues(alpha: 0.15)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Linked to Scheme of Work',
-                style: theme.textTheme.labelLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: cs.primary,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Subject: ${display.subjectName} • Class: $classLevel • Week ${scheme.weekNumber} • Topic: ${scheme.topic}',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: cs.onSurface,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-
-
-// ═══════════════════════════════════════════════════════════════════════
 class _DraftGenerateTab extends StatelessWidget {
   final ColorScheme cs;
   final ThemeData theme;
@@ -4898,7 +4098,7 @@ class _DraftGenerateTab extends StatelessWidget {
             (option) => DropdownMenuItem<_DraftTopicOption>(
               value: option,
               child: Text(
-                '${option.topic} • Week ${option.week}',
+                'Week ${option.week} • ${option.topic}',
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -4988,8 +4188,7 @@ class _DraftGenerateTab extends StatelessWidget {
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            'Draft topics for $subject • $classLevel. '
-                            'The current lesson is included when applicable.',
+                            'Draft topics for $subject • $classLevel.',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: cs.onPrimaryContainer,
                               height: 1.4,
@@ -5000,7 +4199,7 @@ class _DraftGenerateTab extends StatelessWidget {
                     ),
                   ),
                   DropdownButtonFormField<_DraftTopicOption>(
-                    value: selected,
+                    initialValue: selected,
                     items: items,
                     onChanged: isLoadingOptions
                         ? null
@@ -5042,7 +4241,7 @@ class _DraftGenerateTab extends StatelessWidget {
                   )
                 else if (options.isEmpty)
                   DropdownButtonFormField<_DraftTopicOption>(
-                    value: selected,
+                    initialValue: selected,
                     items: items,
                     onChanged: isLoadingOptions
                         ? null
@@ -5316,7 +4515,6 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   final FocusNode _tabFocusNode = FocusNode();
   int _activeDeckIndex = 0;
   _LessonEditorCardKey _activeCardKey = _LessonEditorCardKey.lessonNotes;
-  bool _tabAutoFocused = false;
 
   // Shorthand getters for ColorScheme and ThemeData from widget.
   ColorScheme get cs => widget.cs;
@@ -5326,7 +4524,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   @override
   void initState() {
     super.initState();
-    _deckController = PageController();
+    _deckController = PageController(keepPage: true);
     _activeCardKey = widget.showGenerateSlide
         ? _LessonEditorCardKey.generate
         : _LessonEditorCardKey.lessonNotes;
@@ -5337,7 +4535,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.key != widget.key) {
       _deckController.dispose();
-      _deckController = PageController();
+      _deckController = PageController(keepPage: true);
       _activeDeckIndex = 0;
       _activeCardKey = widget.showGenerateSlide
           ? _LessonEditorCardKey.generate
@@ -5399,23 +4597,6 @@ class _PreviewColumnState extends State<_PreviewColumn> {
     return found;
   }
 
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (_isTextFocused()) return KeyEventResult.ignored;
-    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      if (_activeDeckIndex > 0) {
-        _goToDeckSlide(_activeDeckIndex - 1);
-        return KeyEventResult.handled;
-      }
-    } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      if (_activeDeckIndex < _cardKeys(widget.visibleReferences).length - 1) {
-        _goToDeckSlide(_activeDeckIndex + 1);
-        return KeyEventResult.handled;
-      }
-    }
-    return KeyEventResult.ignored;
-  }
-
   List<_LessonEditorCardKey> _cardKeys(bool includeReferences) => [
         if (widget.showGenerateSlide) _LessonEditorCardKey.generate,
         _LessonEditorCardKey.lessonNotes,
@@ -5423,25 +4604,6 @@ class _PreviewColumnState extends State<_PreviewColumn> {
         _LessonEditorCardKey.diagrams,
         if (includeReferences) _LessonEditorCardKey.references,
       ];
-
-  List<String> get _tabLabels {
-    return _cardKeys(widget.visibleReferences)
-        .map((key) {
-          switch (key) {
-            case _LessonEditorCardKey.lessonNotes:
-              return 'Lesson Note';
-            case _LessonEditorCardKey.assessment:
-              return 'Assessment';
-            case _LessonEditorCardKey.diagrams:
-              return 'Diagrams';
-            case _LessonEditorCardKey.references:
-              return 'References';
-            case _LessonEditorCardKey.generate:
-              return 'Generate';
-          }
-        })
-        .toList();
-  }
 
   void _setActiveDeckSlide(int index) {
     final keys = _cardKeys(widget.visibleReferences);
@@ -5468,10 +4630,6 @@ class _PreviewColumnState extends State<_PreviewColumn> {
     } else {
       _setActiveDeckSlide(index);
     }
-  }
-
-  void _onTabTapped(int index) {
-    _goToDeckSlide(index);
   }
 
   Widget _buildDeckArrow({required bool isPrevious}) {
@@ -5631,7 +4789,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                             width: selected ? 32 : 12,
                             height: 12,
                             decoration: BoxDecoration(
-                              color: selected ? cs.primary : cs.surfaceVariant,
+                              color: selected ? cs.primary : cs.surfaceContainerHighest,
                               borderRadius: BorderRadius.circular(12),
                               boxShadow: selected
                                   ? [
@@ -5886,81 +5044,6 @@ class _PreviewColumnState extends State<_PreviewColumn> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-          // ── Locked overlay (generated but not yet unlocked) ─────
-          if (hasGenerated && !isUnlocked)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: cs.tertiary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                  border: Border.all(
-                    color: cs.tertiary.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.lock_rounded,
-                            color: cs.tertiary, size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Locked — Preview only',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: cs.tertiary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Review the generated lesson content below. '
-                      'Unlock to edit, save, or regenerate.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    if (onShowReferences != null)
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          onPressed: onShowReferences,
-                          icon: const Icon(
-                              Icons.menu_book_outlined, size: 16),
-                          label: const Text('View References'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: cs.tertiary,
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 4),
-                    SizedBox(
-                      width: double.infinity,
-                      height: AppTheme.touchTarget,
-                      child: FilledButton.icon(
-                        onPressed: onUnlock,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: cs.tertiary,
-                          foregroundColor: cs.onTertiary,
-                          shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(AppTheme.radiusXl),
-                          ),
-                        ),
-                        icon: const Icon(Icons.lock_open_rounded),
-                        label: Text(_buildUnlockLabel()),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
           // ── Unlocked banner ─────────────────────────────────────
           if (hasGenerated &&
               isUnlocked &&
@@ -6005,48 +5088,6 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                 child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (_activeCardKey == _LessonEditorCardKey.diagrams) ...[
-                  // Tab chips are part of the diagrams card chrome in the
-                  // Stitch reference, rather than shared deck chrome.
-                  Focus(
-                    focusNode: _tabFocusNode,
-                    onKeyEvent: _handleKeyEvent,
-                    child: Builder(
-                      builder: (ctx) {
-                        if (!_tabAutoFocused) {
-                          _tabAutoFocused = true;
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted) Focus.of(ctx).requestFocus();
-                          });
-                        }
-                        return GestureDetector(
-                          onTap: () => Focus.of(ctx).requestFocus(),
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Row(
-                              children: List.generate(_tabLabels.length, (i) {
-                                final selected = _activeDeckIndex == i;
-                                return Padding(
-                                  padding: const EdgeInsets.only(right: 8),
-                                  child: ChoiceChip(
-                                    label: Text(_tabLabels[i]),
-                                    selected: selected,
-                                    onSelected: (_) => _onTabTapped(i),
-                                    selectedColor: cs.primaryContainer,
-                                    labelStyle: theme.textTheme.labelMedium?.copyWith(
-                                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                                      color: selected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
-                                    ),
-                                  ),
-                                );
-                              }),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  ],
                   // The viewport is bounded by the parent SizedBox. Each
                   // card keeps its own vertical scroll for long content.
                   Expanded(
@@ -6119,6 +5160,11 @@ class _PreviewColumnState extends State<_PreviewColumn> {
             ),
             ],
           ),
+          // ── Locked preview overlay (centered, darkened) ────────
+          if (hasGenerated && !isUnlocked)
+            Positioned.fill(
+              child: _buildLockedPreviewOverlay(),
+            ),
         ],
       ),
     );
@@ -6545,7 +5591,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
         .map((tier) => tier.trim().toLowerCase())
         .contains(widget.subscriptionTier.trim().toLowerCase());
     return _buildContentCard(
-      child: SingleChildScrollView(
+      child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -6700,14 +5746,14 @@ class _PreviewColumnState extends State<_PreviewColumn> {
             // Question cards
             ..._buildQuestionCards(),
             const SizedBox(height: 16),
-            // Homework section
-            _buildHomeworkSection(),
+            // Homework section            _buildHomeworkSection(),
           ],
         ],
         ),
       ),
     );
   }
+
 
   Widget _buildDiagramsTab({required bool readOnly}) {
     return _buildContentCard(
@@ -6894,16 +5940,50 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                           ],
                           if (item.relatedTopics.isNotEmpty) ...[
                             const SizedBox(height: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: cs.secondaryContainer.withValues(alpha: 0.6),
-                                borderRadius: BorderRadius.circular(100),
-                              ),
-                              child: Text(
-                                item.relatedTopics,
-                                style: theme.textTheme.labelSmall?.copyWith(color: cs.onSecondaryContainer, fontWeight: FontWeight.w600),
-                              ),
+                            Builder(
+                              builder: (context) {
+                                final rt = item.relatedTopics;
+                                final prefix = 'Related topics: ';
+                                final prefixAlt = 'Related Topics: ';
+                                String label;
+                                String topics;
+                                if (rt.startsWith(prefix)) {
+                                  label = prefix.trimRight();
+                                  topics = rt.substring(prefix.length).trim();
+                                } else if (rt.startsWith(prefixAlt)) {
+                                  label = prefixAlt.trimRight();
+                                  topics = rt.substring(prefixAlt.length).trim();
+                                } else {
+                                  label = 'Related topics';
+                                  topics = rt;
+                                }
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: cs.secondaryContainer.withValues(alpha: 0.6),
+                                        borderRadius: BorderRadius.circular(100),
+                                      ),
+                                      child: Text(
+                                        label,
+                                        style: theme.textTheme.labelSmall?.copyWith(color: cs.onSecondaryContainer, fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                    if (topics.isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        topics,
+                                        style: theme.textTheme.bodySmall?.copyWith(
+                                          color: cs.onSurfaceVariant,
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                );
+                              },
                             ),
                           ],
                           const SizedBox(height: 6),
@@ -7222,57 +6302,6 @@ class _PreviewColumnState extends State<_PreviewColumn> {
       );
     }
     return widgets;
-  }
-
-  // ── Stage 2: Homework section ────────────────────────────────
-
-  Widget _buildHomeworkSection() {
-    return _DocumentSection(
-      title: 'Homework',
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-        if (!isUnlocked)
-          _renderMarkdownContent(homeworkController.text)
-        else ...[
-          _buildDocumentTextField(
-            homeworkController,
-            undoController: undoController,
-            minLines: 4,
-          ),
-          const SizedBox(height: 8),
-          if (onRegenerateHomework != null)
-            SizedBox(
-              width: double.infinity,
-              height: 40,
-              child: OutlinedButton.icon(
-                onPressed: isRegeneratingHomework ? null : onRegenerateHomework,
-                icon: isRegeneratingHomework
-                    ? SizedBox(
-                        height: 16, width: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary),
-                      )
-                    : Icon(Icons.refresh_rounded, size: 16, color: cs.primary),
-                label: Text(
-                  isRegeneratingHomework ? 'Regenerating...' : 'Regenerate homework only',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: cs.primary,
-                  ),
-                ),
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: cs.primary.withValues(alpha: 0.5)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ],
-    ),
-  );
   }
 
   /// Suggested Images as a collapsible document section. Closed by default
@@ -8390,7 +7419,7 @@ class _BottomNavBar extends StatelessWidget {
         context.go('/exams');
         break;
       case 'More':
-        context.go('/settings');
+        context.push('/settings');
         break;
     }
   }
@@ -8836,275 +7865,6 @@ class _StitchLessonFab extends StatelessWidget {
     );
   }
 }
-
-class _FloatingActionArea extends StatelessWidget {
-  final ColorScheme cs;
-  final ThemeData theme;
-  final bool showReviewSection;
-  final bool showActionMenu;
-  final VoidCallback onToggleReview;
-  final VoidCallback onToggleActions;
-  final TextEditingController reviewController;
-  final bool isRegenerating;
-  final VoidCallback? onRegenerate;
-  final VoidCallback? onMarkCompleted;
-  final String lessonStatus;
-  final VoidCallback? onExportPdf;
-  final bool isExporting;
-  final VoidCallback? onShowVisibleSections;
-
-  const _FloatingActionArea({
-    required this.cs,
-    required this.theme,
-    required this.showReviewSection,
-    required this.showActionMenu,
-    required this.onToggleReview,
-    required this.onToggleActions,
-    required this.reviewController,
-    required this.isRegenerating,
-    this.onRegenerate,
-    this.onMarkCompleted,
-    required this.lessonStatus,
-    this.onExportPdf,
-    this.isExporting = false,
-    this.onShowVisibleSections,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: cs.surface,
-        border: Border(
-          top: BorderSide(
-            color: cs.outlineVariant.withValues(alpha: 0.3),
-          ),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: cs.onSurface.withValues(alpha: 0.05),
-            blurRadius: 4,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Align(
-          alignment: Alignment.centerRight,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 360),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-            // Expandable Review & Regenerate section
-            if (showReviewSection)
-              Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: cs.onPrimaryContainer.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                  border: Border.all(
-                    color: cs.secondary.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Feedback for regeneration',
-                            style: theme.textTheme.labelMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: cs.onPrimaryContainer,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: onToggleReview,
-                          icon: const Icon(Icons.close_rounded, size: 18),
-                          tooltip: 'Close feedback',
-                          visualDensity: VisualDensity.compact,
-                          color: cs.onPrimaryContainer,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: reviewController,
-                      maxLines: 2,
-                      minLines: 1,
-                      decoration: InputDecoration(
-                        hintText: 'Type feedback to guide regeneration...',
-                        hintStyle: TextStyle(
-                          color: cs.onPrimaryContainer.withValues(alpha: 0.5),
-                          fontSize: 13,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                          borderSide: BorderSide.none,
-                        ),
-                        filled: true,
-                        fillColor: cs.surface.withValues(alpha: 0.5),
-                        contentPadding: const EdgeInsets.all(10),
-                        isDense: true,
-                      ),
-                      style: TextStyle(color: cs.onPrimaryContainer, fontSize: 13),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 40,
-                      child: FilledButton.icon(
-                        onPressed: isRegenerating ? null : onRegenerate,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: cs.secondary,
-                          foregroundColor: cs.onSecondary,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                          ),
-                        ),
-                        icon: isRegenerating
-                            ? SizedBox(
-                                height: 18, width: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.5, color: cs.onSecondary,
-                                ),
-                              )
-                            : const Icon(Icons.refresh_rounded, size: 18),
-                        label: Text(
-                          isRegenerating ? 'Regenerating...' : 'Regenerate',
-                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-                // Action buttons row
-            if (showActionMenu && !showReviewSection)
-              Wrap(
-              alignment: WrapAlignment.end,
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                // Regenerate (opens review section)
-                FilledButton.tonalIcon(
-                    onPressed: onRegenerate == null
-                        ? null
-                        : () {
-                            onToggleActions();
-                            onToggleReview();
-                          },
-                    icon: const Icon(Icons.refresh_rounded, size: 18),
-                    label: const Text('Regenerate'),
-                    style: FilledButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      minimumSize: const Size(0, AppTheme.touchTarget),
-                    ),
-                ),
-                // Mark Completed
-                FilledButton.tonalIcon(
-                    onPressed: onMarkCompleted == null
-                        ? null
-                        : () {
-                            onToggleActions();
-                            onMarkCompleted!();
-                          },
-                    icon: const Icon(Icons.check_circle, size: 18),
-                    label: Text(lessonStatus == 'completed' ? 'Completed' : 'Mark Completed'),
-                    style: FilledButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      minimumSize: const Size(0, AppTheme.touchTarget),
-                    ),
-                ),
-                // Export PDF
-                OutlinedButton.icon(
-                    onPressed: onExportPdf == null || isExporting
-                        ? null
-                        : () {
-                            onToggleActions();
-                            onExportPdf!();
-                          },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: cs.tertiary,
-                      side: BorderSide(color: cs.tertiary.withValues(alpha: 0.5)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      minimumSize: const Size(0, AppTheme.touchTarget),
-                    ),
-                    icon: isExporting
-                        ? SizedBox(
-                            width: 16, height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2, color: cs.tertiary,
-                            ),
-                          )
-                        : const Icon(Icons.picture_as_pdf_rounded, size: 18),
-                    label: Text(isExporting ? 'Exporting...' : 'Export PDF'),
-                ),
-                // Visible Sections
-                OutlinedButton.icon(
-                    onPressed: onShowVisibleSections == null
-                        ? null
-                        : () {
-                            onToggleActions();
-                            onShowVisibleSections!();
-                          },
-                    icon: const Icon(Icons.visibility_rounded, size: 18),
-                    label: const Text('Visible Sections'),
-                    style: OutlinedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      minimumSize: const Size(0, AppTheme.touchTarget),
-                    ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FloatingActionButton(
-                heroTag: 'lesson-editor-actions',
-                tooltip: showActionMenu || showReviewSection
-                    ? 'Close lesson actions'
-                    : 'Lesson actions',
-                onPressed: showReviewSection
-                    ? onToggleReview
-                    : onToggleActions,
-                child: Icon(
-                  showActionMenu || showReviewSection
-                      ? Icons.close_rounded
-                      : Icons.add_rounded,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════
 // Number Control (for question counts)
 // ═══════════════════════════════════════════════════════════════════════
 class _NumberControl extends StatelessWidget {
@@ -9181,61 +7941,6 @@ class _NumberControl extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════
 // Reusable Widgets
 // ═══════════════════════════════════════════════════════════════════════
-
-/// Stitch card with rounded-xl border and shadow
-class _StitchCard extends StatelessWidget {
-  final ColorScheme cs;
-  final ThemeData theme;
-  final String title;
-  final Widget child;
-
-  const _StitchCard({
-    required this.cs,
-    required this.theme,
-    required this.title,
-    required this.child,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.3),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: cs.onSurface.withValues(alpha: 0.03),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: cs.onSurface,
-            ),
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(height: 1),
-          ),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
 /// Segmented control matching Stitch style
 class _SegmentedControl extends StatelessWidget {
   final ColorScheme cs;
@@ -9322,95 +8027,3 @@ class _SegmentedControl extends StatelessWidget {
   }
 }
 
-/// Bloom's Taxonomy multi-select chips
-class _BloomChipsSection extends StatelessWidget {
-  final ColorScheme cs;
-  final ThemeData theme;
-  final List<String> bloomVerbs;
-  final Set<String> selectedBlooms;
-  final ValueChanged<String> onToggle;
-
-  const _BloomChipsSection({
-    required this.cs,
-    required this.theme,
-    required this.bloomVerbs,
-    required this.selectedBlooms,
-    required this.onToggle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(
-              'Cognitive Objectives (Bloom\'s)',
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: cs.onSurfaceVariant,
-              ),
-            ),
-            Text(
-              'SELECT MULTIPLE',
-              style: TextStyle(
-                fontSize: 10,
-                color: cs.outline,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 1,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: bloomVerbs.map((verb) {
-            final selected = selectedBlooms.contains(verb);
-            return InkWell(
-              onTap: () => onToggle(verb),
-              borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-              child: Container(
-                height: 32,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                  border: Border.all(
-                    color: selected ? cs.primary : cs.outline,
-                  ),
-                  color: selected
-                      ? cs.primary.withValues(alpha: 0.05)
-                      : cs.surfaceBright,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (selected)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 4),
-                        child: Icon(
-                          Icons.check_rounded,
-                          size: 16,
-                          color: cs.primary,
-                        ),
-                      ),
-                    Text(
-                      verb,
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: selected ? cs.primary : cs.onSurfaceVariant,
-                        fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      ],
-    );
-  }
-}

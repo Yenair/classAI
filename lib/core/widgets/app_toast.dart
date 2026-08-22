@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -24,6 +25,8 @@ class AppToast {
     IconData? icon,
     Color? backgroundColor,
     Color? foregroundColor,
+    bool barrierDismissible = false,
+    Duration? autoCloseDuration,
   }) {
     final cs = Theme.of(context).colorScheme;
     final effectiveIcon = icon ?? Icons.error_outline;
@@ -34,12 +37,13 @@ class AppToast {
 
     showDialog(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: barrierDismissible,
       builder: (dialogContext) => _ToastOverlay(
         message: message,
         icon: effectiveIcon,
         backgroundColor: effectiveBgColor,
         foregroundColor: effectiveFgColor,
+        autoCloseDuration: autoCloseDuration,
       ),
     );
   }
@@ -50,12 +54,14 @@ class _ToastOverlay extends StatefulWidget {
   final IconData icon;
   final Color backgroundColor;
   final Color foregroundColor;
+  final Duration? autoCloseDuration;
 
   const _ToastOverlay({
     required this.message,
     required this.icon,
     required this.backgroundColor,
     required this.foregroundColor,
+    this.autoCloseDuration,
   });
 
   @override
@@ -67,6 +73,7 @@ class _ToastOverlayState extends State<_ToastOverlay>
   late final AnimationController _controller;
   late final Animation<Offset> _slideAnimation;
   bool _isCopied = false;
+  Timer? _autoCloseTimer;
 
   @override
   void initState() {
@@ -80,10 +87,16 @@ class _ToastOverlayState extends State<_ToastOverlay>
       end: Offset.zero,
     ).chain(CurveTween(curve: Curves.elasticOut)).animate(_controller);
     _controller.forward();
+    if (widget.autoCloseDuration != null) {
+      _autoCloseTimer = Timer(widget.autoCloseDuration!, () {
+        if (mounted) _dismiss();
+      });
+    }
   }
 
   @override
   void dispose() {
+    _autoCloseTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -229,7 +242,12 @@ void showErrorToast({required BuildContext context, required String message}) {
 }
 
 /// Shows an info toast.
-void showInfoToast({required BuildContext context, required String message}) {
+void showInfoToast({
+  required BuildContext context,
+  required String message,
+  bool barrierDismissible = false,
+  Duration? autoCloseDuration,
+}) {
   final cs = Theme.of(context).colorScheme;
   AppToast.instance.showToast(
     context: context,
@@ -237,6 +255,8 @@ void showInfoToast({required BuildContext context, required String message}) {
     icon: Icons.info_outline,
     backgroundColor: cs.surfaceContainerHigh,
     foregroundColor: cs.onSurface,
+    barrierDismissible: barrierDismissible,
+    autoCloseDuration: autoCloseDuration,
   );
 }
 

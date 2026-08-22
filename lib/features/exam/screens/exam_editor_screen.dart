@@ -3508,7 +3508,7 @@ class _BottomBar extends StatelessWidget {
         context.go('/exams');
         break;
       case 'More':
-        context.go('/settings');
+        context.push('/settings');
         break;
     }
   }

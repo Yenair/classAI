@@ -8,6 +8,13 @@ Write-Host ""
 Write-Host "Press any key to continue the build..." -ForegroundColor Cyan
 $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 
-# (Your actual build command will go below this line)
-flutter build apk --release
-# or whatever your full build command is
+# Build device-specific release APKs (one per CPU ABI) instead of a universal APK.
+# This avoids shipping all three architectures in a single 460 MiB artifact.
+# Distribute app-arm64-v8a-release.apk for modern Android phones.
+Write-Host "Building per-ABI release APKs..." -ForegroundColor Cyan
+flutter build apk --release --split-per-abi
+
+# Also produce an Android App Bundle for Play Store distribution.
+# Play will generate and serve the optimal ABI/device-specific APKs from this.
+Write-Host "Building Android App Bundle..." -ForegroundColor Cyan
+flutter build appbundle --release
