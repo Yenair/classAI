@@ -12,7 +12,6 @@
 //     without any editable fields.
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:classai/core/theme/app_theme.dart';
 
 /// Shared MCQ question card.

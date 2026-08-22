@@ -903,9 +903,11 @@ class _ExamFiltersPanel extends StatelessWidget {
           InkWell(
             onTap: onToggleExpanded,
             borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Row(
+            child: SizedBox(
+              width: double.infinity,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
                 children: [
                   Icon(Icons.tune_rounded, size: 18, color: cs.primary),
                   const SizedBox(width: 8),
@@ -935,6 +937,7 @@ class _ExamFiltersPanel extends StatelessWidget {
                     color: cs.onSurfaceVariant,
                   ),
                 ],
+                ),
               ),
             ),
           ),

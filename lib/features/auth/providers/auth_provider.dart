@@ -1169,13 +1169,6 @@ class AuthNotifier extends Notifier<AuthStateData> {
     );
 
     try {
-      final client = supabase_pkg.Supabase.instance.client;
-      final response = await client.functions
-          .invoke(
-            'send-verification-code',
-            body: {'email': adminEmail, 'mode': 'signup'},
-          )
-          .timeout(const Duration(seconds: 15));
 
       // Store pending data and transition to email verification
       state = state.copyWith(

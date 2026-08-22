@@ -280,7 +280,6 @@ class DatabaseEncryptionBootstrap {
     final oldUserVersion = _readUserVersion(dbPath);
 
     final newDb = sql.sqlite3.open(encryptedPath);
-    var converted = false;
     try {
       newDb.execute("PRAGMA key = '$passphrase';");
       newDb.execute(
@@ -388,9 +387,6 @@ class DatabaseEncryptionBootstrap {
       } finally {
         oldDb.dispose();
       }
-
-      // All verification passed.
-      converted = true;
     } finally {
       // Close the SQLite handle BEFORE any file mutation below. On Windows,
       // deleting the temp while this connection is still open throws a
@@ -398,13 +394,6 @@ class DatabaseEncryptionBootstrap {
       newDb.dispose();
     }
 
-    if (!converted) {
-      // Conversion failed. Remove the half-written encrypted temp (and any
-      // WAL/SHM sidecars) best-effort so the real error is rethrown, not a
-      // secondary file-deletion error. The original exception propagates from
-      // the try block above.
-      _deleteTempBestEffort(encryptedPath);
-    }
 
     // All verification passed. Swap in place.
     final dbFile = File(dbPath);
