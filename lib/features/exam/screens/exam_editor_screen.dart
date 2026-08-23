@@ -1355,7 +1355,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       // Queue sync entry
       final payload = <String, dynamic>{
         'subject': _subject,
-        'classLevel': _classLevel,
+        'class_level': _classLevel,
         'topic': topic,
         'difficulty': _difficulty,
         'curriculum': 'NERDC',

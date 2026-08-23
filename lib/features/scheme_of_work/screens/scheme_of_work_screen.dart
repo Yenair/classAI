@@ -439,11 +439,11 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
               operation: 'INSERT',
               payload: {
                 'subject': subjectName,
-                'classLevel': classLevel,
+                'class_level': classLevel,
                 'week': weekNumber,
                 'topic': topic,
                 'difficulty': 'medium',
-                'bloomsVerbs': '',
+                'blooms_verbs': '',
                 'curriculum': 'NERDC',
                 'teacher_server_id': teacherServerId,
                 'school_server_id': schoolServerId,
@@ -875,6 +875,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     return DropdownButtonFormField<T>(
       initialValue: value,
       isDense: true,
+      isExpanded: true,
       decoration: InputDecoration(
         labelText: label,
         border: const OutlineInputBorder(),
@@ -900,112 +901,134 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
               style: theme.textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant),
             ),
             const SizedBox(height: 12),
-            _buildAdminFilterDropdown<int?>(
-              label: 'Filter by Teacher',
-              value: _adminFilterTeacher,
-              items: [
-                const DropdownMenuItem<int?>(
-                  value: null,
-                  child: Text('All Teachers'),
-                ),
-                ..._teachers.map(
-                  (teacher) => DropdownMenuItem<int?>(
-                    value: teacher.localId,
-                    child: Text(teacher.teacherName),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 180,
+                    child: _buildAdminFilterDropdown<int?>(
+                      label: 'Filter by Teacher',
+                      value: _adminFilterTeacher,
+                      items: [
+                        const DropdownMenuItem<int?>(
+                          value: null,
+                          child: Text('All Teachers'),
+                        ),
+                        ..._teachers.map(
+                          (teacher) => DropdownMenuItem<int?>(
+                            value: teacher.localId,
+                            child: Text(teacher.teacherName),
+                          ),
+                        ),
+                      ],
+                      onChanged: (v) => setState(() {
+                        _adminFilterTeacher = v;
+                        _applyFilterExpansion();
+                      }),
+                    ),
                   ),
-                ),
-              ],
-              onChanged: (v) => setState(() {
-                _adminFilterTeacher = v;
-                _applyFilterExpansion();
-              }),
-            ),
-            const SizedBox(height: 12),
-            _buildAdminFilterDropdown<String>(
-              label: 'Filter by Subject',
-              value: _adminFilterSubject,
-              items: [
-                const DropdownMenuItem<String>(
-                  value: '',
-                  child: Text('All Subjects'),
-                ),
-                ...nerdcSubjects.map(
-                  (s) => DropdownMenuItem<String>(value: s, child: Text(s)),
-                ),
-              ],
-              onChanged: (v) => setState(() {
-                _adminFilterSubject = v ?? '';
-                _applyFilterExpansion();
-              }),
-            ),
-            const SizedBox(height: 12),
-            _buildAdminFilterDropdown<String>(
-              label: 'Filter by Class',
-              value: _adminFilterClass,
-              items: [
-                const DropdownMenuItem<String>(
-                  value: '',
-                  child: Text('All Classes'),
-                ),
-                ..._classFilterOptions().map(
-                  (c) => DropdownMenuItem<String>(value: c, child: Text(c)),
-                ),
-              ],
-              onChanged: (v) => setState(() {
-                _adminFilterClass = v ?? '';
-                _applyFilterExpansion();
-              }),
-            ),
-            const SizedBox(height: 12),
-            _buildAdminFilterDropdown<String>(
-              label: 'Filter by Topic',
-              value: _adminFilterTopic,
-              items: [
-                const DropdownMenuItem<String>(
-                  value: '',
-                  child: Text('All Topics'),
-                ),
-                ..._topicFilterOptions().map(
-                  (t) => DropdownMenuItem<String>(value: t, child: Text(t)),
-                ),
-              ],
-              onChanged: (v) => setState(() {
-                _adminFilterTopic = v ?? '';
-                _applyFilterExpansion();
-              }),
-            ),
-            const SizedBox(height: 12),
-            _buildAdminFilterDropdown<String>(
-              label: 'Filter by Term',
-              value: _adminFilterTerm,
-              items: [
-                const DropdownMenuItem<String>(
-                  value: '',
-                  child: Text('All Terms'),
-                ),
-                ..._terms.map(
-                  (t) => DropdownMenuItem<String>(value: t, child: Text(t)),
-                ),
-              ],
-              onChanged: (v) => setState(() {
-                _adminFilterTerm = v ?? '';
-                _applyFilterExpansion();
-              }),
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: () {
-                setState(() {
-                  _adminFilterTeacher = null;
-                  _adminFilterSubject = '';
-                  _adminFilterClass = '';
-                  _adminFilterTopic = '';
-                  _adminFilterTerm = '';
-                  _expandedAdminGroups.clear();
-                });
-              },
-              icon: const Icon(Icons.filter_alt_off),
-              label: const Text('Clear Filters'),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 180,
+                    child: _buildAdminFilterDropdown<String>(
+                      label: 'Filter by Subject',
+                      value: _adminFilterSubject,
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: '',
+                          child: Text('All Subjects'),
+                        ),
+                        ...nerdcSubjects.map(
+                          (s) => DropdownMenuItem<String>(value: s, child: Text(s)),
+                        ),
+                      ],
+                      onChanged: (v) => setState(() {
+                        _adminFilterSubject = v ?? '';
+                        _applyFilterExpansion();
+                      }),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 180,
+                    child: _buildAdminFilterDropdown<String>(
+                      label: 'Filter by Class',
+                      value: _adminFilterClass,
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: '',
+                          child: Text('All Classes'),
+                        ),
+                        ..._classFilterOptions().map(
+                          (c) => DropdownMenuItem<String>(value: c, child: Text(c)),
+                        ),
+                      ],
+                      onChanged: (v) => setState(() {
+                        _adminFilterClass = v ?? '';
+                        _applyFilterExpansion();
+                      }),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 180,
+                    child: _buildAdminFilterDropdown<String>(
+                      label: 'Filter by Topic',
+                      value: _adminFilterTopic,
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: '',
+                          child: Text('All Topics'),
+                        ),
+                        ..._topicFilterOptions().map(
+                          (t) => DropdownMenuItem<String>(value: t, child: Text(t)),
+                        ),
+                      ],
+                      onChanged: (v) => setState(() {
+                        _adminFilterTopic = v ?? '';
+                        _applyFilterExpansion();
+                      }),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 180,
+                    child: _buildAdminFilterDropdown<String>(
+                      label: 'Filter by Term',
+                      value: _adminFilterTerm,
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: '',
+                          child: Text('All Terms'),
+                        ),
+                        ..._terms.map(
+                          (t) => DropdownMenuItem<String>(value: t, child: Text(t)),
+                        ),
+                      ],
+                      onChanged: (v) => setState(() {
+                        _adminFilterTerm = v ?? '';
+                        _applyFilterExpansion();
+                      }),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _adminFilterTeacher = null;
+                        _adminFilterSubject = '';
+                        _adminFilterClass = '';
+                        _adminFilterTopic = '';
+                        _adminFilterTerm = '';
+                        _expandedAdminGroups.clear();
+                      });
+                    },
+                    icon: const Icon(Icons.filter_alt_off),
+                    label: const Text('Clear Filters'),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
