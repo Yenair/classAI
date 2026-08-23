@@ -61,6 +61,12 @@ class SyncPullPage {
   final List<SyncChange> changes;
   final String? nextCursor;
 
+  /// Per-table cursors map. When non-null, each key is a table name and the
+  /// value is either a composite cursor map `{updated_at, id}` or `null`
+  /// (table exhausted). The entire map is stored as an opaque JSON string in
+  /// `security_config.sync_cursor` and sent back on the next pull.
+  final Map<String, dynamic>? nextCursors;
+
   /// Set of teacher server IDs that are active on the server.
   /// Used by [SyncService._reconcileTeacherRoster] to remove locally-stored
   /// teachers that were hard-deleted from the cloud (Issue 1).
@@ -91,6 +97,7 @@ class SyncPullPage {
   const SyncPullPage({
     required this.changes,
     required this.nextCursor,
+    this.nextCursors,
     this.activeTeacherIds,
     this.pendingTeachers,
     this.subjectCatalog,
@@ -106,6 +113,9 @@ class SyncPullPage {
               SyncChange.fromJson(Map<String, dynamic>.from(item as Map)))
           .toList(),
       nextCursor: json['next_cursor'] as String?,
+      nextCursors: json['next_cursors'] is Map
+          ? Map<String, dynamic>.from(json['next_cursors'] as Map)
+          : null,
       activeTeacherIds: json['active_teacher_ids'] != null
           ? Set<String>.from(json['active_teacher_ids'] as List)
           : null,
@@ -306,15 +316,36 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
       if (_jwt != null && _jwt!.isNotEmpty) {
         headers['x-classai-jwt'] = _jwt!;
       }
+      // ── Detect cursor format ──────────────────────────────────────
+      // Stored cursor is either:
+      //   • a JSON map string (new per-table cursors)  → parse to Map
+      //   • a plain ISO timestamp string (legacy)      → send as lastSyncTimestamp
+      Map<String, dynamic>? parsedCursors;
+      String? legacyTimestamp;
+      if (cursor != null && cursor.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(cursor);
+          if (decoded is Map<String, dynamic>) {
+            parsedCursors = decoded;
+          }
+        } catch (_) {
+          // Not JSON → legacy timestamp
+        }
+        if (parsedCursors == null) {
+          legacyTimestamp = cursor;
+        }
+      }
+
       final response = await client.functions.invoke(
         'sync-pull',
         headers: headers.isNotEmpty ? headers : null,
         body: {
-          'lastSyncTimestamp': cursor ?? '',
+          'lastSyncTimestamp': legacyTimestamp ?? '',
           'tables': _syncableTables,
           'school_id': schoolId,
           // Identity catalogs for the full-table reconciliation (Fix 5).
           'catalogs': ['lessons', 'exams', 'scheme_of_work', 'progress_logs'],
+          if (parsedCursors != null) 'cursors': parsedCursors,
         },
       );
       final data = response.data as Map<String, dynamic>?;
@@ -613,13 +644,30 @@ class DriftSyncRecordStore implements SyncRecordStore {
     String? hash,
   ) async {
     if (hash == null) return null;
-    final row = await (db.select(db.versionHashes)
+    final rows = await (db.select(db.versionHashes)
           ..where((t) =>
               t.table.equals(tableName) &
               t.recordLocalId.equals(localId) &
-              t.hash.equals(hash)))
-        .getSingleOrNull();
-    return _decodeSnapshot(row?.snapshotJson);
+              t.hash.equals(hash))
+          ..orderBy([
+            (t) => OrderingTerm(
+                expression: t.setAt, mode: OrderingMode.desc),
+            (t) => OrderingTerm(expression: t.id),
+          ]))
+        .get();
+    if (rows.isEmpty) return null;
+    if (rows.length > 1) {
+      final truncatedHash = hash.length > 16 ? '${hash.substring(0, 16)}…' : hash;
+      debugPrint(
+        '[SYNC-DUPLICATE-WARNING] loadBaseRecordByHash: '
+        'found ${rows.length} duplicate rows in table "version_hashes" '
+        'for table="$tableName" recordLocalId=$localId '
+        'hash=$truncatedHash — '
+        'choosing most-recently-updated row (id=${rows.first.id}). '
+        'The duplicate rows should be cleaned up.',
+      );
+    }
+    return _decodeSnapshot(rows.first.snapshotJson);
   }
 
   @override
@@ -1062,14 +1110,28 @@ class SyncService {
         tableCatalogs = page.tableCatalogs;
       }
 
-      cursor = page.nextCursor;
+      // ── Advance cursor (per-table or legacy) ──────────────────────────
+      if (page.nextCursors != null) {
+        // New per-table cursor: serialize the map as JSON
+        cursor = jsonEncode(page.nextCursors);
+      } else {
+        // Legacy single cursor
+        cursor = page.nextCursor;
+      }
       await store.updateSecurityConfig(
         lastPullTimestamp: DateTime.now(),
         syncCursor: cursor,
         lastSyncAttemptTime: DateTime.now(),
       );
 
-      if (cursor == null) {
+      // Stop when no table has more data
+      final bool done;
+      if (page.nextCursors != null) {
+        done = !(page.nextCursors!.values.any((v) => v != null));
+      } else {
+        done = cursor == null;
+      }
+      if (done) {
         break;
       }
     }
@@ -1951,6 +2013,60 @@ class SyncService {
         '${r.eventDate.toUtc().millisecondsSinceEpoch}';
   }
 
+  // ── Natural-key helpers (Phase 2) ───────────────────────────────────────
+
+  /// Builds a normalised-name → server_id map from all local subjects.
+  /// Used by the natural-key scan to resolve a local Lesson/Exam's subject
+  /// name to its server UUID for key comparison.
+  Future<Map<String, String>> _subjectServerIdMap() async {
+    final subjects = await db.select(db.subjects).get();
+    final map = <String, String>{};
+    for (final s in subjects) {
+      final name = s.name.trim();
+      if (name.isEmpty || s.serverId == null || s.serverId!.isEmpty) continue;
+      map[_normKey(name)] = s.serverId!;
+    }
+    return map;
+  }
+
+  /// Looks up an active local lesson whose natural key matches [payload].
+  /// Returns the matching [Lesson], or null if none found.
+  /// Requires `teacher_id` and `subject_id` in [payload] (the raw
+  /// Supabase columns carried by the incremental pull).
+  Future<Lesson?> _findActiveLessonByNaturalKey(
+    Map<String, dynamic> payload,
+  ) async {
+    final key = _lessonKeyFromCatalog(payload);
+    if (key == null) return null;
+    final subjectMap = await _subjectServerIdMap();
+    final localRows = await (db.select(db.lessons)
+          ..where((t) => t.isDeleted.equals(false)))
+        .get();
+    for (final row in localRows) {
+      final localKey = _lessonKeyFromLocal(row, subjectMap);
+      if (localKey != null && localKey == key) return row;
+    }
+    return null;
+  }
+
+  /// Looks up an active local exam whose natural key matches [payload].
+  /// Returns the matching [Exam], or null if none found.
+  Future<Exam?> _findActiveExamByNaturalKey(
+    Map<String, dynamic> payload,
+  ) async {
+    final key = _examKeyFromCatalog(payload);
+    if (key == null) return null;
+    final subjectMap = await _subjectServerIdMap();
+    final localRows = await (db.select(db.exams)
+          ..where((t) => t.isDeleted.equals(false)))
+        .get();
+    for (final row in localRows) {
+      final localKey = _examKeyFromLocal(row, subjectMap);
+      if (localKey != null && localKey == key) return row;
+    }
+    return null;
+  }
+
   // ── Per-table wrappers (school scope + payloads) ────────────────────────
 
   Future<void> _reconcileLocalLessons(
@@ -2157,11 +2273,11 @@ class SyncService {
     }
     return {
       'subject': r.subject,
-      'classLevel': r.classLevel,
+      'class_level': r.classLevel,
       'week': r.week,
       'topic': r.topic,
       'difficulty': r.difficulty,
-      'bloomsVerbs': r.bloomsVerbs,
+      'blooms_verbs': r.bloomsVerbs,
       'curriculum': r.curriculum,
       'teacher_server_id': teacherServerId,
       'school_server_id': r.schoolServerId,
@@ -2185,7 +2301,7 @@ class SyncService {
     }
     return {
       'subject': r.subject,
-      'classLevel': r.classLevel,
+      'class_level': r.classLevel,
       'topic': r.topic,
       'difficulty': r.difficulty,
       'curriculum': r.curriculum,
@@ -2703,6 +2819,29 @@ class SyncService {
           }
         }
       }
+      // ── Permanent test-lesson guard ────────────────────────────────
+      // Skip INSERT/UPDATE for the old direct-test lesson that was used
+      // during initial development.  Prevents the entry from ever reaching
+      // the server.  DELETE still allowed so cleanup can remove any
+      // existing server test row.
+      if (entry.queueTable == 'lessons' &&
+          (effectiveOperation == 'INSERT' || effectiveOperation == 'UPDATE')) {
+        final testTeacherId = '4e569a31-99d1-44a6-8bcc-4efbf0d67a71';
+        final tsid = payload['teacher_server_id'] ?? payload['teacher_id'];
+        final topic = payload['topic'];
+        if (tsid == testTeacherId && topic == 'direct test topic') {
+          debugPrint(
+            '[PUSH-QUEUE] Entry ${entry.id}: SKIP test-lesson '
+            '(${effectiveOperation} on lessons, '
+            'teacher=$tsid, topic=$topic) — marked terminal',
+          );
+          await store.markQueueTerminalFailure(
+            entry.id,
+            lastError: 'Test lesson skipped: permanent guard',
+          );
+          continue;
+        }
+      }
       // Inject local_id so the server can echo it back in the results
       // array, enabling the client to match responses to entries.
       payload['local_id'] = entry.recordLocalId;
@@ -2815,11 +2954,44 @@ class SyncService {
         // 2. Save a version_hash snapshot so the merge engine has a base for
         //    future sync comparisons.
         if (result.serverId != null && result.serverId!.isNotEmpty) {
-          await _updateLocalServerId(
-            tableName: entry.queueTable,
-            localId: entry.recordLocalId,
-            serverId: result.serverId!,
-          );
+          // ── Phase 2: push-result duplicate guard ───────────────
+          // Before assigning the server_id, check whether another
+          // active local row already has it. Catches the crash-gap:
+          // previous push succeeded, _updateLocalServerId wrote
+          // server_id, removeQueueEntry crashed, stale INSERT was
+          // re-pushed as UPDATE, server accepted it again.
+          bool duplicateCleanedUp = false;
+          if (entry.queueTable == 'lessons' ||
+              entry.queueTable == 'exams' ||
+              entry.queueTable == 'scheme_of_work') {
+            final pushedSnapshot = _decodePayload(entry.payload);
+            duplicateCleanedUp = await _handlePushDuplicateServerId(
+              tableName: entry.queueTable,
+              pushedLocalId: entry.recordLocalId,
+              serverId: result.serverId!,
+              pushedSnapshot: pushedSnapshot,
+            );
+          }
+
+          if (!duplicateCleanedUp) {
+            // Normal path: no duplicate — assign server_id.
+            await _updateLocalServerId(
+              tableName: entry.queueTable,
+              localId: entry.recordLocalId,
+              serverId: result.serverId!,
+            );
+          } else {
+            // Duplicate was cleaned up: the pushed local row has been
+            // hard-deleted. Skip the normal version_hash save and
+            // removeQueueEntry — there's nothing to save against, and
+            // the queue entry is now orphaned (marked terminal inside
+            // _handlePushDuplicateServerId).
+            debugPrint(
+              '[PUSH-RESULT] Entry ${entry.id}: duplicate cleaned up '
+              '— skipping version_hash save and removeQueueEntry',
+            );
+            continue;
+          }
         }
         // Build a snapshot from the original payload to record in version_hashes.
         final payload = _decodePayload(entry.payload);
@@ -2987,6 +3159,531 @@ class SyncService {
       default:
         break;
     }
+  }
+
+  // ── Phase 2: Push-result duplicate guard ────────────────────────────────
+
+  /// After a successful push, the server returns [serverId]. Before
+  /// assigning it to [pushedLocalId], checks whether another active
+  /// local row in [tableName] already holds that server_id.
+  ///
+  /// If a duplicate is found:
+  ///   1. The row with the **smallest local id** is the canonical owner.
+  ///   2. Non-empty content from [pushedSnapshot] is merged into the
+  ///      canonical row (empty/null pushed fields keep the canonical
+  ///      row's value — no content is lost).
+  ///   3. The pushed-row's server_id is set on the canonical row.
+  ///   4. The pushed row (the duplicate) is **hard-deleted**.
+  ///   5. No sync_queue DELETE is created — this is a local-only cleanup.
+  ///   6. Any remaining sync_queue entries for the deleted duplicate's
+  ///      local id are marked terminal.
+  ///   7. A version_hash snapshot is saved for the canonical row.
+  ///
+  /// Returns `true` if a duplicate was cleaned up (caller should skip
+  /// the normal `_updateLocalServerId` + `saveSyncedRecord` for the
+  /// pushed entry). Returns `false` if no duplicate was found.
+  Future<bool> _handlePushDuplicateServerId({
+    required String tableName,
+    required int pushedLocalId,
+    required String serverId,
+    required Map<String, dynamic> pushedSnapshot,
+  }) async {
+    // ── Step 1: find all active rows with this server_id ─────────
+    List<dynamic> allMatches;
+    if (tableName == 'lessons') {
+      allMatches = await (db.select(db.lessons)
+            ..where((t) =>
+                t.serverId.equals(serverId) & t.isDeleted.equals(false)))
+          .get();
+    } else if (tableName == 'scheme_of_work') {
+      allMatches = await (db.select(db.schemeOfWork)
+            ..where((t) =>
+                t.serverId.equals(serverId) & t.isDeleted.equals(false)))
+          .get();
+    } else {
+      allMatches = await (db.select(db.exams)
+            ..where((t) =>
+                t.serverId.equals(serverId) & t.isDeleted.equals(false)))
+          .get();
+    }
+
+    // Locate the pushed row among the matches.
+    final pushedInList = allMatches.where((r) {
+      return _rowLocalId(tableName, r) == pushedLocalId;
+    }).toList();
+
+    // No duplicate: either empty (first push — server_id not yet stored)
+    // or only the pushed row itself matches.
+    if (allMatches.isEmpty ||
+        (allMatches.length == 1 && pushedInList.isNotEmpty)) {
+      return false;
+    }
+
+    // ── Step 2: identify canonical (smallest local id) ───────────
+    allMatches.sort((a, b) =>
+        _rowLocalId(tableName, a).compareTo(_rowLocalId(tableName, b)));
+    final canonicalRow = allMatches.first;
+    final canonicalId = _rowLocalId(tableName, canonicalRow);
+
+    if (canonicalId == pushedLocalId) {
+      return false; // pushed row IS the canonical — no cleanup needed
+    }
+
+    debugPrint(
+      '[SYNC-DUPLICATE-PUSH] $tableName: duplicate server_id=$serverId '
+      '— canonical=localId=$canonicalId, '
+      'duplicate=localId=$pushedLocalId',
+    );
+
+    // ── Step 3: merge non-empty pushed content into canonical ────
+    if (tableName == 'lessons') {
+      final canonical = canonicalRow as Lesson;
+      final resolvedSubject = await _resolveSubjectNameFromSync(
+        pushedSnapshot,
+        existingSubject: canonical.subject,
+      );
+      final pushedClassLevel =
+          (pushedSnapshot['class_level'] as String? ?? '');
+      final pushedTopic = (pushedSnapshot['topic'] as String? ?? '');
+
+      await (db.update(db.lessons)
+            ..where((t) => t.id.equals(canonicalId)))
+          .write(LessonsCompanion(
+        serverId: Value(serverId),
+        subject: Value(resolvedSubject),
+        classLevel: Value(
+          pushedClassLevel.isNotEmpty ? pushedClassLevel : canonical.classLevel,
+        ),
+        week: Value(_toInt(pushedSnapshot['week']) ?? canonical.week),
+        topic: Value(pushedTopic.isNotEmpty ? pushedTopic : canonical.topic),
+        difficulty: Value(
+          (pushedSnapshot['difficulty'] as String? ?? '').isNotEmpty
+              ? pushedSnapshot['difficulty'] as String
+              : canonical.difficulty,
+        ),
+        bloomsVerbs: Value(
+          (pushedSnapshot['blooms_verbs'] as String? ?? '').isNotEmpty
+              ? pushedSnapshot['blooms_verbs'] as String
+              : canonical.bloomsVerbs,
+        ),
+        curriculum: Value(
+          (pushedSnapshot['curriculum'] as String? ?? '').isNotEmpty
+              ? pushedSnapshot['curriculum'] as String
+              : canonical.curriculum,
+        ),
+        content: Value(
+          (pushedSnapshot['content'] as String? ?? '').isNotEmpty
+              ? pushedSnapshot['content'] as String
+              : canonical.content,
+        ),
+        contentHash: Value(
+          (pushedSnapshot['content_hash'] as String? ?? '').isNotEmpty
+              ? pushedSnapshot['content_hash'] as String
+              : (canonical.contentHash ?? ''),
+        ),
+        schemeOfWorkId: Value(
+          (pushedSnapshot['scheme_of_work_id'] as String? ?? '').isNotEmpty
+              ? pushedSnapshot['scheme_of_work_id'] as String
+              : (canonical.schemeOfWorkId ?? ''),
+        ),
+        weekNumber: Value(
+          _toInt(pushedSnapshot['week_number']) ?? canonical.weekNumber,
+        ),
+        isDeleted: Value(canonical.isDeleted),
+        lastModifiedBy: Value(
+          (pushedSnapshot['last_modified_by'] as String? ?? '').isNotEmpty
+              ? pushedSnapshot['last_modified_by'] as String
+              : (canonical.lastModifiedBy ?? ''),
+        ),
+        teacherServerId: Value(
+          canonical.teacherServerId ??
+              (pushedSnapshot['teacher_server_id'] as String? ??
+                  pushedSnapshot['teacher_id'] as String?),
+        ),
+        schoolServerId: Value(
+          canonical.schoolServerId ??
+              (pushedSnapshot['school_server_id'] as String? ??
+                  pushedSnapshot['school_id'] as String?),
+        ),
+        isUnlocked: Value(
+          pushedSnapshot['is_unlocked'] == true ||
+                  pushedSnapshot['is_unlocked'] == 'true'
+              ? true
+              : canonical.isUnlocked,
+        ),
+        status: Value(
+          (pushedSnapshot['status'] as String? ?? '').isNotEmpty
+              ? pushedSnapshot['status'] as String
+              : canonical.status,
+        ),
+        term: Value(
+          (pushedSnapshot['term'] as String? ?? '').isNotEmpty
+              ? pushedSnapshot['term'] as String
+              : (canonical.term ?? ''),
+        ),
+        updatedAt: Value(DateTime.now()),
+      ));
+    } else if (tableName == 'exams') {
+      // exams
+      final canonical = canonicalRow as Exam;
+      final resolvedSubject = await _resolveSubjectNameFromSync(
+        pushedSnapshot,
+        existingSubject: canonical.subject,
+      );
+      final pushedClassLevel =
+          (pushedSnapshot['class_level'] as String? ?? '');
+      final pushedTopic = (pushedSnapshot['topic'] as String? ?? '');
+
+      await (db.update(db.exams)
+            ..where((t) => t.id.equals(canonicalId)))
+          .write(ExamsCompanion(
+        serverId: Value(serverId),
+        subject: Value(resolvedSubject),
+        classLevel: Value(
+          pushedClassLevel.isNotEmpty ? pushedClassLevel : canonical.classLevel,
+        ),
+        topic: Value(pushedTopic.isNotEmpty ? pushedTopic : canonical.topic),
+        difficulty: Value(
+          (pushedSnapshot['difficulty'] as String? ?? '').isNotEmpty
+              ? pushedSnapshot['difficulty'] as String
+              : canonical.difficulty,
+        ),
+        curriculum: Value(
+          (pushedSnapshot['curriculum'] as String? ?? '').isNotEmpty
+              ? pushedSnapshot['curriculum'] as String
+              : canonical.curriculum,
+        ),
+        content: Value(
+          (pushedSnapshot['content'] as String? ?? '').isNotEmpty
+              ? pushedSnapshot['content'] as String
+              : canonical.content,
+        ),
+        schemeOfWorkId: Value(
+          (pushedSnapshot['scheme_of_work_id'] as String? ?? '').isNotEmpty
+              ? pushedSnapshot['scheme_of_work_id'] as String
+              : (canonical.schemeOfWorkId ?? ''),
+        ),
+        weekNumber: Value(
+          _toInt(pushedSnapshot['week_number']) ?? canonical.weekNumber,
+        ),
+        isDeleted: Value(canonical.isDeleted),
+        lastModifiedBy: Value(
+          (pushedSnapshot['last_modified_by'] as String? ?? '').isNotEmpty
+              ? pushedSnapshot['last_modified_by'] as String
+              : (canonical.lastModifiedBy ?? ''),
+        ),
+        teacherServerId: Value(
+          canonical.teacherServerId ??
+              (pushedSnapshot['teacher_server_id'] as String? ??
+                  pushedSnapshot['teacher_id'] as String?),
+        ),
+        schoolServerId: Value(
+          canonical.schoolServerId ??
+              (pushedSnapshot['school_server_id'] as String? ??
+                  pushedSnapshot['school_id'] as String?),
+        ),
+        isUnlocked: Value(
+          pushedSnapshot['is_unlocked'] == true ||
+                  pushedSnapshot['is_unlocked'] == 'true'
+              ? true
+              : canonical.isUnlocked,
+        ),
+        term: Value(
+          (pushedSnapshot['term'] as String? ?? '').isNotEmpty
+              ? pushedSnapshot['term'] as String
+              : (canonical.term ?? ''),
+        ),
+        updatedAt: Value(DateTime.now()),
+      ));
+    } else if (tableName == 'scheme_of_work') {
+      final canonical = canonicalRow as SchemeOfWorkData;
+      // Load the actual local pushed row so we use its real fields
+      // (the queue payload may be incomplete — e.g. missing objectives).
+      final pushedRows = await (db.select(db.schemeOfWork)
+            ..where((t) => t.id.equals(pushedLocalId)))
+          .get();
+      final pushedRow = pushedRows.isNotEmpty ? pushedRows.first : null;
+      // Local-first merge: if the pushed local row has a non-empty field,
+      // it wins; otherwise the canonical value stays.
+      String _pf(String local, String canonicalVal) {
+        if (local.isNotEmpty) return local;
+        return canonicalVal;
+      }
+      String? _pfN(String? local, String? canonicalVal) {
+        if (local != null && local.isNotEmpty) return local;
+        return canonicalVal;
+      }
+
+      final pTopic = pushedRow?.topic ?? (pushedSnapshot['topic'] as String? ?? '');
+      final pObjectives = pushedRow?.objectives ?? (pushedSnapshot['objectives'] as String? ?? '');
+      final pStatus = pushedRow?.status ?? (pushedSnapshot['status'] as String? ?? '');
+      final pAdminEditedTopic = pushedRow?.adminEditedTopic ?? (pushedSnapshot['admin_edited_topic'] as String?);
+      final pAdminComment = pushedRow?.adminComment ?? (pushedSnapshot['admin_comment'] as String?);
+      final pClassLevel = pushedRow?.classLevel ?? (pushedSnapshot['class_level'] as String? ?? '');
+      final pTerm = pushedRow?.term ?? (pushedSnapshot['term'] as String? ?? '');
+      final int pWeekNumber;
+      if (pushedRow != null && pushedRow.weekNumber != 0) {
+        pWeekNumber = pushedRow.weekNumber;
+      } else {
+        pWeekNumber = _toInt(pushedSnapshot['week_number']) ?? canonical.weekNumber;
+      }
+
+      await (db.update(db.schemeOfWork)
+            ..where((t) => t.id.equals(canonicalId)))
+          .write(SchemeOfWorkCompanion(
+        serverId: Value(serverId),
+        topic: Value(_pf(pTopic, canonical.topic)),
+        objectives: Value(_pf(pObjectives, canonical.objectives)),
+        status: Value(_pf(pStatus, canonical.status)),
+        adminEditedTopic: Value(_pfN(pAdminEditedTopic, canonical.adminEditedTopic)),
+        adminComment: Value(_pfN(pAdminComment, canonical.adminComment)),
+        classLevel: Value(_pf(pClassLevel, canonical.classLevel)),
+        term: Value(_pf(pTerm, canonical.term)),
+        weekNumber: Value(pWeekNumber),
+        updatedAt: Value(DateTime.now()),
+      ));
+    }
+
+    // ── Step 4: hard-delete the pushed duplicate ─────────────────
+    // No sync_queue DELETE — this is a local-only cleanup.
+    if (tableName == 'lessons') {
+      await (db.delete(db.lessons)
+            ..where((t) => t.id.equals(pushedLocalId)))
+          .go();
+    } else if (tableName == 'scheme_of_work') {
+      await (db.delete(db.schemeOfWork)
+            ..where((t) => t.id.equals(pushedLocalId)))
+          .go();
+    } else {
+      await (db.delete(db.exams)
+            ..where((t) => t.id.equals(pushedLocalId)))
+          .go();
+    }
+    // Clean up the duplicate's version_hashes row.
+    await (db.delete(db.versionHashes)
+          ..where((t) =>
+              t.table.equals(tableName) &
+              t.recordLocalId.equals(pushedLocalId)))
+        .go();
+
+    // ── Step 5: mark orphan queue entries terminal ───────────────
+    final orphanQueue = await (db.select(db.syncQueue)
+          ..where((t) =>
+              t.queueTable.equals(tableName) &
+              t.recordLocalId.equals(pushedLocalId)))
+        .get();
+    for (final q in orphanQueue) {
+      await store.markQueueTerminalFailure(
+        q.id,
+        lastError: 'Local row hard-deleted as push duplicate — '
+            'canonical localId=$canonicalId',
+      );
+    }
+
+    // ── Step 6: save version_hash for the merged canonical row ──
+    // Build a snapshot from the exact merged values used to update
+    // the canonical row in Step 3 so the merge base reflects the
+    // merged pushed content (NOT the canonical row's old snapshot).
+    final now = DateTime.now();
+    final Map<String, dynamic> mergedSnapshot;
+    if (tableName == 'lessons') {
+      final canonical = canonicalRow as Lesson;
+      final resolvedSubject = await _resolveSubjectNameFromSync(
+        pushedSnapshot,
+        existingSubject: canonical.subject,
+      );
+      final pushedClassLevel =
+          (pushedSnapshot['class_level'] as String? ?? '');
+      final pushedTopic = (pushedSnapshot['topic'] as String? ?? '');
+      mergedSnapshot = {
+        'server_id': serverId,
+        'subject': resolvedSubject,
+        'class_level': pushedClassLevel.isNotEmpty
+            ? pushedClassLevel
+            : canonical.classLevel,
+        'week': _toInt(pushedSnapshot['week']) ?? canonical.week,
+        'topic':
+            pushedTopic.isNotEmpty ? pushedTopic : canonical.topic,
+        'difficulty': (pushedSnapshot['difficulty'] as String? ?? '')
+                .isNotEmpty
+            ? pushedSnapshot['difficulty'] as String
+            : canonical.difficulty,
+        'blooms_verbs':
+            (pushedSnapshot['blooms_verbs'] as String? ?? '')
+                    .isNotEmpty
+                ? pushedSnapshot['blooms_verbs'] as String
+                : canonical.bloomsVerbs,
+        'curriculum':
+            (pushedSnapshot['curriculum'] as String? ?? '').isNotEmpty
+                ? pushedSnapshot['curriculum'] as String
+                : canonical.curriculum,
+        'content': (pushedSnapshot['content'] as String? ?? '')
+                .isNotEmpty
+            ? pushedSnapshot['content'] as String
+            : canonical.content,
+        'content_hash':
+            (pushedSnapshot['content_hash'] as String? ?? '')
+                    .isNotEmpty
+                ? pushedSnapshot['content_hash'] as String
+                : (canonical.contentHash ?? ''),
+        'scheme_of_work_id':
+            (pushedSnapshot['scheme_of_work_id'] as String? ?? '')
+                    .isNotEmpty
+                ? pushedSnapshot['scheme_of_work_id'] as String
+                : (canonical.schemeOfWorkId ?? ''),
+        'week_number':
+            _toInt(pushedSnapshot['week_number']) ??
+                canonical.weekNumber,
+        'is_deleted': canonical.isDeleted,
+        'last_modified_by':
+            (pushedSnapshot['last_modified_by'] as String? ?? '')
+                    .isNotEmpty
+                ? pushedSnapshot['last_modified_by'] as String
+                : (canonical.lastModifiedBy ?? ''),
+        'teacher_server_id': canonical.teacherServerId ??
+            (pushedSnapshot['teacher_server_id'] as String? ??
+                pushedSnapshot['teacher_id'] as String?),
+        'school_server_id': canonical.schoolServerId ??
+            (pushedSnapshot['school_server_id'] as String? ??
+                pushedSnapshot['school_id'] as String?),
+        'is_unlocked': pushedSnapshot['is_unlocked'] == true ||
+                pushedSnapshot['is_unlocked'] == 'true'
+            ? true
+            : canonical.isUnlocked,
+        'status': (pushedSnapshot['status'] as String? ?? '')
+                .isNotEmpty
+            ? pushedSnapshot['status'] as String
+            : canonical.status,
+        'term': (pushedSnapshot['term'] as String? ?? '').isNotEmpty
+            ? pushedSnapshot['term'] as String
+            : (canonical.term ?? ''),
+        'created_at': canonical.createdAt.toIso8601String(),
+        'updated_at': now.toIso8601String(),
+      };
+    } else if (tableName == 'exams') {
+      // exams
+      final canonical = canonicalRow as Exam;
+      final resolvedSubject = await _resolveSubjectNameFromSync(
+        pushedSnapshot,
+        existingSubject: canonical.subject,
+      );
+      final pushedClassLevel =
+          (pushedSnapshot['class_level'] as String? ?? '');
+      final pushedTopic = (pushedSnapshot['topic'] as String? ?? '');
+      mergedSnapshot = {
+        'server_id': serverId,
+        'subject': resolvedSubject,
+        'class_level': pushedClassLevel.isNotEmpty
+            ? pushedClassLevel
+            : canonical.classLevel,
+        'topic':
+            pushedTopic.isNotEmpty ? pushedTopic : canonical.topic,
+        'difficulty': (pushedSnapshot['difficulty'] as String? ?? '')
+                .isNotEmpty
+            ? pushedSnapshot['difficulty'] as String
+            : canonical.difficulty,
+        'curriculum':
+            (pushedSnapshot['curriculum'] as String? ?? '').isNotEmpty
+                ? pushedSnapshot['curriculum'] as String
+                : canonical.curriculum,
+        'content': (pushedSnapshot['content'] as String? ?? '')
+                .isNotEmpty
+            ? pushedSnapshot['content'] as String
+            : canonical.content,
+        'scheme_of_work_id':
+            (pushedSnapshot['scheme_of_work_id'] as String? ?? '')
+                    .isNotEmpty
+                ? pushedSnapshot['scheme_of_work_id'] as String
+                : (canonical.schemeOfWorkId ?? ''),
+        'week_number':
+            _toInt(pushedSnapshot['week_number']) ??
+                canonical.weekNumber,
+        'is_deleted': canonical.isDeleted,
+        'last_modified_by':
+            (pushedSnapshot['last_modified_by'] as String? ?? '')
+                    .isNotEmpty
+                ? pushedSnapshot['last_modified_by'] as String
+                : (canonical.lastModifiedBy ?? ''),
+        'teacher_server_id': canonical.teacherServerId ??
+            (pushedSnapshot['teacher_server_id'] as String? ??
+                pushedSnapshot['teacher_id'] as String?),
+        'school_server_id': canonical.schoolServerId ??
+            (pushedSnapshot['school_server_id'] as String? ??
+                pushedSnapshot['school_id'] as String?),
+        'is_unlocked': pushedSnapshot['is_unlocked'] == true ||
+                pushedSnapshot['is_unlocked'] == 'true'
+            ? true
+            : canonical.isUnlocked,
+        'term': (pushedSnapshot['term'] as String? ?? '').isNotEmpty
+            ? pushedSnapshot['term'] as String
+            : (canonical.term ?? ''),
+        'created_at': canonical.createdAt.toIso8601String(),
+        'updated_at': now.toIso8601String(),
+      };
+    } else if (tableName == 'scheme_of_work') {
+      final canonical = canonicalRow as SchemeOfWorkData;
+      // The pushed local row was already hard-deleted in Step 4.
+      // Retrieve its data from allMatches (queried before deletion)
+      // to build an accurate merged snapshot.
+      final pushedData = allMatches.where((r) =>
+          _rowLocalId(tableName, r) == pushedLocalId).toList();
+      final pushedLocal = pushedData.isNotEmpty
+          ? pushedData.first as SchemeOfWorkData
+          : null;
+      String _pf(String? local, String canonicalVal) {
+        if (local != null && local.isNotEmpty) return local;
+        return canonicalVal;
+      }
+      String? _pfN(String? local, String? canonicalVal) {
+        if (local != null && local.isNotEmpty) return local;
+        return canonicalVal;
+      }
+      final pTopic = pushedLocal?.topic ?? (pushedSnapshot['topic'] as String? ?? '');
+      final pObjectives = pushedLocal?.objectives ?? (pushedSnapshot['objectives'] as String? ?? '');
+      final pStatus = pushedLocal?.status ?? (pushedSnapshot['status'] as String? ?? '');
+      final pAdminEditedTopic = pushedLocal?.adminEditedTopic ?? (pushedSnapshot['admin_edited_topic'] as String?);
+      final pAdminComment = pushedLocal?.adminComment ?? (pushedSnapshot['admin_comment'] as String?);
+      final pClassLevel = pushedLocal?.classLevel ?? (pushedSnapshot['class_level'] as String? ?? '');
+      final pTerm = pushedLocal?.term ?? (pushedSnapshot['term'] as String? ?? '');
+      final int pWeekNumber;
+      if (pushedLocal != null && pushedLocal.weekNumber != 0) {
+        pWeekNumber = pushedLocal.weekNumber;
+      } else {
+        pWeekNumber = _toInt(pushedSnapshot['week_number']) ?? canonical.weekNumber;
+      }
+      mergedSnapshot = {
+        'server_id': serverId,
+        'topic': _pf(pTopic, canonical.topic),
+        'objectives': _pf(pObjectives, canonical.objectives),
+        'status': _pf(pStatus, canonical.status),
+        'admin_edited_topic': _pfN(pAdminEditedTopic, canonical.adminEditedTopic),
+        'admin_comment': _pfN(pAdminComment, canonical.adminComment),
+        'class_level': _pf(pClassLevel, canonical.classLevel),
+        'term': _pf(pTerm, canonical.term),
+        'week_number': pWeekNumber,
+        'school_id': canonical.schoolId,
+        'teacher_id': canonical.teacherId,
+        'subject_id': canonical.subjectId,
+        'is_deleted': canonical.isDeleted,
+        'created_at': canonical.createdAt.toIso8601String(),
+        'updated_at': now.toIso8601String(),
+      };
+    } else {
+      throw ArgumentError('Unsupported table: $tableName');
+    }
+    await store.saveSyncedRecord(
+      tableName: tableName,
+      localId: canonicalId,
+      snapshot: mergedSnapshot,
+    );
+
+    debugPrint(
+      '[SYNC-DUPLICATE-PUSH] $tableName: merged into canonical '
+      'localId=$canonicalId, deleted duplicate localId=$pushedLocalId, '
+      'marked ${orphanQueue.length} orphan queue entry(ies) terminal',
+    );
+
+    return true;
   }
 
   Future<void> _applyCreditState() async {
@@ -3359,9 +4056,16 @@ class SyncService {
       if (existing.length > 1) {
         debugPrint(
           '[SYNC] _mergeRemoteChange: ${existing.length} local rows for '
-          'scheme_of_work serverId=$serverId — using lowest localId',
+          'scheme_of_work serverId=$serverId — using lowest localId, '
+          'merging content from duplicates',
         );
         existing.sort((a, b) => a.id.compareTo(b.id));
+        // Merge newer non-empty fields from each duplicate into the
+        // canonical row. Duplicates are NOT deleted — the admin must
+        // confirm removal via Admin Diagnostics.
+        for (final dup in existing.skip(1)) {
+          await _mergeSchemeOfWorkIntoCanonical(existing.first, dup);
+        }
       }
       localId = existing.first.id;
       local = await store.loadLocalRecord(change.table, localId) ?? const {};
@@ -3930,7 +4634,72 @@ class SyncService {
       debugPrint('[sync] _upsertLessonFromSync: UPDATED lesson $serverId');
       return existingLesson.id;
     } else {
-      // Insert new lesson record.
+      // ── Phase 2: Natural-key guard ──────────────────────────────
+      // Before INSERT, check whether an active local lesson with the
+      // same natural key (school, teacher, subject, class_level,
+      // week, term) already exists. Catches the case where a previous
+      // push succeeded (server_id assigned) but the cleanup crashed,
+      // and a later pull delivers the same row: _mergeRemoteChange
+      // found no server_id match and fell through here.
+      final naturalKeyMatch = await _findActiveLessonByNaturalKey(merged);
+      if (naturalKeyMatch != null) {
+        final resolvedSubject = await _resolveSubjectNameFromSync(
+          merged,
+          existingSubject: naturalKeyMatch.subject,
+        );
+        final resolvedClassLevel =
+            (classLevel.isEmpty && naturalKeyMatch.classLevel.isNotEmpty)
+                ? naturalKeyMatch.classLevel
+                : classLevel;
+        final resolvedTopic =
+            (topic.isEmpty && naturalKeyMatch.topic.isNotEmpty)
+                ? naturalKeyMatch.topic
+                : topic;
+
+        await (db.update(db.lessons)
+              ..where((t) => t.id.equals(naturalKeyMatch.id)))
+            .write(LessonsCompanion(
+          serverId: Value(serverId),
+          subject: Value(resolvedSubject),
+          classLevel: Value(resolvedClassLevel),
+          week: Value(week),
+          topic: Value(resolvedTopic),
+          difficulty: Value(difficulty),
+          bloomsVerbs: Value(bloomsVerbs),
+          curriculum: Value(curriculum),
+          content: Value(content),
+          contentHash:
+              contentHash != null ? Value(contentHash) : const Value.absent(),
+          schemeOfWorkId: schemeOfWorkId != null
+              ? Value(schemeOfWorkId)
+              : const Value.absent(),
+          weekNumber:
+              weekNumber != null ? Value(weekNumber) : const Value.absent(),
+          isDeleted: Value(isDeleted),
+          lastModifiedBy: lastModifiedBy != null
+              ? Value(lastModifiedBy)
+              : const Value.absent(),
+          teacherServerId: teacherServerId != null
+              ? Value(teacherServerId)
+              : const Value.absent(),
+          schoolServerId: schoolServerId != null
+              ? Value(schoolServerId)
+              : const Value.absent(),
+          isUnlocked: Value(isUnlocked),
+          status: Value(status),
+          term: term != null ? Value(term) : const Value.absent(),
+          updatedAt: Value(updatedAt),
+          updateCounter: Value(updateCounter),
+        ));
+        debugPrint(
+          '[sync] _upsertLessonFromSync: NATURAL-KEY ADOPTED lesson '
+          '$serverId → localId=${naturalKeyMatch.id} '
+          '(prevented duplicate INSERT)',
+        );
+        return naturalKeyMatch.id;
+      }
+
+      // No natural-key match — safe to INSERT.
       final resolvedSubject = await _resolveSubjectNameFromSync(merged);
       final newLocalId = await (db.into(db.lessons).insert(
             LessonsCompanion.insert(
@@ -4071,7 +4840,61 @@ class SyncService {
       debugPrint('[sync] _upsertExamFromSync: UPDATED exam $serverId');
       return existingExam.id;
     } else {
-      // Insert new exam record.
+      // ── Phase 2: Natural-key guard ──────────────────────────────
+      final naturalKeyMatch = await _findActiveExamByNaturalKey(merged);
+      if (naturalKeyMatch != null) {
+        final resolvedSubject = await _resolveSubjectNameFromSync(
+          merged,
+          existingSubject: naturalKeyMatch.subject,
+        );
+        final resolvedClassLevel =
+            (classLevel.isEmpty && naturalKeyMatch.classLevel.isNotEmpty)
+                ? naturalKeyMatch.classLevel
+                : classLevel;
+        final resolvedTopic =
+            (topic.isEmpty && naturalKeyMatch.topic.isNotEmpty)
+                ? naturalKeyMatch.topic
+                : topic;
+
+        await (db.update(db.exams)
+              ..where((t) => t.id.equals(naturalKeyMatch.id)))
+            .write(ExamsCompanion(
+          serverId: Value(serverId),
+          subject: Value(resolvedSubject),
+          classLevel: Value(resolvedClassLevel),
+          topic: Value(resolvedTopic),
+          difficulty: Value(difficulty),
+          curriculum: Value(curriculum),
+          content: Value(content),
+          schemeOfWorkId: schemeOfWorkId != null
+              ? Value(schemeOfWorkId)
+              : const Value.absent(),
+          weekNumber:
+              weekNumber != null ? Value(weekNumber) : const Value.absent(),
+          isDeleted: Value(isDeleted),
+          lastModifiedBy: lastModifiedBy != null
+              ? Value(lastModifiedBy)
+              : const Value.absent(),
+          teacherServerId: teacherServerId != null
+              ? Value(teacherServerId)
+              : const Value.absent(),
+          schoolServerId: schoolServerId != null
+              ? Value(schoolServerId)
+              : const Value.absent(),
+          isUnlocked: Value(isUnlocked),
+          term: term != null ? Value(term) : const Value.absent(),
+          updatedAt: Value(updatedAt),
+          updateCounter: Value(updateCounter),
+        ));
+        debugPrint(
+          '[sync] _upsertExamFromSync: NATURAL-KEY ADOPTED exam '
+          '$serverId → localId=${naturalKeyMatch.id} '
+          '(prevented duplicate INSERT)',
+        );
+        return naturalKeyMatch.id;
+      }
+
+      // No natural-key match — safe to INSERT.
       final resolvedSubject = await _resolveSubjectNameFromSync(merged);
       final newLocalId = await (db.into(db.exams).insert(
             ExamsCompanion.insert(
@@ -4339,9 +5162,25 @@ class SyncService {
     final createdAt = dateVal('created_at') ?? DateTime.now();
     final updatedAt = dateVal('updated_at') ?? DateTime.now();
 
+    // Local-first merge: if local is non-empty, keep it;
+    // if local is empty/null, use the remote non-empty value.
+    String _localFirst(String local, String remote) {
+      if (local.isNotEmpty) return local;
+      if (remote.isNotEmpty) return remote;
+      return '';
+    }
+    String? _localFirstN(String? local, String? remote) {
+      if (local != null && local.isNotEmpty) return local;
+      if (remote != null && remote.isNotEmpty) return remote;
+      return null;
+    }
+
     if (existing.isNotEmpty) {
       // Update existing scheme_of_work record.
+      // Local-first merge: non-empty local values are preserved;
+      // only empty/null local fields are filled from the remote payload.
       final existingRow = existing.first;
+
       await (db.update(db.schemeOfWork)
             ..where((t) => t.id.equals(existingRow.id)))
           .write(SchemeOfWorkCompanion(
@@ -4349,19 +5188,16 @@ class SyncService {
         schoolId: Value(resolvedSchoolId),
         teacherId: Value(resolvedTeacherId),
         subjectId: Value(resolvedSubjectId),
-        term: Value(normalizeSowTermForServer(term)),
-        weekNumber: Value(weekNumber),
-        topic: Value(topic),
-        objectives: Value(objectives),
-        status: Value(status),
-        adminEditedTopic: adminEditedTopic != null
-            ? Value(adminEditedTopic)
-            : const Value.absent(),
-        adminComment:
-            adminComment != null ? Value(adminComment) : const Value.absent(),
+        term: Value(_localFirst(existingRow.term, normalizeSowTermForServer(term))),
+        weekNumber: Value(existingRow.weekNumber != 0 ? existingRow.weekNumber : weekNumber),
+        topic: Value(_localFirst(existingRow.topic, topic)),
+        objectives: Value(_localFirst(existingRow.objectives, objectives)),
+        status: Value(_localFirst(existingRow.status, status)),
+        adminEditedTopic: Value(_localFirstN(existingRow.adminEditedTopic, adminEditedTopic)),
+        adminComment: Value(_localFirstN(existingRow.adminComment, adminComment)),
+        classLevel: Value(_localFirst(existingRow.classLevel, classLevel)),
         updateCounter: Value(updateCounter),
         isDeleted: Value(isDeleted),
-        classLevel: Value(classLevel),
         updatedAt: Value(updatedAt),
       ));
       debugPrint(
@@ -4369,6 +5205,60 @@ class SyncService {
       );
       return existingRow.id;
     } else {
+      // ── Natural-key guard ─────────────────────────────────────────
+      // No row matches the incoming server_id. Before inserting a new
+      // row, check whether a local row already occupies the same
+      // (school, teacher, subject, term, week_number) slot — adopt it
+      // and assign the incoming server_id instead of creating a duplicate.
+      final nkMatch = await db.schemeOfWorkDao.getByNaturalKey(
+        schoolId: resolvedSchoolId,
+        teacherId: resolvedTeacherId,
+        subjectId: resolvedSubjectId,
+        term: normalizeSowTermForServer(term),
+        weekNumber: weekNumber,
+      );
+      if (nkMatch != null) {
+        // Only overwrite serverId if the existing row has none yet.
+        final needsServerId =
+            nkMatch.serverId == null || nkMatch.serverId!.isEmpty;
+
+        // Remote-first merge: pull payload is the latest server state.
+        String _remoteFirst(String remote, String local) {
+          if (remote.isNotEmpty) return remote;
+          return local;
+        }
+        String? _remoteFirstN(String? remote, String? local) {
+          if (remote != null && remote.isNotEmpty) return remote;
+          return local;
+        }
+
+        await (db.update(db.schemeOfWork)
+              ..where((t) => t.id.equals(nkMatch.id)))
+            .write(SchemeOfWorkCompanion(
+          serverId: needsServerId ? Value(serverId) : const Value.absent(),
+          schoolId: Value(resolvedSchoolId),
+          teacherId: Value(resolvedTeacherId),
+          subjectId: Value(resolvedSubjectId),
+          term: Value(normalizeSowTermForServer(term)),
+          weekNumber: Value(weekNumber != 0 ? weekNumber : nkMatch.weekNumber),
+          topic: Value(_remoteFirst(topic, nkMatch.topic)),
+          objectives: Value(_remoteFirst(objectives, nkMatch.objectives)),
+          status: Value(_remoteFirst(status, nkMatch.status)),
+          adminEditedTopic: Value(_remoteFirstN(adminEditedTopic, nkMatch.adminEditedTopic)),
+          adminComment: Value(_remoteFirstN(adminComment, nkMatch.adminComment)),
+          classLevel: Value(_remoteFirst(classLevel, nkMatch.classLevel)),
+          updateCounter: Value(updateCounter),
+          isDeleted: Value(isDeleted),
+          updatedAt: Value(updatedAt),
+        ));
+        debugPrint(
+          '[sync] _upsertSchemeOfWorkFromSync: natural-key match '
+          'on localId=${nkMatch.id} — updated and adopted '
+          '${needsServerId ? "serverId $serverId" : "existing serverId ${nkMatch.serverId}"}',
+        );
+        return nkMatch.id;
+      }
+
       // Insert new scheme_of_work record.
       final newLocalId = await (db.into(db.schemeOfWork).insert(
             SchemeOfWorkCompanion.insert(
@@ -4399,6 +5289,52 @@ class SyncService {
       );
       return newLocalId;
     }
+  }
+
+  /// Extracts the local primary-key id from a Drift row, dispatching on
+  /// [tableName].
+  static int _rowLocalId(String tableName, dynamic row) {
+    switch (tableName) {
+      case 'lessons':
+        return (row as Lesson).id;
+      case 'scheme_of_work':
+        return (row as SchemeOfWorkData).id;
+      case 'exams':
+        return (row as Exam).id;
+      default:
+        throw ArgumentError('Unsupported table: $tableName');
+    }
+  }
+
+  /// Merges newer non-empty fields from [source] into [canonical]
+  /// scheme_of_work row. Does NOT delete [source].
+  Future<void> _mergeSchemeOfWorkIntoCanonical(
+    SchemeOfWorkData canonical,
+    SchemeOfWorkData source,
+  ) async {
+    String pick(String? src, String dst) =>
+        (src != null && src.isNotEmpty) ? src : dst;
+    String? pickN(String? src, String? dst) =>
+        (src != null && src.isNotEmpty) ? src : dst;
+
+    await (db.update(db.schemeOfWork)
+          ..where((t) => t.id.equals(canonical.id)))
+        .write(SchemeOfWorkCompanion(
+      topic: Value(pick(source.topic, canonical.topic)),
+      objectives: Value(pick(source.objectives, canonical.objectives)),
+      adminEditedTopic:
+          Value(pickN(source.adminEditedTopic, canonical.adminEditedTopic)),
+      adminComment: Value(pickN(source.adminComment, canonical.adminComment)),
+      classLevel: Value(pick(source.classLevel, canonical.classLevel)),
+      term: Value(pick(source.term, canonical.term)),
+      status: Value(pick(source.status, canonical.status)),
+      weekNumber: Value(source.weekNumber),
+      updatedAt: Value(DateTime.now()),
+    ));
+    debugPrint(
+      '[SYNC] _mergeSchemeOfWorkIntoCanonical: merged sourceId=${source.id} '
+      'into canonicalId=${canonical.id} (serverId=${canonical.serverId})',
+    );
   }
 
   /// Removes duplicate teacher rows that share the same non-null [serverId],
