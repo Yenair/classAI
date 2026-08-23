@@ -17,6 +17,7 @@ import 'package:classai/features/exam/screens/exam_choice_screen.dart';
 import 'package:classai/features/exam/screens/exam_editor_screen.dart';
 import 'package:classai/features/exam/screens/exams_list_screen.dart';
 import 'package:classai/features/admin/screens/admin_dashboard_screen.dart';
+import 'package:classai/features/admin/screens/admin_diagnostics_screen.dart';
 import 'package:classai/features/admin/screens/teacher_detail_screen.dart';
 // import 'package:classai/features/vault/screens/vault_browser_screen.dart'; // Vault feature disabled
 // import 'package:classai/features/vault/screens/vault_publisher_screen.dart'; // Vault feature disabled
@@ -96,6 +97,7 @@ final appRouter = GoRouter(
     final isAdminRoute =
         location == '/admin' ||
         location.startsWith('/admin/teachers/') ||
+        location == '/admin/diagnostics' ||
         location == '/scheme-of-work';
     final isPaymentRoute = location == '/payment';
 
@@ -178,6 +180,11 @@ final appRouter = GoRouter(
       path: '/admin',
       name: 'admin',
       builder: (context, state) => const AdminDashboardScreen(),
+    ),
+    _route(
+      path: '/admin/diagnostics',
+      name: 'admin-diagnostics',
+      builder: (context, state) => const AdminDiagnosticsScreen(),
     ),
     _route(
       path: '/admin/teachers/:id',

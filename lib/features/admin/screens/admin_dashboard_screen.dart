@@ -301,6 +301,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 ),
                 const SizedBox(height: 4),
                 _NavItem(
+                  icon: Icons.analytics_outlined,
+                  label: 'Diagnostics',
+                  isActive: false,
+                  onTap: () => context.push('/admin/diagnostics'),
+                ),
+                const SizedBox(height: 4),
+                _NavItem(
                   icon: Icons.settings_rounded,
                   label: 'Settings',
                   isActive: false,
@@ -694,6 +701,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       (icon: Icons.person_add_rounded, label: 'Pending'),
       // (icon: Icons.verified_rounded, label: 'Vault Queue'), // Vault feature disabled
       (icon: Icons.sync_rounded, label: 'Sync'),
+      (icon: Icons.analytics_outlined, label: 'Diagnostics'),
       (icon: Icons.calendar_month_rounded, label: 'Scheme of Work'),
       (icon: Icons.settings_rounded, label: 'Settings'),
     ];
@@ -730,8 +738,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               ),
               onPressed: () {
                 if (i == 3) {
-                  context.push('/scheme-of-work');
+                  context.push('/admin/diagnostics');
                 } else if (i == 4) {
+                  context.push('/scheme-of-work');
+                } else if (i == 5) {
                   context.push('/settings');
                 } else {
                   setState(() => _selectedTabIndex = i);
