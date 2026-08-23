@@ -67,7 +67,25 @@ serve(async (req) => {
     }
 
     // ── 2. Process sync-pull request ───────────────────────────────────────
-    const { lastSyncTimestamp, tables, school_id, catalogs } = await req.json();
+    const { lastSyncTimestamp, tables, school_id, catalogs, cursors } = await req.json();
+
+    // ── Cursor mode detection ─────────────────────────────────────────────
+    // New clients send `cursors` (a map of table → {updated_at, id} | null).
+    // Old clients send `lastSyncTimestamp` (a plain ISO string).
+    // The server supports both simultaneously.
+    const usePerTableCursors = cursors != null
+      && typeof cursors === "object"
+      && !Array.isArray(cursors);
+
+    /** Parse a per-table composite cursor. Returns null if the cursor is
+     *  missing or malformed. Falls back to timestamp-only when id is absent. */
+    function parseCursor(c: unknown): { updatedAt: string; id: string | null } | null {
+      if (!c || typeof c !== "object") return null;
+      const obj = c as Record<string, unknown>;
+      if (typeof obj.updated_at !== "string") return null;
+      const id = typeof obj.id === "string" && obj.id.length > 0 ? obj.id : null;
+      return { updatedAt: obj.updated_at, id };
+    }
 
     if (!Array.isArray(tables) || tables.length === 0) {
       return new Response(
@@ -84,6 +102,7 @@ serve(async (req) => {
         .from(table)
         .select("*")
         .order("updated_at", { ascending: true })
+        .order("id", { ascending: true })
         .limit(PAGE_SIZE);
 
       // ── School-id scoping ──────────────────────────────────────────
@@ -112,7 +131,26 @@ serve(async (req) => {
         }
       }
 
-      if (lastSyncTimestamp) {
+      if (usePerTableCursors) {
+        // ── Per-table cursor mode (new) ────────────────────────────────
+        const tableCursor = parseCursor((cursors as Record<string, unknown>)[table]);
+        if (tableCursor === null && (cursors as Record<string, unknown>).hasOwnProperty(table)) {
+          // Cursor present but null/invalid → table exhausted, skip entirely
+          continue;
+        }
+        if (tableCursor && tableCursor.id) {
+          // Composite cursor: (updated_at, id) — stable tiebreaking
+          // Equivalent SQL: updated_at > $1 OR (updated_at = $1 AND id > $2)
+          query = query.or(
+            `updated_at.gt.${tableCursor.updatedAt},and(updated_at.eq.${tableCursor.updatedAt},id.gt.${tableCursor.id})`
+          );
+        } else if (tableCursor) {
+          // Timestamp-only fallback (cursor had no id field)
+          query = query.gt("updated_at", tableCursor.updatedAt);
+        }
+        // else: no cursor for this table → first page, no filter
+      } else if (lastSyncTimestamp) {
+        // ── Legacy single-cursor mode (unchanged behavior) ──────────────
         query = query.gt("updated_at", lastSyncTimestamp);
       }
 
@@ -149,21 +187,57 @@ serve(async (req) => {
         // Non-fatal — the pull response must succeed regardless
       }
 
-    // Sort all changes globally by updated_at for deterministic ordering
+    // ── Per-table next cursors ──────────────────────────────────────────
+    // For each table, check whether it returned exactly PAGE_SIZE rows.
+    // If so, there may be more → build a composite cursor from the last row.
+    // If fewer → table is exhausted → cursor is null.
+    const nextCursors: Record<string, unknown> = {};
+    const tableRowCounts: Record<string, number> = {};
+    const tableLastRow: Record<string, Record<string, unknown>> = {};
+    for (const entry of changes) {
+      tableRowCounts[entry.table] = (tableRowCounts[entry.table] ?? 0) + 1;
+      tableLastRow[entry.table] = entry.row;
+    }
+    for (const table of tables) {
+      const count = tableRowCounts[table] ?? 0;
+      if (count >= PAGE_SIZE) {
+        const last = tableLastRow[table];
+        const lastUpdatedAt = last?.updated_at as string | undefined;
+        const lastId = last?.id as string | undefined;
+        if (lastUpdatedAt && lastId) {
+          nextCursors[table] = { updated_at: lastUpdatedAt, id: lastId };
+        } else if (lastUpdatedAt) {
+          nextCursors[table] = { updated_at: lastUpdatedAt, id: null };
+        } else {
+          nextCursors[table] = null;
+        }
+      } else {
+        nextCursors[table] = null; // exhausted or absent
+      }
+    }
+
+    // Determine if any table still has more data
+    const anyTableHasMore = Object.values(nextCursors).some((v) => v !== null);
+
+    // Sort all changes globally for deterministic client-side processing
     changes.sort((a, b) => {
       const aTime = a.row.updated_at as string | undefined;
       const bTime = b.row.updated_at as string | undefined;
       if (!aTime && !bTime) return 0;
       if (!aTime) return -1;
       if (!bTime) return 1;
-      return aTime.localeCompare(bTime);
+      const cmp = aTime.localeCompare(bTime);
+      if (cmp !== 0) return cmp;
+      // Tiebreak on id for stability across same-timestamp rows
+      const aId = String(a.row.id ?? "");
+      const bId = String(b.row.id ?? "");
+      return aId.localeCompare(bId);
     });
 
-    // Determine next_cursor from the last change's updated_at if we hit the page limit
+    // Legacy cursor for old clients (deprecated, derived from global last row)
     let nextCursor: string | null = null;
     if (changes.length >= PAGE_SIZE) {
-      const lastChange = changes[changes.length - 1];
-      nextCursor = (lastChange.row.updated_at as string) ?? null;
+      nextCursor = (changes[changes.length - 1].row.updated_at as string) ?? null;
     }
 
     // ── 2c. Full subject catalog for client-side subject self-heal ────────────
@@ -266,7 +340,8 @@ serve(async (req) => {
             JSON.stringify({
               error: "Failed to fetch active teacher IDs",
               changes,
-              next_cursor: nextCursor,
+              next_cursor: usePerTableCursors ? null : nextCursor,
+              next_cursors: anyTableHasMore ? nextCursors : null,
               active_teacher_ids: [],
               pending_teachers: [],
             }),
@@ -298,7 +373,8 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         changes,
-        next_cursor: nextCursor,
+        next_cursor: usePerTableCursors ? null : nextCursor,
+        next_cursors: anyTableHasMore ? nextCursors : null,
         active_teacher_ids: activeTeacherIds,
         pending_teachers: pendingTeachers,
         subject_catalog: subjectCatalog,

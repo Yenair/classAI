@@ -225,21 +225,41 @@ async function findExistingByNaturalKey(
     if (!schoolId || !teacherId || !subjectId || week === undefined) {
       return null;
     }
-    let query = supabase
-      .from("lessons")
-      .select("id")
-      .eq("school_id", schoolId)
-      .eq("teacher_id", teacherId)
-      .eq("subject_id", subjectId)
-      .eq("class_level", String(classLevel))
-      .eq("week", Number(week))
-      .eq("is_deleted", false);
     // Mirror COALESCE(term,'') from the unique index: NULL and '' are the same key.
-    query =
-      term === undefined || term === null || term === ""
-        ? query.or("term.is.null,term.eq.")
-        : query.eq("term", String(term));
-    const { data } = await query.limit(1);
+    // The `.or()` filter is unreliable for empty-string matching, so run two
+    // separate queries when term is null/undefined/empty and return the first hit.
+    const baseFilter = (
+      q: ReturnType<typeof supabase.from>
+    ) =>
+      q
+        .select("id")
+        .eq("school_id", schoolId)
+        .eq("teacher_id", teacherId)
+        .eq("subject_id", subjectId)
+        .eq("class_level", String(classLevel))
+        .eq("week", Number(week))
+        .eq("is_deleted", false);
+    if (term === undefined || term === null || term === "") {
+      const { data: nullTerm } = await baseFilter(
+        supabase.from("lessons")
+      )
+        .is("term", null)
+        .limit(1);
+      if (nullTerm && nullTerm.length > 0) return nullTerm[0].id as string;
+      const { data: emptyTerm } = await baseFilter(
+        supabase.from("lessons")
+      )
+        .eq("term", "")
+        .limit(1);
+      return emptyTerm && emptyTerm.length > 0
+        ? (emptyTerm[0].id as string)
+        : null;
+    }
+    const { data } = await baseFilter(
+      supabase.from("lessons")
+    )
+      .eq("term", String(term))
+      .limit(1);
     return data && data.length > 0 ? (data[0].id as string) : null;
   }
   if (table === "exams") {
@@ -253,21 +273,39 @@ async function findExistingByNaturalKey(
     if (!schoolId || !teacherId || !subjectId || weekNumber === undefined) {
       return null;
     }
-    let query = supabase
-      .from("exams")
-      .select("id")
-      .eq("school_id", schoolId)
-      .eq("teacher_id", teacherId)
-      .eq("subject_id", subjectId)
-      .eq("class_level", String(classLevel))
-      .eq("week_number", Number(weekNumber))
-      .eq("topic", String(topic))
-      .eq("is_deleted", false);
-    query =
-      term === undefined || term === null || term === ""
-        ? query.or("term.is.null,term.eq.")
-        : query.eq("term", String(term));
-    const { data } = await query.limit(1);
+    const baseFilterExams = (
+      q: ReturnType<typeof supabase.from>
+    ) =>
+      q
+        .select("id")
+        .eq("school_id", schoolId)
+        .eq("teacher_id", teacherId)
+        .eq("subject_id", subjectId)
+        .eq("class_level", String(classLevel))
+        .eq("week_number", Number(weekNumber))
+        .eq("topic", String(topic))
+        .eq("is_deleted", false);
+    if (term === undefined || term === null || term === "") {
+      const { data: nullTerm } = await baseFilterExams(
+        supabase.from("exams")
+      )
+        .is("term", null)
+        .limit(1);
+      if (nullTerm && nullTerm.length > 0) return nullTerm[0].id as string;
+      const { data: emptyTerm } = await baseFilterExams(
+        supabase.from("exams")
+      )
+        .eq("term", "")
+        .limit(1);
+      return emptyTerm && emptyTerm.length > 0
+        ? (emptyTerm[0].id as string)
+        : null;
+    }
+    const { data } = await baseFilterExams(
+      supabase.from("exams")
+    )
+      .eq("term", String(term))
+      .limit(1);
     return data && data.length > 0 ? (data[0].id as string) : null;
   }
   if (table === "subjects") {
@@ -1038,6 +1076,16 @@ serve(async (req) => {
       "recovery_codes",
     ]);
 
+    // Tables whose Supabase rows have a `server_id` column that must be
+    // backfilled after INSERT/UPSERT.  schools and teachers use `id` as
+    // their server identity and have no `server_id` column.
+    const SERVER_ID_TABLES = new Set([
+      "lessons",
+      "exams",
+      "scheme_of_work",
+      "subjects",
+    ]);
+
     let processed = 0;
     const results: Record<string, unknown>[] = [];
 
@@ -1150,6 +1198,32 @@ serve(async (req) => {
             continue;
           }
 
+          // ── Permanent test-lesson guard ────────────────────────────────
+          // Skip INSERT/UPDATE for the old direct-test lesson that was used
+          // during initial development.  DELETE still allowed so cleanup can
+          // remove any existing server test row.
+          if (table === "lessons") {
+            const testTeacherId = "4e569a31-99d1-44a6-8bcc-4efbf0d67a71";
+            const tsid = insertData["teacher_server_id"] ?? insertData["teacher_id"];
+            const topic = insertData["topic"];
+            if (
+              tsid === testTeacherId &&
+              topic === "direct test topic"
+            ) {
+              console.warn(
+                `sync-push: SKIP INSERT test-lesson (local_id=${localId}): ` +
+                  `teacher=${tsid}, topic=${topic}`
+              );
+              results.push({
+                local_id: localId,
+                server_id: null,
+                status: "skipped",
+                retryable: false,
+              });
+              continue;
+            }
+          }
+
           console.log(`[SYNC-PUSH-DIAG] INSERT data after resolveForeignKeys: ${JSON.stringify(insertData)}`);
 
           // ── UPSERT if payload includes server_id (handles stale INSERT
@@ -1170,6 +1244,22 @@ serve(async (req) => {
             }
             const serverId = upsertData_?.[0]?.id as string | undefined;
             console.log(`[SYNC-PUSH-DIAG] UPSERT result: localId=${localId}, serverId=${serverId ?? "null"}, upsertData_=${JSON.stringify(upsertData_)}`);
+            // Backfill server_id if UPSERT created a new row (returned id differs
+            // from the supplied server_id).  The server_id column is NOT auto-filled
+            // by PostgREST on INSERT/UPSERT — it must be written explicitly.
+            if (SERVER_ID_TABLES.has(table) && serverId && insertServerId && serverId !== insertServerId) {
+              const { error: backfillErr } = await supabase
+                .from(table)
+                .update({ server_id: serverId })
+                .eq("id", serverId)
+                .is("server_id", null);
+              if (backfillErr) {
+                console.warn(
+                  `sync-push: UPSERT server_id backfill warning on "${table}" ` +
+                    `(id=${serverId}): ${backfillErr.message}`
+                );
+              }
+            }
             results.push({
               local_id: localId,
               server_id: serverId ?? null,
@@ -1241,6 +1331,23 @@ serve(async (req) => {
             }
             const generatedId = insertData_?.[0]?.id as string | undefined;
             console.log(`[SYNC-PUSH-DIAG] INSERT result: localId=${localId}, generatedId=${generatedId ?? "null"}, insertData_=${JSON.stringify(insertData_)}`);
+            // Backfill server_id after first-time INSERT.  The server_id column is
+            // NOT auto-filled by PostgREST — it must be written explicitly so the
+            // client can match its local row to the server row on subsequent pushes.
+            // Only needed for tables that have a server_id column (not schools/teachers).
+            if (SERVER_ID_TABLES.has(table) && generatedId) {
+              const { error: backfillErr } = await supabase
+                .from(table)
+                .update({ server_id: generatedId })
+                .eq("id", generatedId)
+                .is("server_id", null);
+              if (backfillErr) {
+                console.warn(
+                  `sync-push: INSERT server_id backfill warning on "${table}" ` +
+                    `(id=${generatedId}): ${backfillErr.message}`
+                );
+              }
+            }
             results.push({
               local_id: localId,
               server_id: generatedId ?? null,
@@ -1262,6 +1369,30 @@ serve(async (req) => {
           if (updateSkipReason) {
             pushSkipResult(results, localId, serverId as string, table, "UPDATE", updateSkipReason);
             continue;
+          }
+          // ── Permanent test-lesson guard (UPDATE) ────────────────────
+          if (table === "lessons") {
+            const testTeacherId = "4e569a31-99d1-44a6-8bcc-4efbf0d67a71";
+            // teacher_server_id was extracted into _tsid by destructuring above;
+            // use _tsid directly (fall back to fullRowData for safety).
+            const tsid = _tsid ?? fullRowData["teacher_server_id"] ?? fullRowData["teacher_id"];
+            const topic = updateData["topic"] ?? fullRowData["topic"];
+            if (
+              tsid === testTeacherId &&
+              topic === "direct test topic"
+            ) {
+              console.warn(
+                `sync-push: SKIP UPDATE test-lesson (local_id=${localId}): ` +
+                  `teacher=${tsid}, topic=${topic}`
+              );
+              results.push({
+                local_id: localId,
+                server_id: serverId as string,
+                status: "skipped",
+                retryable: false,
+              });
+              continue;
+            }
           }
           // Bump updated_at server-side: client payloads never include it and
           // sync-pull only returns rows with updated_at > lastSyncTimestamp.

@@ -117,11 +117,11 @@ Future<void> _seedLesson(
 // carries server_id.
 Map<String, dynamic> _lessonUpdatePayload() => {
       'subject': 'Mathematics',
-      'classLevel': 'JSS 1',
+      'class_level': 'JSS 1',
       'week': 1,
       'topic': 'Fractions',
       'difficulty': 'medium',
-      'bloomsVerbs': 'list',
+      'blooms_verbs': 'list',
       'curriculum': 'NERDC',
       'teacher_server_id': 'teacher-1',
       'school_server_id': 'school-1',

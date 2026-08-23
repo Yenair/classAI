@@ -315,9 +315,9 @@ void main() {
           payload: {
             'local_id': 1,
             'data': {
-              'subject': 'Mathematics', 'classLevel': 'SS1', 'week': 1,
+              'subject': 'Mathematics', 'class_level': 'SS1', 'week': 1,
               'topic': 'Algebra', 'difficulty': 'medium',
-              'bloomsVerbs': '["analyze"]', 'curriculum': 'nerdc',
+              'blooms_verbs': '["analyze"]', 'curriculum': 'nerdc',
               'content':
                   '{"body":"Solving linear equations","objectives":["Solve X"],"materials":[],"presentation":"","assessment":"","homework":""}',
               'content_hash': 'abc123', 'teacher_server_id': 'srv-teacher-1',
@@ -361,8 +361,8 @@ void main() {
             reason: 'Push payload should have a "data" key');
 
         final expectedFields = [
-          'subject', 'classLevel', 'week', 'topic', 'difficulty',
-          'bloomsVerbs', 'curriculum', 'content', 'content_hash',
+          'subject', 'class_level', 'week', 'topic', 'difficulty',
+          'blooms_verbs', 'curriculum', 'content', 'content_hash',
           'teacher_server_id', 'school_server_id', 'week_number',
           'term', 'status', 'is_unlocked',
         ];
@@ -400,14 +400,14 @@ void main() {
             table: 'exams', localId: 100,
             snapshot: {
               'localId': 100, 'title': 'Local placeholder',
-              'subject': 'Mathematics', 'classLevel': 'SS1',
+              'subject': 'Mathematics', 'class_level': 'SS1',
               'topic': 'Algebra', 'difficulty': 'medium',
               'curriculum': 'nerdc', 'content': '{"mcqs":[]}',
               'updateCounter': 0,
             });
         store.seedLocalRecord('exams', 100, {
           'localId': 100, 'title': 'Local placeholder',
-          'subject': 'Mathematics', 'classLevel': 'SS1',
+          'subject': 'Mathematics', 'class_level': 'SS1',
           'topic': 'Algebra', 'difficulty': 'medium',
           'curriculum': 'nerdc', 'content': '{"mcqs":[]}',
           'updateCounter': 0,
@@ -420,7 +420,7 @@ void main() {
                 SyncChange(table: 'exams', row: {
                   'localId': 100, 'title': 'Remote Algebra Exam',
                   'server_id': 'srv-exam-100',
-                  'subject': 'Mathematics', 'classLevel': 'SS1',
+                  'subject': 'Mathematics', 'class_level': 'SS1',
                   'topic': 'Algebra', 'difficulty': 'hard',
                   'curriculum': 'nerdc',
                   'content': '{"mcqs":[{"q":"What is 2+2?","options":["3","4","5"],"answer":"4"}],"theoryQuestions":[],"markingScheme":"standard"}',
@@ -458,7 +458,7 @@ void main() {
         expect(snapshot['title'], 'Remote Algebra Exam',
             reason: 'Merged snapshot should contain the exam title');
         expect(snapshot['subject'], 'Mathematics');
-        expect(snapshot['classLevel'], 'SS1');
+        expect(snapshot['class_level'], 'SS1');
         expect(snapshot['content'], contains('"mcqs"'));
 
         expect(remote.pullCalls, hasLength(1));

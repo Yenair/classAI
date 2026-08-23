@@ -1,6 +1,7 @@
 // lib/core/services/scheme_of_work_service.dart
 import 'dart:convert';
 import 'package:drift/drift.dart' show Value;
+import 'package:flutter/foundation.dart';
 import 'package:classai/core/database/database.dart';
 
 /// Shared persistence for Scheme-of-Work rows and their linked draft
@@ -173,11 +174,11 @@ class SchemeOfWorkService {
               operation: 'INSERT',
               payload: {
                 'subject': subject,
-                'classLevel': classLevel,
+                'class_level': classLevel,
                 'week': weekNumber,
                 'topic': topicText,
                 'difficulty': 'medium',
-                'bloomsVerbs': '',
+                'blooms_verbs': '',
                 'curriculum': 'NERDC',
                 'teacher_server_id': teacherServerId,
                 'school_server_id': schoolServerId,
@@ -290,11 +291,11 @@ class SchemeOfWorkService {
 
     final payload = <String, dynamic>{
       'subject': subject,
-      'classLevel': classLevel,
+      'class_level': classLevel,
       'week': weekNumber,
       'topic': topic,
       'difficulty': lesson.difficulty,
-      'bloomsVerbs': lesson.bloomsVerbs,
+      'blooms_verbs': lesson.bloomsVerbs,
       'curriculum': lesson.curriculum,
       'teacher_server_id': teacherServerId,
       'school_server_id': schoolServerId,
@@ -400,6 +401,51 @@ class SchemeOfWorkService {
     required String? schoolServerId,
     required String? subjectServerId,
   }) async {
+    // ── Natural-key guard ──────────────────────────────────────────
+    // If an unsynced local row already occupies the same natural-key
+    // slot, adopt it instead of inserting a duplicate.
+    final existing = await db.schemeOfWorkDao.getByNaturalKey(
+      schoolId: schoolId,
+      teacherId: teacherId,
+      subjectId: subjectId,
+      term: normalizeSowTermForServer(term),
+      weekNumber: weekNumber,
+    );
+    if (existing != null &&
+        (existing.serverId == null || existing.serverId!.isEmpty)) {
+      // Update the existing row with fresh content.
+      await db.schemeOfWorkDao.updateWeekEntry(
+        existing.id,
+        topic: topic,
+        objectives: objectives,
+      );
+      debugPrint(
+        '[sow] _insertWeekRow: adopted existing unsynced row '
+        '${existing.id} (natural key match, week $weekNumber)',
+      );
+      // Still queue a sync INSERT so the row reaches the server.
+      await db.syncQueueDao.insertEntry(
+        queueTable: 'scheme_of_work',
+        recordLocalId: existing.id,
+        operation: 'INSERT',
+        payload: {
+          'teacher_server_id': teacherServerId,
+          'school_server_id': schoolServerId,
+          'subject_id': subjectServerId,
+          'subject_name': subject,
+          'term': normalizeSowTermForServer(term),
+          'week_number': weekNumber,
+          'topic': topic,
+          'objectives': objectives,
+          'status': 'draft',
+          'admin_edited_topic': null,
+          'admin_comment': null,
+          'class_level': classLevel,
+        },
+      );
+      return existing.id;
+    }
+    // No unsynced match — proceed with INSERT.
     final newId = await db.schemeOfWorkDao.insert(
       SchemeOfWorkCompanion.insert(
         schoolId: Value(schoolId),

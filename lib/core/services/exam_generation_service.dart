@@ -447,7 +447,7 @@ class ExamGenerationService {
       operation: 'INSERT',
       payload: {
         'subject': subject,
-        'classLevel': classLevel,
+        'class_level': classLevel,
         'topic': topicTitle,
         'difficulty': difficulty,
         'curriculum': 'NERDC',
