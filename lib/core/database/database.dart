@@ -105,7 +105,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 27;
+  int get schemaVersion => 29;
 
   static QueryExecutor _openConnection() {
     final security = SecurityService();
@@ -1035,6 +1035,114 @@ class AppDatabase extends _$AppDatabase {
                 ELSE LOWER(TRIM(term))
               END
             ''');
+          }
+          if (from < 28) {
+            // Phase 1: Sync hardening — test data cleanup + version_hashes dedup.
+            // 1. Remove all local test lesson rows matching known test server_ids.
+            // 2. Deduplicate version_hashes.
+            // 3. Add unique index on version_hashes to prevent recurrence.
+
+            await customStatement('''
+              DELETE FROM lessons
+              WHERE is_deleted = 0
+                AND (
+                  server_id = 'c73bf75f-8bd5-457c-8e51-ac5f2b09698a'
+                  OR server_id = 'direct-test-2'
+                )
+            ''');
+
+            await customStatement('''
+              DELETE FROM version_hashes
+              WHERE id NOT IN (
+                SELECT MIN(id)
+                FROM version_hashes
+                GROUP BY table_name, record_local_id
+              )
+            ''');
+
+            await customStatement('''
+              CREATE UNIQUE INDEX IF NOT EXISTS idx_version_hashes_table_record
+              ON version_hashes(table_name, record_local_id)
+            ''');
+          }
+          if (from < 29) {
+            // Phase 1c: Add partial unique indexes on server_id for lessons
+            // and exams to prevent future duplicate active rows. Before creating
+            // each index, check for existing duplicates — if any are found,
+            // log a warning and SKIP index creation for that table. No rows
+            // are ever deleted by this migration.
+
+            // ── Lessons ──────────────────────────────────────────────
+            final duplicateLessons = await customSelect('''
+              SELECT server_id, COUNT(*) AS cnt
+              FROM lessons
+              WHERE server_id IS NOT NULL
+                AND server_id != ''
+                AND is_deleted = 0
+              GROUP BY server_id
+              HAVING cnt > 1
+            ''').get();
+
+            if (duplicateLessons.isNotEmpty) {
+              // ignore: avoid_print
+              print(
+                '[DB-MIGRATION-v29] WARNING: \'${duplicateLessons.length}\' '
+                'duplicate active lesson server_id(s) found — skipping '
+                'idx_lessons_server_id_active creation. Run diagnostics '
+                'to resolve duplicates before re-attempting.',
+              );
+              for (final row in duplicateLessons) {
+                // ignore: avoid_print
+                print(
+                  '  server_id=\'${row.read<String>('server_id')}\' '
+                  'count=\'${row.read<int>('cnt')}\'',
+                );
+              }
+            } else {
+              await customStatement('''
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_lessons_server_id_active
+                ON lessons(server_id)
+                WHERE server_id IS NOT NULL
+                  AND server_id != ''
+                  AND is_deleted = 0
+              ''');
+            }
+
+            // ── Exams ────────────────────────────────────────────────
+            final duplicateExams = await customSelect('''
+              SELECT server_id, COUNT(*) AS cnt
+              FROM exams
+              WHERE server_id IS NOT NULL
+                AND server_id != ''
+                AND is_deleted = 0
+              GROUP BY server_id
+              HAVING cnt > 1
+            ''').get();
+
+            if (duplicateExams.isNotEmpty) {
+              // ignore: avoid_print
+              print(
+                '[DB-MIGRATION-v29] WARNING: \'${duplicateExams.length}\' '
+                'duplicate active exam server_id(s) found — skipping '
+                'idx_exams_server_id_active creation. Run diagnostics '
+                'to resolve duplicates before re-attempting.',
+              );
+              for (final row in duplicateExams) {
+                // ignore: avoid_print
+                print(
+                  '  server_id=\'${row.read<String>('server_id')}\' '
+                  'count=\'${row.read<int>('cnt')}\'',
+                );
+              }
+            } else {
+              await customStatement('''
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_exams_server_id_active
+                ON exams(server_id)
+                WHERE server_id IS NOT NULL
+                  AND server_id != ''
+                  AND is_deleted = 0
+              ''');
+            }
           }
         },
         beforeOpen: (details) async {

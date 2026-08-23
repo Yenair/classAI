@@ -92,6 +92,65 @@ class SchemeOfWorkDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  /// Finds the first active, non-deleted row matching the scheme_of_work
+  /// natural key. Returns null when no match exists.
+  Future<SchemeOfWorkData?> getByNaturalKey({
+    required int schoolId,
+    required int teacherId,
+    required int subjectId,
+    required String term,
+    required int weekNumber,
+  }) async {
+    final results = await (select(schemeOfWork)
+          ..where((t) =>
+              t.schoolId.equals(schoolId) &
+              t.teacherId.equals(teacherId) &
+              t.subjectId.equals(subjectId) &
+              t.term.equals(term) &
+              t.weekNumber.equals(weekNumber) &
+              t.isDeleted.equals(false))
+          ..limit(1))
+        .get();
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  /// Returns groups of active rows that share the same non-empty serverId.
+  /// Each inner list has length > 1. Empty when no duplicates exist.
+  Future<List<List<SchemeOfWorkData>>> findDuplicateServerIdGroups() async {
+    final dupRows = await (customSelect(
+      'SELECT server_id, COUNT(*) AS cnt '
+      'FROM scheme_of_work '
+      'WHERE server_id IS NOT NULL AND server_id != \'\' '
+      'AND is_deleted = 0 '
+      'GROUP BY server_id '
+      'HAVING COUNT(*) > 1',
+    ))
+        .get();
+    if (dupRows.isEmpty) return const [];
+    final groups = <List<SchemeOfWorkData>>[];
+    for (final row in dupRows) {
+      final sid = row.data['server_id'] as String;
+      final rows = await (select(schemeOfWork)
+            ..where((t) =>
+                t.serverId.equals(sid) & t.isDeleted.equals(false))
+            ..orderBy([(t) => OrderingTerm(expression: t.id)]))
+          .get();
+      if (rows.length > 1) groups.add(rows);
+    }
+    return groups;
+  }
+
+  /// Hard-deletes [deleteIds] from scheme_of_work.
+  /// Caller must handle orphan queue entries and version_hashes.
+  Future<void> mergeAndDeleteGroup({
+    required List<int> deleteIds,
+  }) async {
+    if (deleteIds.isEmpty) return;
+    await (delete(schemeOfWork)
+          ..where((t) => t.id.isIn(deleteIds)))
+        .go();
+  }
+
   /// Hard-delete only confirmed-synced rows for a given teacher.
   /// Used during logout to scope-clean the outgoing teacher's data
   /// while leaving unsynced (pending) rows intact (Option b).
