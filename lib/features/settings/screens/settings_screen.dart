@@ -360,6 +360,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     textTheme: textTheme,
                     onTap: () => context.push('/admin')),
                 const SizedBox(height: 4),
+                if (authData.currentTeacher?.role == 'admin')
+                  _SettingsNavItem(
+                      icon: Icons.analytics_outlined,
+                      label: 'Diagnostics',
+                      isActive: false,
+                      cs: cs,
+                      textTheme: textTheme,
+                      onTap: () => context.push('/admin/diagnostics')),
+                if (authData.currentTeacher?.role == 'admin')
+                  const SizedBox(height: 4),
                 _SettingsNavItem(
                     icon: Icons.settings_rounded,
                     label: 'Settings',
