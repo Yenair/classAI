@@ -125,7 +125,7 @@ class ConfigService {
   Map<String, dynamic> get teacherSeatLimits =>
       getJsonMap('teacher_seat_limits');
 
-  /// Lesson/exam storage limits per tier: { "free": 10, "basic": 20, "standard": 50, "elite": -1 }
+  /// Lesson/exam storage limits per tier: { "free": 100, "basic": 200, "standard": 500, "elite": -1 }
   Map<String, dynamic> get lessonStorageLimits =>
       getJsonMap('lesson_storage_limits');
 

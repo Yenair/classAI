@@ -367,7 +367,7 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
     'free': 5, 'basic': 10, 'standard': 20, 'elite': 100,
   };
   const fallbackLessonStorage = <String, dynamic>{
-    'free': 10, 'basic': 20, 'standard': 50, 'elite': -1,
+    'free': 100, 'basic': 200, 'standard': 500, 'elite': -1,
   };
 
   final teacherSeatLimits = config.teacherSeatLimits.isNotEmpty
@@ -387,7 +387,7 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
       vaultPublishing: false,
       watermark: true,
       teacherSeats: _tierLimitText(teacherSeatLimits['free'], fallback: 5),
-      lessonStorage: _tierLimitText(lessonStorageLimits['free'], fallback: 10),
+      lessonStorage: _tierLimitText(lessonStorageLimits['free'], fallback: 100),
       aiDiagrams: aiDiagramsTiers.contains('free'),
       examGeneration: examGenTiers.contains('free'),
       bulkPdfExport: bulkPdfTiers.contains('free'),
@@ -401,7 +401,7 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
       vaultPublishing: false,
       watermark: false,
       teacherSeats: _tierLimitText(teacherSeatLimits['basic'], fallback: 10),
-      lessonStorage: _tierLimitText(lessonStorageLimits['basic'], fallback: 20),
+      lessonStorage: _tierLimitText(lessonStorageLimits['basic'], fallback: 200),
       aiDiagrams: aiDiagramsTiers.contains('basic'),
       examGeneration: examGenTiers.contains('basic'),
       bulkPdfExport: bulkPdfTiers.contains('basic'),
@@ -415,7 +415,7 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
       vaultPublishing: true,
       watermark: false,
       teacherSeats: _tierLimitText(teacherSeatLimits['standard'], fallback: 20),
-      lessonStorage: _tierLimitText(lessonStorageLimits['standard'], fallback: 50),
+      lessonStorage: _tierLimitText(lessonStorageLimits['standard'], fallback: 500),
       aiDiagrams: aiDiagramsTiers.contains('standard'),
       examGeneration: examGenTiers.contains('standard'),
       bulkPdfExport: bulkPdfTiers.contains('standard'),

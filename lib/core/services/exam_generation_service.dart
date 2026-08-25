@@ -587,15 +587,15 @@ class ExamGenerationService {
   int _defaultStorageLimit(String tier) {
     switch (tier) {
       case 'free':
-        return 10;
+        return 100;
       case 'basic':
-        return 20;
+        return 200;
       case 'standard':
-        return 50;
+        return 500;
       case 'elite':
         return -1;
       default:
-        return 10;
+        return 100;
     }
   }
 
