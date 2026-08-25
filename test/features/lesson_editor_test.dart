@@ -12,8 +12,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide AuthState;
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/providers/config_provider.dart';
+import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/core/services/config_service.dart';
+import 'package:classai/core/services/emergency_flush_service.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
+import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 import 'package:classai/features/lesson/screens/lesson_editor_screen.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
@@ -39,6 +42,11 @@ class FixedAuthNotifier extends AuthNotifier {
   final AuthStateData fixedState;
   @override
   AuthStateData build() => fixedState;
+}
+
+class _TestOfflineCreditNotifier extends OfflineCreditStateNotifier {
+  @override
+  OfflineCreditStateData build() => const OfflineCreditStateData();
 }
 
 AuthStateData _authState(String tier) {
@@ -252,7 +260,7 @@ Future<void> _tapGenerate(WidgetTester tester) async {
   if (controller == null || controller.text.trim().isEmpty) {
     await _enterTopic(tester, 'Algebraic Expressions');
   }
-  final generateButton = find.text('Generate with AI');
+  final generateButton = find.text('Create with AI');
   await tester.ensureVisible(generateButton);
   await tester.pumpAndSettle();
   await tester.tap(generateButton);
@@ -295,6 +303,18 @@ void main() {
     return ProviderScope(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        authProvider.overrideWith(
+          () => FixedAuthNotifier(_eliteAuthState()),
+        ),
+        configServiceProvider.overrideWithValue(
+          ConfigService(client: mockSupabase),
+        ),
+        emergencyFlushServiceProvider.overrideWithValue(
+          EmergencyFlushService(),
+        ),
+        offlineCreditStateProvider.overrideWith(
+          () => _TestOfflineCreditNotifier(),
+        ),
       ],
       child: MaterialApp(
         builder: (context, widget) => MediaQuery(
@@ -332,6 +352,12 @@ void main() {
         ),
         configServiceProvider.overrideWithValue(
           ConfigService(client: mockSupabase),
+        ),
+        emergencyFlushServiceProvider.overrideWithValue(
+          EmergencyFlushService(),
+        ),
+        offlineCreditStateProvider.overrideWith(
+          () => _TestOfflineCreditNotifier(),
         ),
       ],
       child: MaterialApp(
@@ -380,6 +406,12 @@ void main() {
         ),
         configServiceProvider.overrideWithValue(
           ConfigService(client: mockSupabase),
+        ),
+        emergencyFlushServiceProvider.overrideWithValue(
+          EmergencyFlushService(),
+        ),
+        offlineCreditStateProvider.overrideWith(
+          () => _TestOfflineCreditNotifier(),
         ),
       ],
       child: MaterialApp.router(
