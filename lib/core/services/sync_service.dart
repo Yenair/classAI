@@ -4619,12 +4619,16 @@ class SyncService {
         lastModifiedBy: lastModifiedBy != null
             ? Value(lastModifiedBy)
             : const Value.absent(),
-        teacherServerId: teacherServerId != null
+        teacherServerId: (teacherServerId != null && teacherServerId.isNotEmpty)
             ? Value(teacherServerId)
-            : const Value.absent(),
-        schoolServerId: schoolServerId != null
+            : (existingLesson.teacherServerId != null && existingLesson.teacherServerId!.isNotEmpty)
+                ? Value(existingLesson.teacherServerId!)
+                : const Value.absent(),
+        schoolServerId: (schoolServerId != null && schoolServerId.isNotEmpty)
             ? Value(schoolServerId)
-            : const Value.absent(),
+            : (existingLesson.schoolServerId != null && existingLesson.schoolServerId!.isNotEmpty)
+                ? Value(existingLesson.schoolServerId!)
+                : const Value.absent(),
         isUnlocked: Value(isUnlocked),
         status: Value(status),
         term: term != null ? Value(term) : const Value.absent(),
@@ -4724,10 +4728,10 @@ class SyncService {
               lastModifiedBy: lastModifiedBy != null
                   ? Value(lastModifiedBy)
                   : const Value.absent(),
-              teacherServerId: teacherServerId != null
+              teacherServerId: (teacherServerId != null && teacherServerId.isNotEmpty)
                   ? Value(teacherServerId)
                   : const Value.absent(),
-              schoolServerId: schoolServerId != null
+              schoolServerId: (schoolServerId != null && schoolServerId.isNotEmpty)
                   ? Value(schoolServerId)
                   : const Value.absent(),
               isUnlocked: Value(isUnlocked),
