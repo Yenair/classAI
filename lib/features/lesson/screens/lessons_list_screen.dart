@@ -569,12 +569,7 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
         _isLessonContentEmpty(lesson.content);
     switch (_selectedStatusFilter) {
       case 'Draft':
-        // Never generated: still 'draft', not unlocked, and content is an
-        // empty placeholder. Unlocked legacy rows and lessons with content
-        // are excluded from Draft.
-        return lesson.status == 'draft' &&
-            !lesson.isUnlocked &&
-            contentEmpty;
+        return lesson.status == 'draft' && !lesson.isUnlocked;
       case 'Generated':
         // New persisted status, plus legacy fallbacks: unlocking always
         // follows generation, and any lesson with real content counts too.
