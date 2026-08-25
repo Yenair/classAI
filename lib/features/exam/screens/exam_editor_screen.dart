@@ -2126,11 +2126,15 @@ class _TopBar extends StatelessWidget {
               );
             },
           ),
-          Text(
-            'Exam Editor',
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: cs.primary,
+          Flexible(
+            child: Text(
+              'Exam Editor',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: cs.primary,
+              ),
             ),
           ),
           // Undo / Redo buttons
@@ -3220,10 +3224,14 @@ class _PreviewPanel extends StatelessWidget {
           ),
           if (totalQuestions != null) ...[
             const SizedBox(width: 8),
-            Text(
-              '$totalQuestions Questions Total',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: cs.onSurfaceVariant,
+            Flexible(
+              child: Text(
+                '$totalQuestions Questions Total',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
               ),
             ),
           ],
