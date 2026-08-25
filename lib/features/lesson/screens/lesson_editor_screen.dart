@@ -249,7 +249,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   bool _topicConfirmShown = false;
 
   // Stage 4: references visibility toggle (opt-in via Visible Sections sheet).
-  bool _visibleReferences = false;
+  bool _visibleReferences = true;
 
   // Floating action area: Review & Regenerate expandable state.
   bool _showReviewSection = false;
@@ -337,7 +337,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         if (!_hasGenerated) _LessonEditorCardKey.generate,
         _LessonEditorCardKey.lessonNotes,
         _LessonEditorCardKey.assessment,
-        _LessonEditorCardKey.diagrams,
+        if (_visibleSuggestedImages) _LessonEditorCardKey.diagrams,
         if (_visibleReferences) _LessonEditorCardKey.references,
       ];
 
@@ -1189,6 +1189,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     }
 
     if (!await PlatformHelper.isOnline()) {
+      if (!mounted) return;
       showErrorToast(
         context: context,
         message: 'Generation requires internet — try again when connected.',
@@ -1921,6 +1922,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   Future<void> _handleUnlock() async {
     final isOnline = await PlatformHelper.isOnline();
 
+    if (!mounted) return;
     if (!isOnline && _offlineCreditBalance < 1) {
       // Show persistent toast with sync option
       AppToast.instance.showToast(
@@ -2286,7 +2288,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             prefs.getBool(
                   _visibleSectionPrefKey('lesson_visible_references'),
                 ) ??
-                false;
+                true;
         _clampActiveDeckState();
       });
     } catch (_) {
@@ -2338,7 +2340,10 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
               _visibleSectionPrefKey('lesson_visible_materials'), v);
         },
         onSuggestedImagesChanged: (v) {
-          setState(() => _visibleSuggestedImages = v);
+          setState(() {
+            _visibleSuggestedImages = v;
+            _clampActiveDeckState();
+          });
           _persistVisibleSection(
               _visibleSectionPrefKey('lesson_visible_suggested_images'), v);
         },
@@ -2587,8 +2592,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           'school_id': _schoolId,
         },
       );
-      setState(() => _lessonStatus = newStatus);
       if (mounted) {
+        setState(() => _lessonStatus = newStatus);
         showInfoToast(context: context, message: newStatus == 'completed' ? 'Lesson marked as completed!' : 'Lesson reopened');
       }
     } catch (e) {
@@ -2629,6 +2634,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           'school_id': _schoolId,
         },
       );
+      if (!mounted) return;
       setState(() => _lessonStatus = 'completed');
       await _saveLesson(notify: false);
       if (mounted) {
@@ -2670,6 +2676,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         }
         return;
       }
+
+      if (!mounted) return;
 
       final teacherId = authState.currentTeacher?.serverId;
       final teacherEmail = authState.currentTeacher?.email;
@@ -3709,6 +3717,7 @@ class _StitchLessonSidebar extends StatelessWidget {
           color: cs.surface,
           border: Border(right: BorderSide(color: cs.outlineVariant)),
         ),
+        clipBehavior: Clip.hardEdge,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -3815,33 +3824,47 @@ class _StitchLessonSidebar extends StatelessWidget {
               color: cs.outlineVariant,
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: cs.surfaceContainerHigh,
-                    child: Text(
-                      _initials(teacherName),
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: cs.onSurfaceVariant,
-                        fontWeight: FontWeight.w700,
+              padding: EdgeInsets.fromLTRB(isOpen ? 24 : 12, 20, isOpen ? 24 : 12, 24),
+              child: isOpen
+                  ? Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 20,
+                          backgroundColor: cs.surfaceContainerHigh,
+                          child: Text(
+                            _initials(teacherName),
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: cs.onSurfaceVariant,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            teacherName.trim().isEmpty ? 'Teacher' : teacherName,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: cs.onSurface,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Center(
+                      child: CircleAvatar(
+                        radius: 20,
+                        backgroundColor: cs.surfaceContainerHigh,
+                        child: Text(
+                          _initials(teacherName),
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: cs.onSurfaceVariant,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      teacherName.trim().isEmpty ? 'Teacher' : teacherName,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: cs.onSurface,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ),
           ],
         ),
@@ -3993,7 +4016,7 @@ class _StitchLessonHeader extends StatelessWidget {
                 ),
                 const SizedBox(width: 20),
               ],
-              _buildHistoryButtons(),
+              if (!compact) _buildHistoryButtons(),
             ],
           ),
         );
@@ -4127,10 +4150,11 @@ class _DraftGenerateTab extends StatelessWidget {
               horizontal: compact ? 20 : 32,
               vertical: compact ? 20 : 32,
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
                 CircleAvatar(
                   radius: compact ? 30 : 56,
                   backgroundColor: cs.primary.withValues(alpha: 0.10),
@@ -4199,6 +4223,7 @@ class _DraftGenerateTab extends StatelessWidget {
                     ),
                   ),
                   DropdownButtonFormField<_DraftTopicOption>(
+                    isExpanded: true,
                     initialValue: selected,
                     items: items,
                     onChanged: isLoadingOptions
@@ -4241,6 +4266,7 @@ class _DraftGenerateTab extends StatelessWidget {
                   )
                 else if (options.isEmpty)
                   DropdownButtonFormField<_DraftTopicOption>(
+                    isExpanded: true,
                     initialValue: selected,
                     items: items,
                     onChanged: isLoadingOptions
@@ -4300,6 +4326,7 @@ class _DraftGenerateTab extends StatelessWidget {
                   ),
                 ],
               ],
+              ),
             ),
           ),
           ),
@@ -4546,8 +4573,14 @@ class _PreviewColumnState extends State<_PreviewColumn> {
       return;
     }
 
-    final oldKeys = _cardKeys(oldWidget.visibleReferences);
-    final newKeys = _cardKeys(widget.visibleReferences);
+    final oldKeys = _cardKeys(
+      oldWidget.visibleReferences,
+      oldWidget.visibleSuggestedImages,
+    );
+    final newKeys = _cardKeys(
+      widget.visibleReferences,
+      widget.visibleSuggestedImages,
+    );
     final oldIndex = _activeDeckIndex < 0
         ? 0
         : (_activeDeckIndex >= oldKeys.length
@@ -4558,7 +4591,8 @@ class _PreviewColumnState extends State<_PreviewColumn> {
     final clampedIndex = newIndex < 0
         ? (_activeDeckIndex >= newKeys.length ? newKeys.length - 1 : _activeDeckIndex)
         : newIndex;
-    if (clampedIndex != _activeDeckIndex) {
+    if (clampedIndex != _activeDeckIndex ||
+        _activeCardKey != newKeys[clampedIndex]) {
       _activeDeckIndex = clampedIndex;
       _activeCardKey = newKeys[clampedIndex];
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -4597,16 +4631,22 @@ class _PreviewColumnState extends State<_PreviewColumn> {
     return found;
   }
 
-  List<_LessonEditorCardKey> _cardKeys(bool includeReferences) => [
+  List<_LessonEditorCardKey> _cardKeys(
+    bool includeReferences,
+    bool includeSuggestedImages,
+  ) => [
         if (widget.showGenerateSlide) _LessonEditorCardKey.generate,
         _LessonEditorCardKey.lessonNotes,
         _LessonEditorCardKey.assessment,
-        _LessonEditorCardKey.diagrams,
+        if (includeSuggestedImages) _LessonEditorCardKey.diagrams,
         if (includeReferences) _LessonEditorCardKey.references,
       ];
 
   void _setActiveDeckSlide(int index) {
-    final keys = _cardKeys(widget.visibleReferences);
+    final keys = _cardKeys(
+      widget.visibleReferences,
+      widget.visibleSuggestedImages,
+    );
     if (index < 0 || index >= keys.length) return;
     if (index == _activeDeckIndex && _activeCardKey == keys[index]) return;
     setState(() {
@@ -4617,7 +4657,10 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   }
 
   void _goToDeckSlide(int index) {
-    final keys = _cardKeys(widget.visibleReferences);
+    final keys = _cardKeys(
+      widget.visibleReferences,
+      widget.visibleSuggestedImages,
+    );
     if (index < 0 || index >= keys.length || index == _activeDeckIndex) {
       return;
     }
@@ -4633,7 +4676,10 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   }
 
   Widget _buildDeckArrow({required bool isPrevious}) {
-    final keys = _cardKeys(widget.visibleReferences);
+    final keys = _cardKeys(
+      widget.visibleReferences,
+      widget.visibleSuggestedImages,
+    );
     final compact = MediaQuery.sizeOf(context).width < 768;
     final arrowSize = compact ? 48.0 : 56.0;
     final canMove = isPrevious
@@ -4667,7 +4713,10 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   }
 
   int _contentCardNumber(_LessonEditorCardKey key) {
-    final contentKeys = _cardKeys(widget.visibleReferences)
+    final contentKeys = _cardKeys(
+      widget.visibleReferences,
+      widget.visibleSuggestedImages,
+    )
         .where((item) => item != _LessonEditorCardKey.generate)
         .toList();
     final index = contentKeys.indexOf(key);
@@ -4677,7 +4726,10 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   }
 
   int _stitchCardTotal() {
-    final keys = _cardKeys(widget.visibleReferences);
+    final keys = _cardKeys(
+      widget.visibleReferences,
+      widget.visibleSuggestedImages,
+    );
     return keys.contains(_LessonEditorCardKey.generate)
         ? keys.length
         : keys.length + 1;
@@ -5090,70 +5142,151 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                 children: [
                   // The viewport is bounded by the parent SizedBox. Each
                   // card keeps its own vertical scroll for long content.
-                  Expanded(
-                    child: Stack(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 52),
-                          child: PageView.builder(
-                            controller: _deckController,
-                            itemCount: _cardKeys(visibleReferences).length,
-                            onPageChanged: (i) {
-                              _setActiveDeckSlide(i);
-                            },
-                            itemBuilder: (context, index) {
-                              switch (_cardKeys(visibleReferences)[index]) {
-                                case _LessonEditorCardKey.generate:
-                                  return _DraftGenerateTab(
-                                    cs: cs,
-                                    theme: theme,
-                                    subject: widget.subject,
-                                    classLevel: widget.classLevel,
-                                    options: widget.draftTopicOptions,
-                                    selectedOption: widget.selectedDraftTopic,
-                                    isLoadingOptions:
-                                        widget.isLoadingDraftTopics,
-                                    isGenerating: widget.isGenerating,
-                                    isOnline: isOnline,
-                                    onChanged:
-                                        widget.onDraftTopicChanged ?? (_) {},
-                                    onGenerate:
-                                        widget.onDraftGenerate ?? () {},
-                                    onCreateNewTopic:
-                                        widget.onCreateNewTopic ?? () {},
-                                    allowManualTopic: widget.allowManualTopic,
-                                    topicController: widget.topicController,
-                                    onTopicChanged: widget.onTopicChanged,
-                                  );
-                                case _LessonEditorCardKey.lessonNotes:
-                                  return _buildLessonNoteTab(readOnly: !isUnlocked);
-                                case _LessonEditorCardKey.assessment:
-                                  return _buildAssessmentTab(readOnly: !isUnlocked);
-                                case _LessonEditorCardKey.diagrams:
-                                  return _buildDiagramsTab(readOnly: !isUnlocked);
-                                case _LessonEditorCardKey.references:
-                                  return _buildReferencesTab();
-                              }
-                            },
+                  // On compact (phone) screens, put arrows above the card
+                  // and reduce horizontal padding so the card fills width.
+                  if (MediaQuery.sizeOf(context).width < 768)
+                    Expanded(
+                      child: Column(
+                        children: [
+                          // Navigation arrows above the card on phones.
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                _buildDeckArrow(isPrevious: true),
+                                const SizedBox(width: 16),
+                                _buildDeckArrow(isPrevious: false),
+                              ],
+                            ),
                           ),
-                        ),
-                        // Equal insets and centered alignment keep both
-                        // assessment arrows at the same vertical position.
-                        Positioned.fill(
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: _buildDeckArrow(isPrevious: true),
+                          // Card fills remaining vertical space.
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              child: PageView.builder(
+                                controller: _deckController,
+                                itemCount: _cardKeys(
+                                  visibleReferences,
+                                  visibleSuggestedImages,
+                                ).length,
+                                onPageChanged: (i) {
+                                  _setActiveDeckSlide(i);
+                                },
+                                itemBuilder: (context, index) {
+                                  switch (_cardKeys(
+                                    visibleReferences,
+                                    visibleSuggestedImages,
+                                  )[index]) {
+                                    case _LessonEditorCardKey.generate:
+                                      return _DraftGenerateTab(
+                                        cs: cs,
+                                        theme: theme,
+                                        subject: widget.subject,
+                                        classLevel: widget.classLevel,
+                                        options: widget.draftTopicOptions,
+                                        selectedOption: widget.selectedDraftTopic,
+                                        isLoadingOptions:
+                                            widget.isLoadingDraftTopics,
+                                        isGenerating: widget.isGenerating,
+                                        isOnline: isOnline,
+                                        onChanged:
+                                            widget.onDraftTopicChanged ?? (_) {},
+                                        onGenerate:
+                                            widget.onDraftGenerate ?? () {},
+                                        onCreateNewTopic:
+                                            widget.onCreateNewTopic ?? () {},
+                                        allowManualTopic: widget.allowManualTopic,
+                                        topicController: widget.topicController,
+                                        onTopicChanged: widget.onTopicChanged,
+                                      );
+                                    case _LessonEditorCardKey.lessonNotes:
+                                      return _buildLessonNoteTab(readOnly: !isUnlocked);
+                                    case _LessonEditorCardKey.assessment:
+                                      return _buildAssessmentTab(readOnly: !isUnlocked);
+                                    case _LessonEditorCardKey.diagrams:
+                                      return _buildDiagramsTab(readOnly: !isUnlocked);
+                                    case _LessonEditorCardKey.references:
+                                      return _buildReferencesTab();
+                                  }
+                                },
+                              ),
+                            ),
                           ),
-                        ),
-                        Positioned.fill(
-                          child: Align(
-                            alignment: Alignment.centerRight,
-                            child: _buildDeckArrow(isPrevious: false),
+                        ],
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 52),
+                            child: PageView.builder(
+                              controller: _deckController,
+                              itemCount: _cardKeys(
+                                visibleReferences,
+                                visibleSuggestedImages,
+                              ).length,
+                              onPageChanged: (i) {
+                                _setActiveDeckSlide(i);
+                              },
+                              itemBuilder: (context, index) {
+                                switch (_cardKeys(
+                                  visibleReferences,
+                                  visibleSuggestedImages,
+                                )[index]) {
+                                  case _LessonEditorCardKey.generate:
+                                    return _DraftGenerateTab(
+                                      cs: cs,
+                                      theme: theme,
+                                      subject: widget.subject,
+                                      classLevel: widget.classLevel,
+                                      options: widget.draftTopicOptions,
+                                      selectedOption: widget.selectedDraftTopic,
+                                      isLoadingOptions:
+                                          widget.isLoadingDraftTopics,
+                                      isGenerating: widget.isGenerating,
+                                      isOnline: isOnline,
+                                      onChanged:
+                                          widget.onDraftTopicChanged ?? (_) {},
+                                      onGenerate:
+                                          widget.onDraftGenerate ?? () {},
+                                      onCreateNewTopic:
+                                          widget.onCreateNewTopic ?? () {},
+                                      allowManualTopic: widget.allowManualTopic,
+                                      topicController: widget.topicController,
+                                      onTopicChanged: widget.onTopicChanged,
+                                    );
+                                  case _LessonEditorCardKey.lessonNotes:
+                                    return _buildLessonNoteTab(readOnly: !isUnlocked);
+                                  case _LessonEditorCardKey.assessment:
+                                    return _buildAssessmentTab(readOnly: !isUnlocked);
+                                  case _LessonEditorCardKey.diagrams:
+                                    return _buildDiagramsTab(readOnly: !isUnlocked);
+                                  case _LessonEditorCardKey.references:
+                                    return _buildReferencesTab();
+                                }
+                              },
+                            ),
                           ),
-                        ),
-                      ],
+                          // Equal insets and centered alignment keep both
+                          // assessment arrows at the same vertical position.
+                          Positioned.fill(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: _buildDeckArrow(isPrevious: true),
+                            ),
+                          ),
+                          Positioned.fill(
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: _buildDeckArrow(isPrevious: false),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
                 ],
                 ),
               ),
@@ -5591,7 +5724,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
         .map((tier) => tier.trim().toLowerCase())
         .contains(widget.subscriptionTier.trim().toLowerCase());
     return _buildContentCard(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -6234,7 +6367,10 @@ class _PreviewColumnState extends State<_PreviewColumn> {
               ),
               if (onDeleteMcq != null)
                 IconButton(
-                  onPressed: () => onDeleteMcq!(index),
+                  onPressed: () => _confirmDeleteQuestion(
+                    questionType: 'MCQ',
+                    onConfirm: () => onDeleteMcq!(index),
+                  ),
                   icon: const Icon(Icons.delete_outline_rounded),
                   color: cs.error,
                   tooltip: 'Delete question',
@@ -6256,6 +6392,35 @@ class _PreviewColumnState extends State<_PreviewColumn> {
     );
   }
 
+  Future<void> _confirmDeleteQuestion({
+    required String questionType,
+    required VoidCallback onConfirm,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete question?'),
+        content: Text(
+          'Delete this $questionType assessment question? '
+          'This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      onConfirm();
+    }
+  }
+
   List<Widget> _buildQuestionCards() {
     final widgets = <Widget>[];
     // MCQs
@@ -6271,7 +6436,12 @@ class _PreviewColumnState extends State<_PreviewColumn> {
         theme: theme,
         undoController: undoController,
         onUpdateTheory: onUpdateTheory,
-        onDelete: onDeleteTheory != null ? () => onDeleteTheory!(i) : null,
+        onDelete: onDeleteTheory != null
+            ? () => _confirmDeleteQuestion(
+                  questionType: 'theory',
+                  onConfirm: () => onDeleteTheory!(i),
+                )
+            : null,
       ));
     }
     // Subjective
@@ -6284,7 +6454,10 @@ class _PreviewColumnState extends State<_PreviewColumn> {
         undoController: undoController,
         onUpdateTheory: onUpdateSubjective,
         onDelete: onDeleteSubjective != null
-            ? () => onDeleteSubjective!(i)
+            ? () => _confirmDeleteQuestion(
+                  questionType: 'subjective',
+                  onConfirm: () => onDeleteSubjective!(i),
+                )
             : null,
       ));
     }
@@ -8026,4 +8199,3 @@ class _SegmentedControl extends StatelessWidget {
     );
   }
 }
-
