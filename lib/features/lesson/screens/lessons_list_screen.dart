@@ -1436,6 +1436,15 @@ class _LessonFiltersPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Compute a compact one-line summary of active (non-'All') filters.
+    final activeFilters = [
+      if (selectedStatusFilter != 'All') selectedStatusFilter,
+      if (selectedClassFilter != 'All') selectedClassFilter,
+      if (selectedTermFilter != 'All') selectedTermFilter,
+      if (selectedSubjectFilter != 'All') selectedSubjectFilter,
+    ];
+    final filterSummary = activeFilters.isEmpty ? '' : ' \u00b7 ${activeFilters.join(' \u00b7 ')}';
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1455,11 +1464,29 @@ class _LessonFiltersPanel extends StatelessWidget {
                 children: [
                   Icon(Icons.tune_rounded, size: 18, color: cs.primary),
                   const SizedBox(width: 8),
-                  Text(
-                    'Filters',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: cs.onSurface,
+                  Expanded(
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: 'Filters',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: cs.onSurface,
+                            ),
+                          ),
+                          if (filterSummary.isNotEmpty)
+                            TextSpan(
+                              text: filterSummary,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w400,
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                        ],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   const Spacer(),
