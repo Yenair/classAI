@@ -648,52 +648,124 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: cs.primaryContainer,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.assignment_rounded,
-                color: cs.onPrimaryContainer,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final narrow = constraints.maxWidth < 480;
+            if (narrow) {
+              // Stack vertically on narrow widths to prevent Row overflow.
+              return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Scheme of Work Review',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: cs.primaryContainer,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.assignment_rounded,
+                          color: cs.onPrimaryContainer,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Scheme of Work Review',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              selectedTeacher == null
+                                  ? 'Select a teacher to inspect weekly schemes.'
+                                  : 'Review ${selectedTeacher.teacherName}\'s weekly schemes.',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    selectedTeacher == null
-                        ? 'Select a teacher to inspect weekly schemes.'
-                        : 'Review and approve ${selectedTeacher.teacherName}\'s weekly scheme entries.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: cs.onSurfaceVariant,
+                  if (_selectedTeacherSchemes().isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton.icon(
+                        onPressed: _bulkApproveSelectedTeacher,
+                        icon: const Icon(Icons.done_all_rounded, size: 18),
+                        label: const Text('Bulk Approve'),
+                      ),
                     ),
-                  ),
+                  ],
                 ],
-              ),
-            ),
-            if (_selectedTeacherSchemes().isNotEmpty)
-              Flexible(
-                child: FilledButton.icon(
-                  onPressed: _bulkApproveSelectedTeacher,
-                  icon: const Icon(Icons.done_all_rounded),
-                  label: const Text('Bulk Approve'),
+              );
+            }
+            return Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: cs.primaryContainer,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.assignment_rounded,
+                    color: cs.onPrimaryContainer,
+                  ),
                 ),
-              ),
-          ],
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Scheme of Work Review',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        selectedTeacher == null
+                            ? 'Select a teacher to inspect weekly schemes.'
+                            : 'Review and approve ${selectedTeacher.teacherName}\'s weekly scheme entries.',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_selectedTeacherSchemes().isNotEmpty)
+                  Flexible(
+                    child: FilledButton.icon(
+                      onPressed: _bulkApproveSelectedTeacher,
+                      icon: const Icon(Icons.done_all_rounded),
+                      label: const Text('Bulk Approve'),
+                    ),
+                  ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -894,6 +966,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
@@ -1260,18 +1333,21 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
           children: [
             Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: cs.primaryContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    'Week ${record.weekNumber} · ${_friendlyTerm(record.term)} · ${_normalizeClassLevel(record.classLevel)}',
-                    style: TextStyle(color: cs.onPrimaryContainer, fontWeight: FontWeight.w600),
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: cs.primaryContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Week ${record.weekNumber} · ${_friendlyTerm(record.term)} · ${_normalizeClassLevel(record.classLevel)}',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: cs.onPrimaryContainer, fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
                 schemeStatusChip(record.status),
               ],
             ),
@@ -1299,8 +1375,10 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
             const SizedBox(height: 8),
             ..._buildLinkedLessonsSection(theme, cs, linkedLessons),
             const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              alignment: WrapAlignment.end,
               children: [
                 if (record.status != 'approved')
                   TextButton.icon(
@@ -1308,7 +1386,6 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
                     icon: Icon(Icons.check_circle, color: cs.primary),
                     label: const Text('Approve'),
                   ),
-                const SizedBox(width: 8),
                 if (record.status != 'rejected')
                   TextButton.icon(
                     onPressed: () => _adminReject(record.id),
@@ -1355,9 +1432,12 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
                   style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                 ),
               ),
-              TextButton(
-                onPressed: () => context.push('/lessons/${lesson.id}'),
-                child: const Text('Open lesson'),
+              const SizedBox(width: 8),
+              Flexible(
+                child: TextButton(
+                  onPressed: () => context.push('/lessons/${lesson.id}'),
+                  child: const Text('Open lesson', overflow: TextOverflow.ellipsis),
+                ),
               ),
             ],
           ),
