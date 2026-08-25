@@ -80,7 +80,8 @@ class LessonsDao extends DatabaseAccessor<AppDatabase>
     final query = selectOnly(lessons)
       ..addColumns([lessons.id.count()])
       ..where(lessons.teacherServerId.equals(teacherServerId))
-      ..where(lessons.schoolServerId.equals(schoolServerId));
+      ..where(lessons.schoolServerId.equals(schoolServerId))
+      ..where(lessons.isDeleted.equals(false));
     final row = await query.getSingle();
     return row.read<int>(lessons.id.count()) ?? 0;
   }
