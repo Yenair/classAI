@@ -251,6 +251,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   // Stage 4: references visibility toggle (opt-in via Visible Sections sheet).
   bool _visibleReferences = true;
 
+  // Font size preference for lesson card content only.
+  String _editorFontSize = 'medium'; // 'small' | 'medium' | 'large'
+
   // Floating action area: Review & Regenerate expandable state.
   bool _showReviewSection = false;
   bool _showLessonActions = false;
@@ -486,6 +489,15 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
 
   bool get _hasUnsavedDraftChanges =>
       _draftLoadedSnapshot != null && _draftLoadedSnapshot != _editorSnapshot();
+
+  double get _editorContentFontSizeFactor {
+    switch (_editorFontSize) {
+      case 'small': return 0.85;
+      case 'medium': return 1.0;
+      case 'large': return 1.15;
+    }
+    return 1.0;
+  }
 
   Future<void> _loadDraftTopicOptions() async {
     final teacherId = _teacherId;
@@ -2291,6 +2303,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                 true;
         _clampActiveDeckState();
       });
+      await _loadEditorFontSize();
     } catch (_) {
       // Preferences unavailable — keep the defaults (sections hidden).
     }
@@ -2305,6 +2318,57 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     } catch (_) {
       // Non-fatal: the toggle still applies for this session.
     }
+  }
+
+  // ── Stage 5: Editor font size preference ────────────────────────
+
+  Future<void> _loadEditorFontSize() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(
+          _visibleSectionPrefKey('lesson_editor_font_size'));
+      if (saved != null &&
+          (saved == 'small' || saved == 'medium' || saved == 'large')) {
+        setState(() => _editorFontSize = saved);
+      }
+    } catch (_) {
+      // Non-fatal: keep default 'medium'.
+    }
+  }
+
+  Future<void> _persistEditorFontSize(String size) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          _visibleSectionPrefKey('lesson_editor_font_size'), size);
+    } catch (_) {
+      // Non-fatal: the size still applies for this session.
+    }
+  }
+
+  void _showFontSizePicker() {
+    final cs = _lessonEditorStitchColorScheme(
+      Theme.of(context).colorScheme,
+    );
+    final theme = ThemeData(
+      colorScheme: cs,
+      textTheme: GoogleFonts.workSansTextTheme(
+        Theme.of(context).textTheme,
+      ),
+    );
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (_) => _FontSizePickerSheet(
+        cs: cs,
+        theme: theme,
+        currentSize: _editorFontSize,
+        onSelected: (size) {
+          setState(() => _editorFontSize = size);
+          _persistEditorFontSize(size);
+          Navigator.of(context).pop();
+        },
+      ),
+    );
   }
 
   /// Opens the bottom sheet where the teacher picks which optional sections
@@ -2905,6 +2969,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           onExportPdf: _handleExportPdf,
           isExporting: _isExporting,
           onShowVisibleSections: _showVisibleSectionsSheet,
+          onShowFontSize: _showFontSizePicker,
           onSave: _saveLesson,
         ),
       ),
@@ -3099,7 +3164,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       colorScheme: cs,
       textTheme: GoogleFonts.workSansTextTheme(
         Theme.of(context).textTheme,
-      ).apply(fontSizeFactor: 0.9),
+      ).apply(fontSizeFactor: 0.9 * _editorContentFontSizeFactor),
     );
     // Every lesson without generated content starts in the deck's Generate
     // slide, including a brand-new lesson. Keeping this as the single entry
@@ -3174,23 +3239,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                 Expanded(
                   child: Stack(
                     children: [
-                      AnimatedPadding(
-                        duration: const Duration(milliseconds: 180),
-                        curve: Curves.easeOut,
-                        padding: EdgeInsets.only(
-                          bottom: (_hasGenerated &&
-                                  _isUnlocked &&
-                                  (_showLessonActions || _showReviewSection))
-                              ? ((MediaQuery.sizeOf(context).height -
-                                          MediaQuery.viewInsetsOf(context)
-                                              .bottom -
-                                          96)
-                                      .clamp(96.0, 520.0))
-                                  .toDouble()
-                              : 0,
-                        ),
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
+                      LayoutBuilder(
+                        builder: (context, constraints) {
                       final isWide = constraints.maxWidth >= 1024;
                       if (showDraftGenerateTab) {
                         return Padding(
@@ -3574,7 +3624,19 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                         ); */
                           },
                         ),
-                      ),
+                      // Scrim overlay when FAB popup is open (mobile only)
+                      if (_hasGenerated &&
+                          _isUnlocked &&
+                          (_showLessonActions || _showReviewSection) &&
+                          MediaQuery.sizeOf(context).width < 768)
+                        GestureDetector(
+                          onTap: () => setState(() {
+                            _showLessonActions = false;
+                            _showReviewSection = false;
+                          }),
+                          child: Container(color: Colors.black26),
+                        ),
+                      // FAB floats above everything
                       if (_hasGenerated &&
                           _isUnlocked &&
                           MediaQuery.sizeOf(context).width < 768 &&
@@ -7736,6 +7798,7 @@ class _StitchLessonFab extends StatelessWidget {
   final VoidCallback? onExportPdf;
   final bool isExporting;
   final VoidCallback? onShowVisibleSections;
+  final VoidCallback? onShowFontSize;
 
   const _StitchLessonFab({
     required this.cs,
@@ -7753,6 +7816,7 @@ class _StitchLessonFab extends StatelessWidget {
     this.onExportPdf,
     this.isExporting = false,
     this.onShowVisibleSections,
+    this.onShowFontSize,
   });
 
   @override
@@ -7977,6 +8041,17 @@ class _StitchLessonFab extends StatelessWidget {
                     onShowVisibleSections!();
                   },
           ),
+          const SizedBox(height: 8),
+          _actionButton(
+            label: 'Font Size',
+            icon: Icons.format_size_rounded,
+            onPressed: onShowFontSize == null
+                ? null
+                : () {
+                    onToggleActions();
+                    onShowFontSize!();
+                  },
+          ),
         ],
       ),
     );
@@ -8038,6 +8113,96 @@ class _StitchLessonFab extends StatelessWidget {
     );
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Font Size Picker Sheet
+// ═══════════════════════════════════════════════════════════════════════
+class _FontSizePickerSheet extends StatelessWidget {
+  final ColorScheme cs;
+  final ThemeData theme;
+  final String currentSize;
+  final ValueChanged<String> onSelected;
+
+  const _FontSizePickerSheet({
+    required this.cs,
+    required this.theme,
+    required this.currentSize,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Card Font Size',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: cs.onSurface,
+              ),
+            ),
+            const SizedBox(height: 16),
+            for (final entry in const [
+              ('small', 'Small', 13.0),
+              ('medium', 'Medium', 15.0),
+              ('large', 'Large', 17.0),
+            ])
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: InkWell(
+                  onTap: () => onSelected(entry.$1),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: currentSize == entry.$1
+                          ? cs.primaryContainer
+                          : cs.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: currentSize == entry.$1
+                            ? cs.primary
+                            : cs.outlineVariant,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          currentSize == entry.$1
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_unchecked,
+                          size: 20,
+                          color: currentSize == entry.$1
+                              ? cs.primary
+                              : cs.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          entry.$2,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            fontSize: entry.$3,
+                            fontWeight: FontWeight.w600,
+                            color: cs.onSurface,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // Number Control (for question counts)
 // ═══════════════════════════════════════════════════════════════════════
 class _NumberControl extends StatelessWidget {
