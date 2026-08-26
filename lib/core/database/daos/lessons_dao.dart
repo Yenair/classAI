@@ -25,7 +25,10 @@ class LessonsDao extends DatabaseAccessor<AppDatabase>
   ) {
     return (select(lessons)
           ..where((t) => t.teacherServerId.equals(teacherServerId))
-          ..where((t) => t.schoolServerId.equals(schoolServerId))
+          ..where(
+            (t) => t.schoolServerId.equals(schoolServerId) |
+                t.schoolServerId.isNull(),
+          )
           ..where((t) => t.isDeleted.equals(false))
           ..orderBy([(t) => OrderingTerm(expression: t.week, mode: OrderingMode.asc)]))
         .get();
