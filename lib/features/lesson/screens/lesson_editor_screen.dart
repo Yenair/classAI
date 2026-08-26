@@ -524,9 +524,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           .where(
             (lesson) =>
                 lesson.status == 'draft' &&
-                !lesson.isUnlocked &&
-                lesson.subject == _subject &&
-                lesson.classLevel == _classLevel,
+                !lesson.isUnlocked,
           )
           .map(_DraftTopicOption.fromLesson)
           .toList();
@@ -3714,6 +3712,7 @@ class _DraftTopicOption {
   final String topic;
   final String subject;
   final String classLevel;
+  final String term;
   final int week;
   final bool isCreateNew;
 
@@ -3722,6 +3721,7 @@ class _DraftTopicOption {
     required this.topic,
     required this.subject,
     required this.classLevel,
+    required this.term,
     required this.week,
   }) : isCreateNew = false;
 
@@ -3730,6 +3730,7 @@ class _DraftTopicOption {
         topic = '',
         subject = '',
         classLevel = '',
+        term = '',
         week = 1,
         isCreateNew = true;
 
@@ -3739,6 +3740,7 @@ class _DraftTopicOption {
       topic: lesson.topic,
       subject: lesson.subject,
       classLevel: lesson.classLevel,
+      term: lesson.term ?? '',
       week: lesson.week,
     );
   }
@@ -4271,64 +4273,30 @@ class _DraftGenerateTab extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: compact ? 16 : 32),
-                if (options.isNotEmpty) ...[
-                  Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
+                if (options.isEmpty)
+                  Text(
+                    'No draft topics available yet.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: cs.onSurfaceVariant,
                     ),
-                    decoration: BoxDecoration(
-                      color: cs.primaryContainer.withValues(alpha: 0.45),
-                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                      border: Border.all(
-                        color: cs.primary.withValues(alpha: 0.18),
+                  )
+                else ...[
+                  for (final option in options.take(5))
+                    _DraftTopicCard(
+                      option: option,
+                      selected: selectedOption?.lessonId == option.lessonId,
+                      onTap: () => onChanged(option),
+                    ),
+                  if (options.length > 5)
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: () => _showDraftTopicSheet(
+                          context, options, selectedOption, onChanged,
+                        ),
+                        icon: const Icon(Icons.expand_more_rounded),
+                        label: const Text('More drafts'),
                       ),
                     ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(
-                          Icons.info_outline_rounded,
-                          size: 20,
-                          color: cs.primary,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Draft topics for $subject • $classLevel.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: cs.onPrimaryContainer,
-                              height: 1.4,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  DropdownButtonFormField<_DraftTopicOption>(
-                    isExpanded: true,
-                    initialValue: selected,
-                    items: items,
-                    onChanged: isLoadingOptions
-                        ? null
-                        : (value) {
-                            if (value?.isCreateNew == true) {
-                              onCreateNewTopic();
-                            } else {
-                              onChanged(value);
-                            }
-                          },
-                    decoration: InputDecoration(
-                      labelText: 'LESSON TOPIC',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                      ),
-                      filled: true,
-                      fillColor: cs.surfaceBright,
-                    ),
-                  ),
                 ],
                 if (allowManualTopic)
                   TextField(
@@ -4348,42 +4316,7 @@ class _DraftGenerateTab extends StatelessWidget {
                         vertical: compact ? 16 : 24,
                       ),
                     ),
-                  )
-                else if (options.isEmpty)
-                  DropdownButtonFormField<_DraftTopicOption>(
-                    isExpanded: true,
-                    initialValue: selected,
-                    items: items,
-                    onChanged: isLoadingOptions
-                        ? null
-                        : (value) {
-                            if (value?.isCreateNew == true) {
-                              onCreateNewTopic();
-                            } else {
-                              onChanged(value);
-                            }
-                          },
-                    decoration: InputDecoration(
-                      labelText: 'LESSON TOPIC',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                      ),
-                      filled: true,
-                      fillColor: cs.surfaceBright,
-                    ),
                   ),
-                if (!isLoadingOptions && options.isEmpty) ...[
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'No draft topics are available for this class and subject.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ],
                 SizedBox(height: compact ? 16 : 32),
                 SizedBox(
                   width: double.infinity,
@@ -4419,6 +4352,97 @@ class _DraftGenerateTab extends StatelessWidget {
       },
     );
   }
+}
+
+class _DraftTopicCard extends StatelessWidget {
+  final _DraftTopicOption option;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _DraftTopicCard({
+    required this.option,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: selected ? cs.primaryContainer : cs.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? cs.primary : cs.outlineVariant,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                option.subject,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${option.classLevel} · ${option.term} · Week ${option.week}',
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                option.topic,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+void _showDraftTopicSheet(
+  BuildContext context,
+  List<_DraftTopicOption> options,
+  _DraftTopicOption? selectedOption,
+  ValueChanged<_DraftTopicOption> onChanged,
+) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (_) => DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.7,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) => ListView.builder(
+        controller: scrollController,
+        itemCount: options.length,
+        itemBuilder: (context, index) {
+          final option = options[index];
+          return _DraftTopicCard(
+            option: option,
+            selected: selectedOption?.lessonId == option.lessonId,
+            onTap: () {
+              onChanged(option);
+              Navigator.of(context).pop();
+            },
+          );
+        },
+      ),
+    ),
+  );
 }
 
 // Preview Column (right side)
