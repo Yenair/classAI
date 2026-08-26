@@ -4201,22 +4201,16 @@ class _DraftGenerateTab extends StatefulWidget {
 }
 
 class _DraftGenerateTabState extends State<_DraftGenerateTab> {
-  String _sortBy = 'week';
+  String _sortBy = 'classLevel';
 
   List<_DraftTopicOption> get _sortedOptions {
     final list = List<_DraftTopicOption>.of(widget.options);
     switch (_sortBy) {
-      case 'subject':
-        list.sort((a, b) => a.subject.compareTo(b.subject));
-        break;
-      case 'week':
-        list.sort((a, b) => a.week.compareTo(b.week));
-        break;
       case 'classLevel':
         list.sort((a, b) => a.classLevel.compareTo(b.classLevel));
         break;
-      case 'term':
-        list.sort((a, b) => a.term.compareTo(b.term));
+      case 'week':
+        list.sort((a, b) => a.week.compareTo(b.week));
         break;
     }
     return list;
@@ -4237,13 +4231,13 @@ class _DraftGenerateTabState extends State<_DraftGenerateTab> {
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.sort_by_alpha_rounded),
-              title: const Text('Subject A\u2013Z'),
-              trailing: _sortBy == 'subject'
+              leading: const Icon(Icons.school_rounded),
+              title: const Text('Class level'),
+              trailing: _sortBy == 'classLevel'
                   ? const Icon(Icons.check, size: 20)
                   : null,
               onTap: () {
-                setState(() => _sortBy = 'subject');
+                setState(() => _sortBy = 'classLevel');
                 Navigator.pop(context);
               },
             ),
@@ -4258,31 +4252,96 @@ class _DraftGenerateTabState extends State<_DraftGenerateTab> {
                 Navigator.pop(context);
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.school_rounded),
-              title: const Text('Class level'),
-              trailing: _sortBy == 'classLevel'
-                  ? const Icon(Icons.check, size: 20)
-                  : null,
-              onTap: () {
-                setState(() => _sortBy = 'classLevel');
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.event_rounded),
-              title: const Text('Term'),
-              trailing: _sortBy == 'term'
-                  ? const Icon(Icons.check, size: 20)
-                  : null,
-              onTap: () {
-                setState(() => _sortBy = 'term');
-                Navigator.pop(context);
-              },
-            ),
           ],
         ),
       ),
+    );
+  }
+
+  void _showDraftTopicSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final sorted = List<_DraftTopicOption>.of(widget.options);
+            switch (_sortBy) {
+              case 'classLevel':
+                sorted.sort((a, b) => a.classLevel.compareTo(b.classLevel));
+                break;
+              case 'week':
+                sorted.sort((a, b) => a.week.compareTo(b.week));
+                break;
+            }
+            final cs = Theme.of(context).colorScheme;
+            return SafeArea(
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.8,
+                ),
+                decoration: BoxDecoration(
+                  color: cs.surface,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      child: Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'All draft topics',
+                              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                            ),
+                          ),
+                          ChoiceChip(
+                            label: const Text('Class'),
+                            selected: _sortBy == 'classLevel',
+                            onSelected: (_) {
+                              setState(() => _sortBy = 'classLevel');
+                              setSheetState(() {});
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          ChoiceChip(
+                            label: const Text('Week'),
+                            selected: _sortBy == 'week',
+                            onSelected: (_) {
+                              setState(() => _sortBy = 'week');
+                              setSheetState(() {});
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Flexible(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: sorted.length,
+                        itemBuilder: (context, index) {
+                          final option = sorted[index];
+                          return _DraftTopicCard(
+                            option: option,
+                            selected: widget.selectedOption?.lessonId == option.lessonId,
+                            onTap: () {
+                              widget.onChanged(option);
+                              Navigator.of(context).pop();
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -4371,7 +4430,7 @@ class _DraftGenerateTabState extends State<_DraftGenerateTab> {
                     ),
                   )
                 else ...[
-                  if (widget.options.length > 1)
+                  if (selected == null && widget.options.length > 1)
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton.icon(
@@ -4380,18 +4439,23 @@ class _DraftGenerateTabState extends State<_DraftGenerateTab> {
                         label: const Text('Sort'),
                       ),
                     ),
-                  for (final option in _sortedOptions.take(3))
+                  if (selected != null)
                     _DraftTopicCard(
-                      option: option,
-                      selected: widget.selectedOption?.lessonId == option.lessonId,
-                      onTap: () => widget.onChanged(option),
-                    ),
+                      option: selected!,
+                      selected: true,
+                      onTap: () {},
+                    )
+                  else
+                    for (final option in _sortedOptions.take(3))
+                      _DraftTopicCard(
+                        option: option,
+                        selected: false,
+                        onTap: () => widget.onChanged(option),
+                      ),
                   if (widget.options.length > 3)
                     Center(
                       child: TextButton.icon(
-                        onPressed: () => _showDraftTopicSheet(
-                          context, _sortedOptions, widget.selectedOption, widget.onChanged,
-                        ),
+                        onPressed: _showDraftTopicSheet,
                         icon: const Icon(Icons.expand_more_rounded),
                         label: const Text('More drafts'),
                       ),
@@ -4419,7 +4483,7 @@ class _DraftGenerateTabState extends State<_DraftGenerateTab> {
                 SizedBox(height: compact ? 16 : 32),
                 SizedBox(
                   width: double.infinity,
-                  height: compact ? 56 : 80,
+                  height: compact ? 48 : 64,
                   child: FilledButton.icon(
                     onPressed: canGenerate ? widget.onGenerate : null,
                     icon: widget.isGenerating
@@ -4475,7 +4539,7 @@ class _DraftTopicCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
             color: selected ? cs.primaryContainer : cs.surfaceContainerLow,
             borderRadius: BorderRadius.circular(14),
@@ -4488,16 +4552,16 @@ class _DraftTopicCard extends StatelessWidget {
             children: [
               Text(
                 option.subject,
-                style: theme.textTheme.titleMedium?.copyWith(
+                style: theme.textTheme.bodyLarge?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text(
                 '${option.classLevel} · ${option.term} · Week ${option.week}',
                 style: theme.textTheme.bodyMedium,
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text(
                 option.topic,
                 style: theme.textTheme.bodySmall?.copyWith(
@@ -4512,37 +4576,6 @@ class _DraftTopicCard extends StatelessWidget {
   }
 }
 
-void _showDraftTopicSheet(
-  BuildContext context,
-  List<_DraftTopicOption> options,
-  _DraftTopicOption? selectedOption,
-  ValueChanged<_DraftTopicOption> onChanged,
-) {
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    builder: (_) => DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.7,
-      maxChildSize: 0.95,
-      builder: (context, scrollController) => ListView.builder(
-        controller: scrollController,
-        itemCount: options.length,
-        itemBuilder: (context, index) {
-          final option = options[index];
-          return _DraftTopicCard(
-            option: option,
-            selected: selectedOption?.lessonId == option.lessonId,
-            onTap: () {
-              onChanged(option);
-              Navigator.of(context).pop();
-            },
-          );
-        },
-      ),
-    ),
-  );
-}
 
 // Preview Column (right side)
 // ═══════════════════════════════════════════════════════════════════════
