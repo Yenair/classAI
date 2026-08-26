@@ -4220,6 +4220,9 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
                           onPressed: _autoDistribute,
                           icon: const Icon(Icons.shuffle_rounded, size: 20),
                           label: const Text('Auto-Distribute'),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                          ),
                         ),
                       ],
                     ),
