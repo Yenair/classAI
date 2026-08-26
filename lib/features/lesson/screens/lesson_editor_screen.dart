@@ -500,6 +500,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   }
 
   Future<void> _loadDraftTopicOptions() async {
+    if (_teacherId == null || _schoolId == null) {
+      _ensureAuthInfoLoaded();
+    }
     final teacherId = _teacherId;
     final schoolId = _schoolId;
     if (teacherId == null || schoolId == null) return;
@@ -2343,6 +2346,26 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
           _visibleSectionPrefKey('lesson_editor_font_size'), size);
     } catch (_) {
       // Non-fatal: the size still applies for this session.
+    }
+  }
+
+  /// Ensures [_teacherId] and [_schoolId] are populated by reading
+  /// [authProvider]. Called lazily by [_loadDraftTopicOptions] when
+  /// auth info has not yet been loaded.
+  void _ensureAuthInfoLoaded() {
+    if (_teacherId != null && _schoolId != null) return;
+    try {
+      final authData = ref.read(authProvider);
+      if (_teacherId == null &&
+          authData.currentTeacher?.serverId != null) {
+        _teacherId = authData.currentTeacher!.serverId;
+      }
+      if (_schoolId == null &&
+          authData.currentSchool?.serverId != null) {
+        _schoolId = authData.currentSchool!.serverId;
+      }
+    } catch (_) {
+      // Ignore — will return early via null checks.
     }
   }
 
