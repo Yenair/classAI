@@ -110,9 +110,9 @@ class _ToastOverlayState extends State<_ToastOverlay>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Align(
+    return Material(
+      color: Colors.transparent,
+      child: Align(
         alignment: Alignment.bottomCenter,
         child: SlideTransition(
           position: _slideAnimation,
