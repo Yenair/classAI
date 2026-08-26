@@ -3655,7 +3655,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                             _showLessonActions = false;
                             _showReviewSection = false;
                           }),
-                          child: Container(color: Colors.black26),
+                          child: Container(color: Colors.black54),
                         ),
                       // FAB floats above everything
                       if (_hasGenerated &&
@@ -4161,7 +4161,7 @@ class _StitchLessonHeader extends StatelessWidget {
   }
 }
 
-class _DraftGenerateTab extends StatelessWidget {
+class _DraftGenerateTab extends StatefulWidget {
   final ColorScheme cs;
   final ThemeData theme;
   final String subject;
@@ -4197,14 +4197,104 @@ class _DraftGenerateTab extends StatelessWidget {
   });
 
   @override
+  State<_DraftGenerateTab> createState() => _DraftGenerateTabState();
+}
+
+class _DraftGenerateTabState extends State<_DraftGenerateTab> {
+  String _sortBy = 'week';
+
+  List<_DraftTopicOption> get _sortedOptions {
+    final list = List<_DraftTopicOption>.of(widget.options);
+    switch (_sortBy) {
+      case 'subject':
+        list.sort((a, b) => a.subject.compareTo(b.subject));
+        break;
+      case 'week':
+        list.sort((a, b) => a.week.compareTo(b.week));
+        break;
+      case 'classLevel':
+        list.sort((a, b) => a.classLevel.compareTo(b.classLevel));
+        break;
+      case 'term':
+        list.sort((a, b) => a.term.compareTo(b.term));
+        break;
+    }
+    return list;
+  }
+
+  void _showSortSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text(
+                'Sort by',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.sort_by_alpha_rounded),
+              title: const Text('Subject A\u2013Z'),
+              trailing: _sortBy == 'subject'
+                  ? const Icon(Icons.check, size: 20)
+                  : null,
+              onTap: () {
+                setState(() => _sortBy = 'subject');
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.calendar_today_rounded),
+              title: const Text('Week number'),
+              trailing: _sortBy == 'week'
+                  ? const Icon(Icons.check, size: 20)
+                  : null,
+              onTap: () {
+                setState(() => _sortBy = 'week');
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.school_rounded),
+              title: const Text('Class level'),
+              trailing: _sortBy == 'classLevel'
+                  ? const Icon(Icons.check, size: 20)
+                  : null,
+              onTap: () {
+                setState(() => _sortBy = 'classLevel');
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.event_rounded),
+              title: const Text('Term'),
+              trailing: _sortBy == 'term'
+                  ? const Icon(Icons.check, size: 20)
+                  : null,
+              onTap: () {
+                setState(() => _sortBy = 'term');
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxHeight.isFinite &&
             constraints.maxHeight < 560;
-        final selected = options.contains(selectedOption) ? selectedOption : null;
+        final selected = widget.options.contains(widget.selectedOption) ? widget.selectedOption : null;
         final items = [
-          ...options.map(
+          ...widget.options.map(
             (option) => DropdownMenuItem<_DraftTopicOption>(
               value: option,
               child: Text(
@@ -4218,19 +4308,19 @@ class _DraftGenerateTab extends StatelessWidget {
             child: Text('Create new topic'),
           ),
         ];
-        final manualTopic = topicController?.text.trim() ?? '';
+        final manualTopic = widget.topicController?.text.trim() ?? '';
         final canGenerate = ((selected != null && !selected.isCreateNew) ||
-                (allowManualTopic && manualTopic.isNotEmpty)) &&
-            isOnline &&
-            !isGenerating;
+                (widget.allowManualTopic && manualTopic.isNotEmpty)) &&
+            widget.isOnline &&
+            !widget.isGenerating;
 
         return Center(
           child: Container(
           constraints: const BoxConstraints(maxWidth: 760),
           decoration: BoxDecoration(
-            color: cs.surface,
+            color: widget.cs.surface,
             borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-            border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+            border: Border.all(color: widget.cs.outlineVariant.withValues(alpha: 0.3)),
           ),
           child: Padding(
             padding: EdgeInsets.symmetric(
@@ -4244,10 +4334,10 @@ class _DraftGenerateTab extends StatelessWidget {
                 children: [
                 CircleAvatar(
                   radius: compact ? 30 : 56,
-                  backgroundColor: cs.primary.withValues(alpha: 0.10),
+                  backgroundColor: widget.cs.primary.withValues(alpha: 0.10),
                   child: Icon(
                     Icons.auto_awesome_rounded,
-                    color: cs.primary,
+                    color: widget.cs.primary,
                     size: compact ? 36 : 64,
                   ),
                 ),
@@ -4255,54 +4345,63 @@ class _DraftGenerateTab extends StatelessWidget {
                 Text(
                   'Generate Lesson Content',
                   textAlign: TextAlign.center,
-                  style: theme.textTheme.headlineLarge?.copyWith(
+                  style: widget.theme.textTheme.headlineLarge?.copyWith(
                     fontSize: compact ? 28 : 40,
                     height: 1.2,
                     fontWeight: FontWeight.w700,
-                    color: cs.onSurface,
+                    color: widget.cs.onSurface,
                   ),
                 ),
                 const SizedBox(height: 12),
                 Text(
                   'Choose a draft topic and let AI create the lesson content for your students.',
                   textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyLarge?.copyWith(
+                  style: widget.theme.textTheme.bodyLarge?.copyWith(
                     fontSize: compact ? 16 : 18,
                     height: 1.5,
-                    color: cs.onSurfaceVariant,
+                    color: widget.cs.onSurfaceVariant,
                   ),
                 ),
                 SizedBox(height: compact ? 16 : 32),
-                if (options.isEmpty)
+                if (widget.options.isEmpty)
                   Text(
                     'No draft topics available yet.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: cs.onSurfaceVariant,
+                    style: widget.theme.textTheme.bodyMedium?.copyWith(
+                      color: widget.cs.onSurfaceVariant,
                     ),
                   )
                 else ...[
-                  for (final option in options.take(5))
+                  if (widget.options.length > 1)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: _showSortSheet,
+                        icon: const Icon(Icons.sort_rounded, size: 18),
+                        label: const Text('Sort'),
+                      ),
+                    ),
+                  for (final option in _sortedOptions.take(3))
                     _DraftTopicCard(
                       option: option,
-                      selected: selectedOption?.lessonId == option.lessonId,
-                      onTap: () => onChanged(option),
+                      selected: widget.selectedOption?.lessonId == option.lessonId,
+                      onTap: () => widget.onChanged(option),
                     ),
-                  if (options.length > 5)
+                  if (widget.options.length > 3)
                     Center(
                       child: TextButton.icon(
                         onPressed: () => _showDraftTopicSheet(
-                          context, options, selectedOption, onChanged,
+                          context, _sortedOptions, widget.selectedOption, widget.onChanged,
                         ),
                         icon: const Icon(Icons.expand_more_rounded),
                         label: const Text('More drafts'),
                       ),
                     ),
                 ],
-                if (allowManualTopic)
+                if (widget.allowManualTopic && widget.options.isEmpty && selected == null)
                   TextField(
-                    controller: topicController,
+                    controller: widget.topicController,
                     textCapitalization: TextCapitalization.sentences,
-                    onChanged: onTopicChanged,
+                    onChanged: widget.onTopicChanged,
                     decoration: InputDecoration(
                       labelText: 'LESSON TOPIC',
                       hintText: 'e.g. Introduction to Fractions',
@@ -4310,7 +4409,7 @@ class _DraftGenerateTab extends StatelessWidget {
                         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
                       ),
                       filled: true,
-                      fillColor: cs.surfaceBright,
+                      fillColor: widget.cs.surfaceBright,
                       contentPadding: EdgeInsets.symmetric(
                         horizontal: compact ? 16 : 24,
                         vertical: compact ? 16 : 24,
@@ -4322,25 +4421,25 @@ class _DraftGenerateTab extends StatelessWidget {
                   width: double.infinity,
                   height: compact ? 56 : 80,
                   child: FilledButton.icon(
-                    onPressed: canGenerate ? onGenerate : null,
-                    icon: isGenerating
+                    onPressed: canGenerate ? widget.onGenerate : null,
+                    icon: widget.isGenerating
                         ? SizedBox(
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(
                               strokeWidth: 2.5,
-                              color: cs.onPrimary,
+                              color: widget.cs.onPrimary,
                             ),
                           )
                         : const Icon(Icons.auto_awesome_rounded),
-                    label: Text(isGenerating ? 'Generating...' : 'Create with AI'),
+                    label: Text(widget.isGenerating ? 'Generating...' : 'Create with AI'),
                   ),
                 ),
-                if (!isOnline) ...[
+                if (!widget.isOnline) ...[
                   const SizedBox(height: 8),
                   Text(
                     'Generation requires an internet connection.',
-                    style: theme.textTheme.bodySmall?.copyWith(color: cs.error),
+                    style: widget.theme.textTheme.bodySmall?.copyWith(color: widget.cs.error),
                   ),
                 ],
               ],
