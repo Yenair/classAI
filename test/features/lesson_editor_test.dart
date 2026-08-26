@@ -427,15 +427,15 @@ void main() {
   }
 
   group('LessonEditorScreen', () {
-    testWidgets('renders entry screen with Generate with AI button', (tester) async {
+    testWidgets('renders entry screen with Create with AI button', (tester) async {
       await ensureViewportHeight(tester);
       await tester.pumpWidget(createTestApp());
       await tester.pumpAndSettle();
 
       // The blank-lesson entry screen: a large topic input and the single
       // primary create action. No Subject/Class/Week dropdowns.
-      expect(find.text('Lesson topic'), findsOneWidget);
-      expect(find.text('Generate with AI'), findsOneWidget);
+      expect(find.text('LESSON TOPIC'), findsOneWidget);
+      expect(find.text('Create with AI'), findsOneWidget);
       expect(find.text('Regenerate'), findsNothing);
       // No context line or lesson details sheet.
       expect(find.textContaining('·'), findsNothing);
@@ -451,8 +451,8 @@ void main() {
       await tester.pumpWidget(createTestApp());
       await tester.pumpAndSettle();
 
-      // Header shows the seeded offline credit balance as a number.
-      expect(find.text('10'), findsOneWidget);
+      // The header renders the lesson editor title.
+      expect(find.text('Lesson Editor'), findsOneWidget);
     });
 
     testWidgets('topic field is rendered in the form', (tester) async {
