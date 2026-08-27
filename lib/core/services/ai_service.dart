@@ -8,7 +8,6 @@ import '../utils/sanitization_utils.dart';
 import '../utils/token_counter.dart';
 import '../utils/encryption_utils.dart';
 import 'auth_service.dart';
-import 'security_service.dart';
 
 class AiService {
   final Uint8List? _schoolKey;
@@ -54,6 +53,14 @@ class AiService {
   }
 
   Future<Map<String, dynamic>> generate(String prompt) async {
+    // 0. Ensure a valid JWT is available before making any edge function calls.
+    final jwt = await _resolveJwt();
+    if (jwt == null || jwt.isEmpty) {
+      throw AiGenerationException(
+        'No valid session. Please sign in again before generating.',
+      );
+    }
+
     // 1. Sanitize
     final injections = SanitizationUtils.findInjections(prompt);
     if (injections.isNotEmpty) throw AiInjectionException(injections);
@@ -98,14 +105,7 @@ class AiService {
 
   /// Resolves the current JWT, falling back to secure storage if needed.
   Future<String?> _resolveJwt() async {
-    var jwt = SupabaseAuthService().currentJwt;
-    if (jwt == null || jwt.isEmpty) {
-      jwt = await SecurityService().getStoredJwt();
-      if (jwt != null && jwt.isNotEmpty) {
-        SupabaseAuthService().setJwt(jwt);
-      }
-    }
-    return jwt;
+    return await SupabaseAuthService().getValidAccessToken();
   }
 
   Future<Map<String, dynamic>> _callDeepSeek(String prompt) async {

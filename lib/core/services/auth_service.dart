@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase_pkg;
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/services/security_service.dart';
 
 /// Result of a login, activation, signup or password recovery operation.
 class AuthResult {
@@ -52,6 +53,9 @@ abstract class AuthService {
 
   /// Clear the stored JWT (called on logout or token expiry).
   void clearJwt();
+
+  /// Returns a valid JWT, or null if no valid session exists.
+  Future<String?> getValidAccessToken();
 
   /// Authenticate a teacher with email + password + deviceId.
   Future<AuthResult> login(
@@ -845,6 +849,22 @@ class SupabaseAuthService implements AuthService {
   void clearJwt() {
     debugPrint('[AUTH] clearJwt() called; clearing in-memory JWT.');
     _currentJwt = null;
+  }
+
+  /// Returns a valid JWT, or null if no valid session exists.
+  ///
+  /// Checks in-memory first, then secure storage. If neither has a JWT,
+  /// returns null without modifying auth state.
+  Future<String?> getValidAccessToken() async {
+    var jwt = _currentJwt;
+    if (jwt != null && jwt.isNotEmpty) return jwt;
+
+    final stored = await SecurityService().getStoredJwt();
+    if (stored != null && stored.isNotEmpty) {
+      _currentJwt = stored;
+      return stored;
+    }
+    return null;
   }
 
   /// Attempts to extract an `error` field from a [FunctionException.details].

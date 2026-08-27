@@ -19,6 +19,8 @@ import 'package:classai/core/services/auth_service.dart';
 import 'core/services/deep_link_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/providers/auth_provider.dart';
+import 'features/dashboard/providers/sync_status_provider.dart'
+    show syncStatusProvider;
 import 'features/auth/screens/login_screen.dart';
 import 'features/auth/screens/signup_screen.dart';
 import 'features/auth/screens/admin_recovery_screen.dart';
@@ -681,6 +683,21 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
     ref.listen<AuthStateData>(authProvider, (_, __) {
       goRouterRefreshNotifier.value++;
     });
+
+    // Trigger an immediate sync when the user becomes authenticated
+    // (login, email verification, or auto-login). This avoids the 5-minute
+    // delay before lessons/exams appear after sign-in.
+    ref.listen<AuthState>(
+      authProvider.select((s) => s.state),
+      (previous, next) {
+        if (next == AuthState.authenticated &&
+            previous != AuthState.authenticated) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            ref.read(syncStatusProvider.notifier).syncNow();
+          });
+        }
+      },
+    );
 
     // ── Loading state ──────────────────────────────────────────────────
     // Still checking for stored credentials or performing offline login.
