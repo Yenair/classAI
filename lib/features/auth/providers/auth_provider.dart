@@ -1316,6 +1316,13 @@ class AuthNotifier extends Notifier<AuthStateData> {
 
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
+        // Persist JWT to secure storage — _verifyEmailCodeExisting reuses the
+        // JWT from login() but never stores it, so sync/pull can't find it.
+        final jwt = _authService.currentJwt;
+        if (jwt != null && jwt.isNotEmpty) {
+          await _securityService.storeJwt(jwt);
+        }
+
         state = state.copyWith(
           state: AuthState.authenticated,
           clearError: true,
