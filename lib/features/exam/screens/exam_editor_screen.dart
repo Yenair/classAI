@@ -1538,7 +1538,18 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         const SingleActivator(LogicalKeyboardKey.keyY, control: true):
             _undoController.redo,
       },
-      child: Scaffold(
+      child: PopScope(
+        canPop: context.canPop(),
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop && mounted) {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/exams');
+            }
+          }
+        },
+        child: Scaffold(
       backgroundColor: cs.surface,
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1839,6 +1850,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
             ),
           ),
         ],
+      ),
       ),
       ),
     );
@@ -4015,7 +4027,18 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
         !_isGenerating &&
         hasSelection;
 
-    return Scaffold(
+    return PopScope(
+      canPop: context.canPop(),
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && mounted) {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/exams');
+          }
+        }
+      },
+      child: Scaffold(
       backgroundColor: cs.surface,
       appBar: AppBar(
         // The setup screen always has a visible back affordance returning to
@@ -4274,6 +4297,7 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
           ),
         ],
       ),
+    ),
     );
   }
 

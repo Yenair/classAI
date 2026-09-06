@@ -20,12 +20,13 @@ import 'core/services/deep_link_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'features/dashboard/providers/sync_status_provider.dart'
-    show syncStatusProvider;
+    show SyncStatus, SyncStatusData, syncStatusProvider;
 import 'features/auth/screens/login_screen.dart';
 import 'features/auth/screens/signup_screen.dart';
 import 'features/auth/screens/admin_recovery_screen.dart';
 import 'features/auth/screens/teacher_recovery_dialog.dart';
 import 'features/settings/providers/theme_provider.dart';
+import 'features/settings/providers/text_scale_provider.dart';
 import 'core/providers/config_provider.dart';
 import 'router/app_router.dart';
 
@@ -590,11 +591,18 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSubscription;
 
+  /// Whether the first sync after authentication has completed.
+  /// When false and auth is authenticated, a fullscreen loading screen
+  /// is shown while the initial sync restores lessons and exams.
+  bool _isFirstSyncComplete = false;
+
   @override
   void initState() {
     super.initState();
     // Load saved theme preference
     ref.read(themeProvider.notifier).loadTheme();
+    // Load global text scale factor
+    ref.read(textScaleProvider.notifier).load();
     // Defer auth check to after the initial build frame to avoid
     // calling markNeedsBuild() on the ProviderScope during its own
     // build phase (which causes a FlutterError).
@@ -676,6 +684,17 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
   Widget build(BuildContext context) {
     final authData = ref.watch(authProvider);
 
+    // Listen for sync status changes to dismiss the fullscreen loading
+    // screen once the first sync completes (synced or error).
+    ref.listen<SyncStatusData>(syncStatusProvider, (previous, next) {
+      if (!_isFirstSyncComplete &&
+          (next.status == SyncStatus.synced ||
+           next.status == SyncStatus.error ||
+           next.status == SyncStatus.offline)) {
+        setState(() => _isFirstSyncComplete = true);
+      }
+    });
+
     // Re-evaluate GoRouter's redirect guard whenever auth state changes
     // (login, logout, role change, guest transition, etc.).  Without this
     // the redirect callback only fires on explicit navigation actions, so
@@ -692,6 +711,16 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
       (previous, next) {
         if (next == AuthState.authenticated &&
             previous != AuthState.authenticated) {
+          // Reset the flag so the fullscreen loading screen is shown
+          // while the initial sync restores lessons and exams.
+          setState(() => _isFirstSyncComplete = false);
+          // If sync is already done (e.g. cached), skip the loading screen.
+          final currentSync = ref.read(syncStatusProvider);
+          if (currentSync.status == SyncStatus.synced ||
+              currentSync.status == SyncStatus.error ||
+              currentSync.status == SyncStatus.offline) {
+            setState(() => _isFirstSyncComplete = true);
+          }
           WidgetsBinding.instance.addPostFrameCallback((_) {
             ref.read(syncStatusProvider.notifier).syncNow();
           });
@@ -764,6 +793,111 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
       );
     }
 
+    // ── Authenticated — first sync in progress ────────────────────────
+    // Show a fullscreen loading screen while the initial sync restores
+    // lessons and exams. Disappears once the first sync completes or fails.
+    final syncData = ref.watch(syncStatusProvider);
+    if (!_isFirstSyncComplete &&
+        (syncData.status == SyncStatus.syncing ||
+         syncData.status == SyncStatus.offline)) {
+      return MaterialApp(
+        title: 'ClassAI',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light(),
+        darkTheme: AppTheme.dark(),
+        themeMode: ref.watch(themeProvider),
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 48),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 32),
+                  Text(
+                    'Getting your saved lessons and exams…',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'This is safe. Your data is being restored.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // ── Authenticated — first sync failed ──────────────────────────────
+    if (!_isFirstSyncComplete && syncData.status == SyncStatus.error) {
+      return MaterialApp(
+        title: 'ClassAI',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light(),
+        darkTheme: AppTheme.dark(),
+        themeMode: ref.watch(themeProvider),
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 48),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.cloud_off_rounded,
+                    size: 64,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Could not restore your data',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Please check your internet connection and try again.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  FilledButton.icon(
+                    onPressed: () {
+                      setState(() => _isFirstSyncComplete = false);
+                      ref.read(syncStatusProvider.notifier).syncNow();
+                    },
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: () {
+                      setState(() => _isFirstSyncComplete = true);
+                    },
+                    child: const Text('Continue anyway'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     // ── Authenticated — show full app with GoRouter ────────────────────
     return MaterialApp.router(
       title: 'ClassAI',
@@ -772,6 +906,15 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
       darkTheme: AppTheme.dark(),
       themeMode: ref.watch(themeProvider),
       routerConfig: appRouter,
+      builder: (context, child) {
+        final textScale = ref.watch(textScaleProvider);
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(textScale),
+          ),
+          child: child!,
+        );
+      },
     );
   }
 }

@@ -263,7 +263,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
   bool _isVersionLessThan(String a, String b) {
     final aParts = a.split('.').map((e) => int.tryParse(e) ?? 0).toList();
     final bParts = b.split('.').map((e) => int.tryParse(e) ?? 0).toList();
-    final maxLen = aParts.length > bParts.length ? aParts.length : bParts.length;
+    final maxLen =
+        aParts.length > bParts.length ? aParts.length : bParts.length;
     for (int i = 0; i < maxLen; i++) {
       final aVal = i < aParts.length ? aParts[i] : 0;
       final bVal = i < bParts.length ? bParts[i] : 0;
@@ -320,8 +321,9 @@ class AuthNotifier extends Notifier<AuthStateData> {
         }
       }
 
-      // Fallback: check the message text.
-      return _matchesText(error.message);
+      // Do NOT fall through to text matching — the message 'Session expired'
+      // is used as a generic string for non-mismatch errors too.
+      return false;
     }
 
     // ── Raw FunctionException (sync calls etc.) ───────────────────────────
@@ -804,7 +806,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
   /// Perform a manual logout (clean).
   /// Transitions to the login screen after cleanup.
   Future<void> manualLogout() async {
-    debugPrint('[AUTH] manualLogout() called; clearing JWT and secure storage.');
+    debugPrint(
+        '[AUTH] manualLogout() called; clearing JWT and secure storage.');
     await _performLogout(
         isForced: false, targetState: AuthState.onlineLoginRequired);
   }
@@ -1169,7 +1172,6 @@ class AuthNotifier extends Notifier<AuthStateData> {
     );
 
     try {
-
       // Store pending data and transition to email verification
       state = state.copyWith(
         state: AuthState.emailVerificationRequired,
@@ -1195,8 +1197,8 @@ class AuthNotifier extends Notifier<AuthStateData> {
       final details = e.details;
       String errorMessage;
       if (details is Map<String, dynamic>) {
-        errorMessage = details['error'] as String? ??
-            'Failed to send verification code.';
+        errorMessage =
+            details['error'] as String? ?? 'Failed to send verification code.';
       } else {
         errorMessage = 'Failed to send verification code.';
       }
@@ -1305,14 +1307,16 @@ class AuthNotifier extends Notifier<AuthStateData> {
         'code': code,
         if (state.pendingDeviceId != null) 'device_id': state.pendingDeviceId,
       };
-      debugPrint('[AuthNotifier] _verifyEmailCodeExisting — JWT present: ${jwt.isNotEmpty}, pendingDeviceId: ${state.pendingDeviceId ?? "null"}');
+      debugPrint(
+          '[AuthNotifier] _verifyEmailCodeExisting — JWT present: ${jwt.isNotEmpty}, pendingDeviceId: ${state.pendingDeviceId ?? "null"}');
       debugPrint('[AuthNotifier] _verifyEmailCodeExisting — body: $body');
       final response = await client.functions.invoke(
         'verify-code',
         headers: {'x-classai-jwt': jwt},
         body: body,
       );
-      debugPrint('[AuthNotifier] _verifyEmailCodeExisting — response: ${response.data}');
+      debugPrint(
+          '[AuthNotifier] _verifyEmailCodeExisting — response: ${response.data}');
 
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
@@ -1598,12 +1602,10 @@ class AuthNotifier extends Notifier<AuthStateData> {
     _isResending = true;
     try {
       final client = supabase_pkg.Supabase.instance.client;
-      await client.functions
-          .invoke(
-            'send-verification-code',
-            body: {'email': email, 'mode': 'signup'},
-          )
-          .timeout(const Duration(seconds: 15));
+      await client.functions.invoke(
+        'send-verification-code',
+        body: {'email': email, 'mode': 'signup'},
+      ).timeout(const Duration(seconds: 15));
 
       state = state.copyWith(clearError: true, errorMessage: null);
     } on TimeoutException {
@@ -1964,8 +1966,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
         // retryable=false on every attempt, and if the local_id echo
         // is missing (bug) these entries retry indefinitely, jamming the
         // sync queue and blocking real work (lessons, exams, etc.).
-        if (result.teacher.serverId != null &&
-            result.teacher.role == 'admin') {
+        if (result.teacher.serverId != null && result.teacher.role == 'admin') {
           try {
             await _db.syncQueueDao.insertEntry(
               queueTable: 'teachers',

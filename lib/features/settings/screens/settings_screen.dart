@@ -3,12 +3,12 @@ import 'dart:io' ;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/settings/providers/theme_provider.dart';
+import 'package:classai/features/settings/providers/text_scale_provider.dart';
 
 import 'package:classai/features/dashboard/providers/sync_status_provider.dart';
 
@@ -29,29 +29,15 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  static const _fontScaleKey = 'settings_font_scale';
-  double _fontScale = 0.9;
   String _appVersion = '';
 
   @override
   void initState() {
     super.initState();
     _loadAppVersion();
-    _loadFontScale();
   }
 
-  Future<void> _loadFontScale() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (mounted) {
-      setState(() => _fontScale = prefs.getDouble(_fontScaleKey) ?? 0.9);
-    }
-  }
 
-  Future<void> _setFontScale(double value) async {
-    setState(() => _fontScale = value);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_fontScaleKey, value);
-  }
 
   Future<void> _loadAppVersion() async {
     try {
@@ -169,10 +155,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       },
       child: Focus(
         autofocus: true,
-        child: MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            textScaler: TextScaler.linear(_fontScale),
-          ),
+        child: PopScope(
+          canPop: context.canPop(),
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop && mounted) {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/');
+              }
+            }
+          },
           child: Scaffold(
       backgroundColor: cs.surface,
       body: SafeArea(
@@ -225,7 +218,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ],
         ),
       ),
-        ),
+      ),
       ),
       ),
     );
@@ -532,12 +525,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const Icon(Icons.text_decrease_rounded, size: 18),
               Expanded(
                 child: Slider(
-                  value: _fontScale,
+                  value: ref.watch(textScaleProvider),
                   min: 0.8,
-                  max: 1.0,
-                  divisions: 4,
-                  label: '${(_fontScale * 100).round()}%',
-                  onChanged: _setFontScale,
+                  max: 1.2,
+                  divisions: 8,
+                  label: '${(ref.watch(textScaleProvider) * 100).round()}%',
+                  onChanged: (v) => ref.read(textScaleProvider.notifier).setScale(v),
                 ),
               ),
               const Icon(Icons.text_increase_rounded, size: 18),

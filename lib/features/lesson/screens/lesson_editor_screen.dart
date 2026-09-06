@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:classai/features/settings/providers/text_scale_provider.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/core/services/ai_service.dart';
@@ -251,8 +252,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   // Stage 4: references visibility toggle (opt-in via Visible Sections sheet).
   bool _visibleReferences = true;
 
-  // Font size preference for lesson card content only.
-  String _editorFontSize = 'medium'; // 'small' | 'medium' | 'large'
+  // Font size is now a global setting via textScaleProvider.
+  // The picker in the footer writes to the shared provider.
 
   // Floating action area: Review & Regenerate expandable state.
   bool _showReviewSection = false;
@@ -489,15 +490,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
 
   bool get _hasUnsavedDraftChanges =>
       _draftLoadedSnapshot != null && _draftLoadedSnapshot != _editorSnapshot();
-
-  double get _editorContentFontSizeFactor {
-    switch (_editorFontSize) {
-      case 'small': return 0.85;
-      case 'medium': return 1.0;
-      case 'large': return 1.15;
-    }
-    return 1.0;
-  }
 
   Future<void> _loadDraftTopicOptions() async {
     if (_teacherId == null || _schoolId == null) {
@@ -2304,7 +2296,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                 true;
         _clampActiveDeckState();
       });
-      await _loadEditorFontSize();
     } catch (_) {
       // Preferences unavailable — keep the defaults (sections hidden).
     }
@@ -2322,30 +2313,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   }
 
   // ── Stage 5: Editor font size preference ────────────────────────
-
-  Future<void> _loadEditorFontSize() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final saved = prefs.getString(
-          _visibleSectionPrefKey('lesson_editor_font_size'));
-      if (saved != null &&
-          (saved == 'small' || saved == 'medium' || saved == 'large')) {
-        setState(() => _editorFontSize = saved);
-      }
-    } catch (_) {
-      // Non-fatal: keep default 'medium'.
-    }
-  }
-
-  Future<void> _persistEditorFontSize(String size) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-          _visibleSectionPrefKey('lesson_editor_font_size'), size);
-    } catch (_) {
-      // Non-fatal: the size still applies for this session.
-    }
-  }
+  // Now delegated to the global textScaleProvider.
 
   /// Ensures [_teacherId] and [_schoolId] are populated by reading
   /// [authProvider]. Called lazily by [_loadDraftTopicOptions] when
@@ -2377,15 +2345,26 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         Theme.of(context).textTheme,
       ),
     );
+    // Map global text scale to the closest named size for the picker UI.
+    final currentScale = ref.read(textScaleProvider);
+    final currentSize = currentScale <= 0.875
+        ? 'small'
+        : currentScale >= 1.075
+            ? 'large'
+            : 'medium';
     showModalBottomSheet<void>(
       context: context,
       builder: (_) => _FontSizePickerSheet(
         cs: cs,
         theme: theme,
-        currentSize: _editorFontSize,
+        currentSize: currentSize,
         onSelected: (size) {
-          setState(() => _editorFontSize = size);
-          _persistEditorFontSize(size);
+          final double scale = switch (size) {
+            'small' => 0.85,
+            'large' => 1.15,
+            _ => 1.0,
+          };
+          ref.read(textScaleProvider.notifier).setScale(scale);
           Navigator.of(context).pop();
         },
       ),
@@ -3185,7 +3164,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       colorScheme: cs,
       textTheme: GoogleFonts.workSansTextTheme(
         Theme.of(context).textTheme,
-      ).apply(fontSizeFactor: 0.9 * _editorContentFontSizeFactor),
+      ),
     );
     // Every lesson without generated content starts in the deck's Generate
     // slide, including a brand-new lesson. Keeping this as the single entry
@@ -6120,7 +6099,8 @@ class _PreviewColumnState extends State<_PreviewColumn> {
             // Question cards
             ..._buildQuestionCards(),
             const SizedBox(height: 16),
-            // Homework section            _buildHomeworkSection(),
+            // Homework section
+            _buildHomeworkSection(readOnly: readOnly),
           ],
         ],
         ),
@@ -6716,6 +6696,45 @@ class _PreviewColumnState extends State<_PreviewColumn> {
       );
     }
     return widgets;
+  }
+
+  Widget _buildHomeworkSection({required bool readOnly}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Homework',
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: cs.onSurface,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (readOnly)
+            _buildLessonParagraphContent(widget.homeworkController.text)
+          else ...[
+            _buildDocumentTextField(
+              widget.homeworkController,
+              undoController: undoController,
+              minLines: 4,
+            ),
+            if (widget.homeworkController.text.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: widget.onRegenerateHomework,
+                  icon: const Icon(Icons.refresh, size: 16),
+                  label: const Text('Regenerate homework only'),
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
   }
 
   /// Suggested Images as a collapsible document section. Closed by default

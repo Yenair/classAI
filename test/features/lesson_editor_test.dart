@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
+
+
 // These matchers are needed from flutter_test (for example, expect(..., isNull));
 // Drift's column-expression helpers of the same names would be ambiguous.
 import 'package:drift/drift.dart' hide isNotNull, isNull;
@@ -280,9 +283,13 @@ Future<void> _tapGenerate(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+
 void main() {
+
   late AppDatabase db;
   final mockSupabase = buildMockSupabase();
+
+
 
   setUp(() async {
     db = AppDatabase.forTesting();
@@ -902,6 +909,10 @@ void main() {
 
       await _enterTopic(tester, 'Algebraic Expressions');
       await _tapGenerate(tester);
+      // Wait for async _saveLesson() to complete so _lessonId is set.
+      await tester.pump();
+      await Future.delayed(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
 
       // Unlock so the editable document (with the homework regenerate
       // button in the Assessment tab) is rendered, then dismiss the unlock toast.
@@ -914,8 +925,8 @@ void main() {
       await tester.tap(find.text('Close'));
       await tester.pumpAndSettle();
 
-      // Tap the Assessment tab to see homework controls.
-      await tester.tap(find.text('Assessment'));
+      // Navigate to Assessment card using arrows.
+      await tester.tap(find.byTooltip('Next lesson section'));
       await tester.pumpAndSettle();
 
       // The generated homework is on screen before regeneration.

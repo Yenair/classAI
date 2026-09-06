@@ -12,7 +12,18 @@ class InsufficientOfflineCreditScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Scaffold(
+    return PopScope(
+      canPop: context.canPop(),
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/');
+          }
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: const Text('Insufficient Offline Credits'),
       ),
@@ -58,6 +69,7 @@ class InsufficientOfflineCreditScreen extends StatelessWidget {
           ],
         ),
       ),
+    ),
     );
   }
 }

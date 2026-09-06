@@ -139,7 +139,18 @@ class ExamChoiceScreen extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
 
-    return Scaffold(
+    return PopScope(
+      canPop: context.canPop(),
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/');
+          }
+        }
+      },
+      child: Scaffold(
       backgroundColor: cs.surface,
       appBar: AppBar(
         leading: IconButton(
@@ -201,6 +212,7 @@ class ExamChoiceScreen extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 }

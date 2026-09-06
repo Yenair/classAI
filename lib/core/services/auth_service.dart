@@ -703,8 +703,8 @@ class SupabaseAuthService implements AuthService {
               : null;
       throw AuthException(
         code: AuthErrorCode.validationError,
-        message:
-            serverError ?? 'Failed to resend password (server error ${e.status}).',
+        message: serverError ??
+            'Failed to resend password (server error ${e.status}).',
         originalError: e,
       );
     } catch (e) {
@@ -804,31 +804,36 @@ class SupabaseAuthService implements AuthService {
         _currentJwt = null;
         throw AuthException(
           code: AuthErrorCode.invalidCredentials,
-          message: data?['error'] as String? ?? 'Session expired. Please login again.',
+          message: data?['error'] as String? ??
+              'Session expired. Please login again.',
         );
       }
 
       return _parseAuthResult(data);
     } on supabase_pkg.FunctionException catch (e) {
       debugPrint(
-        '[AUTH] validateSession() FunctionException; clearing in-memory JWT. '
-        'status=${e.status}, details=${e.details}',
+        '[AUTH] validateSession() FunctionException; status=${e.status}, '
+        'details=${e.details}',
       );
-      _currentJwt = null;
-      // Check if this is a token_version_mismatch
-      final code = (e.details is Map)
-          ? (e.details as Map)['code'] as String?
-          : null;
-      if (code == 'token_version_mismatch') {
+      // Check if this is a genuine session invalidation (token_version_mismatch,
+      // invalid_jwt, or teacher_not_found). Only these should trigger logout.
+      final code =
+          (e.details is Map) ? (e.details as Map)['code'] as String? : null;
+      if (code == 'token_version_mismatch' ||
+          code == 'invalid_jwt' ||
+          code == 'teacher_not_found') {
         throw AuthException(
           code: AuthErrorCode.invalidCredentials,
           message: 'Session expired. Please login again.',
           originalError: e,
         );
       }
+      // Non-mismatch server error (cold start, 500, rate limit, etc.).
+      // Do NOT clear _currentJwt here — the session may still be valid; only
+      // this particular request failed. Treat as a transient network error.
       throw AuthException(
-        code: AuthErrorCode.invalidCredentials,
-        message: 'Session expired. Please login again.',
+        code: AuthErrorCode.networkError,
+        message: 'Session validation temporarily unavailable.',
         originalError: e,
       );
     } catch (e) {
@@ -978,7 +983,6 @@ class SupabaseAuthService implements AuthService {
       emailVerified: data['email_verified'] as bool? ?? false,
       newDevice: data['new_device'] as bool? ?? false,
     );
-
   }
 
   /// Returns `true` if [e] is a connectivity-related exception.

@@ -194,7 +194,6 @@ class EditorLayout extends ConsumerStatefulWidget {
 }
 
 class _EditorLayoutState extends ConsumerState<EditorLayout> {
-  int _selectedIndex = 0;
   bool _isSidebarOpen = true;
 
   List<NavItem> get _navItems {
@@ -414,7 +413,10 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                 // Nav items
                 ...List.generate(_navItems.length, (index) {
                   final item = _navItems[index];
-                  final isActive = index == _selectedIndex;
+                  final currentPath = GoRouter.maybeOf(context)?.state.uri.path ?? '/';
+                  final isActive = item.route == null
+                      ? currentPath == '/'
+                      : currentPath == item.route || currentPath.startsWith('${item.route}/');
                   return Padding(
                     padding: EdgeInsets.symmetric(
                       horizontal: _isSidebarOpen ? 12 : 8,
@@ -427,7 +429,6 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                           AppTheme.radiusFull,
                         ),
                         onTap: () {
-                          setState(() => _selectedIndex = index);
                           if (item.route != null) {
                             final route = item.route!;
                             WidgetsBinding.instance.addPostFrameCallback((_) {
