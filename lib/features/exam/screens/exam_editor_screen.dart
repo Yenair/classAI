@@ -891,10 +891,6 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         );
       }
 
-      // Increment preview counter only after successful generation
-      await db.securityConfigDao
-          .checkAndIncrementDailyPreviews(tier: _subscriptionTier);
-
       // Audit log the generation
       await aiService.logGeneration(
         teacherId: _teacherId,
@@ -955,12 +951,13 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         _subjectiveQuestions = subjectiveQuestions;
         _hasGenerated = true;
         _configExpanded = false;
-        _isUnlocked = false;
+        _isUnlocked = true;
         _isGenerating = false;
         _previewRevision++;
       });
 
       await _saveExam(notify: false);
+      ref.invalidate(examsListProvider);
 
       if (mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -989,114 +986,6 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         });
       }
     }
-  }
-
-  Future<void> _handleUnlock() async {
-    final isOnline = await PlatformHelper.isOnline();
-
-    if (!isOnline && _dailyCreditBalance < 1) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        AppToast.instance.showToast(
-          context: context,
-          message:
-              'Out of daily credits. Connect to internet and sync to refill.',
-          icon: Icons.warning,
-        );
-        _showSyncBottomSheet();
-      });
-      return;
-    }
-
-    try {
-      final dailyCreditService =
-          DailyCreditService(ref.read(databaseProvider));
-      final topicId = _topicController.text.trim();
-      await dailyCreditService.spendOfflineCredits(
-        amount: 1,
-        contentIds: ['exam_$_subject\$$topicId'],
-      );
-
-      // Audit log the unlock
-      await ref.read(databaseProvider).auditLogsDao.insert(
-        AuditLogsCompanion.insert(
-          id: Value(const Uuid().v4()),
-          teacherId: Value(_teacherId),
-          schoolId: Value(_schoolId),
-          action: Value('unlock'),
-          metadata: Value(jsonEncode({
-            'type': 'exam',
-            'subject': _subject,
-            'topic': topicId,
-            'timestamp': DateTime.now().toIso8601String(),
-          })),
-        ),
-      );
-
-      setState(() {
-        _isUnlocked = true;
-        if (!isOnline) {
-          _dailyCreditBalance = _dailyCreditBalance - 1;
-        }
-      });
-
-      // Persist the unlock so it survives navigation away and back.
-      await _saveExam(notify: false);
-
-      // Refresh the cached exam list so the "Unlocked" filter reflects the
-      // newly unlocked state immediately.
-      ref.invalidate(examsListProvider);
-
-      ref.read(dailyCreditStateProvider.notifier).refresh();
-
-      if (mounted) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          showInfoToast(context: context, message: 'Exam unlocked!');
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          showErrorToast(context: context, message: 'Failed to unlock: $e');
-        });
-      }
-    }
-  }
-
-  void _showSyncBottomSheet() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Sync Daily Credits',
-                style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 16),
-            Text(
-                'Tap below to sync with the server and refill your daily credits.'),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: () {
-                Navigator.pop(context);
-                // Refresh daily credit state
-                final db = ref.read(databaseProvider);
-                db.securityConfigDao.get().then((config) {
-                  if (mounted) {
-                    setState(() =>
-                        _dailyCreditBalance = config.offlineCredits);
-                  }
-                });
-              },
-              child: const Text('Sync Now'),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Future<void> _handleRegenerate() async {
@@ -1738,7 +1627,6 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                           subjectiveQuestions: _subjectiveQuestions,
                                           totalQuestions: totalQuestions,
                                           undoController: _undoController,
-                                          onUnlock: _handleUnlock,
                                           onSave: () => _saveExam(),
                                           onDiscard: _discard,
                                           onUpdateMcq: _updateMcq,
@@ -1842,7 +1730,6 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                       subjectiveQuestions: _subjectiveQuestions,
                                       totalQuestions: totalQuestions,
                                       undoController: _undoController,
-                                      onUnlock: _handleUnlock,
                                       onSave: () => _saveExam(),
                                       onDiscard: _discard,
                                       onUpdateMcq: _updateMcq,
@@ -2775,7 +2662,6 @@ class _PreviewPanel extends StatelessWidget {
   final List<Map<String, dynamic>> subjectiveQuestions;
   final int totalQuestions;
   final UndoHistoryController undoController;
-  final VoidCallback onUnlock;
   final VoidCallback onSave;
   final VoidCallback onDiscard;
   final void Function(int, String, String) onUpdateMcq;
@@ -2796,7 +2682,6 @@ class _PreviewPanel extends StatelessWidget {
     required this.subjectiveQuestions,
     required this.totalQuestions,
     required this.undoController,
-    required this.onUnlock,
     required this.onSave,
     required this.onDiscard,
     required this.onUpdateMcq,
@@ -2943,23 +2828,7 @@ class _PreviewPanel extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      height: AppTheme.touchTarget,
-                      child: FilledButton.icon(
-                        onPressed: onUnlock,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: cs.tertiary,
-                          foregroundColor: cs.onTertiary,
-                          shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(AppTheme.radiusXl),
-                          ),
-                        ),
-                        icon: const Icon(Icons.lock_open_rounded),
-                        label: Text(_buildUnlockLabel()),
-                      ),
-                    ),
+                    // Unlock button removed — content auto-unlocks on generate.
                   ],
                 ),
               ),
@@ -3235,15 +3104,6 @@ class _PreviewPanel extends StatelessWidget {
     if (theoryQuestions.isNotEmpty) parts.add('${theoryQuestions.length} theory');
     if (subjectiveQuestions.isNotEmpty) parts.add('${subjectiveQuestions.length} subjective');
     return 'Generated ${parts.join(', ')} questions';
-  }
-
-  String _buildUnlockLabel() {
-    if (!isOnline) return 'Unlock Offline';
-    if (subscriptionTier.toLowerCase() == 'elite') return 'Unlock \u2014 Unlimited previews';
-    if (remainingDailyPreviews > 0) {
-      return 'Unlock \u2014 $remainingDailyPreviews previews left';
-    }
-    return 'Unlock for 1 Offline Credit';
   }
 
   Widget _previewHeader(int? totalQuestions) {

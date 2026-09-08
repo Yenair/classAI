@@ -1305,9 +1305,8 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             questionsResult = null;
           }
         }
-        // Increment preview counter only after successful test generation
-        await db.securityConfigDao
-            .checkAndIncrementDailyPreviews(tier: _subscriptionTier);
+        // Preview counter no longer tracked separately — unified pool
+        // handles all credits via checkDailyLimit.
       } else {
         // Production path: call the AI generation service directly
         final aiService = AiService(db: db);
@@ -1337,10 +1336,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
 
         result = await lessonFuture;
         questionsResult = await questionsFuture;
-
-        // Increment preview counter only after successful generation
-        await db.securityConfigDao
-            .checkAndIncrementDailyPreviews(tier: _subscriptionTier);
 
         // Audit log the generation
         await aiService.logGeneration(
@@ -1436,11 +1431,12 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             _setGeneratedDeckState();
             _topicConfirmShown = false;
             if (_lessonStatus == 'draft') _lessonStatus = 'generated';
-            _isUnlocked = false;
+            _isUnlocked = true;
             _isGenerating = false;
             _previewRevision++;
           });
           _saveLesson(notify: false);
+          ref.invalidate(lessonsListProvider);
           if (mounted) {
             if (!questionsEnabled) {
               showInfoToast(
@@ -1937,97 +1933,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         showErrorToast(context: context, message: 'Regeneration failed: $e');
       }
     }
-  }
-
-  Future<void> _handleUnlock() async {
-    final isOnline = await PlatformHelper.isOnline();
-
-    if (!mounted) return;
-    if (!isOnline && _dailyCreditBalance < 1) {
-      // Show persistent toast with sync option
-      AppToast.instance.showToast(
-        context: context,
-        message:
-            'Out of daily credits. Connect to internet and sync to refill.',
-        icon: Icons.warning,
-      );
-      _showSyncBottomSheet();
-      return;
-    }
-
-    try {
-      final dailyCreditService =
-          DailyCreditService(ref.read(databaseProvider));
-      await dailyCreditService.spendOfflineCredits(
-          amount: 1, contentIds: ['lesson_draft']);
-
-      // Audit log the unlock
-      await ref.read(databaseProvider).auditLogsDao.insert(
-        AuditLogsCompanion.insert(
-          id: Value(const Uuid().v4()),
-          teacherId: Value(_teacherId),
-          schoolId: Value(_schoolId),
-          action: Value('unlock'),
-          metadata: Value(jsonEncode({
-            'type': 'lesson',
-            'topic': _topicController.text.trim(),
-            'timestamp': DateTime.now().toIso8601String(),
-          })),
-        ),
-      );
-
-      setState(() {
-        _isUnlocked = true;
-        if (!isOnline) {
-          _dailyCreditBalance = _dailyCreditBalance - 1;
-        }
-      });
-
-      // Persist the unlock so it survives navigation away and back.
-      await _saveLesson(notify: false);
-
-      // Refresh the cached lesson list so the "Unlocked" filter reflects the
-      // newly unlocked state immediately.
-      ref.invalidate(lessonsListProvider);
-
-      ref.read(dailyCreditStateProvider.notifier).refresh();
-
-      if (mounted) {
-        showSuccessToast(context: context, message: 'Lesson unlocked!');
-      }
-    } catch (e) {
-      if (mounted) {
-        showErrorToast(context: context, message: 'Failed to unlock: $e');
-      }
-    }
-  }
-
-  void _showSyncBottomSheet() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Sync Daily Credits',
-                style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 16),
-            Text(
-                'Tap below to sync with the server and refill your daily credits.'),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: () {
-                Navigator.pop(context);
-                // Trigger sync
-                ref.read(dailyCreditStateProvider.notifier).refresh();
-              },
-              child: const Text('Sync Now'),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   String _formatList(dynamic items) {
@@ -3030,7 +2935,6 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       questionSummary: questionSummary,
       reviewController: _reviewController,
       undoController: _undoController,
-      onUnlock: _handleUnlock,
       onDiscard: _discard,
       onRegenerate: _isUnlocked ? _handleRegenerate : null,
       onRegenerateReferences:
@@ -4621,7 +4525,6 @@ class _PreviewColumn extends StatefulWidget {
   final String? questionSummary;
   final TextEditingController? reviewController;
   final UndoHistoryController undoController;
-  final VoidCallback onUnlock;
   final VoidCallback? onMarkCompleted;
   final VoidCallback onDiscard;
   final VoidCallback? onRegenerate;
@@ -4720,7 +4623,6 @@ class _PreviewColumn extends StatefulWidget {
     this.questionSummary,
     this.reviewController,
     required this.undoController,
-    required this.onUnlock,
     this.onMarkCompleted,
     required this.onDiscard,
     this.onRegenerate,
@@ -5185,7 +5087,6 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   String? get questionSummary => widget.questionSummary;
   TextEditingController? get reviewController => widget.reviewController;
   UndoHistoryController get undoController => widget.undoController;
-  VoidCallback get onUnlock => widget.onUnlock;
   VoidCallback? get onMarkCompleted => widget.onMarkCompleted;
   VoidCallback? get onRegenerate => widget.onRegenerate;
   String get lessonStatus => widget.lessonStatus;
@@ -5267,19 +5168,6 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                 ),
               ],
               const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                height: AppTheme.touchTarget,
-                child: FilledButton.icon(
-                  onPressed: onUnlock,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: cs.tertiary,
-                    foregroundColor: cs.onTertiary,
-                  ),
-                  icon: const Icon(Icons.lock_open_rounded),
-                  label: Text(_buildUnlockLabel()),
-                ),
-              ),
             ],
           ),
         ),
@@ -7120,14 +7008,6 @@ class _PreviewColumnState extends State<_PreviewColumn> {
     );
   }
 
-  String _buildUnlockLabel() {
-    if (!isOnline) return 'Unlock Offline';
-    if (subscriptionTier.toLowerCase() == 'elite') return 'Unlock \u2014 Unlimited previews';
-    if (remainingDailyPreviews > 0) {
-      return 'Unlock \u2014 $remainingDailyPreviews previews left';
-    }
-    return 'Unlock for 1 Daily Credit';
-  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
