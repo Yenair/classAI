@@ -109,7 +109,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 29;
+  int get schemaVersion => 30;
 
   static QueryExecutor _openConnection() {
     final security = SecurityService();
@@ -1147,6 +1147,15 @@ class AppDatabase extends _$AppDatabase {
                   AND is_deleted = 0
               ''');
             }
+          }
+          if (from < 30) {
+            // R2 Block 1 (2A.1): unified daily credits. `offlineCredits`
+            // becomes the daily-credit balance; `dailyCreditsDate` records
+            // the local day (yyyy-MM-dd) it belongs to so the balance can
+            // reset at day rollover. Purely additive — no data is removed.
+            await customStatement(
+              'ALTER TABLE security_config ADD COLUMN daily_credits_date TEXT NULL',
+            );
           }
         },
         beforeOpen: (details) async {

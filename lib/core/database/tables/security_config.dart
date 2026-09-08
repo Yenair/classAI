@@ -9,7 +9,11 @@ class SecurityConfig extends Table {
   RealColumn get monotonicLastSeen => real().nullable()();
 
   // Credit state
+  // `offlineCredits` is the unified daily-credit balance (R2 unification).
+  // `dailyCreditsDate` is the local day (yyyy-MM-dd) the balance belongs to;
+  // when it differs from today the balance resets to its tier limit.
   IntColumn get offlineCredits => integer().withDefault(const Constant(3))();
+  TextColumn get dailyCreditsDate => text().nullable()();
   TextColumn get creditSpentIdsLocal =>
       text().withDefault(const Constant('[]'))(); // JSON array
   IntColumn get creditServerCounter =>

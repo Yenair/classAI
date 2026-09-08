@@ -20,16 +20,16 @@ class AiService {
         _supabase = supabase ?? Supabase.instance.client,
         _db = db;
 
-  /// Check if generation is allowed based on daily limit.
-  /// Returns true if allowed, throws exception if limit exceeded.
+  /// Check if generation is allowed based on the unified daily credit pool.
+  /// Spends 1 credit when allowed; throws if the pool is exhausted.
   Future<bool> checkDailyLimit(String tier) async {
     final dao = _db.securityConfigDao;
-    final allowed = await dao.checkAndIncrementDailyGenerations(tier: tier);
+    final allowed = await dao.checkAndSpendDailyCredits(tier: tier, cost: 1);
     if (!allowed) {
-      final buffer = StringBuffer('Daily generation limit reached');
-      final limit = dao.getDailyGenerationLimit(tier);
+      final buffer = StringBuffer('Daily credit limit reached');
+      final limit = dao.getDailyCreditLimit(tier);
       if (limit > 0) {
-        final remaining = await dao.getRemainingDailyGenerations(tier: tier);
+        final remaining = await dao.getRemainingDailyCredits(tier: tier);
         final used = (limit - remaining).clamp(0, limit);
         buffer.write(' ($used/$limit today)');
       }

@@ -196,6 +196,90 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
     return defaults[tier] ?? 1;
   }
 
+  /// Reads the unified daily credit limit for [tier] from remote config,
+  /// falling back to the hardcoded defaults.
+  int _dailyCreditLimit(String tier) {
+    final limits = _config?.dailyCreditsLimit;
+    if (limits != null && limits[tier] is int) {
+      return limits[tier] as int;
+    }
+    const defaults = {'free': 3, 'basic': 1, 'standard': 3, 'elite': -1};
+    return defaults[tier] ?? 1;
+  }
+
+  /// The tier's unified daily credit limit (remote-config value with the
+  /// hardcoded fallback). Public so limit-reached messaging can include
+  /// the limit, matching getDailyGenerationLimit().
+  int getDailyCreditLimit(String tier) => _dailyCreditLimit(tier);
+
+  // Unified daily credits (R2 unification)
+  // -----------------------------------------------------------------------
+
+  /// The local day (yyyy-MM-dd) right now, in the same format the
+  /// daily_credits_date column stores.
+  static String _today() =>
+      DateTime.now().toIso8601String().split('T').first;
+
+  /// Check and spend [cost] unified daily credits for [tier].
+  ///
+  /// Always spends — there is no read-only mode (2B.3 vs 2B.4 split:
+  /// display widgets use [getRemainingDailyCredits], actions call this).
+  ///
+  /// Balance semantics: `offlineCredits` holds the REMAINING unified daily
+  /// credits. On a new local day it resets to the tier limit. Elite (-1
+  /// limit) is unlimited — always allowed, balance not tracked.
+  ///
+  /// Returns true if the spend is allowed (balance decremented), false if
+  /// the balance can't cover the cost (nothing written).
+  Future<bool> checkAndSpendDailyCredits({
+    required String tier,
+    int cost = 1,
+  }) async {
+    final config = await get();
+    final today = _today();
+    final limit = _dailyCreditLimit(tier);
+
+    // Elite (-1) is unlimited: never block, never track a balance.
+    if (limit < 0) return true;
+
+    // Balance resets on a new local day. Server time corrections arrive via
+    // sync (2C), overwriting dailyCreditsDate + balance together.
+    final bool isNewDay = config.dailyCreditsDate != today;
+    final int balance = isNewDay ? limit : config.offlineCredits;
+
+    if (balance < cost) {
+      // Exhausted — leave state untouched.
+      return false;
+    }
+
+    await (update(securityConfig)..where((t) => t.id.equals(config.id))).write(
+      SecurityConfigCompanion(
+        offlineCredits: Value(balance - cost),
+        dailyCreditsDate: Value(today),
+      ),
+    );
+    return true;
+  }
+
+  /// Get remaining unified daily credits for today. Read-only — never
+  /// writes, so calling it for display does not consume anything.
+  ///
+  /// Returns -1 for unlimited (elite), or the count remaining (>= 0).
+  Future<int> getRemainingDailyCredits({required String tier}) async {
+    final config = await get();
+    final today = _today();
+    final limit = _dailyCreditLimit(tier);
+
+    if (limit < 0) return -1; // Unlimited
+
+    if (config.dailyCreditsDate != today) {
+      // New day: full quota available (no reset written — read-only).
+      return limit;
+    }
+
+    return config.offlineCredits.clamp(0, limit);
+  }
+
   // Daily counter methods for rate limiting
   // -----------------------------------------------------------------------
 

@@ -6794,6 +6794,12 @@ class $SecurityConfigTable extends SecurityConfig
       type: DriftSqlType.int,
       requiredDuringInsert: false,
       defaultValue: const Constant(3));
+  static const VerificationMeta _dailyCreditsDateMeta =
+      const VerificationMeta('dailyCreditsDate');
+  @override
+  late final GeneratedColumn<String> dailyCreditsDate = GeneratedColumn<String>(
+      'daily_credits_date', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _creditSpentIdsLocalMeta =
       const VerificationMeta('creditSpentIdsLocal');
   @override
@@ -6996,6 +7002,7 @@ class $SecurityConfigTable extends SecurityConfig
         lastKnownGoodTime,
         monotonicLastSeen,
         offlineCredits,
+        dailyCreditsDate,
         creditSpentIdsLocal,
         creditServerCounter,
         creditSpentBatchId,
@@ -7064,6 +7071,12 @@ class $SecurityConfigTable extends SecurityConfig
           _offlineCreditsMeta,
           offlineCredits.isAcceptableOrUnknown(
               data['offline_credits']!, _offlineCreditsMeta));
+    }
+    if (data.containsKey('daily_credits_date')) {
+      context.handle(
+          _dailyCreditsDateMeta,
+          dailyCreditsDate.isAcceptableOrUnknown(
+              data['daily_credits_date']!, _dailyCreditsDateMeta));
     }
     if (data.containsKey('credit_spent_ids_local')) {
       context.handle(
@@ -7255,6 +7268,8 @@ class $SecurityConfigTable extends SecurityConfig
           DriftSqlType.double, data['${effectivePrefix}monotonic_last_seen']),
       offlineCredits: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}offline_credits'])!,
+      dailyCreditsDate: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}daily_credits_date']),
       creditSpentIdsLocal: attachedDatabase.typeMapping.read(
           DriftSqlType.string,
           data['${effectivePrefix}credit_spent_ids_local'])!,
@@ -7334,6 +7349,7 @@ class SecurityConfigData extends DataClass
   final DateTime? lastKnownGoodTime;
   final double? monotonicLastSeen;
   final int offlineCredits;
+  final String? dailyCreditsDate;
   final String creditSpentIdsLocal;
   final int creditServerCounter;
   final String? creditSpentBatchId;
@@ -7368,6 +7384,7 @@ class SecurityConfigData extends DataClass
       this.lastKnownGoodTime,
       this.monotonicLastSeen,
       required this.offlineCredits,
+      this.dailyCreditsDate,
       required this.creditSpentIdsLocal,
       required this.creditServerCounter,
       this.creditSpentBatchId,
@@ -7408,6 +7425,9 @@ class SecurityConfigData extends DataClass
       map['monotonic_last_seen'] = Variable<double>(monotonicLastSeen);
     }
     map['offline_credits'] = Variable<int>(offlineCredits);
+    if (!nullToAbsent || dailyCreditsDate != null) {
+      map['daily_credits_date'] = Variable<String>(dailyCreditsDate);
+    }
     map['credit_spent_ids_local'] = Variable<String>(creditSpentIdsLocal);
     map['credit_server_counter'] = Variable<int>(creditServerCounter);
     if (!nullToAbsent || creditSpentBatchId != null) {
@@ -7484,6 +7504,9 @@ class SecurityConfigData extends DataClass
           ? const Value.absent()
           : Value(monotonicLastSeen),
       offlineCredits: Value(offlineCredits),
+      dailyCreditsDate: dailyCreditsDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dailyCreditsDate),
       creditSpentIdsLocal: Value(creditSpentIdsLocal),
       creditServerCounter: Value(creditServerCounter),
       creditSpentBatchId: creditSpentBatchId == null && nullToAbsent
@@ -7557,6 +7580,7 @@ class SecurityConfigData extends DataClass
       monotonicLastSeen:
           serializer.fromJson<double?>(json['monotonicLastSeen']),
       offlineCredits: serializer.fromJson<int>(json['offlineCredits']),
+      dailyCreditsDate: serializer.fromJson<String?>(json['dailyCreditsDate']),
       creditSpentIdsLocal:
           serializer.fromJson<String>(json['creditSpentIdsLocal']),
       creditServerCounter:
@@ -7615,6 +7639,7 @@ class SecurityConfigData extends DataClass
       'lastKnownGoodTime': serializer.toJson<DateTime?>(lastKnownGoodTime),
       'monotonicLastSeen': serializer.toJson<double?>(monotonicLastSeen),
       'offlineCredits': serializer.toJson<int>(offlineCredits),
+      'dailyCreditsDate': serializer.toJson<String?>(dailyCreditsDate),
       'creditSpentIdsLocal': serializer.toJson<String>(creditSpentIdsLocal),
       'creditServerCounter': serializer.toJson<int>(creditServerCounter),
       'creditSpentBatchId': serializer.toJson<String?>(creditSpentBatchId),
@@ -7657,6 +7682,7 @@ class SecurityConfigData extends DataClass
           Value<DateTime?> lastKnownGoodTime = const Value.absent(),
           Value<double?> monotonicLastSeen = const Value.absent(),
           int? offlineCredits,
+          Value<String?> dailyCreditsDate = const Value.absent(),
           String? creditSpentIdsLocal,
           int? creditServerCounter,
           Value<String?> creditSpentBatchId = const Value.absent(),
@@ -7695,6 +7721,9 @@ class SecurityConfigData extends DataClass
             ? monotonicLastSeen.value
             : this.monotonicLastSeen,
         offlineCredits: offlineCredits ?? this.offlineCredits,
+        dailyCreditsDate: dailyCreditsDate.present
+            ? dailyCreditsDate.value
+            : this.dailyCreditsDate,
         creditSpentIdsLocal: creditSpentIdsLocal ?? this.creditSpentIdsLocal,
         creditServerCounter: creditServerCounter ?? this.creditServerCounter,
         creditSpentBatchId: creditSpentBatchId.present
@@ -7768,6 +7797,9 @@ class SecurityConfigData extends DataClass
       offlineCredits: data.offlineCredits.present
           ? data.offlineCredits.value
           : this.offlineCredits,
+      dailyCreditsDate: data.dailyCreditsDate.present
+          ? data.dailyCreditsDate.value
+          : this.dailyCreditsDate,
       creditSpentIdsLocal: data.creditSpentIdsLocal.present
           ? data.creditSpentIdsLocal.value
           : this.creditSpentIdsLocal,
@@ -7861,6 +7893,7 @@ class SecurityConfigData extends DataClass
           ..write('lastKnownGoodTime: $lastKnownGoodTime, ')
           ..write('monotonicLastSeen: $monotonicLastSeen, ')
           ..write('offlineCredits: $offlineCredits, ')
+          ..write('dailyCreditsDate: $dailyCreditsDate, ')
           ..write('creditSpentIdsLocal: $creditSpentIdsLocal, ')
           ..write('creditServerCounter: $creditServerCounter, ')
           ..write('creditSpentBatchId: $creditSpentBatchId, ')
@@ -7902,6 +7935,7 @@ class SecurityConfigData extends DataClass
         lastKnownGoodTime,
         monotonicLastSeen,
         offlineCredits,
+        dailyCreditsDate,
         creditSpentIdsLocal,
         creditServerCounter,
         creditSpentBatchId,
@@ -7940,6 +7974,7 @@ class SecurityConfigData extends DataClass
           other.lastKnownGoodTime == this.lastKnownGoodTime &&
           other.monotonicLastSeen == this.monotonicLastSeen &&
           other.offlineCredits == this.offlineCredits &&
+          other.dailyCreditsDate == this.dailyCreditsDate &&
           other.creditSpentIdsLocal == this.creditSpentIdsLocal &&
           other.creditServerCounter == this.creditServerCounter &&
           other.creditSpentBatchId == this.creditSpentBatchId &&
@@ -7978,6 +8013,7 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
   final Value<DateTime?> lastKnownGoodTime;
   final Value<double?> monotonicLastSeen;
   final Value<int> offlineCredits;
+  final Value<String?> dailyCreditsDate;
   final Value<String> creditSpentIdsLocal;
   final Value<int> creditServerCounter;
   final Value<String?> creditSpentBatchId;
@@ -8012,6 +8048,7 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
     this.lastKnownGoodTime = const Value.absent(),
     this.monotonicLastSeen = const Value.absent(),
     this.offlineCredits = const Value.absent(),
+    this.dailyCreditsDate = const Value.absent(),
     this.creditSpentIdsLocal = const Value.absent(),
     this.creditServerCounter = const Value.absent(),
     this.creditSpentBatchId = const Value.absent(),
@@ -8047,6 +8084,7 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
     this.lastKnownGoodTime = const Value.absent(),
     this.monotonicLastSeen = const Value.absent(),
     this.offlineCredits = const Value.absent(),
+    this.dailyCreditsDate = const Value.absent(),
     this.creditSpentIdsLocal = const Value.absent(),
     this.creditServerCounter = const Value.absent(),
     this.creditSpentBatchId = const Value.absent(),
@@ -8082,6 +8120,7 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
     Expression<DateTime>? lastKnownGoodTime,
     Expression<double>? monotonicLastSeen,
     Expression<int>? offlineCredits,
+    Expression<String>? dailyCreditsDate,
     Expression<String>? creditSpentIdsLocal,
     Expression<int>? creditServerCounter,
     Expression<String>? creditSpentBatchId,
@@ -8117,6 +8156,7 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
       if (lastKnownGoodTime != null) 'last_known_good_time': lastKnownGoodTime,
       if (monotonicLastSeen != null) 'monotonic_last_seen': monotonicLastSeen,
       if (offlineCredits != null) 'offline_credits': offlineCredits,
+      if (dailyCreditsDate != null) 'daily_credits_date': dailyCreditsDate,
       if (creditSpentIdsLocal != null)
         'credit_spent_ids_local': creditSpentIdsLocal,
       if (creditServerCounter != null)
@@ -8171,6 +8211,7 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
       Value<DateTime?>? lastKnownGoodTime,
       Value<double?>? monotonicLastSeen,
       Value<int>? offlineCredits,
+      Value<String?>? dailyCreditsDate,
       Value<String>? creditSpentIdsLocal,
       Value<int>? creditServerCounter,
       Value<String?>? creditSpentBatchId,
@@ -8205,6 +8246,7 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
       lastKnownGoodTime: lastKnownGoodTime ?? this.lastKnownGoodTime,
       monotonicLastSeen: monotonicLastSeen ?? this.monotonicLastSeen,
       offlineCredits: offlineCredits ?? this.offlineCredits,
+      dailyCreditsDate: dailyCreditsDate ?? this.dailyCreditsDate,
       creditSpentIdsLocal: creditSpentIdsLocal ?? this.creditSpentIdsLocal,
       creditServerCounter: creditServerCounter ?? this.creditServerCounter,
       creditSpentBatchId: creditSpentBatchId ?? this.creditSpentBatchId,
@@ -8259,6 +8301,9 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
     }
     if (offlineCredits.present) {
       map['offline_credits'] = Variable<int>(offlineCredits.value);
+    }
+    if (dailyCreditsDate.present) {
+      map['daily_credits_date'] = Variable<String>(dailyCreditsDate.value);
     }
     if (creditSpentIdsLocal.present) {
       map['credit_spent_ids_local'] =
@@ -8364,6 +8409,7 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
           ..write('lastKnownGoodTime: $lastKnownGoodTime, ')
           ..write('monotonicLastSeen: $monotonicLastSeen, ')
           ..write('offlineCredits: $offlineCredits, ')
+          ..write('dailyCreditsDate: $dailyCreditsDate, ')
           ..write('creditSpentIdsLocal: $creditSpentIdsLocal, ')
           ..write('creditServerCounter: $creditServerCounter, ')
           ..write('creditSpentBatchId: $creditSpentBatchId, ')
@@ -18145,6 +18191,7 @@ typedef $$SecurityConfigTableCreateCompanionBuilder = SecurityConfigCompanion
   Value<DateTime?> lastKnownGoodTime,
   Value<double?> monotonicLastSeen,
   Value<int> offlineCredits,
+  Value<String?> dailyCreditsDate,
   Value<String> creditSpentIdsLocal,
   Value<int> creditServerCounter,
   Value<String?> creditSpentBatchId,
@@ -18181,6 +18228,7 @@ typedef $$SecurityConfigTableUpdateCompanionBuilder = SecurityConfigCompanion
   Value<DateTime?> lastKnownGoodTime,
   Value<double?> monotonicLastSeen,
   Value<int> offlineCredits,
+  Value<String?> dailyCreditsDate,
   Value<String> creditSpentIdsLocal,
   Value<int> creditServerCounter,
   Value<String?> creditSpentBatchId,
@@ -18238,6 +18286,10 @@ class $$SecurityConfigTableFilterComposer
 
   ColumnFilters<int> get offlineCredits => $composableBuilder(
       column: $table.offlineCredits,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get dailyCreditsDate => $composableBuilder(
+      column: $table.dailyCreditsDate,
       builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get creditSpentIdsLocal => $composableBuilder(
@@ -18380,6 +18432,10 @@ class $$SecurityConfigTableOrderingComposer
       column: $table.offlineCredits,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get dailyCreditsDate => $composableBuilder(
+      column: $table.dailyCreditsDate,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get creditSpentIdsLocal => $composableBuilder(
       column: $table.creditSpentIdsLocal,
       builder: (column) => ColumnOrderings(column));
@@ -18517,6 +18573,9 @@ class $$SecurityConfigTableAnnotationComposer
   GeneratedColumn<int> get offlineCredits => $composableBuilder(
       column: $table.offlineCredits, builder: (column) => column);
 
+  GeneratedColumn<String> get dailyCreditsDate => $composableBuilder(
+      column: $table.dailyCreditsDate, builder: (column) => column);
+
   GeneratedColumn<String> get creditSpentIdsLocal => $composableBuilder(
       column: $table.creditSpentIdsLocal, builder: (column) => column);
 
@@ -18636,6 +18695,7 @@ class $$SecurityConfigTableTableManager extends RootTableManager<
             Value<DateTime?> lastKnownGoodTime = const Value.absent(),
             Value<double?> monotonicLastSeen = const Value.absent(),
             Value<int> offlineCredits = const Value.absent(),
+            Value<String?> dailyCreditsDate = const Value.absent(),
             Value<String> creditSpentIdsLocal = const Value.absent(),
             Value<int> creditServerCounter = const Value.absent(),
             Value<String?> creditSpentBatchId = const Value.absent(),
@@ -18671,6 +18731,7 @@ class $$SecurityConfigTableTableManager extends RootTableManager<
             lastKnownGoodTime: lastKnownGoodTime,
             monotonicLastSeen: monotonicLastSeen,
             offlineCredits: offlineCredits,
+            dailyCreditsDate: dailyCreditsDate,
             creditSpentIdsLocal: creditSpentIdsLocal,
             creditServerCounter: creditServerCounter,
             creditSpentBatchId: creditSpentBatchId,
@@ -18706,6 +18767,7 @@ class $$SecurityConfigTableTableManager extends RootTableManager<
             Value<DateTime?> lastKnownGoodTime = const Value.absent(),
             Value<double?> monotonicLastSeen = const Value.absent(),
             Value<int> offlineCredits = const Value.absent(),
+            Value<String?> dailyCreditsDate = const Value.absent(),
             Value<String> creditSpentIdsLocal = const Value.absent(),
             Value<int> creditServerCounter = const Value.absent(),
             Value<String?> creditSpentBatchId = const Value.absent(),
@@ -18741,6 +18803,7 @@ class $$SecurityConfigTableTableManager extends RootTableManager<
             lastKnownGoodTime: lastKnownGoodTime,
             monotonicLastSeen: monotonicLastSeen,
             offlineCredits: offlineCredits,
+            dailyCreditsDate: dailyCreditsDate,
             creditSpentIdsLocal: creditSpentIdsLocal,
             creditServerCounter: creditServerCounter,
             creditSpentBatchId: creditSpentBatchId,

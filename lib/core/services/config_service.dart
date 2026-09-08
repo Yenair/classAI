@@ -123,6 +123,12 @@ class ConfigService {
   Map<String, dynamic> get dailyGenerationLimits =>
       getJsonMap('daily_generation_limits');
 
+  /// Unified daily credit limits per tier:
+  /// { "free": 3, "basic": 1, "standard": 3, "elite": -1 }
+  /// One pool covering AI generation and vault acquisitions.
+  /// -1 means unlimited (elite).
+  Map<String, dynamic> get dailyCreditsLimit => getJsonMap('daily_credits_limit');
+
   /// PDF export limits per tier: { "free": 1, "basic": 3, ... }
   Map<String, dynamic> get pdfExportLimits => getJsonMap('pdf_export_limits');
 

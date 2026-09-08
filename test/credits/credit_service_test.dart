@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/services/credit_service.dart';
@@ -18,6 +19,13 @@ void main() {
     await db.close();
   });
 
+  // NOTE: the two "online path" tests below depend on
+  // PlatformHelper.isOnline() returning false (spendOfflineCredits
+  // early-returns the batch ID when online). On hosts with connectivity the
+  // DB assertions cannot run — a pre-existing limitation, not new in R2.
+  // The offline (spend) path is exercised by the insufficient-credit test,
+  // which seeds an explicit today-stamped balance of 0.
+
   test('spend credits decrements locally', () async {
     // spendOfflineCredits clamps amount>1 to 1 (only deducts 1 credit per unlock)
     final batchId = await creditService.spendOfflineCredits(
@@ -31,8 +39,17 @@ void main() {
   });
 
   test('spend credits when insufficient throws', () async {
-    // spendOfflineCredits clamps amount>1 to 1; set credits to 0 so the check fails
-    await db.securityConfigDao.updateConfig(offlineCredits: 0);
+    // R2 unified pool: no school row -> tier resolves to 'free' (limit 3).
+    // A today-stamped balance of 0 cannot cover the cost, so the spend is
+    // rejected and the insufficient exception is thrown.
+    await db.update(db.securityConfig).write(
+          SecurityConfigCompanion(
+            offlineCredits: const Value(0),
+            dailyCreditsDate: Value(
+              DateTime.now().toIso8601String().split('T').first,
+            ),
+          ),
+        );
     await expectLater(
       () => creditService.spendOfflineCredits(amount: 20, contentIds: ['x']),
       throwsA(isA<OfflineCreditInsufficientException>()),
