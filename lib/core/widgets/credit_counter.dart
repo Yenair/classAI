@@ -4,21 +4,21 @@ import 'package:go_router/go_router.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
 
-/// Offline credit counter chip in the AppBar.
+/// Daily credits counter chip in the AppBar.
 ///
 /// Stitch style: compact pill container, primary tint background when
-/// offline credits are positive, thin mono-style numerics for the count.
-class OfflineCreditCounter extends ConsumerStatefulWidget {
-  const OfflineCreditCounter({super.key, this.visible = true});
+/// daily credits are positive, thin mono-style numerics for the count.
+class DailyCreditsCounter extends ConsumerStatefulWidget {
+  const DailyCreditsCounter({super.key, this.visible = true});
 
   final bool visible;
 
   @override
-  ConsumerState<OfflineCreditCounter> createState() =>
-      _OfflineCreditCounterState();
+  ConsumerState<DailyCreditsCounter> createState() =>
+      _DailyCreditsCounterState();
 }
 
-class _OfflineCreditCounterState extends ConsumerState<OfflineCreditCounter>
+class _DailyCreditsCounterState extends ConsumerState<DailyCreditsCounter>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
@@ -56,8 +56,8 @@ class _OfflineCreditCounterState extends ConsumerState<OfflineCreditCounter>
   Widget build(BuildContext context) {
     if (!widget.visible) return const SizedBox.shrink();
 
-    final offlineCreditData = ref.watch(offlineCreditStateProvider);
-    final balance = offlineCreditData.currentOfflineCredits;
+    final dailyCreditData = ref.watch(dailyCreditStateProvider);
+    final balance = dailyCreditData.currentDailyCredits;
 
     if (_previousBalance >= 0 &&
         balance != _previousBalance &&
@@ -72,9 +72,9 @@ class _OfflineCreditCounterState extends ConsumerState<OfflineCreditCounter>
     _previousBalance = balance;
 
     final cs = Theme.of(context).colorScheme;
-    final hasError = offlineCreditData.errorMessage != null;
+    final hasError = dailyCreditData.errorMessage != null;
     final isPositive =
-        !hasError && offlineCreditData.currentOfflineCredits > 0;
+        !hasError && dailyCreditData.currentDailyCredits > 0;
     final labelColor = hasError ? cs.error : (isPositive ? cs.primary : cs.error);
 
     return RepaintBoundary(
@@ -113,9 +113,9 @@ class _OfflineCreditCounterState extends ConsumerState<OfflineCreditCounter>
           label: Text(
             hasError
                 ? '—'
-                : (offlineCreditData.loading
+                : (dailyCreditData.loading
                     ? '…'
-                    : '${offlineCreditData.currentOfflineCredits}'),
+                    : '${dailyCreditData.currentDailyCredits}'),
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                   color: labelColor,
@@ -123,10 +123,10 @@ class _OfflineCreditCounterState extends ConsumerState<OfflineCreditCounter>
                 ),
           ),
           onPressed: () {
-            if (offlineCreditData.currentOfflineCredits <= 0) {
+            if (dailyCreditData.currentDailyCredits <= 0) {
               context.push('/insufficient-offline-credit');
             } else {
-              _showOfflineCreditDetailsDialog(context, offlineCreditData);
+              _showDailyCreditDetailsDialog(context, dailyCreditData);
             }
           },
         ),
@@ -134,12 +134,12 @@ class _OfflineCreditCounterState extends ConsumerState<OfflineCreditCounter>
     );
   }
 
-  void _showOfflineCreditDetailsDialog(BuildContext context, dynamic data) {
+  void _showDailyCreditDetailsDialog(BuildContext context, dynamic data) {
     final authData = ref.read(authProvider);
     final schoolTier = authData.currentSchool?.subscriptionTier ?? 'free';
     showDialog(
       context: context,
-      builder: (_) => _OfflineCreditDetailsDialog(
+      builder: (_) => _DailyCreditsDetailsDialog(
         data: data,
         schoolTier: schoolTier,
       ),
@@ -147,8 +147,8 @@ class _OfflineCreditCounterState extends ConsumerState<OfflineCreditCounter>
   }
 }
 
-class _OfflineCreditDetailsDialog extends StatelessWidget {
-  const _OfflineCreditDetailsDialog({
+class _DailyCreditsDetailsDialog extends StatelessWidget {
+  const _DailyCreditsDetailsDialog({
     required this.data,
     required this.schoolTier,
   });
@@ -186,7 +186,7 @@ class _OfflineCreditDetailsDialog extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Text(
-            'Offline Credits',
+            'Daily Credits',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w700,
                   color: cs.onSurface,
@@ -203,7 +203,7 @@ class _OfflineCreditDetailsDialog extends StatelessWidget {
             children: [
               Flexible(
                 child: Text(
-                  'Available offline credits',
+                  'Available daily credits',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: cs.onSurfaceVariant,
                         overflow: TextOverflow.clip,
@@ -213,7 +213,7 @@ class _OfflineCreditDetailsDialog extends StatelessWidget {
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  '${data.currentOfflineCredits}',
+                  '${data.currentDailyCredits}',
                   textAlign: TextAlign.end,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,

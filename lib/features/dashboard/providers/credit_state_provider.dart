@@ -2,26 +2,26 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/main.dart' show databaseProvider;
 
-/// Data exposed to the offline credit counter widget.
-class OfflineCreditStateData {
-  final int currentOfflineCredits;
+/// Data exposed to the daily credits counter widget.
+class DailyCreditStateData {
+  final int currentDailyCredits;
   final String tierName;
   final bool loading;
   final String? errorMessage;
 
-  const OfflineCreditStateData({
-    this.currentOfflineCredits = 0,
+  const DailyCreditStateData({
+    this.currentDailyCredits = 0,
     this.tierName = 'Free',
     this.loading = false,
     this.errorMessage,
   });
 }
 
-/// Notifier that provides current offline credit state for UI display.
-class OfflineCreditStateNotifier extends Notifier<OfflineCreditStateData> {
+/// Notifier that provides current daily credit state for UI display.
+class DailyCreditStateNotifier extends Notifier<DailyCreditStateData> {
   @override
-  OfflineCreditStateData build() {
-    return const OfflineCreditStateData(loading: true);
+  DailyCreditStateData build() {
+    return const DailyCreditStateData(loading: true);
   }
 
   AppDatabase get _db => ref.read(databaseProvider);
@@ -30,26 +30,27 @@ class OfflineCreditStateNotifier extends Notifier<OfflineCreditStateData> {
   Future<void> refresh() async {
     try {
       final config = await _db.securityConfigDao.get();
-      state = OfflineCreditStateData(
-        currentOfflineCredits: config.offlineCredits,
-        tierName: _tierFromCredits(config.offlineCredits),
+      String tierName = 'Free';
+      try {
+        final school = await _db.schoolsDao.get();
+        final tier = school?.subscriptionTier ?? 'free';
+        tierName = tier[0].toUpperCase() + tier.substring(1).toLowerCase();
+      } catch (_) {
+        tierName = 'Free';
+      }
+      state = DailyCreditStateData(
+        currentDailyCredits: config.offlineCredits,
+        tierName: tierName,
       );
     } catch (e) {
-      state = OfflineCreditStateData(
-        errorMessage: 'Failed to load offline credits: $e',
+      state = DailyCreditStateData(
+        errorMessage: 'Failed to load daily credits: $e',
       );
     }
   }
-
-  String _tierFromCredits(int credits) {
-    if (credits >= 100) return 'Premium';
-    if (credits >= 50) return 'Pro';
-    if (credits >= 10) return 'Standard';
-    return 'Free';
-  }
 }
 
-final offlineCreditStateProvider =
-    NotifierProvider<OfflineCreditStateNotifier, OfflineCreditStateData>(
-  OfflineCreditStateNotifier.new,
+final dailyCreditStateProvider =
+    NotifierProvider<DailyCreditStateNotifier, DailyCreditStateData>(
+  DailyCreditStateNotifier.new,
 );

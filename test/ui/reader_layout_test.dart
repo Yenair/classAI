@@ -40,9 +40,9 @@ class TestAuthNotifier extends AuthNotifier {
       );
 }
 
-class TestOfflineCreditStateNotifier extends OfflineCreditStateNotifier {
+class TestDailyCreditStateNotifier extends DailyCreditStateNotifier {
   @override
-  OfflineCreditStateData build() => const OfflineCreditStateData();
+  DailyCreditStateData build() => const DailyCreditStateData();
 }
 
 class TestSyncStatusNotifier extends SyncStatusNotifier {
@@ -94,8 +94,8 @@ void main() {
           syncStatusProvider.overrideWith(() => TestSyncStatusNotifier(
                 const SyncStatusData(status: SyncStatus.synced),
               )),
-          offlineCreditStateProvider.overrideWith(
-            () => TestOfflineCreditStateNotifier(),
+          dailyCreditStateProvider.overrideWith(
+            () => TestDailyCreditStateNotifier(),
           ),
           configServiceProvider.overrideWithValue(
             ConfigService(client: mockSupabase),
@@ -172,8 +172,8 @@ void main() {
           syncStatusProvider.overrideWith(() => TestSyncStatusNotifier(
                 const SyncStatusData(status: SyncStatus.synced),
               )),
-          offlineCreditStateProvider.overrideWith(
-            () => TestOfflineCreditStateNotifier(),
+          dailyCreditStateProvider.overrideWith(
+            () => TestDailyCreditStateNotifier(),
           ),
           configServiceProvider.overrideWithValue(
             ConfigService(client: mockSupabase),
@@ -243,8 +243,8 @@ void main() {
           syncStatusProvider.overrideWith(() => TestSyncStatusNotifier(
                 const SyncStatusData(status: SyncStatus.synced),
               )),
-          offlineCreditStateProvider.overrideWith(
-            () => TestOfflineCreditStateNotifier(),
+          dailyCreditStateProvider.overrideWith(
+            () => TestDailyCreditStateNotifier(),
           ),
           configServiceProvider.overrideWithValue(
             ConfigService(client: mockSupabase),

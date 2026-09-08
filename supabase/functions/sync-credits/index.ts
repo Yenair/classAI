@@ -51,11 +51,29 @@ serve(async (req) => {
     // ── 3. Return current credit state ───────────────────────────────────
     // Currently credits are a flat 3 allowance per device.
     // This will be extended with a proper credit table later.
+    //
+    // R1: also return the school's subscription tier so clients can derive
+    // the correct daily credit allowance. Legacy fields are kept for
+    // backward compatibility with older clients (plan R2 removes them).
+    const { data: school, error: schoolError } = await supabase
+      .from("schools")
+      .select("subscription_tier")
+      .eq("id", schoolId)
+      .maybeSingle();
+
+    if (schoolError || !school) {
+      return new Response(
+        JSON.stringify({ error: "School not found" }),
+        { status: 404, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
     return new Response(
       JSON.stringify({
         offline_credits: 3,
         credit_server_counter: 0,
         spent_ids: "[]",
+        subscription_tier: school.subscription_tier ?? "free",
         last_credit_refill_server_time: teacher.last_credit_refill_date?.toISOString() ?? new Date().toISOString(),
       }),
       { status: 200, headers: { "Content-Type": "application/json" } },

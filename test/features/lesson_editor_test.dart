@@ -47,9 +47,9 @@ class FixedAuthNotifier extends AuthNotifier {
   AuthStateData build() => fixedState;
 }
 
-class _TestOfflineCreditNotifier extends OfflineCreditStateNotifier {
+class _TestDailyCreditNotifier extends DailyCreditStateNotifier {
   @override
-  OfflineCreditStateData build() => const OfflineCreditStateData();
+  DailyCreditStateData build() => const DailyCreditStateData();
 }
 
 AuthStateData _authState(String tier) {
@@ -319,8 +319,8 @@ void main() {
         emergencyFlushServiceProvider.overrideWithValue(
           EmergencyFlushService(),
         ),
-        offlineCreditStateProvider.overrideWith(
-          () => _TestOfflineCreditNotifier(),
+        dailyCreditStateProvider.overrideWith(
+          () => _TestDailyCreditNotifier(),
         ),
       ],
       child: MaterialApp(
@@ -363,8 +363,8 @@ void main() {
         emergencyFlushServiceProvider.overrideWithValue(
           EmergencyFlushService(),
         ),
-        offlineCreditStateProvider.overrideWith(
-          () => _TestOfflineCreditNotifier(),
+        dailyCreditStateProvider.overrideWith(
+          () => _TestDailyCreditNotifier(),
         ),
       ],
       child: MaterialApp(
@@ -417,8 +417,8 @@ void main() {
         emergencyFlushServiceProvider.overrideWithValue(
           EmergencyFlushService(),
         ),
-        offlineCreditStateProvider.overrideWith(
-          () => _TestOfflineCreditNotifier(),
+        dailyCreditStateProvider.overrideWith(
+          () => _TestDailyCreditNotifier(),
         ),
       ],
       child: MaterialApp.router(

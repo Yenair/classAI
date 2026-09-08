@@ -12,6 +12,7 @@ import 'package:classai/core/data/nerdc_curriculum.dart';
 import 'package:classai/core/services/ai_service.dart';
 import 'package:classai/core/services/scheme_of_work_service.dart';
 import 'package:classai/core/providers/pdf_service_provider.dart';
+import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/core/services/pdf_service.dart';
 import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/core/widgets/conflict_banner.dart';
@@ -136,7 +137,7 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
     _loadFilterPreferences();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(syncStatusProvider.notifier).refresh();
-      ref.read(offlineCreditStateProvider.notifier).refresh();
+      ref.read(dailyCreditStateProvider.notifier).refresh();
       ref.read(unresolvedConflictsProvider.notifier).refresh();
       _loadSchemesForDisplay();
     });
@@ -442,8 +443,30 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
           );
         }
         final aiService = AiService(db: db);
-        await aiService.checkDailyLimit(
-          school.subscriptionTier.isEmpty ? 'free' : school.subscriptionTier);
+        final tierForLimit = school.subscriptionTier.isEmpty ? 'free' : school.subscriptionTier;
+
+        // Subject-gating: check if this tier is allowed to generate for this subject.
+        final config = ref.read(configServiceProvider);
+        if (!config.isSubjectAllowedForTier(tierForLimit, selection.subject)) {
+          if (mounted && Navigator.of(context, rootNavigator: true).canPop()) {
+            Navigator.of(context, rootNavigator: true).pop(); // dismiss loading dialog
+          }
+          _showToast(
+            'Your current plan does not include ${selection.subject}. '
+            'Upgrade to generate content for this subject.',
+          );
+          return;
+        }
+
+        try {
+          await aiService.checkDailyLimit(tierForLimit);
+        } on AiGenerationException catch (e) {
+          if (mounted && Navigator.of(context, rootNavigator: true).canPop()) {
+            Navigator.of(context, rootNavigator: true).pop(); // dismiss loading dialog
+          }
+          _showToast(e.message);
+          return;
+        }
         final prompt = PromptTemplates.schemeOfWork(
           selection.subject, selection.classLevel, selection.termLabel);
         final result = await aiService.generate(prompt);
@@ -807,7 +830,7 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
           actions: [
             const SyncIndicator(),
             const SizedBox(width: 4),
-            OfflineCreditCounter(
+            DailyCreditsCounter(
               visible: ref.watch(isOfflineProvider),
             ),
             PopupMenuButton<String>(

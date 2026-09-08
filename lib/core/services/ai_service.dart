@@ -23,11 +23,18 @@ class AiService {
   /// Check if generation is allowed based on daily limit.
   /// Returns true if allowed, throws exception if limit exceeded.
   Future<bool> checkDailyLimit(String tier) async {
-    final allowed = await _db.securityConfigDao
-        .checkAndIncrementDailyGenerations(tier: tier);
+    final dao = _db.securityConfigDao;
+    final allowed = await dao.checkAndIncrementDailyGenerations(tier: tier);
     if (!allowed) {
-      throw AiGenerationException(
-          'Daily generation limit reached. Try again tomorrow.');
+      final buffer = StringBuffer('Daily generation limit reached');
+      final limit = dao.getDailyGenerationLimit(tier);
+      if (limit > 0) {
+        final remaining = await dao.getRemainingDailyGenerations(tier: tier);
+        final used = (limit - remaining).clamp(0, limit);
+        buffer.write(' ($used/$limit today)');
+      }
+      buffer.write('. Try again tomorrow.');
+      throw AiGenerationException(buffer.toString());
     }
     return true;
   }

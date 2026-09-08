@@ -118,6 +118,11 @@ class ConfigService {
   Map<String, dynamic> get dailyPreviewLimits =>
       getJsonMap('daily_preview_limits');
 
+  /// Daily AI generation limits per tier: { "free": 0, "basic": 5, "standard": 10, "elite": -1 }
+  /// Separate from preview limits — generations call the AI; previews may not.
+  Map<String, dynamic> get dailyGenerationLimits =>
+      getJsonMap('daily_generation_limits');
+
   /// PDF export limits per tier: { "free": 1, "basic": 3, ... }
   Map<String, dynamic> get pdfExportLimits => getJsonMap('pdf_export_limits');
 
@@ -161,6 +166,29 @@ class ConfigService {
     final tiers = getJsonList('sync_health_allowed_tiers');
     if (tiers.isEmpty) return ['elite'];
     return tiers;
+  }
+
+  /// Per-tier subject restrictions.
+  /// Map of tier name → list of allowed subject names.
+  /// e.g. { "free": ["Mathematics","English"], "basic": ["*"], ... }
+  /// An empty or missing entry means all subjects are allowed.
+  Map<String, dynamic> get topicRestrictionsByTier =>
+      getJsonMap('topic_restrictions_by_tier');
+
+  /// Returns true if [tier] is allowed to generate content for [subject].
+  /// When no restrictions are configured (empty map), all subjects are allowed.
+  /// A wildcard "*" in the allowed list means all subjects.
+  bool isSubjectAllowedForTier(String tier, String subject) {
+    final restrictions = topicRestrictionsByTier;
+    if (restrictions.isEmpty) return true; // no restrictions configured
+    final allowed = restrictions[tier];
+    if (allowed == null || (allowed is List && allowed.isEmpty)) return true;
+    if (allowed is List) {
+      final lower = allowed.map((e) => e.toString().toLowerCase()).toList();
+      if (lower.contains('*')) return true;
+      return lower.contains(subject.toLowerCase());
+    }
+    return true;
   }
 
   bool get featureVaultPublishing =>

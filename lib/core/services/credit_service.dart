@@ -2,11 +2,11 @@ import 'package:uuid/uuid.dart';
 import '../utils/platform_helper.dart';
 import '../database/database.dart';
 
-class OfflineCreditService {
+class DailyCreditService {
   final AppDatabase _db;
   final _uuid = const Uuid();
 
-  OfflineCreditService(this._db);
+  DailyCreditService(this._db);
 
   /// Spend credits for content unlock. Returns batch ID.
   /// CRITICAL: Batch ID is written to SQLite BEFORE the network call.

@@ -123,7 +123,7 @@ class _VaultBrowserScreenState extends ConsumerState<VaultBrowserScreen> {
         actions: [
           const SyncIndicator(),
           const SizedBox(width: 8),
-          OfflineCreditCounter(visible: ref.watch(isOfflineProvider)),
+          DailyCreditsCounter(visible: ref.watch(isOfflineProvider)),
           const SizedBox(width: 8),
         ],
         elevation: 0,
@@ -1118,7 +1118,7 @@ class _VaultCard extends StatelessWidget {
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    '${item.creditCost} Offline Credits',
+                                    '${item.creditCost} Daily Credits',
                                     style: tt.labelMedium?.copyWith(
                                       fontWeight: FontWeight.bold,
                                       color: cs.primary,

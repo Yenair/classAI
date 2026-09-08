@@ -80,7 +80,11 @@ part 'database.g.dart'; // generated
   AuditLogs,
 ])
 class AppDatabase extends _$AppDatabase {
-  SecurityConfigDao get securityConfigDao => SecurityConfigDao(this);
+  /// Late-final field, not a getter: SecurityConfigDao holds injected state
+  /// (the ConfigService wired via `setConfigService` in main.dart). A plain
+  /// getter handed out a fresh instance on every access, silently dropping
+  /// the injected remote config so only hardcoded limits ever applied.
+  late final SecurityConfigDao securityConfigDao = SecurityConfigDao(this);
   SyncQueueDao get syncQueueDao => SyncQueueDao(this);
   SyncReconcileStateDao get syncReconcileStateDao =>
       SyncReconcileStateDao(this);

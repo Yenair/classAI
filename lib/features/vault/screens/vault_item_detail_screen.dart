@@ -211,7 +211,7 @@ class VaultItemDetailScreen extends ConsumerWidget {
                 const SizedBox(width: 4),
                 Flexible(
                   child: Text(
-                    '${item.creditCost} offline credits',
+                    '${item.creditCost} daily credits',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                           color: cs.tertiary,
@@ -251,18 +251,18 @@ class VaultItemDetailScreen extends ConsumerWidget {
                 child: FilledButton.icon(
                   onPressed: () => _acquireItem(context, ref, item),
                   icon: const Icon(Icons.shopping_cart_rounded),
-                  label: Text('Acquire for ${item.creditCost} offline credits'),
+                  label: Text('Acquire for ${item.creditCost} daily credits'),
                 ),
               ),
 
-            if (ref.watch(offlineCreditStateProvider).currentOfflineCredits <
+            if (ref.watch(dailyCreditStateProvider).currentDailyCredits <
                 item.creditCost)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   'You have '
-                  '${ref.watch(offlineCreditStateProvider).currentOfflineCredits} '
-                  'offline credits. Purchase more to acquire this item.',
+                  '${ref.watch(dailyCreditStateProvider).currentDailyCredits} '
+                  'daily credits. Purchase more to acquire this item.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: cs.error,
                       ),
@@ -277,16 +277,16 @@ class VaultItemDetailScreen extends ConsumerWidget {
 
   Future<void> _acquireItem(
       BuildContext context, WidgetRef ref, VaultItem item) async {
-    final offlineCreditData = ref.read(offlineCreditStateProvider);
-    if (offlineCreditData.currentOfflineCredits < item.creditCost) {
+    final dailyCreditData = ref.read(dailyCreditStateProvider);
+    if (dailyCreditData.currentDailyCredits < item.creditCost) {
       if (!context.mounted) return;
       final result = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Insufficient Offline Credits'),
+          title: const Text('Insufficient Daily Credits'),
           content: Text(
-            'This item costs ${item.creditCost} offline credits, but you '
-            'only have ${offlineCreditData.currentOfflineCredits}. Would you '
+            'This item costs ${item.creditCost} daily credits, but you '
+            'only have ${dailyCreditData.currentDailyCredits}. Would you '
             'like to purchase more?',
           ),
           actions: [
@@ -298,7 +298,7 @@ class VaultItemDetailScreen extends ConsumerWidget {
               onPressed: () {
                 Navigator.of(ctx).pop(true);
               },
-              child: const Text('Get Offline Credits'),
+              child: const Text('Get Daily Credits'),
             ),
           ],
         ),
@@ -314,7 +314,7 @@ class VaultItemDetailScreen extends ConsumerWidget {
       builder: (ctx) => AlertDialog(
         title: Text('Acquire "${item.title}"'),
         content: Text(
-          'This will cost ${item.creditCost} offline credit(s). '
+          'This will cost ${item.creditCost} daily credit(s). '
           'Do you want to proceed?',
         ),
         actions: [
@@ -333,8 +333,8 @@ class VaultItemDetailScreen extends ConsumerWidget {
     if (confirmed == true && context.mounted) {
       try {
         final db = ref.read(databaseProvider);
-        final offlineCreditService = OfflineCreditService(db);
-        final batchId = await offlineCreditService.spendOfflineCredits(
+        final dailyCreditService = DailyCreditService(db);
+        final batchId = await dailyCreditService.spendOfflineCredits(
           amount: item.creditCost,
           contentIds: ['vault_item:${item.id}'],
         );
@@ -347,7 +347,7 @@ class VaultItemDetailScreen extends ConsumerWidget {
 
         if (context.mounted) {
           showInfoToast(context: context, message: '"${item.title}" acquired!');
-          await ref.read(offlineCreditStateProvider.notifier).refresh();
+          await ref.read(dailyCreditStateProvider.notifier).refresh();
           Navigator.of(context).pop(); // Go back to vault browser
         }
       } catch (e) {

@@ -4,12 +4,12 @@ import 'package:classai/core/services/credit_service.dart';
 
 void main() {
   late AppDatabase db;
-  late OfflineCreditService creditService;
+  late DailyCreditService creditService;
 
   setUp(() async {
     db = AppDatabase.forTesting();
     await db.initialize();
-    creditService = OfflineCreditService(db);
+    creditService = DailyCreditService(db);
     // Set initial credits
     await db.securityConfigDao.updateConfig(offlineCredits: 10);
   });

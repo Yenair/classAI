@@ -63,8 +63,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   int? _examId;
   bool _editorSidebarOpen = false;
   bool _sidebarInitialized = false;
-  int _offlineCreditBalance = 3;
+  int _dailyCreditBalance = 3;
   int _remainingDailyPreviews = 10;
+  int _remainingDailyGenerations = 5;
   String? _teacherId;
   String? _schoolId;
   String _subscriptionTier = 'free';
@@ -167,7 +168,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     if (mounted) setState(() => _isOnline = online);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _registerWithEmergencyFlush();
-      _loadOfflineCreditBalance();
+      _loadDailyCreditBalance();
       _loadDailyPreviewData();
       _loadAuthInfo();
       _loadSubjects();
@@ -651,18 +652,24 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       const limits = {'free': 10, 'basic': 10, 'standard': 10, 'elite': -1};
       final limit = limits[_subscriptionTier] ?? 10;
       final remaining = limit < 0 ? -1 : (limit - count).clamp(0, limit);
+      // Generations
+      final remainingGen = await db.securityConfigDao
+          .getRemainingDailyGenerations(tier: _subscriptionTier);
       if (mounted) {
-        setState(() => _remainingDailyPreviews = remaining);
+        setState(() {
+          _remainingDailyPreviews = remaining;
+          _remainingDailyGenerations = remainingGen;
+        });
       }
     } catch (_) {}
   }
 
-  Future<void> _loadOfflineCreditBalance() async {
+  Future<void> _loadDailyCreditBalance() async {
     try {
-      await ref.read(offlineCreditStateProvider.notifier).refresh();
+      await ref.read(dailyCreditStateProvider.notifier).refresh();
       if (mounted) {
-        setState(() => _offlineCreditBalance =
-            ref.read(offlineCreditStateProvider).currentOfflineCredits);
+        setState(() => _dailyCreditBalance =
+            ref.read(dailyCreditStateProvider).currentDailyCredits);
       }
     } catch (_) {}
   }
@@ -732,6 +739,12 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     final config = ref.read(configServiceProvider);
     final allowedTiers = config.examGenerationAllowedTiers;
     if (!allowedTiers.contains(authTier)) {
+      await _showUpgradeRequiredDialog();
+      return;
+    }
+
+    // Subject-gating: check if this tier is allowed to generate for this subject.
+    if (!config.isSubjectAllowedForTier(authTier, _subject)) {
       await _showUpgradeRequiredDialog();
       return;
     }
@@ -981,13 +994,13 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   Future<void> _handleUnlock() async {
     final isOnline = await PlatformHelper.isOnline();
 
-    if (!isOnline && _offlineCreditBalance < 1) {
+    if (!isOnline && _dailyCreditBalance < 1) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         AppToast.instance.showToast(
           context: context,
           message:
-              'Out of offline credits. Connect to internet and sync to refill.',
+              'Out of daily credits. Connect to internet and sync to refill.',
           icon: Icons.warning,
         );
         _showSyncBottomSheet();
@@ -996,10 +1009,10 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     }
 
     try {
-      final offlineCreditService =
-          OfflineCreditService(ref.read(databaseProvider));
+      final dailyCreditService =
+          DailyCreditService(ref.read(databaseProvider));
       final topicId = _topicController.text.trim();
-      await offlineCreditService.spendOfflineCredits(
+      await dailyCreditService.spendOfflineCredits(
         amount: 1,
         contentIds: ['exam_$_subject\$$topicId'],
       );
@@ -1023,7 +1036,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       setState(() {
         _isUnlocked = true;
         if (!isOnline) {
-          _offlineCreditBalance = _offlineCreditBalance - 1;
+          _dailyCreditBalance = _dailyCreditBalance - 1;
         }
       });
 
@@ -1034,7 +1047,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
       // newly unlocked state immediately.
       ref.invalidate(examsListProvider);
 
-      ref.read(offlineCreditStateProvider.notifier).refresh();
+      ref.read(dailyCreditStateProvider.notifier).refresh();
 
       if (mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1060,21 +1073,21 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Sync Offline Credits',
+            Text('Sync Daily Credits',
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
             Text(
-                'Tap below to sync with the server and refill your offline credits.'),
+                'Tap below to sync with the server and refill your daily credits.'),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: () {
                 Navigator.pop(context);
-                // Refresh offline credit state
+                // Refresh daily credit state
                 final db = ref.read(databaseProvider);
                 db.securityConfigDao.get().then((config) {
                   if (mounted) {
                     setState(() =>
-                        _offlineCreditBalance = config.offlineCredits);
+                        _dailyCreditBalance = config.offlineCredits);
                   }
                 });
               },
@@ -1572,7 +1585,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                 _TopBar(
                   cs: cs,
                   theme: theme,
-                  offlineCreditBalance: _offlineCreditBalance,
+                  dailyCreditBalance: _dailyCreditBalance,
                   onToggleSidebar: () => setState(
                       () => _editorSidebarOpen = !_editorSidebarOpen),
                   sidebarOpen: _editorSidebarOpen,
@@ -1649,7 +1662,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                           examBodyEmpty: examBodyEmpty,
                                           onRegenerate: _isUnlocked ? _handleRegenerate : null,
                                           reviewController: _reviewController,
-                                          offlineCreditBalance: _offlineCreditBalance,
+                                          dailyCreditBalance: _dailyCreditBalance,
                                           subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
                                           classLevels: _classLevels,
                                           difficulties: _difficulties,
@@ -1698,6 +1711,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                           isFromSchemeOfWork: _isFromSchemeOfWork,
                                           isManualTopicEntry: _isManualTopicEntry,
                                           selectedLessonId: _selectedLessonId,
+                                          remainingDailyGenerations: _remainingDailyGenerations,
                                           onWeekChanged: (v) {
                                             setState(() => _week = v);
                                             _refreshSavedLessonAvailability();
@@ -1754,7 +1768,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                         examBodyEmpty: examBodyEmpty,
                                         onRegenerate: _isUnlocked ? _handleRegenerate : null,
                                         reviewController: _reviewController,
-                                        offlineCreditBalance: _offlineCreditBalance,
+                                        dailyCreditBalance: _dailyCreditBalance,
                                         subjects: _loadedSubjects.isNotEmpty ? _loadedSubjects : _subjects,
                                         classLevels: _classLevels,
                                         difficulties: _difficulties,
@@ -1803,6 +1817,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                         isFromSchemeOfWork: _isFromSchemeOfWork,
                                         isManualTopicEntry: _isManualTopicEntry,
                                         selectedLessonId: _selectedLessonId,
+                                        remainingDailyGenerations: _remainingDailyGenerations,
                                         onWeekChanged: (v) {
                                             setState(() => _week = v);
                                             _refreshSavedLessonAvailability();
@@ -2076,14 +2091,14 @@ class _NavDrawer extends StatelessWidget {
 class _TopBar extends StatelessWidget {
   final ColorScheme cs;
   final ThemeData theme;
-  final int offlineCreditBalance;
+  final int dailyCreditBalance;
   final VoidCallback? onToggleSidebar;
   final bool sidebarOpen;
   final UndoHistoryController undoController;
   const _TopBar({
     required this.cs,
     required this.theme,
-    required this.offlineCreditBalance,
+    required this.dailyCreditBalance,
     this.onToggleSidebar,
     required this.sidebarOpen,
     required this.undoController,
@@ -2192,7 +2207,7 @@ class _TopBar extends StatelessWidget {
                   Icon(Icons.stars_rounded, size: 20, color: cs.primary),
                   const SizedBox(width: 6),
                   Text(
-                    '$offlineCreditBalance',
+                    '$dailyCreditBalance',
                     style: theme.textTheme.labelLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                       color: cs.primary,
@@ -2224,7 +2239,7 @@ class _ConfigPanel extends StatelessWidget {
   final bool isGenerating;
   final bool isRegenerating;
   final bool examBodyEmpty;
-  final int offlineCreditBalance;
+  final int dailyCreditBalance;
   final List<String> subjects;
   final List<String> classLevels;
   final List<String> difficulties;
@@ -2244,6 +2259,7 @@ class _ConfigPanel extends StatelessWidget {
   final bool isFromSchemeOfWork;
   final bool isManualTopicEntry;
   final int? selectedLessonId;
+  final int remainingDailyGenerations;
   final ValueChanged<int> onWeekChanged;
   final ValueChanged<Lesson?> onLessonSelected;
   final ValueChanged<SchemeOfWorkData?> onSchemeOfWorkSelected;
@@ -2266,7 +2282,7 @@ class _ConfigPanel extends StatelessWidget {
     required this.isGenerating,
     this.isRegenerating = false,
     this.examBodyEmpty = false,
-    required this.offlineCreditBalance,
+    required this.dailyCreditBalance,
     required this.subjects,
     required this.classLevels,
     required this.difficulties,
@@ -2286,6 +2302,7 @@ class _ConfigPanel extends StatelessWidget {
     required this.isFromSchemeOfWork,
     required this.isManualTopicEntry,
     required this.selectedLessonId,
+    this.remainingDailyGenerations = 5,
     required this.onWeekChanged,
     required this.onLessonSelected,
     required this.onSchemeOfWorkSelected,
@@ -2589,6 +2606,23 @@ class _ConfigPanel extends StatelessWidget {
                   ),
                 ),
               ),
+
+              // Remaining daily generations indicator
+              if (remainingDailyGenerations >= 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    remainingDailyGenerations == 0
+                        ? 'No generations left today'
+                        : '$remainingDailyGenerations generation${remainingDailyGenerations == 1 ? '' : 's'} left today',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: remainingDailyGenerations == 0
+                          ? cs.error
+                          : cs.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
 
               // ── Review & Regenerate (visible after generation + unlock) ──
               if (onRegenerate != null) ...[

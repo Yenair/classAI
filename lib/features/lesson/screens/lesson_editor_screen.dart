@@ -223,8 +223,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   bool _isExporting = false;
   bool _editorSidebarOpen = false;
   bool _sidebarInitialized = false;
-  int _offlineCreditBalance = 0;
+  int _dailyCreditBalance = 0;
   int _remainingDailyPreviews = 10;
+  int _remainingDailyGenerations = 5;
   String? _teacherId;
   String? _schoolId;
   String _subscriptionTier = 'free';
@@ -750,7 +751,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     if (mounted) setState(() => _isOnline = online);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _registerWithEmergencyFlush();
-      _loadOfflineCreditBalance();
+      _loadDailyCreditBalance();
       _loadDailyPreviewData();
       _loadAuthInfo();
       _loadSchemesForContext();
@@ -924,6 +925,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   Future<void> _loadDailyPreviewData() async {
     try {
       final db = ref.read(databaseProvider);
+      // Previews
       final config = await db.securityConfigDao.get();
       final today = DateTime.now().toIso8601String().split('T').first;
       final currentCount = config.dailyPreviewCount;
@@ -935,18 +937,24 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       const limits = {'free': 10, 'basic': 10, 'standard': 10, 'elite': -1};
       final limit = limits[_subscriptionTier] ?? 10;
       final remaining = limit < 0 ? -1 : (limit - count).clamp(0, limit);
+      // Generations
+      final remainingGen = await db.securityConfigDao
+          .getRemainingDailyGenerations(tier: _subscriptionTier);
       if (mounted) {
-        setState(() => _remainingDailyPreviews = remaining);
+        setState(() {
+          _remainingDailyPreviews = remaining;
+          _remainingDailyGenerations = remainingGen;
+        });
       }
     } catch (_) {}
   }
 
-  Future<void> _loadOfflineCreditBalance() async {
+  Future<void> _loadDailyCreditBalance() async {
     try {
-      await ref.read(offlineCreditStateProvider.notifier).refresh();
+      await ref.read(dailyCreditStateProvider.notifier).refresh();
       if (mounted) {
-        setState(() => _offlineCreditBalance =
-            ref.read(offlineCreditStateProvider).currentOfflineCredits);
+        setState(() => _dailyCreditBalance =
+            ref.read(dailyCreditStateProvider).currentDailyCredits);
       }
     } catch (_) {}
   }
@@ -1189,6 +1197,13 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     final authTier =
         (ref.read(authProvider).currentSchool?.subscriptionTier ?? _subscriptionTier).toLowerCase();
     if (authTier == 'free') {
+      await _showUpgradeRequiredDialog();
+      return;
+    }
+
+    // Subject-gating: check if this tier is allowed to generate for this subject.
+    final config = ref.read(configServiceProvider);
+    if (!config.isSubjectAllowedForTier(authTier, _subject)) {
       await _showUpgradeRequiredDialog();
       return;
     }
@@ -1928,12 +1943,12 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     final isOnline = await PlatformHelper.isOnline();
 
     if (!mounted) return;
-    if (!isOnline && _offlineCreditBalance < 1) {
+    if (!isOnline && _dailyCreditBalance < 1) {
       // Show persistent toast with sync option
       AppToast.instance.showToast(
         context: context,
         message:
-            'Out of offline credits. Connect to internet and sync to refill.',
+            'Out of daily credits. Connect to internet and sync to refill.',
         icon: Icons.warning,
       );
       _showSyncBottomSheet();
@@ -1941,9 +1956,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     }
 
     try {
-      final offlineCreditService =
-          OfflineCreditService(ref.read(databaseProvider));
-      await offlineCreditService.spendOfflineCredits(
+      final dailyCreditService =
+          DailyCreditService(ref.read(databaseProvider));
+      await dailyCreditService.spendOfflineCredits(
           amount: 1, contentIds: ['lesson_draft']);
 
       // Audit log the unlock
@@ -1964,7 +1979,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       setState(() {
         _isUnlocked = true;
         if (!isOnline) {
-          _offlineCreditBalance = _offlineCreditBalance - 1;
+          _dailyCreditBalance = _dailyCreditBalance - 1;
         }
       });
 
@@ -1975,7 +1990,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       // newly unlocked state immediately.
       ref.invalidate(lessonsListProvider);
 
-      ref.read(offlineCreditStateProvider.notifier).refresh();
+      ref.read(dailyCreditStateProvider.notifier).refresh();
 
       if (mounted) {
         showSuccessToast(context: context, message: 'Lesson unlocked!');
@@ -1995,17 +2010,17 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Sync Offline Credits',
+            Text('Sync Daily Credits',
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
             Text(
-                'Tap below to sync with the server and refill your offline credits.'),
+                'Tap below to sync with the server and refill your daily credits.'),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: () {
                 Navigator.pop(context);
                 // Trigger sync
-                ref.read(offlineCreditStateProvider.notifier).refresh();
+                ref.read(dailyCreditStateProvider.notifier).refresh();
               },
               child: const Text('Sync Now'),
             ),
@@ -3492,6 +3507,22 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                           ],
                                         ),
                                       ),
+                                      // Remaining daily generations indicator
+                                      if (_remainingDailyGenerations >= 0 && _subscriptionTier != 'free')
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 8),
+                                          child: Text(
+                                            _remainingDailyGenerations == 0
+                                                ? 'No generations left today'
+                                                : '$_remainingDailyGenerations generation${_remainingDailyGenerations == 1 ? '' : 's'} left today',
+                                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                              color: _remainingDailyGenerations == 0
+                                                  ? Theme.of(context).colorScheme.error
+                                                  : Theme.of(context).colorScheme.onSurfaceVariant,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
                                       const SizedBox(height: 24),
                                       // 2. Advanced Settings card (collapsible, default closed)
                                       Container(
@@ -7095,7 +7126,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
     if (remainingDailyPreviews > 0) {
       return 'Unlock \u2014 $remainingDailyPreviews previews left';
     }
-    return 'Unlock for 1 Offline Credit';
+    return 'Unlock for 1 Daily Credit';
   }
 }
 

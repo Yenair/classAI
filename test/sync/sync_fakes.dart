@@ -297,7 +297,12 @@ class FakeSyncRemoteApi implements SyncRemoteApi {
 
   @override
   Future<Map<String, dynamic>?> fetchCreditState() async {
-    return {'offlineCredits': 5, 'creditServerCounter': 3, 'spentIds': <String>[]};
+    return {
+      'offlineCredits': 5,
+      'creditServerCounter': 3,
+      'spentIds': <String>[],
+      'subscriptionTier': 'standard',
+    };
   }
 
   @override

@@ -325,7 +325,9 @@ Widget _buildPlanCard({
               ),
               const Divider(height: 24),
               // Feature rows
-              _featureRow('Daily previews', plan.dailyPreviews),
+              _featureRow('Daily credits', plan.dailyPreviews),
+              _featureRow('Daily generations', plan.dailyGenerations),
+              _featureRow('Subjects', plan.subjects),
               _featureRow('PDF exports', plan.pdfExports),
               _featureRow('Vault publishing', plan.vaultPublishing),
               _featureRow('Watermark', plan.watermark),
@@ -358,10 +360,28 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
   final config = ref.read(configServiceProvider);
   final prices = config.subscriptionPrices;
   final previewLimits = config.dailyPreviewLimits;
+  final generationLimits = config.dailyGenerationLimits;
   final pdfLimits = config.pdfExportLimits;
   final examGenTiers = config.examGenerationAllowedTiers;
   final bulkPdfTiers = config.bulkPdfExportAllowedTiers;
   final aiDiagramsTiers = config.aiDiagramsAllowedTiers;
+  final topicRestrictions = config.topicRestrictionsByTier;
+
+  String _subjectsLabel(String tier) {
+    final allowed = topicRestrictions[tier];
+    if (allowed == null || (allowed is List && allowed.isEmpty)) {
+      return 'All subjects';
+    }
+    if (allowed is List) {
+      final lower = allowed.map((e) => e.toString().toLowerCase()).toList();
+      if (lower.contains('*')) return 'All subjects';
+      if (lower.length <= 3) {
+        return lower.map((s) => s[0].toUpperCase() + s.substring(1)).join(', ');
+      }
+      return '${lower.length} subjects';
+    }
+    return 'All subjects';
+  }
 
   const fallbackTeacherSeats = <String, dynamic>{
     'free': 5, 'basic': 10, 'standard': 20, 'elite': 100,
@@ -383,6 +403,8 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
       name: 'Free',
       price: 'Free',
       previewLimit: _tierLimitText(previewLimits['free'], fallback: 0),
+      dailyGenerations: _tierLimitText(generationLimits['free'], fallback: 0),
+      subjects: _subjectsLabel('free'),
       pdfExports: _tierLimitText(pdfLimits['free'], fallback: 1),
       vaultPublishing: false,
       watermark: true,
@@ -397,6 +419,8 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
       name: 'Basic',
       price: _tierPrice(prices['basic'], AppConstants.basicPlanPriceNaira),
       previewLimit: _tierLimitText(previewLimits['basic'], fallback: 10),
+      dailyGenerations: _tierLimitText(generationLimits['basic'], fallback: 5),
+      subjects: _subjectsLabel('basic'),
       pdfExports: _tierLimitText(pdfLimits['basic'], fallback: 3),
       vaultPublishing: false,
       watermark: false,
@@ -411,6 +435,8 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
       name: 'Standard',
       price: _tierPrice(prices['standard'], AppConstants.standardPlanPriceNaira),
       previewLimit: _tierLimitText(previewLimits['standard'], fallback: 10),
+      dailyGenerations: _tierLimitText(generationLimits['standard'], fallback: 10),
+      subjects: _subjectsLabel('standard'),
       pdfExports: _tierLimitText(pdfLimits['standard'], fallback: 5),
       vaultPublishing: true,
       watermark: false,
@@ -425,6 +451,8 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
       name: 'Elite',
       price: _tierPrice(prices['elite'], AppConstants.elitePlanPriceNaira),
       previewLimit: _tierLimitText(previewLimits['elite'], fallback: -1),
+      dailyGenerations: _tierLimitText(generationLimits['elite'], fallback: -1),
+      subjects: _subjectsLabel('elite'),
       pdfExports: _tierLimitText(pdfLimits['elite'], fallback: -1),
       vaultPublishing: true,
       watermark: false,
@@ -1190,6 +1218,8 @@ class _TierComparisonRow {
   final String name;
   final String price;
   final String previewLimit;
+  final String dailyGenerations;
+  final String subjects;
   final String pdfExports;
   final bool vaultPublishing;
   final bool watermark;
@@ -1206,6 +1236,8 @@ class _TierComparisonRow {
     required this.name,
     required this.price,
     required this.previewLimit,
+    required this.dailyGenerations,
+    required this.subjects,
     required this.pdfExports,
     required this.vaultPublishing,
     required this.watermark,

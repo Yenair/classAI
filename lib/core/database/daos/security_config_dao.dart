@@ -174,6 +174,17 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
     return defaults[tier] ?? 10;
   }
 
+  /// Reads the daily AI generation limit for [tier] from remote config,
+  /// falling back to the hardcoded defaults.
+  int _generationLimit(String tier) {
+    final limits = _config?.dailyGenerationLimits;
+    if (limits != null && limits[tier] is int) {
+      return limits[tier] as int;
+    }
+    const defaults = {'free': 0, 'basic': 5, 'standard': 10, 'elite': -1};
+    return defaults[tier] ?? 5;
+  }
+
   /// Reads the daily PDF export limit for [tier] from remote config, falling
   /// back to the hardcoded defaults.
   int _pdfLimit(String tier) {
@@ -206,8 +217,8 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
       newDate = today;
     }
 
-    // Check limit based on tier
-    final limit = _previewLimit(tier);
+    // Check limit based on tier — uses _generationLimit, NOT _previewLimit
+    final limit = _generationLimit(tier);
 
     if (limit > 0 && newCount >= limit) {
       return false; // Limit exceeded
@@ -295,6 +306,30 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
     );
 
     return true;
+  }
+
+  /// Get remaining daily generations for today.
+  /// Returns -1 for unlimited (elite), or the count remaining (>= 0).
+  Future<int> getRemainingDailyGenerations({required String tier}) async {
+    final config = await get();
+    final today = DateTime.now().toIso8601String().split('T').first;
+
+    if (config.dailyGenerationDate != today) {
+      return _getTierGenerationLimit(tier);
+    }
+
+    final limit = _generationLimit(tier);
+    if (limit < 0) return -1; // Unlimited
+    return (limit - config.dailyGenerations).clamp(0, limit);
+  }
+
+  /// The tier's daily generation limit (remote-config value with the
+  /// hardcoded fallback). Public so limit-reached messaging can include
+  /// the usage, e.g. "Daily generation limit reached (5/5 today)."
+  int getDailyGenerationLimit(String tier) => _generationLimit(tier);
+
+  int _getTierGenerationLimit(String tier) {
+    return _generationLimit(tier);
   }
 
   /// Get remaining PDF exports for today.
