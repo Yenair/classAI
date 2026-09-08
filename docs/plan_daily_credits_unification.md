@@ -323,6 +323,23 @@ Release 1 → stable in prod
 | 5 | 3A + 3B (server deploys first) | PAUSE 6 | verify 403/429/refund against real proxy calls |
 | 6 | 3C, 3D, 3E, 3F (independent; can land incrementally) | — | hardening complete |
 
+**SQL Migration Application**
+
+Each SQL migration file in `supabase/migrations/` must be applied to the remote
+Supabase database before its corresponding client code ships. Apply via:
+
+```bash
+supabase db push
+```
+
+Or manually via the Supabase Dashboard SQL Editor. The migration files use
+`INSERT ... ON CONFLICT ... DO UPDATE` (upsert), so re-applying is safe.
+
+| Migration file | Applied when |
+|---------------|-------------|
+| `20260906_000001_seed_generation_limits_and_topic_restrictions.sql` | Before R1 client ships |
+| `20260908_000002_seed_daily_credits_limit.sql` | Before Block 2 client ships |
+
 **Two rules regardless of block:**
 1. Server always deploys before the client that consumes it (2C.1, then 3A/3B).
 2. Never end a session mid-phase — every pause lands on a compiling, fully-tested app.

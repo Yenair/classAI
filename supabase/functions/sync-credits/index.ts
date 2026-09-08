@@ -68,13 +68,21 @@ serve(async (req) => {
       );
     }
 
+    // R2: return the authoritative server date so clients can detect
+    // day rollover. No credit COUNT is returned yet — the client manages
+    // the balance locally until R3 adds the daily_credits table.
+    const serverDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+
     return new Response(
       JSON.stringify({
+        // Legacy fields kept for old clients (removed in R3)
         offline_credits: 3,
         credit_server_counter: 0,
         spent_ids: "[]",
-        subscription_tier: school.subscription_tier ?? "free",
         last_credit_refill_server_time: teacher.last_credit_refill_date?.toISOString() ?? new Date().toISOString(),
+        // R2 fields
+        daily_credits_date: serverDate,
+        subscription_tier: school.subscription_tier ?? "free",
       }),
       { status: 200, headers: { "Content-Type": "application/json" } },
     );

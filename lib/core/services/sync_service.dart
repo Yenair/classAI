@@ -532,9 +532,13 @@ class SupabaseSyncRemoteApi implements SyncRemoteApi {
       final data = response.data as Map<String, dynamic>?;
       if (data != null) {
         return {
+          // Legacy fields (kept for backward compat, removed in R3)
           'offlineCredits': data['offline_credits'] as int? ?? 3,
           'creditServerCounter': data['credit_server_counter'] as int? ?? 0,
           'spentIds': data['spent_ids'] as String? ?? '[]',
+          // R2 fields
+          'dailyCreditsDate': data['daily_credits_date'] as String?,
+          'subscriptionTier': data['subscription_tier'] as String?,
         };
       }
     } catch (e) {
@@ -3714,20 +3718,38 @@ class SyncService {
     _setState(SyncState.idle);
   }
 
-  /// Fetches credit state from server and resets local credits.
+  /// Syncs the daily-credit date boundary using the server's authoritative
+  /// time. On a new server day the local credit balance resets to the tier
+  /// limit; otherwise the local balance is left untouched.
+  ///
+  /// R2 design: the server only provides the authoritative DATE. The client
+  /// manages the balance locally. R3 adds the server-side spend table.
   Future<void> _syncCreditState() async {
     try {
       final response = await remoteApi.fetchCreditState();
-      if (response != null) {
+      if (response == null) return;
+
+      final serverDate = response['dailyCreditsDate'] as String?;
+      if (serverDate == null || serverDate.isEmpty) return;
+
+      final config = await db.securityConfigDao.get();
+      final localDate = config.dailyCreditsDate;
+
+      if (localDate != serverDate) {
+        // New server day — reset the balance to the tier limit.
+        final school = schoolId.isNotEmpty
+            ? await db.schoolsDao.getByServerId(schoolId)
+            : await db.schoolsDao.get();
+        final tier = school?.subscriptionTier ?? 'free';
+
+        // Read the tier limit from the DAO (mirrors _dailyCreditLimit).
+        // ConfigService may not be injected yet at this point, so the DAO
+        // falls back to the hardcoded defaults.
+        final limit = db.securityConfigDao.getDailyCreditLimit(tier);
+
         await db.securityConfigDao.updateConfig(
-          offlineCredits: response['offlineCredits'] as int? ?? 3,
-          creditServerCounter: response['creditServerCounter'] as int? ?? 0,
-          creditSpentIdsLocal: (() {
-            final spentIds = response['spentIds'];
-            if (spentIds is String) return spentIds;
-            if (spentIds is List) return jsonEncode(spentIds);
-            return '[]';
-          })(),
+          offlineCredits: limit < 0 ? 0 : limit,
+          dailyCreditsDate: serverDate,
         );
       }
     } catch (e) {

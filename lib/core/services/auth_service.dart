@@ -14,8 +14,6 @@ class AuthResult {
   final School school;
   final String? wrappedSchoolKey; // base64
   final int passwordHashVersion;
-  final int offlineCredits;
-  final DateTime lastCreditRefillServerTime;
   final bool? forcePasswordReset;
   final bool emailVerified;
   final bool newDevice;
@@ -25,8 +23,6 @@ class AuthResult {
     required this.school,
     this.wrappedSchoolKey,
     required this.passwordHashVersion,
-    required this.offlineCredits,
-    required this.lastCreditRefillServerTime,
     this.forcePasswordReset,
     this.emailVerified = false,
     this.newDevice = false,
@@ -967,18 +963,11 @@ class SupabaseAuthService implements AuthService {
       themeMode: teacherMap['theme_mode'] as String? ?? 'system',
     );
 
-    final serverTimeStr = data['last_credit_refill_server_time'] as String?;
-    final serverTime = serverTimeStr != null
-        ? DateTime.tryParse(serverTimeStr) ?? DateTime.now()
-        : DateTime.now();
-
     return AuthResult(
       teacher: teacher,
       school: school,
       wrappedSchoolKey: data['wrapped_school_key'] as String?,
       passwordHashVersion: data['password_hash_version'] as int? ?? 1,
-      offlineCredits: data['offline_credits'] as int? ?? 3,
-      lastCreditRefillServerTime: serverTime,
       forcePasswordReset: data['force_password_reset'] as bool?,
       emailVerified: data['email_verified'] as bool? ?? false,
       newDevice: data['new_device'] as bool? ?? false,

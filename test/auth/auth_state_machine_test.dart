@@ -433,8 +433,6 @@ void main() {
         ),
         wrappedSchoolKey: 'bW9ja193cmFwcGVkX3NjaG9vbF9rZXk=',
         passwordHashVersion: 1,
-        offlineCredits: 50,
-        lastCreditRefillServerTime: now,
         emailVerified: true,  // Required to reach authenticated state
       );
 
@@ -714,8 +712,6 @@ void main() {
         ),
         wrappedSchoolKey: 'bW9ja193cmFwcGVkX3NjaG9vbF9rZXlfdjI=',
         passwordHashVersion: 2,
-        offlineCredits: 50,
-        lastCreditRefillServerTime: now,
       );
 
       when(() => mockAuth.verifyAdminOtp(any(), any(), any()))
@@ -851,8 +847,6 @@ void main() {
         ),
         wrappedSchoolKey: 'bW9ja193cmFwcGVkX3NjaG9vbF9rZXk=',
         passwordHashVersion: 1,
-        offlineCredits: 50,
-        lastCreditRefillServerTime: now,
       );
 
       when(() => mockAuth.recoverTeacherPassword(any(), any(), any()))

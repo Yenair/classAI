@@ -23,7 +23,6 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
     String? creditSpentBatchId,
     String? creditSpentIdsLocal,
     int? creditServerCounter,
-    DateTime? lastCreditRefillServerTime,
     DateTime? lastPullTimestamp,
     String? syncCursor,
     DateTime? lastSyncAttemptTime,
@@ -47,6 +46,7 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
     double? monotonicLastSeen,
     int? dailyPreviewCount,
     String? dailyPreviewDate,
+    String? dailyCreditsDate,
   }) async {
     final config = await get();
     await (update(securityConfig)..where((t) => t.id.equals(config.id))).write(
@@ -62,9 +62,6 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
             : const Value.absent(),
         creditServerCounter: creditServerCounter != null
             ? Value(creditServerCounter)
-            : const Value.absent(),
-        lastCreditRefillServerTime: lastCreditRefillServerTime != null
-            ? Value(lastCreditRefillServerTime)
             : const Value.absent(),
         lastPullTimestamp: lastPullTimestamp != null
             ? Value(lastPullTimestamp)
@@ -128,6 +125,9 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
             : const Value.absent(),
         dailyPreviewDate: dailyPreviewDate != null
             ? Value(dailyPreviewDate)
+            : const Value.absent(),
+        dailyCreditsDate: dailyCreditsDate != null
+            ? Value(dailyCreditsDate)
             : const Value.absent(),
       ),
     );

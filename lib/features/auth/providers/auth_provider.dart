@@ -417,9 +417,6 @@ class AuthNotifier extends Notifier<AuthStateData> {
             school: cachedAuth.school,
             wrappedSchoolKey: cachedAuth.teacher.schoolKeyWrapped,
             passwordHashVersion: cachedAuth.teacher.passwordHashVersion,
-            offlineCredits: (await _db.securityConfigDao.get()).offlineCredits,
-            lastCreditRefillServerTime:
-                cachedAuth.teacher.lastCreditRefillDate ?? DateTime.now(),
             emailVerified: true,
             newDevice: false,
           ),
@@ -515,9 +512,6 @@ class AuthNotifier extends Notifier<AuthStateData> {
           school: cachedAuth.school,
           wrappedSchoolKey: cachedAuth.teacher.schoolKeyWrapped,
           passwordHashVersion: cachedAuth.teacher.passwordHashVersion,
-          offlineCredits: (await _db.securityConfigDao.get()).offlineCredits,
-          lastCreditRefillServerTime:
-              cachedAuth.teacher.lastCreditRefillDate ?? DateTime.now(),
           emailVerified: true,
           newDevice: false,
         ),
@@ -596,9 +590,6 @@ class AuthNotifier extends Notifier<AuthStateData> {
         school: cachedAuth.school,
         wrappedSchoolKey: cachedAuth.teacher.schoolKeyWrapped,
         passwordHashVersion: cachedAuth.teacher.passwordHashVersion,
-        offlineCredits: (await _db.securityConfigDao.get()).offlineCredits,
-        lastCreditRefillServerTime:
-            cachedAuth.teacher.lastCreditRefillDate ?? DateTime.now(),
         emailVerified: true,
         newDevice: false,
       ),
@@ -1954,7 +1945,6 @@ class AuthNotifier extends Notifier<AuthStateData> {
             forcePasswordReset: Value(result.teacher.forcePasswordReset),
             passwordHashVersion: Value(result.passwordHashVersion),
             schoolKeyWrapped: Value(result.wrappedSchoolKey),
-            lastCreditRefillDate: Value(result.lastCreditRefillServerTime),
             updatedAt: Value(DateTime.now()),
             updateCounter: Value(existing.updateCounter + 1),
           ),
@@ -2002,7 +1992,6 @@ class AuthNotifier extends Notifier<AuthStateData> {
         forcePasswordReset: Value(result.teacher.forcePasswordReset),
         passwordHashVersion: Value(result.passwordHashVersion),
         schoolKeyWrapped: Value(result.wrappedSchoolKey),
-        lastCreditRefillDate: Value(result.lastCreditRefillServerTime),
       ),
     );
 
@@ -2039,10 +2028,9 @@ class AuthNotifier extends Notifier<AuthStateData> {
       }
     }
 
-    // Update security config with server credit state
+    // Update security config (credit balance is now managed by the unified
+    // daily-credit pool — checkAndSpendDailyCredits — not by auth login).
     await _db.securityConfigDao.updateConfig(
-      offlineCredits: result.offlineCredits,
-      lastCreditRefillServerTime: result.lastCreditRefillServerTime,
       lastKnownPasswordHashVersion: result.passwordHashVersion,
     );
   }
