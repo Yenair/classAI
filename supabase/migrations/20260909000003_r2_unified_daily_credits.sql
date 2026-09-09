@@ -21,13 +21,44 @@ WHERE is_unlocked = false
 
 -- ── 2A.6b: exams — no status column, inspect content instead ────────────
 -- Unlock any exam whose content JSON has at least one question of any
--- type. Legacy rows whose content is not valid JSON (encrypted rows)
--- do not match and stay locked — audit those manually if any remain.
-UPDATE public.exams
+-- type. Rows whose content is not valid JSON (legacy encrypted rows)
+-- or whose question fields are not JSON arrays cannot break the
+-- migration: the exception-safe cast maps them to NULL and they stay
+-- locked — audit those manually if any remain.
+--
+-- NOTE: json_extract/json_array_length are SQLite functions; Postgres
+-- uses -> / jsonb_array_length. An earlier revision used the SQLite
+-- dialect here and failed the push with SQLSTATE 42883.
+CREATE OR REPLACE FUNCTION pg_temp.try_cast_jsonb(txt text)
+RETURNS jsonb
+LANGUAGE plpgsql IMMUTABLE
+AS $$
+BEGIN
+  RETURN txt::jsonb;
+EXCEPTION WHEN others THEN
+  RETURN NULL;
+END;
+$$;
+
+UPDATE public.exams e
 SET is_unlocked = true
-WHERE is_unlocked = false
-  AND (
-    COALESCE(json_array_length(json_extract(content, '$.mcqs')), 0) > 0
-    OR COALESCE(json_array_length(json_extract(content, '$.theory')), 0) > 0
-    OR COALESCE(json_array_length(json_extract(content, '$.subjective')), 0) > 0
+WHERE e.is_unlocked = false
+  AND EXISTS (
+    SELECT 1
+    FROM (SELECT pg_temp.try_cast_jsonb(e.content) AS j) parsed
+    WHERE parsed.j IS NOT NULL
+      AND (
+        COALESCE(
+          CASE WHEN jsonb_typeof(parsed.j -> 'mcqs') = 'array'
+               THEN jsonb_array_length(parsed.j -> 'mcqs') ELSE 0 END,
+          0) > 0
+        OR COALESCE(
+          CASE WHEN jsonb_typeof(parsed.j -> 'theory') = 'array'
+               THEN jsonb_array_length(parsed.j -> 'theory') ELSE 0 END,
+          0) > 0
+        OR COALESCE(
+          CASE WHEN jsonb_typeof(parsed.j -> 'subjective') = 'array'
+               THEN jsonb_array_length(parsed.j -> 'subjective') ELSE 0 END,
+          0) > 0
+      )
   );
