@@ -1,5 +1,12 @@
 # Plan: Daily Credits Unification
 
+> **STATUS: R1 + R2 IMPLEMENTED AND DEPLOYED (2026-09-09).**
+> All four R2 blocks committed (3d35a33, 7bb597a, 6fb7213, e0c864c);
+> migration `20260909000003` pushed (Postgres-dialect fix: 7d5bd31);
+> `sync-credits` deployed. Remaining: manual QA, ship R2, soak.
+> R3 (server-side hardening) is future scope.
+> See the Follow-up section at the bottom for the empty-exam-shells reminder.
+>
 > Unifies offline credits, daily previews, and daily generations into a single
 > "daily credits" pool. Adds server-time reliance for the daily reset boundary.
 > Adds per-tier subject restrictions. Removes the manual unlock step. Adds
@@ -402,3 +409,34 @@ Or manually via the Supabase Dashboard SQL Editor. The migration files use
 | R3-E | Rate Limiting | 3/10 |
 | R3-F | Tests | 1/10 |
 | **Overall** | | **4/10** |
+
+---
+
+## Follow-up (added 2026-09-09): Empty exam shells — REMINDER
+
+**Reminder:** after R2 ships, revisit the **109 empty exam shells** found during
+the post-migration audit of `20260909000003`.
+
+**What they are:** server rows in `public.exams` with
+`is_unlocked = false` and content exactly `{"mcqs":[],"theory":[],"subjective":[]}`.
+Created 2026-07-25 → 2026-08-15 by a single teacher account; topic/week/term are
+filled, questions are not. They are pre-fill scaffolds from the scheme-of-work
+flow (and older manual drafts), not real exams — the current client
+(`ExamGenerationService.generateCombinedExam`) either fills them or creates its
+own. The unlock migration correctly skipped them (no content to unlock).
+
+**Verdict: effectively useless, but they are the teacher's data.**
+
+**Proposed cleanup plan (do NOT run before R2 ships and soaks):**
+
+| Step | Action | Risk |
+|------|--------|------|
+| C.1 | Ship R2, soak ≥ 1 week, confirm no user complains about "missing" empty exams | — |
+| C.2 | Confirm the client treats empty exams as draft (exams_list shows them under Draft; no crash on open) — if the list already hides/filters them, user impact of deletion is zero | 2/10 |
+| C.3 | Migration `cleanup_empty_exam_shells.sql`: soft-delete only — `UPDATE exams SET deleted_at = now() WHERE is_unlocked = false AND content = '{"mcqs":[],"theory":[],"subjective":[]}'` (scoped, reversible). If the table has no `deleted_at` column, add it first, or fall back to a dated archive table (`exams_empty_shells_archive_YYYYMMDD`) instead of DELETE | 3/10 |
+| C.4 | Client-side: extend the exams sync-pull handling to reconcile server-removed exams on next sync (delete local rows whose server_id is gone), so devices converge; the current pull only reconciles the teacher roster | 4/10 |
+| C.5 | Optional: same audit for empty lesson shells (lessons with empty objectives/presentation but status 'draft') once C.4 lands | 2/10 |
+| C.6 | After another soak period, hard-delete the archive | 1/10 |
+
+**Do not** bulk-DELETE live rows without C.4 — local devices that still hold
+those rows would re-insert them on their next sync push.
