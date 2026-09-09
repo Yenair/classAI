@@ -201,10 +201,10 @@ void main() {
     await db.close();
   });
 
-  /// The stored daily generation counter — must stay at 0 when the subject
-  /// gate blocks, and advance when generation is allowed through.
+  /// The remaining unified daily-credit balance — must stay unchanged when
+  /// the subject gate blocks, and drop when generation is allowed through.
   Future<int> generationCount() async =>
-      (await db.select(db.securityConfig).getSingle()).dailyGenerations;
+      (await db.select(db.securityConfig).getSingle()).offlineCredits;
 
   Widget buildLessonApp({
     required ConfigService config,
@@ -336,8 +336,8 @@ void main() {
       expect(find.text('Upgrade Required'), findsOneWidget);
       // …no AI call was made…
       expect(generateCalls, 0);
-      // …and the daily generation counter was not consumed.
-      expect(await generationCount(), 0);
+      // …and the daily credit balance was not consumed.
+      expect(await generationCount(), 10);
     });
 
     testWidgets('allows generation when the subject is permitted (control)',
@@ -405,7 +405,7 @@ void main() {
 
       expect(find.text('Upgrade Required'), findsOneWidget);
       expect(generateCalls, 0);
-      expect(await generationCount(), 0);
+      expect(await generationCount(), 10);
     });
 
     testWidgets('reaches generation when the subject is permitted (control)',
@@ -434,10 +434,12 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
 
       // The daily-limit check runs right after the subject gate and
-      // consumes one generation — proof the gate let the request through.
+      // consumes one credit — proof the gate let the request through.
+      // (Balance semantics: date not stamped yet -> reset to the standard
+      // limit 3 first, then the spend leaves 2.)
       expect(find.text('Upgrade Required'), findsNothing);
       expect(generateCalls, greaterThan(0));
-      expect(await generationCount(), 1);
+      expect(await generationCount(), 2);
 
       await dismissToastIfShowing(tester);
     });

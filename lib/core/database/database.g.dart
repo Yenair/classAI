@@ -6936,20 +6936,6 @@ class $SecurityConfigTable extends SecurityConfig
   late final GeneratedColumn<String> currentDeviceId = GeneratedColumn<String>(
       'current_device_id', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _dailyGenerationsMeta =
-      const VerificationMeta('dailyGenerations');
-  @override
-  late final GeneratedColumn<int> dailyGenerations = GeneratedColumn<int>(
-      'daily_generations', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(0));
-  static const VerificationMeta _dailyGenerationDateMeta =
-      const VerificationMeta('dailyGenerationDate');
-  @override
-  late final GeneratedColumn<String> dailyGenerationDate =
-      GeneratedColumn<String>('daily_generation_date', aliasedName, true,
-          type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _dailyPdfExportsMeta =
       const VerificationMeta('dailyPdfExports');
   @override
@@ -6964,20 +6950,6 @@ class $SecurityConfigTable extends SecurityConfig
   late final GeneratedColumn<String> dailyPdfExportDate =
       GeneratedColumn<String>('daily_pdf_export_date', aliasedName, true,
           type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _dailyPreviewCountMeta =
-      const VerificationMeta('dailyPreviewCount');
-  @override
-  late final GeneratedColumn<int> dailyPreviewCount = GeneratedColumn<int>(
-      'daily_preview_count', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(0));
-  static const VerificationMeta _dailyPreviewDateMeta =
-      const VerificationMeta('dailyPreviewDate');
-  @override
-  late final GeneratedColumn<String> dailyPreviewDate = GeneratedColumn<String>(
-      'daily_preview_date', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _pendingDbReplacementMeta =
       const VerificationMeta('pendingDbReplacement');
   @override
@@ -7022,12 +6994,8 @@ class $SecurityConfigTable extends SecurityConfig
         sessionKeyExpiry,
         syncPendingAfterBiometricTimeout,
         currentDeviceId,
-        dailyGenerations,
-        dailyGenerationDate,
         dailyPdfExports,
         dailyPdfExportDate,
-        dailyPreviewCount,
-        dailyPreviewDate,
         pendingDbReplacement,
         vacuumedDbPath
       ];
@@ -7198,18 +7166,6 @@ class $SecurityConfigTable extends SecurityConfig
     } else if (isInserting) {
       context.missing(_currentDeviceIdMeta);
     }
-    if (data.containsKey('daily_generations')) {
-      context.handle(
-          _dailyGenerationsMeta,
-          dailyGenerations.isAcceptableOrUnknown(
-              data['daily_generations']!, _dailyGenerationsMeta));
-    }
-    if (data.containsKey('daily_generation_date')) {
-      context.handle(
-          _dailyGenerationDateMeta,
-          dailyGenerationDate.isAcceptableOrUnknown(
-              data['daily_generation_date']!, _dailyGenerationDateMeta));
-    }
     if (data.containsKey('daily_pdf_exports')) {
       context.handle(
           _dailyPdfExportsMeta,
@@ -7221,18 +7177,6 @@ class $SecurityConfigTable extends SecurityConfig
           _dailyPdfExportDateMeta,
           dailyPdfExportDate.isAcceptableOrUnknown(
               data['daily_pdf_export_date']!, _dailyPdfExportDateMeta));
-    }
-    if (data.containsKey('daily_preview_count')) {
-      context.handle(
-          _dailyPreviewCountMeta,
-          dailyPreviewCount.isAcceptableOrUnknown(
-              data['daily_preview_count']!, _dailyPreviewCountMeta));
-    }
-    if (data.containsKey('daily_preview_date')) {
-      context.handle(
-          _dailyPreviewDateMeta,
-          dailyPreviewDate.isAcceptableOrUnknown(
-              data['daily_preview_date']!, _dailyPreviewDateMeta));
     }
     if (data.containsKey('pending_db_replacement')) {
       context.handle(
@@ -7316,18 +7260,10 @@ class $SecurityConfigTable extends SecurityConfig
           data['${effectivePrefix}sync_pending_after_biometric_timeout'])!,
       currentDeviceId: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}current_device_id'])!,
-      dailyGenerations: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}daily_generations'])!,
-      dailyGenerationDate: attachedDatabase.typeMapping.read(
-          DriftSqlType.string, data['${effectivePrefix}daily_generation_date']),
       dailyPdfExports: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}daily_pdf_exports'])!,
       dailyPdfExportDate: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}daily_pdf_export_date']),
-      dailyPreviewCount: attachedDatabase.typeMapping.read(
-          DriftSqlType.int, data['${effectivePrefix}daily_preview_count'])!,
-      dailyPreviewDate: attachedDatabase.typeMapping.read(
-          DriftSqlType.string, data['${effectivePrefix}daily_preview_date']),
       pendingDbReplacement: attachedDatabase.typeMapping.read(
           DriftSqlType.bool, data['${effectivePrefix}pending_db_replacement'])!,
       vacuumedDbPath: attachedDatabase.typeMapping.read(
@@ -7369,12 +7305,8 @@ class SecurityConfigData extends DataClass
   final DateTime? sessionKeyExpiry;
   final bool syncPendingAfterBiometricTimeout;
   final String currentDeviceId;
-  final int dailyGenerations;
-  final String? dailyGenerationDate;
   final int dailyPdfExports;
   final String? dailyPdfExportDate;
-  final int dailyPreviewCount;
-  final String? dailyPreviewDate;
   final bool pendingDbReplacement;
   final String? vacuumedDbPath;
   const SecurityConfigData(
@@ -7404,12 +7336,8 @@ class SecurityConfigData extends DataClass
       this.sessionKeyExpiry,
       required this.syncPendingAfterBiometricTimeout,
       required this.currentDeviceId,
-      required this.dailyGenerations,
-      this.dailyGenerationDate,
       required this.dailyPdfExports,
       this.dailyPdfExportDate,
-      required this.dailyPreviewCount,
-      this.dailyPreviewDate,
       required this.pendingDbReplacement,
       this.vacuumedDbPath});
   @override
@@ -7473,17 +7401,9 @@ class SecurityConfigData extends DataClass
     map['sync_pending_after_biometric_timeout'] =
         Variable<bool>(syncPendingAfterBiometricTimeout);
     map['current_device_id'] = Variable<String>(currentDeviceId);
-    map['daily_generations'] = Variable<int>(dailyGenerations);
-    if (!nullToAbsent || dailyGenerationDate != null) {
-      map['daily_generation_date'] = Variable<String>(dailyGenerationDate);
-    }
     map['daily_pdf_exports'] = Variable<int>(dailyPdfExports);
     if (!nullToAbsent || dailyPdfExportDate != null) {
       map['daily_pdf_export_date'] = Variable<String>(dailyPdfExportDate);
-    }
-    map['daily_preview_count'] = Variable<int>(dailyPreviewCount);
-    if (!nullToAbsent || dailyPreviewDate != null) {
-      map['daily_preview_date'] = Variable<String>(dailyPreviewDate);
     }
     map['pending_db_replacement'] = Variable<bool>(pendingDbReplacement);
     if (!nullToAbsent || vacuumedDbPath != null) {
@@ -7549,18 +7469,10 @@ class SecurityConfigData extends DataClass
           : Value(sessionKeyExpiry),
       syncPendingAfterBiometricTimeout: Value(syncPendingAfterBiometricTimeout),
       currentDeviceId: Value(currentDeviceId),
-      dailyGenerations: Value(dailyGenerations),
-      dailyGenerationDate: dailyGenerationDate == null && nullToAbsent
-          ? const Value.absent()
-          : Value(dailyGenerationDate),
       dailyPdfExports: Value(dailyPdfExports),
       dailyPdfExportDate: dailyPdfExportDate == null && nullToAbsent
           ? const Value.absent()
           : Value(dailyPdfExportDate),
-      dailyPreviewCount: Value(dailyPreviewCount),
-      dailyPreviewDate: dailyPreviewDate == null && nullToAbsent
-          ? const Value.absent()
-          : Value(dailyPreviewDate),
       pendingDbReplacement: Value(pendingDbReplacement),
       vacuumedDbPath: vacuumedDbPath == null && nullToAbsent
           ? const Value.absent()
@@ -7616,14 +7528,9 @@ class SecurityConfigData extends DataClass
       syncPendingAfterBiometricTimeout:
           serializer.fromJson<bool>(json['syncPendingAfterBiometricTimeout']),
       currentDeviceId: serializer.fromJson<String>(json['currentDeviceId']),
-      dailyGenerations: serializer.fromJson<int>(json['dailyGenerations']),
-      dailyGenerationDate:
-          serializer.fromJson<String?>(json['dailyGenerationDate']),
       dailyPdfExports: serializer.fromJson<int>(json['dailyPdfExports']),
       dailyPdfExportDate:
           serializer.fromJson<String?>(json['dailyPdfExportDate']),
-      dailyPreviewCount: serializer.fromJson<int>(json['dailyPreviewCount']),
-      dailyPreviewDate: serializer.fromJson<String?>(json['dailyPreviewDate']),
       pendingDbReplacement:
           serializer.fromJson<bool>(json['pendingDbReplacement']),
       vacuumedDbPath: serializer.fromJson<String?>(json['vacuumedDbPath']),
@@ -7664,12 +7571,8 @@ class SecurityConfigData extends DataClass
       'syncPendingAfterBiometricTimeout':
           serializer.toJson<bool>(syncPendingAfterBiometricTimeout),
       'currentDeviceId': serializer.toJson<String>(currentDeviceId),
-      'dailyGenerations': serializer.toJson<int>(dailyGenerations),
-      'dailyGenerationDate': serializer.toJson<String?>(dailyGenerationDate),
       'dailyPdfExports': serializer.toJson<int>(dailyPdfExports),
       'dailyPdfExportDate': serializer.toJson<String?>(dailyPdfExportDate),
-      'dailyPreviewCount': serializer.toJson<int>(dailyPreviewCount),
-      'dailyPreviewDate': serializer.toJson<String?>(dailyPreviewDate),
       'pendingDbReplacement': serializer.toJson<bool>(pendingDbReplacement),
       'vacuumedDbPath': serializer.toJson<String?>(vacuumedDbPath),
     };
@@ -7702,12 +7605,8 @@ class SecurityConfigData extends DataClass
           Value<DateTime?> sessionKeyExpiry = const Value.absent(),
           bool? syncPendingAfterBiometricTimeout,
           String? currentDeviceId,
-          int? dailyGenerations,
-          Value<String?> dailyGenerationDate = const Value.absent(),
           int? dailyPdfExports,
           Value<String?> dailyPdfExportDate = const Value.absent(),
-          int? dailyPreviewCount,
-          Value<String?> dailyPreviewDate = const Value.absent(),
           bool? pendingDbReplacement,
           Value<String?> vacuumedDbPath = const Value.absent()}) =>
       SecurityConfigData(
@@ -7765,18 +7664,10 @@ class SecurityConfigData extends DataClass
         syncPendingAfterBiometricTimeout: syncPendingAfterBiometricTimeout ??
             this.syncPendingAfterBiometricTimeout,
         currentDeviceId: currentDeviceId ?? this.currentDeviceId,
-        dailyGenerations: dailyGenerations ?? this.dailyGenerations,
-        dailyGenerationDate: dailyGenerationDate.present
-            ? dailyGenerationDate.value
-            : this.dailyGenerationDate,
         dailyPdfExports: dailyPdfExports ?? this.dailyPdfExports,
         dailyPdfExportDate: dailyPdfExportDate.present
             ? dailyPdfExportDate.value
             : this.dailyPdfExportDate,
-        dailyPreviewCount: dailyPreviewCount ?? this.dailyPreviewCount,
-        dailyPreviewDate: dailyPreviewDate.present
-            ? dailyPreviewDate.value
-            : this.dailyPreviewDate,
         pendingDbReplacement: pendingDbReplacement ?? this.pendingDbReplacement,
         vacuumedDbPath:
             vacuumedDbPath.present ? vacuumedDbPath.value : this.vacuumedDbPath,
@@ -7857,24 +7748,12 @@ class SecurityConfigData extends DataClass
       currentDeviceId: data.currentDeviceId.present
           ? data.currentDeviceId.value
           : this.currentDeviceId,
-      dailyGenerations: data.dailyGenerations.present
-          ? data.dailyGenerations.value
-          : this.dailyGenerations,
-      dailyGenerationDate: data.dailyGenerationDate.present
-          ? data.dailyGenerationDate.value
-          : this.dailyGenerationDate,
       dailyPdfExports: data.dailyPdfExports.present
           ? data.dailyPdfExports.value
           : this.dailyPdfExports,
       dailyPdfExportDate: data.dailyPdfExportDate.present
           ? data.dailyPdfExportDate.value
           : this.dailyPdfExportDate,
-      dailyPreviewCount: data.dailyPreviewCount.present
-          ? data.dailyPreviewCount.value
-          : this.dailyPreviewCount,
-      dailyPreviewDate: data.dailyPreviewDate.present
-          ? data.dailyPreviewDate.value
-          : this.dailyPreviewDate,
       pendingDbReplacement: data.pendingDbReplacement.present
           ? data.pendingDbReplacement.value
           : this.pendingDbReplacement,
@@ -7915,12 +7794,8 @@ class SecurityConfigData extends DataClass
           ..write(
               'syncPendingAfterBiometricTimeout: $syncPendingAfterBiometricTimeout, ')
           ..write('currentDeviceId: $currentDeviceId, ')
-          ..write('dailyGenerations: $dailyGenerations, ')
-          ..write('dailyGenerationDate: $dailyGenerationDate, ')
           ..write('dailyPdfExports: $dailyPdfExports, ')
           ..write('dailyPdfExportDate: $dailyPdfExportDate, ')
-          ..write('dailyPreviewCount: $dailyPreviewCount, ')
-          ..write('dailyPreviewDate: $dailyPreviewDate, ')
           ..write('pendingDbReplacement: $pendingDbReplacement, ')
           ..write('vacuumedDbPath: $vacuumedDbPath')
           ..write(')'))
@@ -7955,12 +7830,8 @@ class SecurityConfigData extends DataClass
         sessionKeyExpiry,
         syncPendingAfterBiometricTimeout,
         currentDeviceId,
-        dailyGenerations,
-        dailyGenerationDate,
         dailyPdfExports,
         dailyPdfExportDate,
-        dailyPreviewCount,
-        dailyPreviewDate,
         pendingDbReplacement,
         vacuumedDbPath
       ]);
@@ -7996,12 +7867,8 @@ class SecurityConfigData extends DataClass
           other.syncPendingAfterBiometricTimeout ==
               this.syncPendingAfterBiometricTimeout &&
           other.currentDeviceId == this.currentDeviceId &&
-          other.dailyGenerations == this.dailyGenerations &&
-          other.dailyGenerationDate == this.dailyGenerationDate &&
           other.dailyPdfExports == this.dailyPdfExports &&
           other.dailyPdfExportDate == this.dailyPdfExportDate &&
-          other.dailyPreviewCount == this.dailyPreviewCount &&
-          other.dailyPreviewDate == this.dailyPreviewDate &&
           other.pendingDbReplacement == this.pendingDbReplacement &&
           other.vacuumedDbPath == this.vacuumedDbPath);
 }
@@ -8033,12 +7900,8 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
   final Value<DateTime?> sessionKeyExpiry;
   final Value<bool> syncPendingAfterBiometricTimeout;
   final Value<String> currentDeviceId;
-  final Value<int> dailyGenerations;
-  final Value<String?> dailyGenerationDate;
   final Value<int> dailyPdfExports;
   final Value<String?> dailyPdfExportDate;
-  final Value<int> dailyPreviewCount;
-  final Value<String?> dailyPreviewDate;
   final Value<bool> pendingDbReplacement;
   final Value<String?> vacuumedDbPath;
   const SecurityConfigCompanion({
@@ -8068,12 +7931,8 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
     this.sessionKeyExpiry = const Value.absent(),
     this.syncPendingAfterBiometricTimeout = const Value.absent(),
     this.currentDeviceId = const Value.absent(),
-    this.dailyGenerations = const Value.absent(),
-    this.dailyGenerationDate = const Value.absent(),
     this.dailyPdfExports = const Value.absent(),
     this.dailyPdfExportDate = const Value.absent(),
-    this.dailyPreviewCount = const Value.absent(),
-    this.dailyPreviewDate = const Value.absent(),
     this.pendingDbReplacement = const Value.absent(),
     this.vacuumedDbPath = const Value.absent(),
   });
@@ -8104,12 +7963,8 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
     this.sessionKeyExpiry = const Value.absent(),
     this.syncPendingAfterBiometricTimeout = const Value.absent(),
     required String currentDeviceId,
-    this.dailyGenerations = const Value.absent(),
-    this.dailyGenerationDate = const Value.absent(),
     this.dailyPdfExports = const Value.absent(),
     this.dailyPdfExportDate = const Value.absent(),
-    this.dailyPreviewCount = const Value.absent(),
-    this.dailyPreviewDate = const Value.absent(),
     this.pendingDbReplacement = const Value.absent(),
     this.vacuumedDbPath = const Value.absent(),
   }) : currentDeviceId = Value(currentDeviceId);
@@ -8140,12 +7995,8 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
     Expression<DateTime>? sessionKeyExpiry,
     Expression<bool>? syncPendingAfterBiometricTimeout,
     Expression<String>? currentDeviceId,
-    Expression<int>? dailyGenerations,
-    Expression<String>? dailyGenerationDate,
     Expression<int>? dailyPdfExports,
     Expression<String>? dailyPdfExportDate,
-    Expression<int>? dailyPreviewCount,
-    Expression<String>? dailyPreviewDate,
     Expression<bool>? pendingDbReplacement,
     Expression<String>? vacuumedDbPath,
   }) {
@@ -8190,14 +8041,9 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
         'sync_pending_after_biometric_timeout':
             syncPendingAfterBiometricTimeout,
       if (currentDeviceId != null) 'current_device_id': currentDeviceId,
-      if (dailyGenerations != null) 'daily_generations': dailyGenerations,
-      if (dailyGenerationDate != null)
-        'daily_generation_date': dailyGenerationDate,
       if (dailyPdfExports != null) 'daily_pdf_exports': dailyPdfExports,
       if (dailyPdfExportDate != null)
         'daily_pdf_export_date': dailyPdfExportDate,
-      if (dailyPreviewCount != null) 'daily_preview_count': dailyPreviewCount,
-      if (dailyPreviewDate != null) 'daily_preview_date': dailyPreviewDate,
       if (pendingDbReplacement != null)
         'pending_db_replacement': pendingDbReplacement,
       if (vacuumedDbPath != null) 'vacuumed_db_path': vacuumedDbPath,
@@ -8231,12 +8077,8 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
       Value<DateTime?>? sessionKeyExpiry,
       Value<bool>? syncPendingAfterBiometricTimeout,
       Value<String>? currentDeviceId,
-      Value<int>? dailyGenerations,
-      Value<String?>? dailyGenerationDate,
       Value<int>? dailyPdfExports,
       Value<String?>? dailyPdfExportDate,
-      Value<int>? dailyPreviewCount,
-      Value<String?>? dailyPreviewDate,
       Value<bool>? pendingDbReplacement,
       Value<String?>? vacuumedDbPath}) {
     return SecurityConfigCompanion(
@@ -8270,12 +8112,8 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
       syncPendingAfterBiometricTimeout: syncPendingAfterBiometricTimeout ??
           this.syncPendingAfterBiometricTimeout,
       currentDeviceId: currentDeviceId ?? this.currentDeviceId,
-      dailyGenerations: dailyGenerations ?? this.dailyGenerations,
-      dailyGenerationDate: dailyGenerationDate ?? this.dailyGenerationDate,
       dailyPdfExports: dailyPdfExports ?? this.dailyPdfExports,
       dailyPdfExportDate: dailyPdfExportDate ?? this.dailyPdfExportDate,
-      dailyPreviewCount: dailyPreviewCount ?? this.dailyPreviewCount,
-      dailyPreviewDate: dailyPreviewDate ?? this.dailyPreviewDate,
       pendingDbReplacement: pendingDbReplacement ?? this.pendingDbReplacement,
       vacuumedDbPath: vacuumedDbPath ?? this.vacuumedDbPath,
     );
@@ -8371,24 +8209,11 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
     if (currentDeviceId.present) {
       map['current_device_id'] = Variable<String>(currentDeviceId.value);
     }
-    if (dailyGenerations.present) {
-      map['daily_generations'] = Variable<int>(dailyGenerations.value);
-    }
-    if (dailyGenerationDate.present) {
-      map['daily_generation_date'] =
-          Variable<String>(dailyGenerationDate.value);
-    }
     if (dailyPdfExports.present) {
       map['daily_pdf_exports'] = Variable<int>(dailyPdfExports.value);
     }
     if (dailyPdfExportDate.present) {
       map['daily_pdf_export_date'] = Variable<String>(dailyPdfExportDate.value);
-    }
-    if (dailyPreviewCount.present) {
-      map['daily_preview_count'] = Variable<int>(dailyPreviewCount.value);
-    }
-    if (dailyPreviewDate.present) {
-      map['daily_preview_date'] = Variable<String>(dailyPreviewDate.value);
     }
     if (pendingDbReplacement.present) {
       map['pending_db_replacement'] =
@@ -8431,12 +8256,8 @@ class SecurityConfigCompanion extends UpdateCompanion<SecurityConfigData> {
           ..write(
               'syncPendingAfterBiometricTimeout: $syncPendingAfterBiometricTimeout, ')
           ..write('currentDeviceId: $currentDeviceId, ')
-          ..write('dailyGenerations: $dailyGenerations, ')
-          ..write('dailyGenerationDate: $dailyGenerationDate, ')
           ..write('dailyPdfExports: $dailyPdfExports, ')
           ..write('dailyPdfExportDate: $dailyPdfExportDate, ')
-          ..write('dailyPreviewCount: $dailyPreviewCount, ')
-          ..write('dailyPreviewDate: $dailyPreviewDate, ')
           ..write('pendingDbReplacement: $pendingDbReplacement, ')
           ..write('vacuumedDbPath: $vacuumedDbPath')
           ..write(')'))
@@ -18211,12 +18032,8 @@ typedef $$SecurityConfigTableCreateCompanionBuilder = SecurityConfigCompanion
   Value<DateTime?> sessionKeyExpiry,
   Value<bool> syncPendingAfterBiometricTimeout,
   required String currentDeviceId,
-  Value<int> dailyGenerations,
-  Value<String?> dailyGenerationDate,
   Value<int> dailyPdfExports,
   Value<String?> dailyPdfExportDate,
-  Value<int> dailyPreviewCount,
-  Value<String?> dailyPreviewDate,
   Value<bool> pendingDbReplacement,
   Value<String?> vacuumedDbPath,
 });
@@ -18248,12 +18065,8 @@ typedef $$SecurityConfigTableUpdateCompanionBuilder = SecurityConfigCompanion
   Value<DateTime?> sessionKeyExpiry,
   Value<bool> syncPendingAfterBiometricTimeout,
   Value<String> currentDeviceId,
-  Value<int> dailyGenerations,
-  Value<String?> dailyGenerationDate,
   Value<int> dailyPdfExports,
   Value<String?> dailyPdfExportDate,
-  Value<int> dailyPreviewCount,
-  Value<String?> dailyPreviewDate,
   Value<bool> pendingDbReplacement,
   Value<String?> vacuumedDbPath,
 });
@@ -18368,28 +18181,12 @@ class $$SecurityConfigTableFilterComposer
       column: $table.currentDeviceId,
       builder: (column) => ColumnFilters(column));
 
-  ColumnFilters<int> get dailyGenerations => $composableBuilder(
-      column: $table.dailyGenerations,
-      builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<String> get dailyGenerationDate => $composableBuilder(
-      column: $table.dailyGenerationDate,
-      builder: (column) => ColumnFilters(column));
-
   ColumnFilters<int> get dailyPdfExports => $composableBuilder(
       column: $table.dailyPdfExports,
       builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get dailyPdfExportDate => $composableBuilder(
       column: $table.dailyPdfExportDate,
-      builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<int> get dailyPreviewCount => $composableBuilder(
-      column: $table.dailyPreviewCount,
-      builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<String> get dailyPreviewDate => $composableBuilder(
-      column: $table.dailyPreviewDate,
       builder: (column) => ColumnFilters(column));
 
   ColumnFilters<bool> get pendingDbReplacement => $composableBuilder(
@@ -18513,28 +18310,12 @@ class $$SecurityConfigTableOrderingComposer
       column: $table.currentDeviceId,
       builder: (column) => ColumnOrderings(column));
 
-  ColumnOrderings<int> get dailyGenerations => $composableBuilder(
-      column: $table.dailyGenerations,
-      builder: (column) => ColumnOrderings(column));
-
-  ColumnOrderings<String> get dailyGenerationDate => $composableBuilder(
-      column: $table.dailyGenerationDate,
-      builder: (column) => ColumnOrderings(column));
-
   ColumnOrderings<int> get dailyPdfExports => $composableBuilder(
       column: $table.dailyPdfExports,
       builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get dailyPdfExportDate => $composableBuilder(
       column: $table.dailyPdfExportDate,
-      builder: (column) => ColumnOrderings(column));
-
-  ColumnOrderings<int> get dailyPreviewCount => $composableBuilder(
-      column: $table.dailyPreviewCount,
-      builder: (column) => ColumnOrderings(column));
-
-  ColumnOrderings<String> get dailyPreviewDate => $composableBuilder(
-      column: $table.dailyPreviewDate,
       builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<bool> get pendingDbReplacement => $composableBuilder(
@@ -18637,23 +18418,11 @@ class $$SecurityConfigTableAnnotationComposer
   GeneratedColumn<String> get currentDeviceId => $composableBuilder(
       column: $table.currentDeviceId, builder: (column) => column);
 
-  GeneratedColumn<int> get dailyGenerations => $composableBuilder(
-      column: $table.dailyGenerations, builder: (column) => column);
-
-  GeneratedColumn<String> get dailyGenerationDate => $composableBuilder(
-      column: $table.dailyGenerationDate, builder: (column) => column);
-
   GeneratedColumn<int> get dailyPdfExports => $composableBuilder(
       column: $table.dailyPdfExports, builder: (column) => column);
 
   GeneratedColumn<String> get dailyPdfExportDate => $composableBuilder(
       column: $table.dailyPdfExportDate, builder: (column) => column);
-
-  GeneratedColumn<int> get dailyPreviewCount => $composableBuilder(
-      column: $table.dailyPreviewCount, builder: (column) => column);
-
-  GeneratedColumn<String> get dailyPreviewDate => $composableBuilder(
-      column: $table.dailyPreviewDate, builder: (column) => column);
 
   GeneratedColumn<bool> get pendingDbReplacement => $composableBuilder(
       column: $table.pendingDbReplacement, builder: (column) => column);
@@ -18715,12 +18484,8 @@ class $$SecurityConfigTableTableManager extends RootTableManager<
             Value<DateTime?> sessionKeyExpiry = const Value.absent(),
             Value<bool> syncPendingAfterBiometricTimeout = const Value.absent(),
             Value<String> currentDeviceId = const Value.absent(),
-            Value<int> dailyGenerations = const Value.absent(),
-            Value<String?> dailyGenerationDate = const Value.absent(),
             Value<int> dailyPdfExports = const Value.absent(),
             Value<String?> dailyPdfExportDate = const Value.absent(),
-            Value<int> dailyPreviewCount = const Value.absent(),
-            Value<String?> dailyPreviewDate = const Value.absent(),
             Value<bool> pendingDbReplacement = const Value.absent(),
             Value<String?> vacuumedDbPath = const Value.absent(),
           }) =>
@@ -18751,12 +18516,8 @@ class $$SecurityConfigTableTableManager extends RootTableManager<
             sessionKeyExpiry: sessionKeyExpiry,
             syncPendingAfterBiometricTimeout: syncPendingAfterBiometricTimeout,
             currentDeviceId: currentDeviceId,
-            dailyGenerations: dailyGenerations,
-            dailyGenerationDate: dailyGenerationDate,
             dailyPdfExports: dailyPdfExports,
             dailyPdfExportDate: dailyPdfExportDate,
-            dailyPreviewCount: dailyPreviewCount,
-            dailyPreviewDate: dailyPreviewDate,
             pendingDbReplacement: pendingDbReplacement,
             vacuumedDbPath: vacuumedDbPath,
           ),
@@ -18787,12 +18548,8 @@ class $$SecurityConfigTableTableManager extends RootTableManager<
             Value<DateTime?> sessionKeyExpiry = const Value.absent(),
             Value<bool> syncPendingAfterBiometricTimeout = const Value.absent(),
             required String currentDeviceId,
-            Value<int> dailyGenerations = const Value.absent(),
-            Value<String?> dailyGenerationDate = const Value.absent(),
             Value<int> dailyPdfExports = const Value.absent(),
             Value<String?> dailyPdfExportDate = const Value.absent(),
-            Value<int> dailyPreviewCount = const Value.absent(),
-            Value<String?> dailyPreviewDate = const Value.absent(),
             Value<bool> pendingDbReplacement = const Value.absent(),
             Value<String?> vacuumedDbPath = const Value.absent(),
           }) =>
@@ -18823,12 +18580,8 @@ class $$SecurityConfigTableTableManager extends RootTableManager<
             sessionKeyExpiry: sessionKeyExpiry,
             syncPendingAfterBiometricTimeout: syncPendingAfterBiometricTimeout,
             currentDeviceId: currentDeviceId,
-            dailyGenerations: dailyGenerations,
-            dailyGenerationDate: dailyGenerationDate,
             dailyPdfExports: dailyPdfExports,
             dailyPdfExportDate: dailyPdfExportDate,
-            dailyPreviewCount: dailyPreviewCount,
-            dailyPreviewDate: dailyPreviewDate,
             pendingDbReplacement: pendingDbReplacement,
             vacuumedDbPath: vacuumedDbPath,
           ),

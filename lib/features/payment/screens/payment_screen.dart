@@ -324,9 +324,8 @@ Widget _buildPlanCard({
                 ),
               ),
               const Divider(height: 24),
-              // Feature rows
-              _featureRow('Daily credits', plan.dailyPreviews),
-              _featureRow('Daily generations', plan.dailyGenerations),
+              // Feature rows — one unified daily-credit quota per tier (2F.3)
+              _featureRow('Daily credits', plan.dailyCredits),
               _featureRow('Subjects', plan.subjects),
               _featureRow('PDF exports', plan.pdfExports),
               _featureRow('Vault publishing', plan.vaultPublishing),
@@ -359,8 +358,7 @@ Widget _buildPlanCard({
 List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
   final config = ref.read(configServiceProvider);
   final prices = config.subscriptionPrices;
-  final previewLimits = config.dailyPreviewLimits;
-  final generationLimits = config.dailyGenerationLimits;
+  final dailyCreditsLimits = config.dailyCreditsLimit;
   final pdfLimits = config.pdfExportLimits;
   final examGenTiers = config.examGenerationAllowedTiers;
   final bulkPdfTiers = config.bulkPdfExportAllowedTiers;
@@ -402,8 +400,7 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
       tier: 'free',
       name: 'Free',
       price: 'Free',
-      previewLimit: _tierLimitText(previewLimits['free'], fallback: 0),
-      dailyGenerations: _tierLimitText(generationLimits['free'], fallback: 0),
+      dailyCredits: _tierLimitText(dailyCreditsLimits['free'], fallback: 3),
       subjects: _subjectsLabel('free'),
       pdfExports: _tierLimitText(pdfLimits['free'], fallback: 1),
       vaultPublishing: false,
@@ -418,8 +415,7 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
       tier: 'basic',
       name: 'Basic',
       price: _tierPrice(prices['basic'], AppConstants.basicPlanPriceNaira),
-      previewLimit: _tierLimitText(previewLimits['basic'], fallback: 10),
-      dailyGenerations: _tierLimitText(generationLimits['basic'], fallback: 5),
+      dailyCredits: _tierLimitText(dailyCreditsLimits['basic'], fallback: 1),
       subjects: _subjectsLabel('basic'),
       pdfExports: _tierLimitText(pdfLimits['basic'], fallback: 3),
       vaultPublishing: false,
@@ -434,8 +430,7 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
       tier: 'standard',
       name: 'Standard',
       price: _tierPrice(prices['standard'], AppConstants.standardPlanPriceNaira),
-      previewLimit: _tierLimitText(previewLimits['standard'], fallback: 10),
-      dailyGenerations: _tierLimitText(generationLimits['standard'], fallback: 10),
+      dailyCredits: _tierLimitText(dailyCreditsLimits['standard'], fallback: 3),
       subjects: _subjectsLabel('standard'),
       pdfExports: _tierLimitText(pdfLimits['standard'], fallback: 5),
       vaultPublishing: true,
@@ -450,8 +445,7 @@ List<_TierComparisonRow> _buildTierComparisonRows(WidgetRef ref) {
       tier: 'elite',
       name: 'Elite',
       price: _tierPrice(prices['elite'], AppConstants.elitePlanPriceNaira),
-      previewLimit: _tierLimitText(previewLimits['elite'], fallback: -1),
-      dailyGenerations: _tierLimitText(generationLimits['elite'], fallback: -1),
+      dailyCredits: _tierLimitText(dailyCreditsLimits['elite'], fallback: -1),
       subjects: _subjectsLabel('elite'),
       pdfExports: _tierLimitText(pdfLimits['elite'], fallback: -1),
       vaultPublishing: true,
@@ -1217,8 +1211,7 @@ class _TierComparisonRow {
   final String tier;
   final String name;
   final String price;
-  final String previewLimit;
-  final String dailyGenerations;
+  final String dailyCredits;
   final String subjects;
   final String pdfExports;
   final bool vaultPublishing;
@@ -1229,14 +1222,12 @@ class _TierComparisonRow {
   final bool examGeneration;
   final bool bulkPdfExport;
 
-  String get dailyPreviews => previewLimit;
 
   const _TierComparisonRow({
     required this.tier,
     required this.name,
     required this.price,
-    required this.previewLimit,
-    required this.dailyGenerations,
+    required this.dailyCredits,
     required this.subjects,
     required this.pdfExports,
     required this.vaultPublishing,

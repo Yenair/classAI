@@ -109,7 +109,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 30;
+  int get schemaVersion => 31;
 
   static QueryExecutor _openConnection() {
     final security = SecurityService();
@@ -1155,6 +1155,24 @@ class AppDatabase extends _$AppDatabase {
             // reset at day rollover. Purely additive — no data is removed.
             await customStatement(
               'ALTER TABLE security_config ADD COLUMN daily_credits_date TEXT NULL',
+            );
+          }
+          if (from < 31) {
+            // R2 Block 4 (2A.6a/2A.6b): the manual unlock flow is gone —
+            // unlock content generated under the old flow so it does not
+            // become permanently read-only. Lessons are matched by status;
+            // exams by whether their content JSON holds any question
+            // (legacy encrypted rows stay locked — audit manually).
+            await customStatement(
+              "UPDATE lessons SET is_unlocked = 1 "
+              "WHERE is_unlocked = 0 AND status IN ('generated', 'completed')",
+            );
+            await customStatement(
+              "UPDATE exams SET is_unlocked = 1 "
+              "WHERE is_unlocked = 0 AND ("
+              "COALESCE(json_array_length(json_extract(content, '\$.mcqs')), 0) > 0 "
+              "OR COALESCE(json_array_length(json_extract(content, '\$.theory')), 0) > 0 "
+              "OR COALESCE(json_array_length(json_extract(content, '\$.subjective')), 0) > 0)",
             );
           }
         },

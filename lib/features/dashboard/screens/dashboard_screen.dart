@@ -532,7 +532,7 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
                       // Sync indicator (Stitch green dot style)
                       const _SyncChip(),
                       const SizedBox(width: 8),
-                      // Offline credit chip
+                      // Daily credits chip (R2 unified pool)
                       _DailyCreditsChip(visible: ref.watch(isOfflineProvider)),
                       const SizedBox(width: 8),
                       // Login button — only visible for guest users
@@ -898,7 +898,9 @@ class _DailyCreditsChip extends ConsumerWidget {
               Text(
                 dailyCreditData.loading
                     ? '…'
-                    : '${dailyCreditData.currentDailyCredits}',
+                    : (dailyCreditData.currentDailyCredits < 0
+                        ? '∞'
+                        : '${dailyCreditData.currentDailyCredits}'),
                 style: theme.textTheme.labelLarge?.copyWith(
                   fontWeight: FontWeight.w700,
                   color: cs.primary,
@@ -958,9 +960,9 @@ class _DailyCreditsChip extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                'Daily credits let you access lessons, exams, and '
-                'content even without an internet connection. '
-                'Each unlock uses 1 credit.',
+                'Daily credits are spent each time you generate a lesson or '
+                'exam with AI, or acquire an item from the vault. '
+                'Your balance refills every day based on your plan.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: cs.onSurfaceVariant,
                   height: 1.5,
@@ -1990,9 +1992,9 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Daily credits let you access lessons, exams, and '
-                'content even without an internet connection. '
-                'Each unlock uses 1 credit.',
+                'Daily credits are spent each time you generate a lesson or '
+                'exam with AI, or acquire an item from the vault. '
+                'Your balance refills every day based on your plan.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: cs.onSurfaceVariant,
                   height: 1.5,

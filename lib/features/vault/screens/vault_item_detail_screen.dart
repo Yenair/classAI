@@ -350,6 +350,17 @@ class VaultItemDetailScreen extends ConsumerWidget {
           await ref.read(dailyCreditStateProvider.notifier).refresh();
           Navigator.of(context).pop(); // Go back to vault browser
         }
+      } on OfflineCreditInsufficientException catch (e) {
+        // 2B.6/2G: no InsufficientOfflineCreditScreen — the vault UI shows
+        // its own insufficient-credit message.
+        if (context.mounted) {
+          showInfoToast(
+            context: context,
+            message:
+                'Not enough daily credits — you have ${e.available}, '
+                'need ${e.required}. Upgrade or try again tomorrow.',
+          );
+        }
       } catch (e) {
         if (context.mounted) {
           showErrorToast(

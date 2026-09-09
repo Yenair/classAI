@@ -6,11 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uuid/uuid.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/core/services/ai_service.dart';
-import 'package:classai/core/services/credit_service.dart';
 import 'package:classai/core/services/exam_generation_service.dart';
 import 'package:classai/core/services/question_validation.dart';
 import 'package:classai/core/constants/prompt_templates.dart';
@@ -64,8 +62,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   bool _editorSidebarOpen = false;
   bool _sidebarInitialized = false;
   int _dailyCreditBalance = 3;
-  int _remainingDailyPreviews = 10;
-  int _remainingDailyGenerations = 5;
+  // Unified daily credits (R2): -1 means unlimited (elite). One pool
+  // replaced the old per-feature preview/generation counters (2E.8).
+  int _dailyCredits = 0;
   String? _teacherId;
   String? _schoolId;
   String _subscriptionTier = 'free';
@@ -169,7 +168,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _registerWithEmergencyFlush();
       _loadDailyCreditBalance();
-      _loadDailyPreviewData();
+      _loadDailyCredits();
       _loadAuthInfo();
       _loadSubjects();
       _loadSchemesForContext();
@@ -636,31 +635,13 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
     } catch (_) {}
   }
 
-  Future<void> _loadDailyPreviewData() async {
+  /// Loads the remaining unified daily credits (2E.8). Replaces the old
+  /// per-feature preview/generation loaders removed in 2E.7.
+  Future<void> _loadDailyCredits() async {
     try {
-      final db = ref.read(databaseProvider);
-      final config = await db.securityConfigDao.get();
-      final today = DateTime.now().toIso8601String().split('T').first;
-      final currentCount = config.dailyPreviewCount;
-      final currentDate = config.dailyPreviewDate ?? '';
-      // Reset counter if date changed
-      int count = currentCount;
-      if (currentDate != today) {
-        count = 0;
-      }
-      // Calculate remaining previews based on tier
-      const limits = {'free': 10, 'basic': 10, 'standard': 10, 'elite': -1};
-      final limit = limits[_subscriptionTier] ?? 10;
-      final remaining = limit < 0 ? -1 : (limit - count).clamp(0, limit);
-      // Generations
-      final remainingGen = await db.securityConfigDao
-          .getRemainingDailyGenerations(tier: _subscriptionTier);
-      if (mounted) {
-        setState(() {
-          _remainingDailyPreviews = remaining;
-          _remainingDailyGenerations = remainingGen;
-        });
-      }
+      final remaining = await ref.read(databaseProvider).securityConfigDao
+          .getRemainingDailyCredits(tier: _subscriptionTier);
+      if (mounted) setState(() => _dailyCredits = remaining);
     } catch (_) {}
   }
 
@@ -1600,7 +1581,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                           isFromSchemeOfWork: _isFromSchemeOfWork,
                                           isManualTopicEntry: _isManualTopicEntry,
                                           selectedLessonId: _selectedLessonId,
-                                          remainingDailyGenerations: _remainingDailyGenerations,
+                                          remainingDailyGenerations: _dailyCredits,
                                           onWeekChanged: (v) {
                                             setState(() => _week = v);
                                             _refreshSavedLessonAvailability();
@@ -1621,7 +1602,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                           isUnlocked: _isUnlocked,
                                           isOnline: _isOnline,
                                           subscriptionTier: _subscriptionTier,
-                                          remainingDailyPreviews: _remainingDailyPreviews,
+                                          remainingDailyCredits: _dailyCredits,
                                           mcqs: _mcqs,
                                           theoryQuestions: _theoryQuestions,
                                           subjectiveQuestions: _subjectiveQuestions,
@@ -1705,7 +1686,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                         isFromSchemeOfWork: _isFromSchemeOfWork,
                                         isManualTopicEntry: _isManualTopicEntry,
                                         selectedLessonId: _selectedLessonId,
-                                        remainingDailyGenerations: _remainingDailyGenerations,
+                                        remainingDailyGenerations: _dailyCredits,
                                         onWeekChanged: (v) {
                                             setState(() => _week = v);
                                             _refreshSavedLessonAvailability();
@@ -1724,7 +1705,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                                       isUnlocked: _isUnlocked,
                                       isOnline: _isOnline,
                                       subscriptionTier: _subscriptionTier,
-                                      remainingDailyPreviews: _remainingDailyPreviews,
+                                      remainingDailyCredits: _dailyCredits,
                                       mcqs: _mcqs,
                                       theoryQuestions: _theoryQuestions,
                                       subjectiveQuestions: _subjectiveQuestions,
@@ -2494,14 +2475,14 @@ class _ConfigPanel extends StatelessWidget {
                 ),
               ),
 
-              // Remaining daily generations indicator
+              // Remaining unified daily credits indicator
               if (remainingDailyGenerations >= 0)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
                     remainingDailyGenerations == 0
-                        ? 'No generations left today'
-                        : '$remainingDailyGenerations generation${remainingDailyGenerations == 1 ? '' : 's'} left today',
+                        ? 'No credits left today'
+                        : '$remainingDailyGenerations credit${remainingDailyGenerations == 1 ? '' : 's'} left today',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: remainingDailyGenerations == 0
                           ? cs.error
@@ -2656,7 +2637,7 @@ class _PreviewPanel extends StatelessWidget {
   final bool isUnlocked;
   final bool isOnline;
   final String subscriptionTier;
-  final int remainingDailyPreviews;
+  final int remainingDailyCredits;
   final List<Map<String, dynamic>> mcqs;
   final List<Map<String, dynamic>> theoryQuestions;
   final List<Map<String, dynamic>> subjectiveQuestions;
@@ -2676,7 +2657,7 @@ class _PreviewPanel extends StatelessWidget {
     required this.isUnlocked,
     required this.isOnline,
     required this.subscriptionTier,
-    this.remainingDailyPreviews = 10,
+    this.remainingDailyCredits = 0,
     required this.mcqs,
     required this.theoryQuestions,
     required this.subjectiveQuestions,

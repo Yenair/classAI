@@ -8,13 +8,11 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:classai/features/settings/providers/text_scale_provider.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/providers/emergency_flush_provider.dart';
 import 'package:classai/core/services/ai_service.dart';
-import 'package:classai/core/services/credit_service.dart';
 import 'package:classai/core/services/emergency_flush_service.dart';
 import 'package:classai/core/services/question_validation.dart';
 import 'package:classai/core/constants/prompt_templates.dart';
@@ -223,9 +221,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   bool _isExporting = false;
   bool _editorSidebarOpen = false;
   bool _sidebarInitialized = false;
-  int _dailyCreditBalance = 0;
-  int _remainingDailyPreviews = 10;
-  int _remainingDailyGenerations = 5;
+  int _dailyCredits = 0;
   String? _teacherId;
   String? _schoolId;
   String _subscriptionTier = 'free';
@@ -752,7 +748,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _registerWithEmergencyFlush();
       _loadDailyCreditBalance();
-      _loadDailyPreviewData();
+      _loadDailyCredits();
       _loadAuthInfo();
       _loadSchemesForContext();
       _loadVisibleSectionPrefs();
@@ -922,40 +918,20 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     } catch (_) {}
   }
 
-  Future<void> _loadDailyPreviewData() async {
+  /// Loads the remaining unified daily credits (2E.8). Replaces the old
+  /// per-feature preview/generation loaders removed in 2E.7.
+  Future<void> _loadDailyCredits() async {
     try {
-      final db = ref.read(databaseProvider);
-      // Previews
-      final config = await db.securityConfigDao.get();
-      final today = DateTime.now().toIso8601String().split('T').first;
-      final currentCount = config.dailyPreviewCount;
-      final currentDate = config.dailyPreviewDate ?? '';
-      int count = currentCount;
-      if (currentDate != today) {
-        count = 0;
-      }
-      const limits = {'free': 10, 'basic': 10, 'standard': 10, 'elite': -1};
-      final limit = limits[_subscriptionTier] ?? 10;
-      final remaining = limit < 0 ? -1 : (limit - count).clamp(0, limit);
-      // Generations
-      final remainingGen = await db.securityConfigDao
-          .getRemainingDailyGenerations(tier: _subscriptionTier);
-      if (mounted) {
-        setState(() {
-          _remainingDailyPreviews = remaining;
-          _remainingDailyGenerations = remainingGen;
-        });
-      }
+      final remaining = await ref.read(databaseProvider).securityConfigDao
+          .getRemainingDailyCredits(tier: _subscriptionTier);
+      if (mounted) setState(() => _dailyCredits = remaining);
     } catch (_) {}
   }
 
   Future<void> _loadDailyCreditBalance() async {
     try {
+      // Refresh the shared provider; the chip widgets watch it directly.
       await ref.read(dailyCreditStateProvider.notifier).refresh();
-      if (mounted) {
-        setState(() => _dailyCreditBalance =
-            ref.read(dailyCreditStateProvider).currentDailyCredits);
-      }
     } catch (_) {}
   }
 
@@ -2913,7 +2889,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       isUnlocked: _isUnlocked,
       isOnline: _isOnline,
       subscriptionTier: _subscriptionTier,
-      remainingDailyPreviews: _remainingDailyPreviews,
+      remainingDailyCredits: _dailyCredits,
       isRegenerating: _isRegenerating,
       assessmentAllowedTiers: ref
           .read(configServiceProvider)
@@ -3411,16 +3387,16 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                           ],
                                         ),
                                       ),
-                                      // Remaining daily generations indicator
-                                      if (_remainingDailyGenerations >= 0 && _subscriptionTier != 'free')
+                                      // Remaining unified daily credits indicator
+                                      if (_dailyCredits >= 0 && _subscriptionTier != 'free')
                                         Padding(
                                           padding: const EdgeInsets.only(top: 8),
                                           child: Text(
-                                            _remainingDailyGenerations == 0
-                                                ? 'No generations left today'
-                                                : '$_remainingDailyGenerations generation${_remainingDailyGenerations == 1 ? '' : 's'} left today',
+                                            _dailyCredits == 0
+                                                ? 'No credits left today'
+                                                : '$_dailyCredits credit${_dailyCredits == 1 ? '' : 's'} left today',
                                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                              color: _remainingDailyGenerations == 0
+                                              color: _dailyCredits == 0
                                                   ? Theme.of(context).colorScheme.error
                                                   : Theme.of(context).colorScheme.onSurfaceVariant,
                                             ),
@@ -4503,7 +4479,7 @@ class _PreviewColumn extends StatefulWidget {
   final bool isOnline;
   final String subscriptionTier;
   final List<String> assessmentAllowedTiers;
-  final int remainingDailyPreviews;
+  final int remainingDailyCredits;
   final bool isRegenerating;
   final List<Map<String, dynamic>> diagramResults;
   final bool isGeneratingDiagrams;
@@ -4601,7 +4577,7 @@ class _PreviewColumn extends StatefulWidget {
     required this.isOnline,
     required this.subscriptionTier,
     required this.assessmentAllowedTiers,
-    this.remainingDailyPreviews = 10,
+    this.remainingDailyCredits = 0,
     this.isRegenerating = false,
     this.diagramResults = const [],
     this.isGeneratingDiagrams = false,
@@ -5064,7 +5040,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   bool get isOnline => widget.isOnline;
   String get subscriptionTier => widget.subscriptionTier;
   List<String> get assessmentAllowedTiers => widget.assessmentAllowedTiers;
-  int get remainingDailyPreviews => widget.remainingDailyPreviews;
+  int get remainingDailyCredits => widget.remainingDailyCredits;
   bool get isRegenerating => widget.isRegenerating;
   List<Map<String, dynamic>> get diagramResults => widget.diagramResults;
   bool get isGeneratingDiagrams => widget.isGeneratingDiagrams;

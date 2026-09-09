@@ -23,7 +23,6 @@ import 'package:classai/features/admin/screens/teacher_detail_screen.dart';
 // import 'package:classai/features/vault/screens/vault_publisher_screen.dart'; // Vault feature disabled
 import 'package:classai/features/payment/screens/payment_screen.dart';
 import 'package:classai/features/settings/screens/settings_screen.dart';
-import 'package:classai/features/credit/screens/insufficient_credit_screen.dart';
 import 'package:classai/features/scheme_of_work/screens/scheme_of_work_screen.dart';
 
 /// Counter-based notifier that triggers GoRouter's redirect guard to
@@ -235,11 +234,9 @@ final appRouter = GoRouter(
       name: 'payment',
       builder: (context, state) => const PaymentScreen(),
     ),
-    _route(
-      path: '/insufficient-offline-credit',
-      name: 'insufficient-offline-credit',
-      builder: (context, state) => const InsufficientOfflineCreditScreen(),
-    ),
+    // '/insufficient-offline-credit' route removed (2G.1/2G.2) — the
+    // insufficient-credit screen is gone; the credit chip opens the
+    // daily-credits details dialog instead.
     _route(
       path: '/scheme-of-work',
       name: 'scheme-of-work',

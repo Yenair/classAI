@@ -111,7 +111,7 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
     _StatusFilterItem('All', Icons.layers_rounded),
     _StatusFilterItem('Draft', Icons.edit_note_rounded),
     _StatusFilterItem('Completed', Icons.check_circle_rounded),
-    _StatusFilterItem('Unlocked', Icons.lock_open_rounded),
+    // 'Unlocked' filter removed (2F.1) — unlock is automatic now.
     _StatusFilterItem('Generated', Icons.auto_awesome_rounded),
   ];
 

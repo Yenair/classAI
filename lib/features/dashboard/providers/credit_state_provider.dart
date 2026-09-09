@@ -27,19 +27,25 @@ class DailyCreditStateNotifier extends Notifier<DailyCreditStateData> {
   AppDatabase get _db => ref.read(databaseProvider);
 
   /// Refresh credit state from the database.
+  ///
+  /// Reads the unified daily-credit pool (2F.2): the remaining balance for
+  /// today (never negative, capped at the tier limit) — read-only, no spend.
   Future<void> refresh() async {
     try {
-      final config = await _db.securityConfigDao.get();
       String tierName = 'Free';
+      String tier = 'free';
       try {
         final school = await _db.schoolsDao.get();
-        final tier = school?.subscriptionTier ?? 'free';
+        tier = (school?.subscriptionTier ?? 'free').toLowerCase();
         tierName = tier[0].toUpperCase() + tier.substring(1).toLowerCase();
       } catch (_) {
         tierName = 'Free';
       }
+      final remaining = await _db.securityConfigDao
+          .getRemainingDailyCredits(tier: tier);
+      // -1 = unlimited (elite); the chip renders it as ∞.
       state = DailyCreditStateData(
-        currentDailyCredits: config.offlineCredits,
+        currentDailyCredits: remaining,
         tierName: tierName,
       );
     } catch (e) {

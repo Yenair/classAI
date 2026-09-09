@@ -26,10 +26,6 @@ class FakeConfigService extends Fake implements ConfigService {
   final Map<String, dynamic> values;
 
   @override
-  Map<String, dynamic> get dailyGenerationLimits =>
-      values['daily_generation_limits'] as Map<String, dynamic>? ?? {};
-
-  @override
   Map<String, dynamic> get dailyCreditsLimit =>
       values['daily_credits_limit'] as Map<String, dynamic>? ?? {};
 

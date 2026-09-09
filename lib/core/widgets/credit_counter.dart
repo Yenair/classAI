@@ -58,8 +58,11 @@ class _DailyCreditsCounterState extends ConsumerState<DailyCreditsCounter>
 
     final dailyCreditData = ref.watch(dailyCreditStateProvider);
     final balance = dailyCreditData.currentDailyCredits;
+    // -1 = unlimited (elite) — never pulses, never shows as negative.
+    final isUnlimited = balance < 0;
 
-    if (_previousBalance >= 0 &&
+    if (!isUnlimited &&
+        _previousBalance >= 0 &&
         balance != _previousBalance &&
         !_pulseScheduled) {
       _pulseScheduled = true;
@@ -73,8 +76,7 @@ class _DailyCreditsCounterState extends ConsumerState<DailyCreditsCounter>
 
     final cs = Theme.of(context).colorScheme;
     final hasError = dailyCreditData.errorMessage != null;
-    final isPositive =
-        !hasError && dailyCreditData.currentDailyCredits > 0;
+    final isPositive = !hasError && (isUnlimited || balance > 0);
     final labelColor = hasError ? cs.error : (isPositive ? cs.primary : cs.error);
 
     return RepaintBoundary(
@@ -115,7 +117,7 @@ class _DailyCreditsCounterState extends ConsumerState<DailyCreditsCounter>
                 ? '—'
                 : (dailyCreditData.loading
                     ? '…'
-                    : '${dailyCreditData.currentDailyCredits}'),
+                    : (isUnlimited ? '∞' : '${dailyCreditData.currentDailyCredits}')),
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                   color: labelColor,
@@ -123,11 +125,9 @@ class _DailyCreditsCounterState extends ConsumerState<DailyCreditsCounter>
                 ),
           ),
           onPressed: () {
-            if (dailyCreditData.currentDailyCredits <= 0) {
-              context.push('/insufficient-offline-credit');
-            } else {
-              _showDailyCreditDetailsDialog(context, dailyCreditData);
-            }
+            // 2G.2: the insufficient-credit route is deleted — the chip
+            // always opens the credit details dialog now.
+            _showDailyCreditDetailsDialog(context, dailyCreditData);
           },
         ),
       ),

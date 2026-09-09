@@ -114,14 +114,9 @@ class ConfigService {
   /// Subscription prices as a map: { "basic": 49999, ... }
   Map<String, dynamic> get subscriptionPrices => getJsonMap('subscription_prices');
 
-  /// Daily preview limits per tier: { "free": 0, "basic": 10, ... }
-  Map<String, dynamic> get dailyPreviewLimits =>
-      getJsonMap('daily_preview_limits');
-
-  /// Daily AI generation limits per tier: { "free": 0, "basic": 5, "standard": 10, "elite": -1 }
-  /// Separate from preview limits — generations call the AI; previews may not.
-  Map<String, dynamic> get dailyGenerationLimits =>
-      getJsonMap('daily_generation_limits');
+  // NOTE (R2 Block 4): daily_preview_limits and daily_generation_limits
+  // were removed — the unified dailyCreditsLimit getter is the only
+  // generation/preview quota source now.
 
   /// Unified daily credit limits per tier:
   /// { "free": 3, "basic": 1, "standard": 3, "elite": -1 }

@@ -26,16 +26,9 @@ extension CurriculumTypeX on CurriculumType {
 
 enum SubscriptionTier { free, basic, standard, elite }
 
-extension SubscriptionTierX on SubscriptionTier {
-  int get offlineCredits {
-    switch (this) {
-      case SubscriptionTier.free: return 3;
-      case SubscriptionTier.basic: return 5;
-      case SubscriptionTier.standard: return 10;
-      case SubscriptionTier.elite: return 20;
-    }
-  }
-}
+// SubscriptionTierX.offlineCredits removed (2G.3) — hardcoded per-tier
+// balances are obsolete; limits come from the daily_credits_limit
+// remote-config key via ConfigService/SecurityConfigDao.
 
 /// Nigerian NERDC (National Educational Research and Development Council)
 /// subjects taught in Nigerian secondary schools (JSS and SSS).

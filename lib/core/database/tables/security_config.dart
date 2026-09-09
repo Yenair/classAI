@@ -50,14 +50,12 @@ class SecurityConfig extends Table {
   TextColumn get currentDeviceId => text()();
 
   // Daily counters for rate limiting
-  IntColumn get dailyGenerations => integer().withDefault(const Constant(0))();
-  TextColumn get dailyGenerationDate => text().nullable()();
+  // NOTE (R2 unification): the old dailyGenerations/dailyPreviewCount counter
+  // columns were removed from the Drift definition in Block 4 — the unified
+  // daily-credit pool above is the only generation/preview gate. They remain
+  // as unused columns in existing SQLite files (Drift ignores extra columns).
   IntColumn get dailyPdfExports => integer().withDefault(const Constant(0))();
   TextColumn get dailyPdfExportDate => text().nullable()();
-
-  // Daily preview counters (separate from generation)
-  IntColumn get dailyPreviewCount => integer().withDefault(const Constant(0))();
-  TextColumn get dailyPreviewDate => text().nullable()();
 
   // VACUUM
   BoolColumn get pendingDbReplacement =>

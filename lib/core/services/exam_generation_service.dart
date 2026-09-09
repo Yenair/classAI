@@ -435,7 +435,7 @@ class ExamGenerationService {
         schoolServerId: schoolServerId != null
             ? Value(schoolServerId)
             : const Value.absent(),
-        isUnlocked: const Value(false),
+        isUnlocked: const Value(true),
         weekNumber: Value(weekNumber),
         term: Value(termLabelStored),
       ),
@@ -454,7 +454,7 @@ class ExamGenerationService {
         'teacher_server_id': teacherServerId,
         'school_server_id': schoolServerId,
         'content': contentJson,
-        'is_unlocked': false,
+        'is_unlocked': true,
         'week_number': weekNumber,
         'term': termLabelStored,
       },

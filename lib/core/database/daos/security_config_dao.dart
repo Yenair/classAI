@@ -44,8 +44,6 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
     DateTime? lastSeenTime,
     DateTime? lastKnownGoodTime,
     double? monotonicLastSeen,
-    int? dailyPreviewCount,
-    String? dailyPreviewDate,
     String? dailyCreditsDate,
   }) async {
     final config = await get();
@@ -120,12 +118,6 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
         monotonicLastSeen: monotonicLastSeen != null
             ? Value(monotonicLastSeen)
             : const Value.absent(),
-        dailyPreviewCount: dailyPreviewCount != null
-            ? Value(dailyPreviewCount)
-            : const Value.absent(),
-        dailyPreviewDate: dailyPreviewDate != null
-            ? Value(dailyPreviewDate)
-            : const Value.absent(),
         dailyCreditsDate: dailyCreditsDate != null
             ? Value(dailyCreditsDate)
             : const Value.absent(),
@@ -133,8 +125,8 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
     );
 
     // security_config is a per-device local table with no server-side
-    // counterpart.  The data it holds (offline credits, daily preview
-    // counters, deviceId, etc.) is never pushed to the server.
+    // counterpart.  The data it holds (daily credits, deviceId, etc.) is
+    // never pushed to the server.
     // Inserting a sync-queue entry here would produce an UPDATE against
     // the `security_config` PostgREST endpoint, which returns 404
     // because the relation does not exist on the server — causing stuck
@@ -161,28 +153,6 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
 
   void setConfigService(ConfigService config) {
     _config = config;
-  }
-
-  /// Reads the daily preview limit for [tier] from remote config, falling
-  /// back to the hardcoded defaults.
-  int _previewLimit(String tier) {
-    final limits = _config?.dailyPreviewLimits;
-    if (limits != null && limits[tier] is int) {
-      return limits[tier] as int;
-    }
-    const defaults = {'free': 0, 'basic': 10, 'standard': 10, 'elite': -1};
-    return defaults[tier] ?? 10;
-  }
-
-  /// Reads the daily AI generation limit for [tier] from remote config,
-  /// falling back to the hardcoded defaults.
-  int _generationLimit(String tier) {
-    final limits = _config?.dailyGenerationLimits;
-    if (limits != null && limits[tier] is int) {
-      return limits[tier] as int;
-    }
-    const defaults = {'free': 0, 'basic': 5, 'standard': 10, 'elite': -1};
-    return defaults[tier] ?? 5;
   }
 
   /// Reads the daily PDF export limit for [tier] from remote config, falling
@@ -283,78 +253,11 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
   // Daily counter methods for rate limiting
   // -----------------------------------------------------------------------
 
-  /// Check and increment the daily generation counter.
-  /// Returns true if the generation is allowed, false if limit exceeded.
-  /// Also resets the counter if the date has changed.
-  Future<bool> checkAndIncrementDailyGenerations({required String tier}) async {
-    final config = await get();
-    final today = DateTime.now().toIso8601String().split('T').first;
-    final currentCount = config.dailyGenerations;
-    final currentDate = config.dailyGenerationDate;
-
-    // Reset counter if date changed
-    int newCount = currentCount;
-    String newDate = currentDate ?? '';
-
-    if (currentDate != today) {
-      newCount = 0;
-      newDate = today;
-    }
-
-    // Check limit based on tier — uses _generationLimit, NOT _previewLimit
-    final limit = _generationLimit(tier);
-
-    if (limit > 0 && newCount >= limit) {
-      return false; // Limit exceeded
-    }
-
-    // Increment and save
-    await (update(securityConfig)..where((t) => t.id.equals(config.id))).write(
-      SecurityConfigCompanion(
-        dailyGenerations: Value(newCount + 1),
-        dailyGenerationDate: Value(newDate),
-      ),
-    );
-
-    return true;
-  }
-
-  /// Check and increment the daily preview counter.
-  /// Returns true if the preview is allowed, false if limit exceeded.
-  /// Also resets the counter if the date has changed.
-  /// Elite tier has unlimited previews.
-  Future<bool> checkAndIncrementDailyPreviews({required String tier}) async {
-    final config = await get();
-    final today = DateTime.now().toIso8601String().split('T').first;
-    final currentCount = config.dailyPreviewCount;
-    final currentDate = config.dailyPreviewDate;
-
-    // Reset counter if date changed
-    int newCount = currentCount;
-    String newDate = currentDate ?? '';
-
-    if (currentDate != today) {
-      newCount = 0;
-      newDate = today;
-    }
-
-    // Check limit based on tier
-    final limit = _previewLimit(tier);
-
-    if (limit > 0 && newCount >= limit) {
-      return false; // Limit exceeded
-    }
-
-    // Increment and save
-    await (update(securityConfig)..where((t) => t.id.equals(config.id))).write(
-      SecurityConfigCompanion(
-        dailyPreviewCount: Value(newCount + 1),
-        dailyPreviewDate: Value(newDate),
-      ),
-    );
-
-    return true;
-  }
+  // NOTE (R2 Block 4, 2B.7/2B.8): the legacy generation/preview counter
+  // methods (checkAndIncrementDailyGenerations, checkAndIncrementDailyPreviews,
+  // _previewLimit, _generationLimit, getRemainingDailyGenerations,
+  // getDailyGenerationLimit and their helpers) were removed — the unified
+  // daily-credit pool above is the only generation/preview gate.
 
   /// Check and increment the daily PDF export counter.
   /// Returns true if the export is allowed, false if limit exceeded.
@@ -390,30 +293,6 @@ class SecurityConfigDao extends DatabaseAccessor<AppDatabase>
     );
 
     return true;
-  }
-
-  /// Get remaining daily generations for today.
-  /// Returns -1 for unlimited (elite), or the count remaining (>= 0).
-  Future<int> getRemainingDailyGenerations({required String tier}) async {
-    final config = await get();
-    final today = DateTime.now().toIso8601String().split('T').first;
-
-    if (config.dailyGenerationDate != today) {
-      return _getTierGenerationLimit(tier);
-    }
-
-    final limit = _generationLimit(tier);
-    if (limit < 0) return -1; // Unlimited
-    return (limit - config.dailyGenerations).clamp(0, limit);
-  }
-
-  /// The tier's daily generation limit (remote-config value with the
-  /// hardcoded fallback). Public so limit-reached messaging can include
-  /// the usage, e.g. "Daily generation limit reached (5/5 today)."
-  int getDailyGenerationLimit(String tier) => _generationLimit(tier);
-
-  int _getTierGenerationLimit(String tier) {
-    return _generationLimit(tier);
   }
 
   /// Get remaining PDF exports for today.
