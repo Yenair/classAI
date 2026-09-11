@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:classai/core/widgets/app_toast.dart';
+import 'package:classai/core/widgets/app_side_nav.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/settings/providers/theme_provider.dart';
 import 'package:classai/features/settings/providers/text_scale_provider.dart';
@@ -225,156 +226,57 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   // ---------------------------------------------------------------
-  // Nav Drawer (Desktop)
+  // Nav Drawer (Desktop) — shared AppSideNav (Lesson Editor design)
   // ---------------------------------------------------------------
   Widget _buildNavDrawer(
       ColorScheme cs, TextTheme textTheme, AuthStateData authData) {
-    return Container(
-      width: 288,
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        border: Border(
-          right: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.3)),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 24),
-          // Branding
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'ClassAI',
-                  style: textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    color: cs.primary,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Nigerian Academic Partner',
-                  style: textTheme.bodyMedium?.copyWith(
-                    color: cs.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Educator avatar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: cs.primaryContainer,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(
-                      _getInitials(
-                          authData.currentTeacher?.teacherName ?? 'T'),
-                      style: textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: cs.onPrimaryContainer,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Text(
-                  authData.currentTeacher?.teacherName ?? 'Educator Profile',
-                  style: textTheme.labelLarge?.copyWith(
-                    color: cs.primary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Nav items
-          Expanded(
-            child: ListView(
-
-              physics: (Platform.isAndroid || Platform.isIOS)
-                  ? const BouncingScrollPhysics()
-                  : null,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              children: [
-                // Teacher-only nav items — hidden for admins
-                if (authData.currentTeacher?.role != 'admin') ...[
-                  _SettingsNavItem(
-                      icon: Icons.home_rounded,
-                      label: 'Home',
-                      isActive: false,
-                      cs: cs,
-                      textTheme: textTheme,
-                      onTap: () => context.go('/')),
-                  const SizedBox(height: 4),
-                  _SettingsNavItem(
-                      icon: Icons.menu_book_rounded,
-                      label: 'Lessons',
-                      isActive: false,
-                      cs: cs,
-                      textTheme: textTheme,
-                      onTap: () => _goToLessonsDeferred(context)),
-                  const SizedBox(height: 4),
-                  _SettingsNavItem(
-                      icon: Icons.quiz_rounded,
-                      label: 'Exams',
-                      isActive: false,
-                      cs: cs,
-                      textTheme: textTheme,
-                      onTap: () => context.push('/exams')),
-                  const SizedBox(height: 4),
-                ],
-                // _SettingsNavItem(
-                //     icon: Icons.inventory_2_rounded,
-                //     label: 'Vault', // Vault feature disabled
-                //     isActive: false,
-                //     cs: cs,
-                //     textTheme: textTheme,
-                //     onTap: () => context.push('/vault')),
-                // const SizedBox(height: 4),
-                _SettingsNavItem(
-                    icon: Icons.admin_panel_settings_rounded,
-                    label: 'Admin',
-                    isActive: false,
-                    cs: cs,
-                    textTheme: textTheme,
-                    onTap: () => context.push('/admin')),
-                const SizedBox(height: 4),
-                if (authData.currentTeacher?.role == 'admin')
-                  _SettingsNavItem(
-                      icon: Icons.analytics_outlined,
-                      label: 'Diagnostics',
-                      isActive: false,
-                      cs: cs,
-                      textTheme: textTheme,
-                      onTap: () => context.push('/admin/diagnostics')),
-                if (authData.currentTeacher?.role == 'admin')
-                  const SizedBox(height: 4),
-                _SettingsNavItem(
-                    icon: Icons.settings_rounded,
-                    label: 'Settings',
-                    isActive: true,
-                    cs: cs,
-                    textTheme: textTheme,
-                    onTap: null),
-              ],
-            ),
-          ),
+    final isAdmin = authData.currentTeacher?.role == 'admin';
+    return AppSideNav(
+      cs: cs,
+      theme: Theme.of(context),
+      teacherName: authData.currentTeacher?.teacherName ?? 'Teacher',
+      isOpen: true,
+      onToggle: () {},
+      items: [
+        if (!isAdmin) ...[
+          const AppSideNavItem(
+              label: 'Home', icon: Icons.home_rounded, isActive: false),
+          const AppSideNavItem(
+              label: 'Lessons', icon: Icons.menu_book_rounded, isActive: false),
+          const AppSideNavItem(
+              label: 'Exams', icon: Icons.quiz_rounded, isActive: false),
         ],
-      ),
+        const AppSideNavItem(
+            label: 'Admin',
+            icon: Icons.admin_panel_settings_rounded,
+            isActive: false),
+        if (isAdmin)
+          const AppSideNavItem(
+              label: 'Diagnostics',
+              icon: Icons.analytics_outlined,
+              isActive: false),
+        const AppSideNavItem(
+            label: 'Settings', icon: Icons.settings_rounded, isActive: true),
+      ],
+      onItemTap: (BuildContext context, String label) {
+        switch (label) {
+          case 'Home':
+            context.go('/');
+            break;
+          case 'Lessons':
+            _goToLessonsDeferred(context);
+            break;
+          case 'Exams':
+            context.push('/exams');
+            break;
+          case 'Admin':
+            context.push('/admin');
+            break;
+          case 'Diagnostics':
+            context.push('/admin/diagnostics');
+            break;
+        }
+      },
     );
   }
 
@@ -769,7 +671,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Compare tiers and upgrade to unlock more features.',
+                        'Compare tiers and upgrade to access more features.',
                         style: textTheme.bodyMedium?.copyWith(
                           color: cs.onSurfaceVariant,
                         ),
@@ -1471,7 +1373,7 @@ class _SyncStatusRow extends StatelessWidget {
             child: Text(
               '$label:',
               style: textTheme.bodyMedium?.copyWith(
-                overflow: TextOverflow.clip,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
@@ -1481,7 +1383,7 @@ class _SyncStatusRow extends StatelessWidget {
               value,
               style: textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.w600,
-                overflow: TextOverflow.clip,
+                overflow: TextOverflow.ellipsis,
               ),
               textAlign: TextAlign.right,
             ),

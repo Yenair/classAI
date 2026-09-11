@@ -41,10 +41,10 @@ void main() {
           home: Scaffold(
             body: Column(
               children: [
-                examRowStatusChip(unlocked: false),
-                examRowStatusChip(unlocked: true),
-                lessonRowStatusChip(completed: true, unlocked: true, generated: false),
-                lessonRowStatusChip(completed: false, unlocked: false, generated: true),
+                examRowStatusChip(generated: false),
+                examRowStatusChip(generated: true),
+                lessonRowStatusChip(completed: true, generated: false),
+                lessonRowStatusChip(completed: false, generated: true),
                 lessonStatusChipFor('generated'),
                 schemeStatusChip('none', fallbackLabel: 'No Scheme'),
                 schemeLinkedChip(),
@@ -60,10 +60,9 @@ void main() {
         expect(chip.label, isNotEmpty);
         expect(chip.icon, isNotNull);
       }
-      expect(find.text('Draft'), findsOneWidget);
-      expect(find.text('Unlocked'), findsOneWidget);
-      expect(find.text('Completed'), findsOneWidget);
+      expect(find.text('Draft'), findsWidgets);
       expect(find.text('Generated'), findsWidgets);
+      expect(find.text('Completed'), findsOneWidget);
       expect(find.text('No Scheme'), findsOneWidget);
       expect(find.text('Linked'), findsOneWidget);
     },

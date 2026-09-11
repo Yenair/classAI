@@ -2,29 +2,34 @@ import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/services/credit_service.dart';
+import 'package:classai/core/utils/platform_helper.dart';
 
 void main() {
   late AppDatabase db;
   late DailyCreditService creditService;
 
+  /// Today's date in the same format the DAO stores: yyyy-MM-dd.
+  String today() => DateTime.now().toIso8601String().split('T').first;
+
   setUp(() async {
+    // spendOfflineCredits short-circuits when the host reports online;
+    // pin the connectivity seam so the local-spend path is exercised
+    // deterministically on any machine.
+    PlatformHelper.isOnlineOverride = false;
     db = AppDatabase.forTesting();
     await db.initialize();
     creditService = DailyCreditService(db);
-    // Set initial credits
+    // Seed a today-stamped unified balance of 10 (no school row -> tier
+    // resolves to 'free', limit 3; stamping today keeps the seeded balance
+    // authoritative instead of resetting to the tier limit).
     await db.securityConfigDao.updateConfig(offlineCredits: 10);
+    await db.securityConfigDao.updateConfig(dailyCreditsDate: today());
   });
 
   tearDown(() async {
+    PlatformHelper.isOnlineOverride = null;
     await db.close();
   });
-
-  // NOTE: the two "online path" tests below depend on
-  // PlatformHelper.isOnline() returning false (spendOfflineCredits
-  // early-returns the batch ID when online). On hosts with connectivity the
-  // DB assertions cannot run — a pre-existing limitation, not new in R2.
-  // The offline (spend) path is exercised by the insufficient-credit test,
-  // which seeds an explicit today-stamped balance of 0.
 
   test('spend credits decrements locally', () async {
     // spendOfflineCredits clamps amount>1 to 1 (only deducts 1 credit per unlock)

@@ -1,7 +1,7 @@
 # Project Rules
 
 ## Build & Analysis
-- NEVER run `flutter clean` or `dart analyze` or `flutter analyze `
+- NEVER run `flutter clean` or `dart analyze` or `flutter analyze ` ask me if there are any errors, i will tell you, instead.
 
 try to run flutter test, as less often as possible, once confirmed a change, no need to run and re run it again, unless you implement a change. 
 

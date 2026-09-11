@@ -221,6 +221,9 @@ class _McqQuestionCardState extends State<McqQuestionCard> {
   Widget _buildEditable(ThemeData theme, ColorScheme cs) {
     final mcq = widget.mcq;
     final correct = mcq['correct']?.toString() ?? 'A';
+    // Compact layout on small phones: tighter card padding, smaller number
+    // circle and delete button so the question text gets the space.
+    final compact = MediaQuery.sizeOf(context).width < 480;
 
     return Container(
       width: double.infinity,
@@ -232,7 +235,7 @@ class _McqQuestionCardState extends State<McqQuestionCard> {
           color: cs.outlineVariant.withValues(alpha: 0.4),
         ),
       ),
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(compact ? 12 : 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -241,8 +244,8 @@ class _McqQuestionCardState extends State<McqQuestionCard> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 32,
-                height: 32,
+                width: compact ? 24 : 32,
+                height: compact ? 24 : 32,
                 decoration: BoxDecoration(
                   color: cs.primaryContainer,
                   borderRadius: BorderRadius.circular(
@@ -254,17 +257,20 @@ class _McqQuestionCardState extends State<McqQuestionCard> {
                     '${widget.index + 1}',
                     style: theme.textTheme.labelLarge?.copyWith(
                       fontWeight: FontWeight.w700,
+                      fontSize: compact ? 11 : null,
                       color: cs.onPrimaryContainer,
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: compact ? 8 : 12),
               Expanded(
                 child: TextFormField(
                   controller: _questionController,
                   undoController: widget.undoController,
-                  maxLines: 2,
+                  // Grows with the content — no internal scrolling.
+                  minLines: 1,
+                  maxLines: null,
                   decoration: InputDecoration(
                     border: OutlineInputBorder(
                       borderRadius:
@@ -278,13 +284,18 @@ class _McqQuestionCardState extends State<McqQuestionCard> {
                 ),
               ),
               if (widget.onDelete != null) ...[
-                const SizedBox(width: 4),
+                SizedBox(width: compact ? 0 : 4),
                 IconButton(
                   onPressed: widget.onDelete,
                   icon: const Icon(Icons.delete_outline_rounded, size: 18),
                   color: cs.error,
                   tooltip: 'Delete question',
                   visualDensity: VisualDensity.compact,
+                  constraints: BoxConstraints(
+                    minWidth: compact ? 32 : 40,
+                    minHeight: compact ? 32 : 40,
+                  ),
+                  padding: EdgeInsets.zero,
                 ),
               ],
             ],
@@ -555,6 +566,10 @@ class _TheoryQuestionCardState extends State<TheoryQuestionCard> {
   }
 
   Widget _buildEditable(ThemeData theme, ColorScheme cs) {
+    // Compact layout on small phones: tighter card padding, smaller number
+    // circle and delete button so the question text gets the space.
+    final compact = MediaQuery.sizeOf(context).width < 480;
+
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 12),
@@ -565,7 +580,7 @@ class _TheoryQuestionCardState extends State<TheoryQuestionCard> {
           color: cs.outlineVariant.withValues(alpha: 0.4),
         ),
       ),
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(compact ? 12 : 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -573,8 +588,8 @@ class _TheoryQuestionCardState extends State<TheoryQuestionCard> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 32,
-                height: 32,
+                width: compact ? 24 : 32,
+                height: compact ? 24 : 32,
                 decoration: BoxDecoration(
                   color: cs.primaryContainer,
                   borderRadius: BorderRadius.circular(
@@ -586,17 +601,20 @@ class _TheoryQuestionCardState extends State<TheoryQuestionCard> {
                     '${widget.index + 1}',
                     style: theme.textTheme.labelLarge?.copyWith(
                       fontWeight: FontWeight.w700,
+                      fontSize: compact ? 11 : null,
                       color: cs.onPrimaryContainer,
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: compact ? 8 : 12),
               Expanded(
                 child: TextFormField(
                   controller: _questionController,
                   undoController: widget.undoController,
-                  maxLines: 3,
+                  // Grows with the content — no internal scrolling.
+                  minLines: 1,
+                  maxLines: null,
                   decoration: InputDecoration(
                     labelText: 'Question',
                     labelStyle: theme.textTheme.labelMedium?.copyWith(
@@ -613,13 +631,18 @@ class _TheoryQuestionCardState extends State<TheoryQuestionCard> {
                 ),
               ),
               if (widget.onDelete != null) ...[
-                const SizedBox(width: 4),
+                SizedBox(width: compact ? 0 : 4),
                 IconButton(
                   onPressed: widget.onDelete,
                   icon: const Icon(Icons.delete_outline_rounded, size: 18),
                   color: cs.error,
                   tooltip: 'Delete question',
                   visualDensity: VisualDensity.compact,
+                  constraints: BoxConstraints(
+                    minWidth: compact ? 32 : 40,
+                    minHeight: compact ? 32 : 40,
+                  ),
+                  padding: EdgeInsets.zero,
                 ),
               ],
             ],
@@ -628,7 +651,10 @@ class _TheoryQuestionCardState extends State<TheoryQuestionCard> {
           TextFormField(
             controller: _answerController,
             undoController: widget.undoController,
-            maxLines: 4,
+            // Grows with the content — the marking guide never needs
+            // internal scrolling.
+            minLines: 2,
+            maxLines: null,
             decoration: InputDecoration(
               labelText: 'Marking Guide / Expected Elements',
               labelStyle: theme.textTheme.labelMedium?.copyWith(

@@ -678,7 +678,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
                           children: [
                             Text(
                               'Scheme of Work Review',
-                              maxLines: 1,
+                              maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.w700,
@@ -689,7 +689,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
                               selectedTeacher == null
                                   ? 'Select a teacher to inspect weekly schemes.'
                                   : 'Review ${selectedTeacher.teacherName}\'s weekly schemes.',
-                              maxLines: 1,
+                              maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: cs.onSurfaceVariant,
@@ -735,7 +735,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
                     children: [
                       Text(
                         'Scheme of Work Review',
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w700,
@@ -746,7 +746,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
                         selectedTeacher == null
                             ? 'Select a teacher to inspect weekly schemes.'
                             : 'Review and approve ${selectedTeacher.teacherName}\'s weekly scheme entries.',
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: cs.onSurfaceVariant,
@@ -847,7 +847,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
                     ),
                     Text(
                       teacher.email,
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: cs.onSurfaceVariant,
@@ -1427,7 +1427,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
               Expanded(
                 child: Text(
                   lesson.topic,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                 ),

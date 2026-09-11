@@ -4,6 +4,8 @@ import 'package:drift/drift.dart' hide Column;
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart'
+    show PointerSignalEvent, PointerScrollEvent;
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
@@ -18,6 +20,7 @@ import 'package:classai/core/services/question_validation.dart';
 import 'package:classai/core/constants/prompt_templates.dart';
 import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/core/widgets/app_toast.dart';
+import 'package:classai/core/widgets/app_side_nav.dart';
 import 'package:classai/core/widgets/question_cards.dart';
 import 'package:classai/core/widgets/upgrade_request_dialog.dart';
 import 'package:classai/core/theme/app_theme.dart';
@@ -149,6 +152,153 @@ String _referenceRelatedTopicsText(Map<String, dynamic> reference) {
   return topics.isEmpty ? '' : 'Related topics: $topics';
 }
 
+/// One parsed presentation step, e.g. from raw AI output shaped like
+/// `step1: {title: ..., activities: [a, b, c], duration: 10 minutes}`.
+class _PresentationStep {
+  final String title;
+  final List<String> activities;
+  final String duration;
+  const _PresentationStep({
+    required this.title,
+    required this.activities,
+    required this.duration,
+  });
+}
+
+/// Stray punctuation artifacts left by AI prose (trailing semicolons before
+/// line breaks, doubled spaces, leading separators). Display-only.
+String _sanitizeLessonDisplayText(String text) {
+  return text
+      .replaceAll(RegExp(r'[ \t]+'), ' ')
+      .replaceAll(RegExp(r';\s*\n'), '\n')
+      .replaceAll(RegExp(r'\s+;$'), '')
+      .replaceAll(RegExp(r'^[;,]\s*'), '')
+      .trim();
+}
+
+/// Returns true when [text] contains at least one `stepN: {` block.
+bool _containsPresentationSteps(String text) {
+  return RegExp(r'\bstep\s*\d+\s*:', caseSensitive: false).hasMatch(text) &&
+      text.contains('{');
+}
+
+/// Parses raw AI pseudo-JSON step blocks out of a presentation/development
+/// section. Uses a bracket counter instead of regex end-matching because
+/// activity text can contain nested brackets and parentheses. Fields are
+/// extracted with leading-key prefix matching; the activities list is split
+/// on the `.,` separators with an abbreviation guard so "e.g.," and "i.e.,"
+/// do not split a sentence.
+List<_PresentationStep> _parsePresentationSteps(String text) {
+  final steps = <_PresentationStep>[];
+  final pattern = RegExp(r'\bstep\s*(\d+)\s*:', caseSensitive: false);
+  final matches = pattern.allMatches(text).toList();
+  for (var m = 0; m < matches.length; m++) {
+    final start = matches[m].end;
+    final open = text.indexOf('{', start);
+    if (open < 0) continue;
+    final bodyEnd = m + 1 < matches.length
+        ? text.lastIndexOf('}', matches[m + 1].start)
+        : text.lastIndexOf('}');
+    if (bodyEnd <= open) continue;
+
+    // Bracket-counter scan for the matching close brace.
+    var depth = 0;
+    var close = -1;
+    var inQuote = false;
+    for (var i = open; i <= bodyEnd; i++) {
+      final ch = text[i];
+      if (ch == '"' && (i == 0 || text[i - 1] != '\\')) inQuote = !inQuote;
+      if (!inQuote) {
+        if (ch == '{') depth++;
+        if (ch == '}') {
+          depth--;
+          if (depth == 0) {
+            close = i;
+            break;
+          }
+        }
+      }
+    }
+    if (close < 0) continue;
+    final body = text.substring(open + 1, close);
+
+    // Reads `key: value` up to the next known key (or the block end).
+    String extract(String key) {
+      final idx = body.indexOf(key);
+      if (idx < 0) return '';
+      var i = idx + key.length;
+      while (i < body.length && (body[i] == ' ' || body[i] == ':')) {
+        i++;
+      }
+      if (i < body.length && body[i] == '[') {
+        final end = body.indexOf(']', i);
+        return end > i ? body.substring(i + 1, end) : body.substring(i + 1);
+      }
+      final nextKeys = ['title', 'activities', 'duration']
+          .map((k) => body.indexOf(k, i))
+          .where((p) => p > 0)
+          .toList();
+      var end = body.length;
+      for (final p in nextKeys) {
+        if (p < end) end = p;
+      }
+      return body.substring(i, end);
+    }
+
+    final title = extract('title').trim();
+    final durationRaw = extract('duration').trim();
+    final duration = durationRaw.isEmpty
+        ? ''
+        : durationRaw.replaceAll(RegExp(r'[}\],]+$'), '').trim();
+
+    // Activities: split on ".," but not after abbreviations (e.g., i.e., etc).
+    final rawActivities = extract('activities');
+    final parts = <String>[];
+    final buffer = StringBuffer();
+    for (var i = 0; i < rawActivities.length; i++) {
+      final ch = rawActivities[i];
+      final before = i > 0 ? rawActivities[i - 1] : '';
+      final wordBefore = rawActivities.substring(0, i > 0 ? i - 1 : 0).trim();
+      final isAbbrevDot = before == '.' &&
+          (wordBefore.endsWith(' e') ||
+              wordBefore.endsWith(' i') ||
+              wordBefore.endsWith('etc'));
+      if (ch == ',' && before == '.' && !isAbbrevDot) {
+        final piece = _sanitizeLessonDisplayText(buffer.toString());
+        if (piece.isNotEmpty) parts.add(piece);
+        buffer.clear();
+        continue;
+      }
+      buffer.write(ch);
+    }
+    final tail = _sanitizeLessonDisplayText(buffer.toString());
+    if (tail.isNotEmpty) parts.add(tail);
+
+    steps.add(_PresentationStep(
+      title: title.isEmpty ? 'Step ${matches[m].group(1)}' : title,
+      activities: parts,
+      duration: duration,
+    ));
+  }
+  return steps;
+}
+
+/// Splits the related-topics text into one numbered entry per topic.
+///
+/// AI references supply a list (already joined as "a, b, c"), while teacher
+/// references may hold one topic per line or a comma-separated string. Each
+/// topic is prefixed with its 1-based number so the References tab renders
+/// "1. First topic / 2. Second topic" instead of a comma-run.
+List<String> _numberedRelatedTopics(String topicsText) {
+  final raw = topicsText
+      .replaceAll('\n', ' ')
+      .split(RegExp(r'[\n,]'))
+      .map((t) => t.trim())
+      .where((t) => t.isNotEmpty)
+      .toList();
+  return [for (var i = 0; i < raw.length; i++) '${i + 1}. ${raw[i]}'];
+}
+
 /// Stitch‑designed lesson note editor with AI generation.
 ///
 /// Form fields: Subject dropdown, Class dropdown, Week spinbox,
@@ -166,7 +316,20 @@ class LessonEditorScreen extends ConsumerStatefulWidget {
   /// If provided, pre-fills the form from an existing lesson.
   final int? lessonId;
 
-  const LessonEditorScreen({super.key, this.generateCallback, this.lessonId});
+  /// Optional prefill from the caller (e.g. the lessons list "Create" flyout
+  /// passes the active list filters). Null/empty values keep the defaults.
+  final String? initialSubject;
+  final String? initialClassLevel;
+  final String? initialTerm;
+
+  const LessonEditorScreen({
+    super.key,
+    this.generateCallback,
+    this.lessonId,
+    this.initialSubject,
+    this.initialClassLevel,
+    this.initialTerm,
+  });
 
   @override
   ConsumerState<LessonEditorScreen> createState() => _LessonEditorScreenState();
@@ -197,6 +360,11 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   int _week = 1;
   String _subject = 'Mathematics';
   String _classLevel = 'JSS 1';
+
+  /// Term prefill from the lessons list. Display-only for now — the editor
+  /// already resolves the term from the linked scheme (or the school's
+  /// current term) when saving; this only shows the caller's context.
+  String? _initialTermLabel;
   String _difficulty = 'medium';
   String _assessmentFormat = 'Both';
   final Set<String> _selectedBlooms = {};
@@ -221,7 +389,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
   bool _isExporting = false;
   bool _editorSidebarOpen = false;
   bool _sidebarInitialized = false;
-  int _dailyCredits = 0;
+  // Unified daily credits: null = still loading, -1 = unlimited (elite).
+  // Tri-state keeps Create-with-AI from flash-disabling on startup.
+  int? _dailyCredits;
   String? _teacherId;
   String? _schoolId;
   String _subscriptionTier = 'free';
@@ -305,6 +475,16 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     _lessonId = widget.lessonId;
     _selectedDraftLessonId = widget.lessonId;
     _isLoadingLesson = widget.lessonId != null;
+    // Apply caller prefills (subject/class/term from the lessons list
+    // filters) before the first frame renders the form.
+    final prefillSubject = widget.initialSubject?.trim() ?? '';
+    if (prefillSubject.isNotEmpty) _subject = prefillSubject;
+    final prefillClass = widget.initialClassLevel?.trim() ?? '';
+    if (prefillClass.isNotEmpty) _classLevel = prefillClass;
+    final prefillTerm = widget.initialTerm?.trim() ?? '';
+    if (prefillTerm.isNotEmpty) {
+      _initialTermLabel = _normalizeTermLabel(prefillTerm);
+    }
     // A brand-new (blank) lesson opens with the config form expanded so the
     // fields are immediately visible/interactive; a reopened existing lesson
     // stays collapsed. Post-generation, _handleGenerate sets this back to
@@ -913,6 +1093,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         }
       }
       if (mounted) setState(() {});
+      // Reload credits now that _subscriptionTier is resolved - the
+      // earlier load may have run with the 'free' fallback tier.
+      await _loadDailyCredits();
       await _loadDraftTopicOptions();
       await _refreshSourceMissing();
     } catch (_) {}
@@ -1356,19 +1539,25 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       }
       final questionsFailed = questionsResult == null || parsedQuestions == null;
 
-      List<Map<String, dynamic>> generatedDiagrams = [];
-      final diagramsRaw = parsedRaw['diagrams'] as List<dynamic>?;
-      if (diagramsRaw != null && diagramsRaw.isNotEmpty) {
-        generatedDiagrams = diagramsRaw.take(3).map((entry) {
-          final diagram = entry is Map<String, dynamic>
-              ? entry
-              : <String, dynamic>{};
-          return <String, dynamic>{
-            'description': diagram['description'] as String? ?? 'Suggested image',
-            'imageUrl': diagram['imageUrl'] as String?,
-            'error': diagram['error'] as String?,
-          };
-        }).toList();
+      List<Map<String, dynamic>> generatedDiagrams = _parseDiagramEntries(
+        parsedRaw['diagrams'],
+      );
+
+      // Diagrams are a required part of the lesson-note prompt, so a blank
+      // result means the model strayed from the contract. Retry once with a
+      // cheap diagrams-only call instead of making the teacher generate the
+      // whole lesson again (the "blank generation" complaint).
+      if (generatedDiagrams.isEmpty) {
+        generatedDiagrams = await _retryDiagramsAfterGenerate(db, prompt);
+      }
+
+      // References follow the same contract — retry once when the lesson
+      // call returned none, so the teacher does not have to regenerate the
+      // lesson just to get the References card populated.
+      List<Map<String, dynamic>> generatedReferences =
+          _parseReferences(parsedRaw['references'], forceAiOrigin: true);
+      if (generatedReferences.isEmpty) {
+        generatedReferences = await _retryReferencesAfterGenerate(db, prompt);
       }
 
       if (mounted) {
@@ -1401,8 +1590,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
             _theoryQuestions = parsedQuestions?['theory'] ?? const [];
             _subjectiveQuestions = parsedQuestions?['subjective'] ?? const [];
             _droppedQuestionCount = droppedQuestionCount;
-            _references =
-                _parseReferences(parsedRaw['references'], forceAiOrigin: true);
+            _references = generatedReferences;
             _diagramResults = generatedDiagrams;
             _setGeneratedDeckState();
             _topicConfirmShown = false;
@@ -1448,6 +1636,146 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       if (mounted) {
         setState(() => _isGenerating = false);
         showErrorToast(context: context, message: 'Generation failed: $e');
+      }
+    }
+  }
+
+  /// Normalizes the raw `diagrams` list from an AI response into well-formed
+  /// diagram entries. Entries that are not maps, or whose description is
+  /// blank, are dropped instead of becoming empty "Suggested image" cards —
+  /// the main source of the blank Suggested Images section.
+  List<Map<String, dynamic>> _parseDiagramEntries(dynamic diagramsRaw) {
+    if (diagramsRaw is! List || diagramsRaw.isEmpty) return const [];
+    final result = <Map<String, dynamic>>[];
+    for (final entry in diagramsRaw.take(3)) {
+      final diagram =
+          entry is Map ? Map<String, dynamic>.from(entry) : <String, dynamic>{};
+      // Some responses return a bare string (or a list of strings) instead
+      // of {"description": ...}; treat a bare string as the description.
+      final description =
+          (diagram['description'] as String?)?.trim() ??
+              (entry is String ? entry.trim() : '');
+      if (description.isEmpty) continue;
+      result.add({
+        'description': description,
+        'imageUrl': diagram['imageUrl'] as String?,
+        'error': diagram['error'] as String?,
+      });
+    }
+    return result;
+  }
+
+  /// One cheap diagrams-only retry after a generation whose lesson call
+  /// returned no usable diagram descriptions. Returns the parsed diagrams,
+  /// or an empty list when the retry also fails (non-fatal — the lesson
+  /// still saves without diagrams rather than failing the whole generation).
+  Future<List<Map<String, dynamic>>> _retryDiagramsAfterGenerate(
+    AppDatabase db,
+    String lessonPrompt,
+  ) async {
+    try {
+      final topic = _topicController.text.trim();
+      final retryPrompt = PromptTemplates.diagramsOnly(
+        _subject,
+        _classLevel,
+        _week,
+        topic,
+        teacherName: _teacherName,
+        schoolName: _schoolName,
+      );
+      final result = widget.generateCallback != null
+          ? await widget.generateCallback!(retryPrompt)
+          : await AiService(db: db).generate(retryPrompt);
+      final raw = result['raw'] as Map<String, dynamic>? ?? result;
+      return _parseDiagramEntries(raw['diagrams']);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// One references-only retry after a generation whose lesson call returned
+  /// no usable references. Returns the parsed references, or an empty list
+  /// when the retry also fails (non-fatal).
+  Future<List<Map<String, dynamic>>> _retryReferencesAfterGenerate(
+    AppDatabase db,
+    String lessonPrompt,
+  ) async {
+    try {
+      final topic = _topicController.text.trim();
+      final retryPrompt = PromptTemplates.referencesOnly(
+        _subject,
+        _classLevel,
+        _week,
+        topic,
+        teacherName: _teacherName,
+        schoolName: _schoolName,
+      );
+      final result = widget.generateCallback != null
+          ? await widget.generateCallback!(retryPrompt)
+          : await AiService(db: db).generate(retryPrompt);
+      final raw = result['raw'] as Map<String, dynamic>? ?? result;
+      return _parseReferences(raw['references'], forceAiOrigin: true);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Regenerates the suggested-image *prompts* for the whole Suggested
+  /// Images section: asks the AI for a fresh set of diagram descriptions
+  /// and renders the first one. Gives the teacher a way out when the
+  /// suggested prompts do not fit the lesson, without regenerating the
+  /// lesson or its questions.
+  Future<void> _regenerateSuggestedImagePrompts() async {
+    if (_isGeneratingDiagrams || !_isUnlocked) return;
+
+    setState(() => _isGeneratingDiagrams = true);
+    try {
+      final db = ref.read(databaseProvider);
+      final topic = _topicController.text.trim();
+      final prompt = PromptTemplates.diagramsOnly(
+        _subject,
+        _classLevel,
+        _week,
+        topic,
+        teacherName: _teacherName,
+        schoolName: _schoolName,
+      );
+      final result = widget.generateCallback != null
+          ? await widget.generateCallback!(prompt)
+          : await AiService(db: db).generate(prompt);
+      final raw = result['raw'] as Map<String, dynamic>? ?? result;
+      final freshDiagrams = _parseDiagramEntries(raw['diagrams']);
+      if (freshDiagrams.isEmpty) {
+        if (mounted) {
+          setState(() => _isGeneratingDiagrams = false);
+          showErrorToast(
+            context: context,
+            message: 'Could not generate new image suggestions. Try again.',
+          );
+        }
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        _diagramResults = freshDiagrams;
+        _isGeneratingDiagrams = false;
+        _generatingDiagramIndex = null;
+      });
+      await _saveLesson(notify: false);
+      if (mounted) {
+        showSuccessToast(
+          context: context,
+          message: 'New image suggestions ready.',
+        );
+      }
+    } catch (e) {
+      debugPrint('[LessonEditor] Suggested image prompt regeneration failed: $e');
+      if (mounted) {
+        setState(() => _isGeneratingDiagrams = false);
+        showErrorToast(
+          context: context,
+          message: 'Regenerating image suggestions failed: $e',
+        );
       }
     }
   }
@@ -2872,6 +3200,43 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
     );
   }
 
+  /// Whether the active card can be regenerated right now (same rule the
+  /// mobile FAB uses to enable its Regenerate action).
+  bool get _canRegenerateActiveCard =>
+      _isUnlocked &&
+      (_activeCardKey == _LessonEditorCardKey.lessonNotes ||
+          _activeCardKey == _LessonEditorCardKey.assessment ||
+          _activeCardKey == _LessonEditorCardKey.references ||
+          (_activeCardKey == _LessonEditorCardKey.diagrams &&
+              _activeDiagramIndex != null));
+
+  /// The "Feedback for regeneration" panel docked above the desktop footer.
+  Widget _buildDesktopReviewPanel() {
+    final stitchCs = _lessonEditorStitchColorScheme(
+      Theme.of(context).colorScheme,
+    );
+    return _DesktopReviewPanel(
+      cs: stitchCs,
+      theme: ThemeData(
+        colorScheme: stitchCs,
+        textTheme: GoogleFonts.workSansTextTheme(
+          Theme.of(context).textTheme,
+        ),
+      ),
+      reviewController: _reviewController,
+      isRegenerating: _isRegenerating,
+      onRegenerate: _canRegenerateActiveCard
+          ? () => _handleRegenerate(
+                skipConfirmation: true,
+                cardKey: _regenerationCardKey ?? _activeCardKey,
+                diagramIndex:
+                    _regenerationDiagramIndex ?? _activeDiagramIndex,
+              )
+          : null,
+      onClose: _toggleReviewSectionForActiveCard,
+    );
+  }
+
   Widget _buildPreviewColumn(
     ColorScheme cs,
     ThemeData theme,
@@ -2898,6 +3263,9 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
       isGeneratingDiagrams: _isGeneratingDiagrams,
       generatingDiagramIndex: _generatingDiagramIndex,
       onRegenerateDiagram: _handleDiagramAction,
+      onRegenerateDiagramPrompts: _isUnlocked && _lessonId != null
+          ? _regenerateSuggestedImagePrompts
+          : null,
       onActiveCardChanged: _onPreviewCardChanged,
       objectivesController: _objectivesController,
       vocabularyController: _vocabularyController,
@@ -3096,14 +3464,28 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
         children: [
           // ── Navigation Drawer (tablet+; never on Android) ────────
           if (MediaQuery.sizeOf(context).width >= 768)
-            _StitchLessonSidebar(
-              cs: cs,
-              theme: theme,
+            AppSideNav(
+              cs: _lessonEditorStitchColorScheme(cs),
+              theme: ThemeData(
+                colorScheme: _lessonEditorStitchColorScheme(cs),
+                textTheme: GoogleFonts.workSansTextTheme(
+                  Theme.of(context).textTheme,
+                ),
+              ),
               teacherName: _teacherName,
               isOpen: _editorSidebarOpen,
               onToggle: () => setState(
                 () => _editorSidebarOpen = !_editorSidebarOpen,
               ),
+              items: _LessonEditorScreenState._navItems
+                  .map(
+                    (item) => AppSideNavItem(
+                      label: item.label,
+                      icon: item.icon,
+                      isActive: item.isActive,
+                    ),
+                  )
+                  .toList(),
             ),
 
           // ── Main Content ────────────────────────────────────────
@@ -3120,8 +3502,22 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                           _subject,
                           _classLevel,
                           'Week $_week',
+                          // Term prefill from the lessons list (display-only
+                          // context; saving still resolves the real term).
+                          if (_initialTermLabel != null &&
+                              _initialTermLabel!.trim().isNotEmpty)
+                            _initialTermLabel!,
                         ].where((value) => value.trim().isNotEmpty).join(' • ')
-                      : null,
+                      : _hasGenerated
+                          ? [
+                              _subject,
+                              _classLevel,
+                              'Week $_week',
+                              _topicController.text.trim().isNotEmpty
+                                  ? _topicController.text.trim()
+                                  : 'Untitled topic',
+                            ].join(' • ')
+                          : null,
                   deckIndicatorTotal: _visibleDeckCardKeys.length,
                   deckIndicatorIndex: _activeDeckIndex,
                 ),
@@ -3355,7 +3751,7 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                               width: double.infinity,
                                               height: AppTheme.touchTarget,
                                               child: FilledButton.icon(
-                                                onPressed: _isGenerating
+                                                onPressed: (_isGenerating || _dailyCredits == 0)
                                                     ? null
                                                     : (_hasGenerated ? _handleRegenerate : _handleGenerate),
                                                 style: FilledButton.styleFrom(
@@ -3388,13 +3784,18 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                                         ),
                                       ),
                                       // Remaining unified daily credits indicator
-                                      if (_dailyCredits >= 0 && _subscriptionTier != 'free')
+                                      // (-1 = unlimited shows its own label;
+                                      // hidden while the balance is loading)
+                                      if (_dailyCredits != null &&
+                                          _subscriptionTier.toLowerCase() != 'free')
                                         Padding(
                                           padding: const EdgeInsets.only(top: 8),
                                           child: Text(
-                                            _dailyCredits == 0
-                                                ? 'No credits left today'
-                                                : '$_dailyCredits credit${_dailyCredits == 1 ? '' : 's'} left today',
+                                            _dailyCredits! < 0
+                                                ? 'Unlimited - no daily limit'
+                                                : _dailyCredits == 0
+                                                    ? 'No credits left today'
+                                                    : '$_dailyCredits credit${_dailyCredits == 1 ? '' : 's'} left today',
                                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                               color: _dailyCredits == 0
                                                   ? Theme.of(context).colorScheme.error
@@ -3553,6 +3954,28 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                           MediaQuery.sizeOf(context).width < 768 &&
                           _activeCardKey != _LessonEditorCardKey.generate)
                         _buildStitchLessonFab(),
+                      // Desktop feedback panel (>= 768px) — hosted in this
+                      // full-screen Stack rather than the footer Stack so it
+                      // is painted ABOVE the lesson cards and never clipped
+                      // by the footer's small Stack bounds. Docks bottom-right
+                      // just above the footer, same visual position as before.
+                      if (_hasGenerated &&
+                          _isUnlocked &&
+                          _showReviewSection &&
+                          MediaQuery.sizeOf(context).width >= 768 &&
+                          _activeCardKey != _LessonEditorCardKey.generate)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: Align(
+                            alignment: Alignment.bottomRight,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(40, 0, 40, 8),
+                              child: _buildDesktopReviewPanel(),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -3563,22 +3986,28 @@ class _LessonEditorScreenState extends ConsumerState<LessonEditorScreen> {
                     _isUnlocked &&
                     MediaQuery.sizeOf(context).width >= 768 &&
                     _activeCardKey != _LessonEditorCardKey.generate)
-                  _StitchLessonFooter(
-                    cs: cs,
-                    theme: theme,
-                    onRegenerate: () => _handleRegenerate(
-                      skipConfirmation: true,
-                      cardKey: _regenerationCardKey ?? _activeCardKey,
-                      diagramIndex:
-                          _regenerationDiagramIndex ?? _activeDiagramIndex,
-                    ),
-                    onMarkCompleted: _lessonStatus != 'completed'
-                        ? _handleMarkCompleted
-                        : null,
-                    lessonStatus: _lessonStatus,
-                    onExportPdf: _handleExportPdf,
-                    isExporting: _isExporting,
-                    onShowVisibleSections: _showVisibleSectionsSheet,
+                  Stack(
+                    children: [
+                      _StitchLessonFooter(
+                        cs: cs,
+                        theme: theme,
+                        // Opens the feedback panel first; the panel's own
+                        // button runs the regeneration (same flow as the
+                        // mobile FAB).
+                        onRegenerate: _canRegenerateActiveCard
+                            ? () => _handleRegenerate()
+                            : null,
+                        onMarkCompleted: _lessonStatus != 'completed'
+                            ? _handleMarkCompleted
+                            : null,
+                        lessonStatus: _lessonStatus,
+                        onExportPdf: _handleExportPdf,
+                        isExporting: _isExporting,
+                        onShowVisibleSections: _showVisibleSectionsSheet,
+                        onSave: _saveLesson,
+                        onShowFontSize: _showFontSizePicker,
+                      ),
+                    ],
                   ),
                 _BottomNavBar(cs: cs, theme: theme),
               ],
@@ -3660,217 +4089,7 @@ class _BottomNavDef {
   const _BottomNavDef(this.label, this.icon, this.isActive);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// Navigation Drawer (tablet+)
-// ═══════════════════════════════════════════════════════════════════════
-/// Fixed Stitch navigation rail used by the responsive Lesson Editor shell.
-/// The older collapsible drawer remains available to other legacy callers,
-/// but this screen uses the fixed rail so desktop and tablet share one layout.
-class _StitchLessonSidebar extends StatelessWidget {
-  final ColorScheme cs;
-  final ThemeData theme;
-  final String teacherName;
-  final bool isOpen;
-  final VoidCallback onToggle;
 
-  const _StitchLessonSidebar({
-    required this.cs,
-    required this.theme,
-    required this.teacherName,
-    required this.isOpen,
-    required this.onToggle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (MediaQuery.sizeOf(context).width < 768) {
-      return const SizedBox.shrink();
-    }
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
-      width: isOpen ? 256 : 72,
-      child: Container(
-        decoration: BoxDecoration(
-          color: cs.surface,
-          border: Border(right: BorderSide(color: cs.outlineVariant)),
-        ),
-        clipBehavior: Clip.hardEdge,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            InkWell(
-              onTap: onToggle,
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(isOpen ? 24 : 12, 24, 12, 0),
-                child: Row(
-                  mainAxisAlignment: isOpen
-                      ? MainAxisAlignment.start
-                      : MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.school_rounded, color: cs.primary, size: 28),
-                    if (isOpen) ...[
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('ClassAI', style: theme.textTheme.titleLarge?.copyWith(
-                              color: cs.primary,
-                              fontWeight: FontWeight.w700,
-                            )),
-                            Text('Nigerian Academic Partner', style: theme.textTheme.labelSmall?.copyWith(
-                              color: cs.onSurfaceVariant,
-                            )),
-                          ],
-                        ),
-                      ),
-                    ],
-                    Icon(
-                      isOpen ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
-                      color: cs.onSurfaceVariant,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 48),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: _LessonEditorScreenState._navItems.map((item) {
-                  final foreground = item.isActive
-                      ? cs.onSecondaryContainer
-                      : cs.onSurfaceVariant;
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                    child: Semantics(
-                      button: true,
-                      selected: item.isActive,
-                      label: item.label,
-                      child: Tooltip(
-                        message: item.label,
-                        child: Material(
-                          color: item.isActive
-                              ? cs.secondaryContainer
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(16),
-                          child: InkWell(
-                            onTap: () => _navigateTo(context, item.label),
-                            borderRadius: BorderRadius.circular(16),
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(
-                                minHeight: AppTheme.touchTarget,
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(item.icon, size: 22, color: foreground),
-                                    if (isOpen) ...[
-                                      const SizedBox(width: 16),
-                                      Text(
-                                        item.label,
-                                        style: theme.textTheme.labelLarge?.copyWith(
-                                          color: foreground,
-                                          fontWeight: item.isActive
-                                              ? FontWeight.w700
-                                              : FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 20),
-              height: 1,
-              color: cs.outlineVariant,
-            ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(isOpen ? 24 : 12, 20, isOpen ? 24 : 12, 24),
-              child: isOpen
-                  ? Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 20,
-                          backgroundColor: cs.surfaceContainerHigh,
-                          child: Text(
-                            _initials(teacherName),
-                            style: theme.textTheme.labelLarge?.copyWith(
-                              color: cs.onSurfaceVariant,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            teacherName.trim().isEmpty ? 'Teacher' : teacherName,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.labelLarge?.copyWith(
-                              color: cs.onSurface,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  : Center(
-                      child: CircleAvatar(
-                        radius: 20,
-                        backgroundColor: cs.surfaceContainerHigh,
-                        child: Text(
-                          _initials(teacherName),
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            color: cs.onSurfaceVariant,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty);
-    final values = parts.take(2).map((part) => part[0].toUpperCase()).join();
-    return values.isEmpty ? 'T' : values;
-  }
-
-  void _navigateTo(BuildContext context, String label) {
-    switch (label) {
-      case 'Home':
-        context.go('/');
-        break;
-      case 'Lessons':
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (context.mounted) context.go('/lessons');
-        });
-        break;
-      case 'Exams':
-        context.go('/exams');
-        break;
-    }
-  }
-}
 
 // ═══════════════════════════════════════════════════════════════════════
 // Mobile Header
@@ -4067,6 +4286,8 @@ class _DraftGenerateTab extends StatefulWidget {
   final bool allowManualTopic;
   final TextEditingController? topicController;
   final ValueChanged<String>? onTopicChanged;
+  final int? remainingDailyCredits;
+  final String subscriptionTier;
 
   const _DraftGenerateTab({
     required this.cs,
@@ -4084,6 +4305,8 @@ class _DraftGenerateTab extends StatefulWidget {
     this.allowManualTopic = false,
     this.topicController,
     this.onTopicChanged,
+    this.remainingDailyCredits,
+    this.subscriptionTier = 'free',
   });
 
   @override
@@ -4242,7 +4465,7 @@ class _DraftGenerateTabState extends State<_DraftGenerateTab> {
         final compact = constraints.maxHeight.isFinite &&
             constraints.maxHeight < 560;
         final selected = widget.options.contains(widget.selectedOption) ? widget.selectedOption : null;
-        final items = [
+        final _draftTopicDropdownItems = [
           ...widget.options.map(
             (option) => DropdownMenuItem<_DraftTopicOption>(
               value: option,
@@ -4257,11 +4480,14 @@ class _DraftGenerateTabState extends State<_DraftGenerateTab> {
             child: Text('Create new topic'),
           ),
         ];
+        _draftTopicDropdownItems; // used by widget.selection logic below
         final manualTopic = widget.topicController?.text.trim() ?? '';
         final canGenerate = ((selected != null && !selected.isCreateNew) ||
                 (widget.allowManualTopic && manualTopic.isNotEmpty)) &&
             widget.isOnline &&
-            !widget.isGenerating;
+            !widget.isGenerating &&
+            (widget.remainingDailyCredits == null ||
+                widget.remainingDailyCredits != 0);
 
         return Center(
           child: Container(
@@ -4334,9 +4560,12 @@ class _DraftGenerateTabState extends State<_DraftGenerateTab> {
                       option: selected!,
                       selected: true,
                       onTap: () {},
-                    )
-                  else
-                    for (final option in _sortedOptions.take(3))
+                    ),
+                    // Unselected tiles: skip the selected topic so it is
+                    // not rendered twice (pinned above + in the list).
+                    for (final option in _sortedOptions
+                        .where((o) => o != selected)
+                        .take(3))
                       _DraftTopicCard(
                         option: option,
                         selected: false,
@@ -4371,6 +4600,25 @@ class _DraftGenerateTabState extends State<_DraftGenerateTab> {
                     ),
                   ),
                 SizedBox(height: compact ? 16 : 32),
+                if (widget.remainingDailyCredits != null &&
+                    widget.subscriptionTier.toLowerCase() != 'free')
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      widget.remainingDailyCredits! < 0
+                          ? 'Unlimited - no daily limit'
+                          : widget.remainingDailyCredits == 0
+                              ? 'No credits left today'
+                              : '${widget.remainingDailyCredits} '
+                                  'credit${widget.remainingDailyCredits == 1 ? '' : 's'} left today',
+                      textAlign: TextAlign.center,
+                      style: widget.theme.textTheme.bodySmall?.copyWith(
+                        color: widget.remainingDailyCredits == 0
+                            ? widget.cs.error
+                            : widget.cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
                 SizedBox(
                   width: double.infinity,
                   height: compact ? 48 : 64,
@@ -4479,7 +4727,7 @@ class _PreviewColumn extends StatefulWidget {
   final bool isOnline;
   final String subscriptionTier;
   final List<String> assessmentAllowedTiers;
-  final int remainingDailyCredits;
+  final int? remainingDailyCredits;
   final bool isRegenerating;
   final List<Map<String, dynamic>> diagramResults;
   final bool isGeneratingDiagrams;
@@ -4529,6 +4777,8 @@ class _PreviewColumn extends StatefulWidget {
   // Stage 3: References (opens the references bottom sheet; read-only
   // while the lesson is still locked)
   final VoidCallback? onShowReferences;
+  // Suggested Images: section-level "regenerate the prompts" action
+  final VoidCallback? onRegenerateDiagramPrompts;
   // Stage 2: Homework
   final VoidCallback? onRegenerateHomework;
   final bool isRegeneratingHomework;
@@ -4577,12 +4827,13 @@ class _PreviewColumn extends StatefulWidget {
     required this.isOnline,
     required this.subscriptionTier,
     required this.assessmentAllowedTiers,
-    this.remainingDailyCredits = 0,
+    this.remainingDailyCredits,
     this.isRegenerating = false,
     this.diagramResults = const [],
     this.isGeneratingDiagrams = false,
     this.generatingDiagramIndex,
     this.onRegenerateDiagram,
+    this.onRegenerateDiagramPrompts,
     this.onRegenerateReferences,
     this.isRegeneratingReferences = false,
     this.referencesRegenerationError,
@@ -4672,6 +4923,14 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   int _activeDeckIndex = 0;
   _LessonEditorCardKey _activeCardKey = _LessonEditorCardKey.lessonNotes;
 
+  // Vertical scrollables of the content tabs. Registered so the arrow keys
+  // can drive smooth continuous scrolling of whichever tab is visible
+  // (see _SeamlessScrollShortcut).
+  final GlobalKey _lessonNotesScrollKey = GlobalKey();
+  final GlobalKey _assessmentScrollKey = GlobalKey();
+  final GlobalKey _diagramsScrollKey = GlobalKey();
+  final GlobalKey _referencesScrollKey = GlobalKey();
+
   // Shorthand getters for ColorScheme and ThemeData from widget.
   ColorScheme get cs => widget.cs;
   ThemeData get theme => widget.theme;
@@ -4684,6 +4943,8 @@ class _PreviewColumnState extends State<_PreviewColumn> {
     _activeCardKey = widget.showGenerateSlide
         ? _LessonEditorCardKey.generate
         : _LessonEditorCardKey.lessonNotes;
+    // Seamless arrow-key scrolling (see _handleArrowScrollKey).
+    HardwareKeyboard.instance.addHandler(_handleArrowScrollKey);
   }
 
   @override
@@ -4736,28 +4997,105 @@ class _PreviewColumnState extends State<_PreviewColumn> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleArrowScrollKey);
     _deckController.dispose();
     _tabFocusNode.dispose();
     super.dispose();
   }
 
-  bool _isTextFocused() {
-    final focus = FocusManager.instance.primaryFocus;
-    if (focus == null) return false;
-    final ctx = focus.context;
-    if (ctx == null) return false;
-    // Check if the focused element itself is an EditableText.
-    if (ctx.widget is EditableText) return true;
-    // Walk up the widget tree to check if an ancestor is an EditableText.
-    bool found = false;
-    ctx.visitAncestorElements((element) {
+  // ── Seamless arrow-key scrolling ──────────────────────────────
+  // By default the up/down arrows move *focus* between focusable widgets
+  // (icon → icon) and stop being useful the moment focus enters an editable
+  // field. This handler intercepts the arrows at the hardware level — before
+  // the focus system sees them — and instead animates the visible tab's
+  // scroll position by ~half a viewport per press. Repeated presses retarget
+  // from the current pixel offset, so holding the key glides the content
+  // instead of hopping widget to widget.
+  //
+  // Deliberate fall-throughs (returns false → native behavior):
+  //  • a text field holds focus → arrows move the caret, as expected while
+  //    editing;
+  //  • a dialog/bottom sheet is open above this screen → the editor's
+  //    content must not scroll behind it;
+  //  • the visible tab has nothing to scroll → traversal/default behavior
+  //    applies.
+  bool _handleArrowScrollKey(KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
+    final double direction;
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      direction = -1;
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      direction = 1;
+    } else {
+      return false;
+    }
+    if (!mounted) return false;
+
+    if (_focusInEditableField()) return false;
+
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return false;
+
+    final position = _activeScrollPosition();
+    if (position == null ||
+        !position.hasContentDimensions ||
+        !position.hasViewportDimension ||
+        position.maxScrollExtent <= 0) {
+      return false;
+    }
+
+    final viewport =
+        position.viewportDimension.isFinite && position.viewportDimension > 0
+            ? position.viewportDimension
+            : 400.0;
+    final target = (position.pixels + direction * viewport * 0.45)
+        .clamp(0.0, position.maxScrollExtent);
+    position.animateTo(
+      target,
+      duration: const Duration(milliseconds: 140),
+      curve: Curves.easeOutCubic,
+    );
+    return true;
+  }
+
+  bool _focusInEditableField() {
+    final focusContext = FocusManager.instance.primaryFocus?.context;
+    if (focusContext == null) return false;
+    var found = false;
+    focusContext.visitAncestorElements((element) {
       if (element.widget is EditableText) {
         found = true;
-        return false; // stop visiting
+        return false;
       }
-      return true; // continue visiting
+      return true;
     });
     return found;
+  }
+
+  ScrollPosition? _activeScrollPosition() {
+    final GlobalKey? key = switch (_activeCardKey) {
+      _LessonEditorCardKey.lessonNotes => _lessonNotesScrollKey,
+      _LessonEditorCardKey.assessment => _assessmentScrollKey,
+      _LessonEditorCardKey.diagrams => _diagramsScrollKey,
+      _LessonEditorCardKey.references => _referencesScrollKey,
+      _LessonEditorCardKey.generate => null,
+    };
+    final ctx = key?.currentContext;
+    if (ctx == null || !ctx.mounted || ctx is! Element) return null;
+    // The tab scroll view is the first Scrollable beneath the keyed widget;
+    // a depth-first search stops there before reaching any inner text-field
+    // viewports.
+    ScrollableState? scrollable;
+    void visit(Element element) {
+      if (scrollable != null) return;
+      if (element is StatefulElement && element.state is ScrollableState) {
+        scrollable = element.state as ScrollableState;
+        return;
+      }
+      element.visitChildElements(visit);
+    }
+    visit(ctx);
+    return scrollable?.position;
   }
 
   List<_LessonEditorCardKey> _cardKeys(
@@ -5028,7 +5366,11 @@ class _PreviewColumnState extends State<_PreviewColumn> {
         ],
       ),
       padding: EdgeInsets.all(
-        MediaQuery.sizeOf(context).width < 768 ? 16 : 32,
+        MediaQuery.sizeOf(context).width < 480
+            ? 10
+            : MediaQuery.sizeOf(context).width < 768
+                ? 16
+                : 32,
       ),
       child: child,
     );
@@ -5040,12 +5382,14 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   bool get isOnline => widget.isOnline;
   String get subscriptionTier => widget.subscriptionTier;
   List<String> get assessmentAllowedTiers => widget.assessmentAllowedTiers;
-  int get remainingDailyCredits => widget.remainingDailyCredits;
+  int get remainingDailyCredits => widget.remainingDailyCredits ?? 0;
   bool get isRegenerating => widget.isRegenerating;
   List<Map<String, dynamic>> get diagramResults => widget.diagramResults;
   bool get isGeneratingDiagrams => widget.isGeneratingDiagrams;
   int? get generatingDiagramIndex => widget.generatingDiagramIndex;
   ValueChanged<int>? get onRegenerateDiagram => widget.onRegenerateDiagram;
+  VoidCallback? get onRegenerateDiagramPrompts =>
+      widget.onRegenerateDiagramPrompts;
   Future<void> Function()? get onRegenerateReferences =>
       widget.onRegenerateReferences;
   bool get isRegeneratingReferences => widget.isRegeneratingReferences;
@@ -5090,66 +5434,6 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   bool get visibleMaterials => widget.visibleMaterials;
   bool get visibleSuggestedImages => widget.visibleSuggestedImages;
   VoidCallback? get onShowVisibleSections => widget.onShowVisibleSections;
-
-  Widget _buildLockedPreviewOverlay() {
-    return Container(
-      color: cs.scrim.withValues(alpha: 0.68),
-      alignment: Alignment.center,
-      padding: const EdgeInsets.all(24),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 440),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: cs.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-            border: Border.all(color: cs.tertiary.withValues(alpha: 0.45)),
-            boxShadow: [
-              BoxShadow(
-                color: cs.shadow.withValues(alpha: 0.54),
-                blurRadius: 28,
-                offset: const Offset(0, 12),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.lock_rounded, color: cs.tertiary, size: 32),
-              const SizedBox(height: 12),
-              Text(
-                'Locked — Preview only',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  color: cs.onSurface,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Review the generated lesson content. Unlock to edit, save, or regenerate.',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: cs.onSurfaceVariant,
-                  height: 1.5,
-                ),
-              ),
-              if (onShowReferences != null) ...[
-                const SizedBox(height: 12),
-                TextButton.icon(
-                  onPressed: onShowReferences,
-                  icon: const Icon(Icons.menu_book_outlined, size: 18),
-                  label: const Text('View References'),
-                  style: TextButton.styleFrom(foregroundColor: cs.tertiary),
-                ),
-              ],
-              const SizedBox(height: 8),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -5211,42 +5495,6 @@ class _PreviewColumnState extends State<_PreviewColumn> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-          // ── Unlocked banner ─────────────────────────────────────
-          if (hasGenerated &&
-              isUnlocked &&
-              _activeCardKey == _LessonEditorCardKey.diagrams)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: cs.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                  border: Border.all(
-                    color: cs.primary.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.check_circle_rounded,
-                        color: cs.primary, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Unlocked — You can edit and save this lesson',
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: cs.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
           // ── Numbered content tabs ─────────────────────────────
           if (hasGenerated || widget.showGenerateSlide)
             Expanded(
@@ -5314,6 +5562,10 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                                         allowManualTopic: widget.allowManualTopic,
                                         topicController: widget.topicController,
                                         onTopicChanged: widget.onTopicChanged,
+                                        remainingDailyCredits:
+                                            widget.remainingDailyCredits,
+                                        subscriptionTier:
+                                            widget.subscriptionTier,
                                       );
                                     case _LessonEditorCardKey.lessonNotes:
                                       return _buildLessonNoteTab(readOnly: !isUnlocked);
@@ -5369,10 +5621,13 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                                           widget.onDraftGenerate ?? () {},
                                       onCreateNewTopic:
                                           widget.onCreateNewTopic ?? () {},
-                                      allowManualTopic: widget.allowManualTopic,
-                                      topicController: widget.topicController,
-                                      onTopicChanged: widget.onTopicChanged,
-                                    );
+                                    allowManualTopic: widget.allowManualTopic,
+                                    topicController: widget.topicController,
+                                    onTopicChanged: widget.onTopicChanged,
+                                    remainingDailyCredits:
+                                        widget.remainingDailyCredits,
+                                    subscriptionTier: widget.subscriptionTier,
+                                  );
                                   case _LessonEditorCardKey.lessonNotes:
                                     return _buildLessonNoteTab(readOnly: !isUnlocked);
                                   case _LessonEditorCardKey.assessment:
@@ -5408,11 +5663,6 @@ class _PreviewColumnState extends State<_PreviewColumn> {
             ),
             ],
           ),
-          // ── Locked preview overlay (centered, darkened) ────────
-          if (hasGenerated && !isUnlocked)
-            Positioned.fill(
-              child: _buildLockedPreviewOverlay(),
-            ),
         ],
       ),
     );
@@ -5536,7 +5786,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
       styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
         p: theme.textTheme.bodyLarge?.copyWith(
           color: cs.onSurface,
-          height: 1.55,
+          height: 1.6,
         ),
         h1: theme.textTheme.headlineSmall?.copyWith(
           color: cs.onSurface,
@@ -5556,7 +5806,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
         h1Padding: const EdgeInsets.only(top: 16, bottom: 8),
         h2Padding: const EdgeInsets.only(top: 14, bottom: 6),
         h3Padding: const EdgeInsets.only(top: 12, bottom: 4),
-        blockSpacing: 12,
+        blockSpacing: 16,
         listBullet: theme.textTheme.bodyLarge?.copyWith(
           color: cs.onSurface,
         ),
@@ -5578,11 +5828,17 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   }
 
   Widget _renderReadableLockedContent(String content) {
+    // Raw AI step blocks render as the structured step document, matching
+    // the unlocked read-only view.
+    if (_containsPresentationSteps(content)) {
+      final steps = _parsePresentationSteps(content);
+      if (steps.isNotEmpty) return _buildPresentationStepsContent(steps);
+    }
     final children = <Widget>[];
     for (final rawLine in content.replaceAll('\r\n', '\n').split('\n')) {
       final line = rawLine.trim();
       if (line.isEmpty) {
-        children.add(const SizedBox(height: 8));
+        children.add(const SizedBox(height: 14));
         continue;
       }
       final heading = RegExp(r'^#{1,6}\s+(.+)$').firstMatch(line);
@@ -5665,6 +5921,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
     final contextLabel = '${widget.subject} • ${widget.classLevel}';
     return _buildContentCard(
       child: SingleChildScrollView(
+        key: _lessonNotesScrollKey,
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -5733,6 +5990,72 @@ class _PreviewColumnState extends State<_PreviewColumn> {
     );
   }
 
+  /// Renders parsed AI step blocks as a professional document layout:
+  /// numbered step headings, bulleted activities, and an italic duration.
+  Widget _buildPresentationStepsContent(List<_PresentationStep> steps) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < steps.length; i++) ...[
+          // Double line break before each step (except the first) so every
+          // step reads as its own clearly separated section.
+          if (i > 0) const SizedBox(height: 40),
+          Text(
+            'Step ${i + 1} — ${_stripPresentationBrackets(steps[i].title)}',
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: cs.onSurface,
+              fontWeight: FontWeight.w700,
+              height: 1.3,
+            ),
+          ),
+          const SizedBox(height: 10),
+          for (var j = 0; j < steps[i].activities.length; j++)
+            Padding(
+              padding: const EdgeInsets.only(left: 16, bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('•  '),
+                  Expanded(
+                    child: Text(
+                      _stripPresentationBrackets(steps[i].activities[j]),
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: cs.onSurface,
+                        height: 1.7,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (steps[i].duration.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Duration: ${_stripPresentationBrackets(steps[i].duration)}',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: cs.onSurfaceVariant,
+                fontStyle: FontStyle.italic,
+                height: 1.5,
+              ),
+            ),
+          ],
+        ],
+        // Trailing gap so the last step doesn't sit flush against the
+        // next section (Homework, References, etc.).
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  /// Removes square-bracket AI markup artifacts ([like this]) from
+  /// presentation display text, collapsing leftover whitespace.
+  String _stripPresentationBrackets(String text) {
+    return text
+        .replaceAll(RegExp(r'\[|\]'), '')
+        .replaceAll(RegExp(r'[ \t]{2,}'), ' ')
+        .trim();
+  }
+
   Widget _buildLessonParagraphContent(String content) {
     if (content.trim().isEmpty) {
       return Text(
@@ -5742,6 +6065,13 @@ class _PreviewColumnState extends State<_PreviewColumn> {
           height: 1.55,
         ),
       );
+    }
+
+    // Raw AI step blocks (step1: {title: ..., activities: [...], duration: ...})
+    // render as a structured, numbered document instead of pseudo-JSON.
+    if (_containsPresentationSteps(content)) {
+      final steps = _parsePresentationSteps(content);
+      if (steps.isNotEmpty) return _buildPresentationStepsContent(steps);
     }
 
     final blocks = <Widget>[];
@@ -5840,7 +6170,13 @@ class _PreviewColumnState extends State<_PreviewColumn> {
         .contains(widget.subscriptionTier.trim().toLowerCase());
     return _buildContentCard(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        key: _assessmentScrollKey,
+        // Tight horizontal padding on small phones — the question text is
+        // the most important content on this tab and must not be squeezed
+        // by nested card margins.
+        padding: MediaQuery.sizeOf(context).width < 480
+            ? const EdgeInsets.fromLTRB(4, 8, 4, 16)
+            : const EdgeInsets.fromLTRB(16, 8, 16, 16),
         child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -6007,10 +6343,51 @@ class _PreviewColumnState extends State<_PreviewColumn> {
   Widget _buildDiagramsTab({required bool readOnly}) {
     return _buildContentCard(
       child: SingleChildScrollView(
+        key: _diagramsScrollKey,
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            _buildCardMeta(
+              label: 'Suggested Images',
+              title: '${widget.classLevel} ${widget.subject}',
+              cardKey: _LessonEditorCardKey.diagrams,
+            ),
+            // Section-level regenerate: asks the AI for a fresh set of image
+            // suggestions (the prompts), not just a new image for the same
+            // prompt. Disabled while the read-only locked preview shows.
+            if (!readOnly && onRegenerateDiagramPrompts != null) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: OutlinedButton.icon(
+                  onPressed: isGeneratingDiagrams
+                      ? null
+                      : () => onRegenerateDiagramPrompts!.call(),
+                  icon: isGeneratingDiagrams
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh_rounded, size: 18),
+                  label: Text(
+                    isGeneratingDiagrams
+                        ? 'Generating suggestions...'
+                        : 'Regenerate suggestions',
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, AppTheme.touchTarget),
+                    foregroundColor: cs.primary,
+                    side: BorderSide(color: cs.primary),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
             _buildSuggestedImagesSection(
               context,
               readOnly: readOnly,
@@ -6071,6 +6448,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
     }
     return _buildContentCard(
       child: SingleChildScrollView(
+        key: _referencesScrollKey,
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -6222,11 +6600,16 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                                     ),
                                     if (topics.isNotEmpty) ...[
                                       const SizedBox(height: 4),
-                                      Text(
-                                        topics,
-                                        style: theme.textTheme.bodySmall?.copyWith(
-                                          color: cs.onSurfaceVariant,
-                                          height: 1.4,
+                                      // One numbered line per related topic
+                                      // (1. Topic / 2. Topic) instead of a
+                                      // comma-separated run.
+                                      ..._numberedRelatedTopics(topics).map(
+                                        (line) => Text(
+                                          line,
+                                          style: theme.textTheme.bodySmall?.copyWith(
+                                            color: cs.onSurfaceVariant,
+                                            height: 1.4,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -6293,38 +6676,207 @@ class _PreviewColumnState extends State<_PreviewColumn> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: sections.map((entry) {
-          final (label, controller) = entry;
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: cs.onSurfaceVariant,
+        children: [
+          for (final entry in sections)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    entry.$1,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (readOnly)
+                    // Block paragraph style is always applied for the
+                    // generated/locked write-up: solid paragraph blocks with
+                    // full line spacing between them (see
+                    // _buildBlockParagraphContent).
+                    _buildBlockParagraphContent(entry.$2.text)
+                  else
+                    _buildDocumentTextField(
+                      entry.$2,
+                      undoController: undoController,
+                      minLines: 3,
+                      hintText: '${entry.$1} content...',
+                      highlightKeyExample: entry.$2.text
+                          .toLowerCase()
+                          .contains('key example'),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Renders the Presentation write-up in Block Paragraph Style: solid
+  /// justified paragraph blocks — consecutive non-empty lines are merged
+  /// into one flowing paragraph, blank lines separate paragraphs, and the
+  /// existing Key Example callout styling is preserved.
+  Widget _buildBlockParagraphContent(String content) {
+    if (content.trim().isEmpty) {
+      return Text(
+        'No content yet.',
+        style: theme.textTheme.bodyLarge?.copyWith(
+          color: cs.onSurfaceVariant,
+          height: 1.55,
+        ),
+      );
+    }
+
+    // Raw AI step blocks (step1: {title: ..., activities: [...]}) render
+    // as the structured step document with full spacing between steps.
+    if (_containsPresentationSteps(content)) {
+      final steps = _parsePresentationSteps(content);
+      if (steps.isNotEmpty) return _buildPresentationStepsContent(steps);
+    }
+
+    // ── Parse into paragraph segments ────────────────────────────
+    // 1. Strip display noise: square brackets (AI markup artifacts) and
+    //    markdown emphasis that does not belong in prose blocks.
+    // 2. Split around "Key Example" headers (keeps the callout styling).
+    // 3. Merge consecutive non-empty lines into one flowing paragraph;
+    //    blank lines separate paragraphs; a `stepN:` line becomes its own
+    //    "Step k —" heading block with full spacing after it.
+    String cleanLine(String line) {
+      var l = _stripInlineDocumentMarkup(line);
+      // Remove square-bracket markup like [Group work] or [10 minutes].
+      l = l.replaceAll(RegExp(r'\[|\]'), '');
+      // Collapse whitespace left behind by the removal.
+      l = l.replaceAll(RegExp(r'[ \t]{2,}'), ' ').trim();
+      // Drop a bare leading bullet marker.
+      l = l.replaceFirst(RegExp(r'^[-*+]\s+'), '');
+      return l.trim();
+    }
+
+    final normalized = content.replaceAll('\r\n', '\n');
+    final paragraphs = <({bool isKeyExample, String text})>[];
+
+    var paraLines = <String>[];
+    var paraIsKey = false;
+
+    void flushParagraph() {
+      final text = paraLines.join(' ').trim();
+      if (text.isNotEmpty) {
+        paragraphs.add((isKeyExample: paraIsKey, text: text));
+      }
+      paraLines = [];
+      paraIsKey = false;
+    }
+
+    // Detect a step header line (`step 1:` / `step1 :` etc.).
+    final stepHeaderPattern =
+        RegExp(r'^step\s*(\d+)\s*:', caseSensitive: false);
+
+    for (final rawLine in normalized.split('\n')) {
+      final line = cleanLine(rawLine);
+      final trimmed = line.trim();
+      final stepMatch = stepHeaderPattern.firstMatch(trimmed);
+
+      if (trimmed.isEmpty) {
+        // Blank line → paragraph boundary.
+        flushParagraph();
+        continue;
+      }
+
+      final keyHeader = trimmed
+          .replaceFirst(RegExp(r'^#{1,6}\s*'), '')
+          .toLowerCase()
+          .startsWith('key example');
+      if (keyHeader) {
+        flushParagraph();
+        paraIsKey = true;
+        final colon = trimmed.indexOf(':');
+        if (colon >= 0 && colon + 1 < trimmed.length) {
+          paraLines.add(trimmed.substring(colon + 1).trim());
+        }
+        continue;
+      }
+
+      if (stepMatch != null) {
+        flushParagraph();
+        final stepTitle = trimmed.substring(stepMatch.end).trim();
+        paragraphs.add(
+          (
+            isKeyExample: false,
+            text: 'Step ${stepMatch.group(1)} — $stepTitle',
+          ),
+        );
+        continue;
+      }
+
+      paraLines.add(trimmed);
+    }
+    flushParagraph();
+
+    // A rendered step heading gets extra spacing after it so each step
+    // reads as a clearly separated section.
+    bool isStepHeading(String text) => text.startsWith('Step ');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < paragraphs.length; i++) ...[
+          if (i > 0)
+            // Double line break around every step section: a step heading
+            // gets extra room before AND after it. Plain paragraphs keep
+            // the standard single gap.
+            SizedBox(
+              height: isStepHeading(paragraphs[i].text) ||
+                      isStepHeading(paragraphs[i - 1].text)
+                  ? 40
+                  : 18,
+            ),
+          paragraphs[i].isKeyExample
+              ? Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border(
+                      left: BorderSide(color: cs.primary, width: 4),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Key Example',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          color: cs.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        paragraphs[i].text,
+                        textAlign: TextAlign.justify,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: cs.onSurface,
+                          height: 1.75,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : Text(
+                  paragraphs[i].text,
+                  textAlign: TextAlign.justify,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: cs.onSurface,
+                    height: 1.75,
                   ),
                 ),
-                const SizedBox(height: 6),
-                if (readOnly)
-                  _buildLessonParagraphContent(controller.text)
-                else
-                  _buildDocumentTextField(
-                    controller,
-                    undoController: undoController,
-                    minLines: 3,
-                    hintText: '$label content...',
-                    highlightKeyExample: controller.text
-                        .toLowerCase()
-                        .contains('key example'),
-                  ),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
+        ],
+      ],
     );
   }
 
@@ -6360,86 +6912,111 @@ class _PreviewColumnState extends State<_PreviewColumn> {
       );
     }
 
+    /// Compact option row matching the Exams Editor's McqQuestionCard:
+    /// 24px check circle + "A." label + dense outlined field. Long option
+    /// text wraps inside the field (never overflows); a correct answer is
+    /// marked by the filled check circle plus a compact inline check icon
+    /// suffix — no free-standing text tag that can overflow at 320dp.
     Widget optionButton(String key) {
-      final selected = key == correct;
+      final isCorrect = key == correct;
       final optionText = options[key]?.toString() ?? '';
       return Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: isUnlocked
-                ? () => onUpdateMcq?.call(index, 'correct', key)
-                : null,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              constraints: const BoxConstraints(minHeight: 80),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: selected ? cs.surfaceContainerHigh : cs.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: selected ? cs.primary : cs.outlineVariant,
-                  width: selected ? 2 : 1,
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: InkWell(
+                onTap: isUnlocked
+                    ? () => onUpdateMcq?.call(index, 'correct', key)
+                    : null,
+                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                child: Container(
+                  // Diameter uses an em-based estimate so the circle grows
+                  // with the global font-size setting and keeps containing
+                  // the scaled label text.
+                  width: 24 * MediaQuery.textScalerOf(context).scale(16) / 16,
+                  height: 24 * MediaQuery.textScalerOf(context).scale(16) / 16,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color:
+                        isCorrect ? cs.secondaryContainer : Colors.transparent,
+                    border: Border.all(
+                      color: isCorrect ? cs.secondary : cs.outlineVariant,
+                      width: 2,
+                    ),
+                  ),
+                  child: isCorrect
+                      ? Icon(
+                          Icons.check_rounded,
+                          size: 14 * MediaQuery.textScalerOf(context).scale(16) / 16,
+                          color: cs.onSecondaryContainer,
+                        )
+                      : null,
                 ),
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: selected ? cs.primary : Colors.transparent,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: selected ? cs.primary : cs.outlineVariant,
-                        width: 2,
-                      ),
-                    ),
-                    child: Text(
-                      key,
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: selected ? cs.onPrimary : cs.onSurfaceVariant,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: TextFormField(
-                      initialValue: optionText,
-                      undoController: undoController,
-                      readOnly: !isUnlocked,
-                      onChanged: (value) =>
-                          onUpdateMcqOption?.call(index, key, value),
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        color: cs.onSurface,
-                        height: 1.45,
-                      ),
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        disabledBorder: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
-                        isDense: true,
-                      ),
-                    ),
-                  ),
-                ],
+            ),
+            const SizedBox(width: 8),
+            Padding(
+              padding: const EdgeInsets.only(top: 9),
+              child: Text(
+                '$key.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurfaceVariant,
+                ),
               ),
             ),
-          ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: TextFormField(
+                initialValue: optionText,
+                undoController: undoController,
+                readOnly: !isUnlocked,
+                minLines: 1,
+                maxLines: 4,
+                onChanged: (value) =>
+                    onUpdateMcqOption?.call(index, key, value),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurface,
+                ),
+                decoration: InputDecoration(
+                  isDense: true,
+                  prefixIcon: isCorrect
+                      ? Icon(
+                          Icons.check_rounded,
+                          size: 16,
+                          color: cs.secondary,
+                        )
+                      : null,
+                  prefixIconConstraints: const BoxConstraints(
+                    minWidth: 28,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                    borderSide: BorderSide(color: cs.outlineVariant),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       );
     }
 
+    // Compact layout on small phones: tighter card padding, smaller number
+    // circle and delete button so the question text gets the space.
+    final compact = MediaQuery.sizeOf(context).width < 480;
+
     return Container(
       key: ValueKey(question),
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.all(compact ? 12 : 20),
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(16),
@@ -6452,8 +7029,8 @@ class _PreviewColumnState extends State<_PreviewColumn> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 40,
-                height: 40,
+                width: compact ? 24 : 40,
+                height: compact ? 24 : 40,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: cs.primaryContainer,
@@ -6464,15 +7041,17 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                   style: theme.textTheme.labelLarge?.copyWith(
                     color: cs.onPrimaryContainer,
                     fontWeight: FontWeight.w700,
+                    fontSize: compact ? 11 : null,
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: compact ? 8 : 12),
               Expanded(
                 child: TextFormField(
                   initialValue: question['question']?.toString() ?? '',
                   undoController: undoController,
-                  maxLines: 3,
+                  minLines: 1,
+                  maxLines: null,
                   onChanged: (value) => onUpdateMcq?.call(index, 'question', value),
                   style: theme.textTheme.bodyLarge?.copyWith(
                     color: cs.onSurface,
@@ -6487,13 +7066,19 @@ class _PreviewColumnState extends State<_PreviewColumn> {
                     questionType: 'MCQ',
                     onConfirm: () => onDeleteMcq!(index),
                   ),
-                  icon: const Icon(Icons.delete_outline_rounded),
+                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
                   color: cs.error,
                   tooltip: 'Delete question',
+                  visualDensity: VisualDensity.compact,
+                  constraints: BoxConstraints(
+                    minWidth: compact ? 32 : 40,
+                    minHeight: compact ? 32 : 40,
+                  ),
+                  padding: EdgeInsets.zero,
                 ),
             ],
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: compact ? 12 : 20),
           Text(
             'Select the correct answer',
             style: theme.textTheme.labelLarge?.copyWith(
@@ -6501,7 +7086,7 @@ class _PreviewColumnState extends State<_PreviewColumn> {
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: compact ? 8 : 12),
           ...optionKeys.map(optionButton),
         ],
       ),
@@ -6814,28 +7399,9 @@ class _PreviewColumnState extends State<_PreviewColumn> {
             ],
           );
     if (!collapsible) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.image_outlined, size: 18, color: cs.onSurface),
-              const SizedBox(width: 8),
-              Text(
-                'Suggested Images',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  color: cs.onSurface,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Divider(height: 1, color: cs.outlineVariant),
-          const SizedBox(height: 16),
-          content,
-        ],
-      );
+      // The diagrams tab already renders the card header via _buildCardMeta;
+      // skip the secondary "Suggested Images" row to avoid a duplicate title.
+      return content;
     }
     return _DocumentSection(
       title: 'Suggested Images',
@@ -7486,11 +8052,17 @@ class _ReferencesSheetState extends State<_ReferencesSheet> {
                             ],
                             if (item.relatedTopics.isNotEmpty) ...[
                               const SizedBox(height: 4),
-                              Text(
-                                item.relatedTopics,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: cs.onSurfaceVariant,
-                                  height: 1.4,
+                              // One numbered line per related topic
+                              // (1. Topic / 2. Topic) instead of a
+                              // comma-separated run.
+                              ..._numberedRelatedTopics(item.relatedTopics)
+                                  .map(
+                                (line) => Text(
+                                  line,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                    height: 1.4,
+                                  ),
                                 ),
                               ),
                             ],
@@ -7699,7 +8271,7 @@ class _BottomNavBar extends StatelessWidget {
                               Flexible(
                                 child: Text(
                                   item.label,
-                                  maxLines: 1,
+                                  maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: theme.textTheme.labelSmall?.copyWith(
                                     fontWeight: FontWeight.w700,
@@ -7748,7 +8320,7 @@ class _BottomNavBar extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════
 // Floating Action Area (fixed at bottom)
 // ═══════════════════════════════════════════════════════════════════════
-class _StitchLessonFooter extends StatelessWidget {
+class _StitchLessonFooter extends StatefulWidget {
   final ColorScheme cs;
   final ThemeData theme;
   final VoidCallback? onRegenerate;
@@ -7757,6 +8329,8 @@ class _StitchLessonFooter extends StatelessWidget {
   final VoidCallback? onExportPdf;
   final bool isExporting;
   final VoidCallback? onShowVisibleSections;
+  final VoidCallback? onSave;
+  final VoidCallback? onShowFontSize;
 
   const _StitchLessonFooter({
     required this.cs,
@@ -7767,10 +8341,50 @@ class _StitchLessonFooter extends StatelessWidget {
     this.onExportPdf,
     this.isExporting = false,
     this.onShowVisibleSections,
+    this.onSave,
+    this.onShowFontSize,
   });
 
   @override
+  State<_StitchLessonFooter> createState() => _StitchLessonFooterState();
+}
+
+class _StitchLessonFooterState extends State<_StitchLessonFooter> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  // Desktop mice emit vertical wheel deltas, which a horizontal-only
+  // scrollable ignores by default — the action row would look frozen
+  // whenever the buttons overflow at narrower desktop widths. Bridge the
+  // wheel delta onto the horizontal controller (horizontal trackpad deltas
+  // still win when present). The PointerSignalResolver guarantees this only
+  // runs when the inner scrollable did not already consume the event.
+  void _handlePointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+    final double delta = event.scrollDelta.dx != 0.0
+        ? event.scrollDelta.dx
+        : event.scrollDelta.dy;
+    if (delta == 0.0 || !_scrollController.hasClients) return;
+    _scrollController.position.pointerScroll(delta);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final cs = widget.cs;
+    final theme = widget.theme;
+    final onRegenerate = widget.onRegenerate;
+    final onMarkCompleted = widget.onMarkCompleted;
+    final lessonStatus = widget.lessonStatus;
+    final onExportPdf = widget.onExportPdf;
+    final isExporting = widget.isExporting;
+    final onShowVisibleSections = widget.onShowVisibleSections;
+    final onSave = widget.onSave;
+    final onShowFontSize = widget.onShowFontSize;
     final labelStyle = theme.textTheme.labelLarge?.copyWith(
       fontWeight: FontWeight.w600,
     );
@@ -7782,11 +8396,31 @@ class _StitchLessonFooter extends StatelessWidget {
           color: cs.surfaceContainer,
           border: Border(top: BorderSide(color: cs.outlineVariant)),
         ),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
+        child: Listener(
+          onPointerSignal: _handlePointerSignal,
+          child: Scrollbar(
+            controller: _scrollController,
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              scrollDirection: Axis.horizontal,
+              child: Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              // Save — mirrors the FAB action menu so every FAB action is
+              // reachable from the footer row.
+              FilledButton.icon(
+                onPressed: onSave,
+                icon: const Icon(Icons.save_rounded),
+                label: const Text('Save'),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, AppTheme.touchTarget),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  textStyle: labelStyle,
+                ),
+              ),
+              const SizedBox(width: 12),
               FilledButton.tonalIcon(
                 onPressed: onRegenerate,
                 icon: const Icon(Icons.refresh_rounded),
@@ -7859,9 +8493,122 @@ class _StitchLessonFooter extends StatelessWidget {
                   textStyle: labelStyle,
                 ),
               ),
+              const SizedBox(width: 12),
+              // Font Size — mirrors the FAB action menu.
+              OutlinedButton.icon(
+                onPressed: onShowFontSize,
+                icon: const Icon(Icons.format_size_rounded),
+                label: const Text('Font Size'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, AppTheme.touchTarget),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  textStyle: labelStyle,
+                ),
+              ),
             ],
           ),
         ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Desktop host for the "Feedback for regeneration" panel. The mobile FAB
+/// embeds the same UI; on desktop (>= 768px) the FAB is not rendered, so the
+/// panel docks above the footer instead. Visuals match the FAB panel.
+class _DesktopReviewPanel extends StatelessWidget {
+  final ColorScheme cs;
+  final ThemeData theme;
+  final TextEditingController reviewController;
+  final bool isRegenerating;
+  final VoidCallback? onRegenerate;
+  final VoidCallback onClose;
+
+  const _DesktopReviewPanel({
+    required this.cs,
+    required this.theme,
+    required this.reviewController,
+    required this.isRegenerating,
+    required this.onRegenerate,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 420,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: cs.shadow.withValues(alpha: 0.25),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Feedback for regeneration',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: cs.onSurface,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: onClose,
+                icon: const Icon(Icons.close_rounded),
+                tooltip: 'Close feedback',
+                color: cs.onSurfaceVariant,
+              ),
+            ],
+          ),
+          TextField(
+            controller: reviewController,
+            minLines: 1,
+            maxLines: 3,
+            decoration: InputDecoration(
+              hintText: 'Type feedback to guide regeneration...',
+              filled: true,
+              fillColor: cs.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: cs.outlineVariant),
+              ),
+              contentPadding: const EdgeInsets.all(12),
+            ),
+            style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurface),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: AppTheme.touchTarget,
+            child: FilledButton.icon(
+              onPressed: isRegenerating ? null : onRegenerate,
+              icon: isRegenerating
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh_rounded),
+              label: Text(isRegenerating ? 'Regenerating...' : 'Regenerate'),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -8164,7 +8911,7 @@ class _StitchLessonFab extends StatelessWidget {
               ),
               child: Text(
                 label,
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.labelLarge?.copyWith(
                   color: cs.onSurface,
@@ -8318,8 +9065,11 @@ class _NumberControl extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
+        // Height follows the text (min touch target) so the value grows
+        // with the global font-size setting instead of being clipped by a
+        // fixed-height container.
         Container(
-          height: AppTheme.touchTarget,
+          constraints: const BoxConstraints(minHeight: AppTheme.touchTarget),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: cs.outlineVariant),
@@ -8394,56 +9144,47 @@ class _SegmentedControl extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        Container(
-          height: AppTheme.touchTarget,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: cs.outlineVariant),
-            color: cs.surfaceContainerLow,
-          ),
-          padding: const EdgeInsets.all(4),
-          child: Row(
-            children: List.generate(options.length * 2 - 1, (index) {
-              if (index.isOdd) {
-                return Container(
-                  width: 1,
-                  margin: const EdgeInsets.symmetric(vertical: 8),
-                  color: cs.outlineVariant.withValues(alpha: 0.5),
-                );
-              }
-              final i = index ~/ 2;
-              final option = options[i];
-              final isSelected = option == value;
-              return Expanded(
-                child: InkWell(
-                  onTap: () => onChanged(option),
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: isSelected ? cs.primary : Colors.transparent,
-                      borderRadius:
-                          BorderRadius.circular(8),
+        // Wrap layout instead of a fixed-height row: segments flow onto a
+        // second line when the global font-size setting is large, so the
+        // option text always grows with the setting (never shrunk back via
+        // FittedBox or clipped).
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: List.generate(options.length, (i) {
+            final option = options[i];
+            final isSelected = option == value;
+            return Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => onChanged(option),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isSelected ? cs.primary : cs.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isSelected ? cs.primary : cs.outlineVariant,
                     ),
-                    alignment: Alignment.center,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        option,
-                        maxLines: 1,
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          fontWeight:
-                              isSelected ? FontWeight.w600 : FontWeight.w500,
-                          color: isSelected
-                              ? cs.onPrimary
-                              : cs.onSurfaceVariant,
-                        ),
-                      ),
+                  ),
+                  child: Text(
+                    option,
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.w500,
+                      color: isSelected
+                          ? cs.onPrimary
+                          : cs.onSurfaceVariant,
                     ),
                   ),
                 ),
-              );
-            }),
-          ),
+              ),
+            );
+          }),
         ),
       ],
     );

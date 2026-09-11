@@ -87,6 +87,32 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
   bool _isSyncing = false;
   bool _initialized = false;
 
+  /// Pending one-shot refreshes that should happen after a sync cycle ends.
+  /// They are coalesced so a single sync does not fan out into many synchronous
+  /// state updates that can jank scroll during the sync window.
+  final _postSyncTasks = <Future<void> Function()>[];
+
+  void _schedulePostSyncTask(Future<void> Function() task) {
+    _postSyncTasks.add(task);
+  }
+
+  Future<void> _flushPostSyncTasks() async {
+    if (_postSyncTasks.isEmpty) return;
+    final tasks = List<Future<void> Function()>.from(_postSyncTasks);
+    _postSyncTasks.clear();
+    for (final task in tasks) {
+      await task();
+    }
+  }
+
+  /// Schedules a dependent refresh to run after the current sync cycle ends,
+  /// but does not block the UI on it. This keeps post-sync work from fanning
+  /// out into several simultaneous state updates while the user may be scrolling.
+  Future<void> _deferredRefresh() async {
+    await Future<void>.delayed(const Duration(milliseconds: 16));
+    await refresh();
+  }
+
   @override
   SyncStatusData build() {
     if (_initialized) {
@@ -182,12 +208,13 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
       final syncService = await ref.read(syncServiceProvider.future);
       final jwt = await _setJwtOnRemoteApi(syncService);
       await syncService.onConnectivityRestored(jwt: jwt);
-      await refresh();
-      await ref.read(dailyCreditStateProvider.notifier).refresh();
-      await ref.read(configServiceProvider).refresh();
-      // Refresh in-memory school state so any tier/school-name change
-      // from the sync pull is visible immediately (no re-login required).
-      await ref.read(authProvider.notifier).refreshSchoolFromDb();
+      await _deferredRefresh();
+      _schedulePostSyncTask(() async {
+        await ref.read(dailyCreditStateProvider.notifier).refresh();
+      });
+      _schedulePostSyncTask(() async {
+        await ref.read(configServiceProvider).refresh();
+      });
       // Invalidate lesson/exam list and count providers so the UI reflects
       // any new/updated data pulled during sync.
       ref.invalidate(lessonsListProvider);
@@ -270,10 +297,14 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
       return;
     }
 
-    // Refresh display state after successful sync
-    await refresh();
-    await ref.read(dailyCreditStateProvider.notifier).refresh();
-    await ref.read(configServiceProvider).refresh();
+    // Refresh display state after successful sync.
+    await _deferredRefresh();
+    _schedulePostSyncTask(() async {
+      await ref.read(dailyCreditStateProvider.notifier).refresh();
+    });
+    _schedulePostSyncTask(() async {
+      await ref.read(configServiceProvider).refresh();
+    });
     // Refresh in-memory school state so any tier/school-name change
     // from the sync pull is visible immediately (no re-login required).
     await ref.read(authProvider.notifier).refreshSchoolFromDb();
@@ -337,9 +368,13 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
       return false;
     } finally {
       // Refresh display state after sync attempt
-      await refresh();
-      await ref.read(dailyCreditStateProvider.notifier).refresh();
-      await ref.read(configServiceProvider).refresh();
+      await _deferredRefresh();
+      _schedulePostSyncTask(() async {
+        await ref.read(dailyCreditStateProvider.notifier).refresh();
+      });
+      _schedulePostSyncTask(() async {
+        await ref.read(configServiceProvider).refresh();
+      });
       await ref.read(authProvider.notifier).refreshSchoolFromDb();
     }
   }
@@ -355,9 +390,8 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
 
       final isOnline = await PlatformHelper.isOnline();
 
-      final syncStatus = _determineSyncStatus(config, isOnline);
       state = SyncStatusData(
-        status: syncStatus,
+        status: _determineSyncStatus(config, isOnline),
         lastSyncTime: config.lastSyncAttemptTime,
         pendingPushCount: pendingQueue.length,
         pendingPullCount: 0, // Pull count tracked server-side
@@ -376,6 +410,7 @@ class SyncStatusNotifier extends Notifier<SyncStatusData> {
         isOnline: state.isOnline,
       );
     }
+    await _flushPostSyncTasks();
   }
 
   /// Determines the appropriate [SyncStatus] based on connectivity and

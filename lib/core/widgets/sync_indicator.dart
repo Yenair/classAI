@@ -27,7 +27,16 @@ class SyncIndicator extends ConsumerWidget {
     return IconButton(
       tooltip: label,
       onPressed: () async {
-        await ref.read(syncStatusProvider.notifier).refresh();
+        final notifier = ref.read(syncStatusProvider.notifier);
+        if (syncData.status == SyncStatus.syncing) {
+          _showSyncDetailsSheet(
+            context,
+            ref,
+            syncData,
+          );
+          return;
+        }
+        await notifier.syncNow();
         if (!context.mounted) return;
         _showSyncDetailsSheet(
           context,
@@ -208,7 +217,7 @@ class _StatRow extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: cs.onSurface.withValues(alpha: 0.65),
                   fontWeight: FontWeight.w400,
-                  overflow: TextOverflow.clip,
+                  overflow: TextOverflow.ellipsis,
                 ),
           ),
         ),
@@ -219,7 +228,7 @@ class _StatRow extends StatelessWidget {
             textAlign: TextAlign.end,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.w600,
-                  overflow: TextOverflow.clip,
+                  overflow: TextOverflow.ellipsis,
                 ),
           ),
         ),

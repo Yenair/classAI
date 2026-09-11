@@ -143,7 +143,17 @@ final appRouter = GoRouter(
     _route(
       path: '/lesson-editor',
       name: 'lesson-creator',
-      builder: (context, state) => const LessonEditorScreen(),
+      builder: (context, state) {
+        // The lessons list "Create" flow appends its active filters as query
+        // params so the editor opens pre-configured instead of always
+        // defaulting to Mathematics / JSS 1.
+        final query = state.uri.queryParameters;
+        return LessonEditorScreen(
+          initialSubject: query['subject'],
+          initialClassLevel: query['classLevel'],
+          initialTerm: query['term'],
+        );
+      },
     ),
     _route(
       path: '/exams',

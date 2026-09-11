@@ -15,6 +15,7 @@ import 'package:classai/core/providers/pdf_service_provider.dart';
 import 'package:classai/core/providers/config_provider.dart';
 import 'package:classai/core/services/pdf_service.dart';
 import 'package:classai/core/utils/platform_helper.dart';
+import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/core/widgets/conflict_banner.dart';
 import 'package:classai/core/widgets/credit_counter.dart';
 import 'package:classai/core/widgets/status_chip.dart';
@@ -594,15 +595,10 @@ class _LessonsListScreenState extends ConsumerState<LessonsListScreen> {
       case 'Draft':
         return lesson.status == 'draft' && !lesson.isUnlocked;
       case 'Generated':
-        // New persisted status, plus legacy fallbacks: unlocking always
-        // follows generation, and any lesson with real content counts too.
-        return lesson.status == 'generated' ||
-            lesson.isUnlocked ||
-            !contentEmpty;
+        // All generated content is automatically unlocked.
+        return lesson.status == 'generated' || !contentEmpty;
       case 'Completed':
         return lesson.status == 'completed';
-      case 'Unlocked':
-        return lesson.isUnlocked;
       default:
         return true;
     }
@@ -1508,7 +1504,7 @@ class _LessonFiltersPanel extends StatelessWidget {
                             ),
                         ],
                       ),
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -1613,7 +1609,6 @@ class _LessonFiltersPanel extends StatelessWidget {
 Color _statusFilterAccent(String label, ColorScheme cs) => switch (label) {
       'Draft' => kStatusDraftColor,
       'Completed' => kStatusCompletedColor,
-      'Unlocked' => kStatusUnlockedColor,
       'Generated' => kStatusGeneratedColor,
       _ => cs.primary, // 'All'
     };
@@ -1727,9 +1722,22 @@ Future<void> exportLessonPdf(
           XTypeGroup(label: 'PDF', extensions: ['pdf']),
         ],
       );
-      // User cancellation (null location) is normal; no error SnackBar needed.
+      // User cancellation (null location) is normal; no toast is shown.
       if (saveLocation != null) {
         await File(saveLocation.path).writeAsBytes(pdfBytes);
+        if (context.mounted) {
+          // Full-screen success confirmation (same language as the
+          // exam-created toast) - silent before, which read as a hang.
+          AppToast.instance.showToast(
+            context: context,
+            message: 'PDF exported successfully',
+            icon: Icons.check_circle_rounded,
+            backgroundColor: const Color(0xFF2E7D32),
+            foregroundColor: Colors.white,
+            barrierDismissible: true,
+            autoCloseDuration: const Duration(seconds: 4),
+          );
+        }
       }
     }
     // User cancellation is normal; no error SnackBar needed.
@@ -1794,7 +1802,7 @@ Future<void> exportLessonPdf(
   }
 }
 
-/// Lesson row status chips (Completed / Unlocked / Draft) plus the brown
+/// Lesson row status chips (Completed / Generated / Draft) plus the brown
 /// "Linked" marker come from the shared status language in
 /// core/widgets/status_chip.dart, keeping the exams and lessons lists
 /// consistent.
@@ -1828,9 +1836,8 @@ class _LessonCard extends StatelessWidget {
     // Primary status color for the left accent strip.
     final Color accentColor = switch (lesson.status) {
       'completed' => kStatusCompletedColor,
-      'generated' when lesson.isUnlocked => kStatusUnlockedColor,
       'generated' => kStatusGeneratedColor,
-      _ => lesson.isUnlocked ? kStatusUnlockedColor : kStatusDraftColor,
+      _ => kStatusDraftColor,
     };
 
     // Status chips — stacked vertically: primary first, Needs Sync below.
@@ -1840,7 +1847,6 @@ class _LessonCard extends StatelessWidget {
       children: [
         lessonRowStatusChip(
           completed: lesson.status == 'completed',
-          unlocked: lesson.isUnlocked,
           generated: lesson.status == 'generated',
         ),
         if (lesson.serverId == null || lesson.serverId!.isEmpty) ...[
@@ -1891,7 +1897,7 @@ class _LessonCard extends StatelessWidget {
           children: [
             Text(
               lesson.topic,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w600,
@@ -1899,33 +1905,27 @@ class _LessonCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4),
-            // Flexible + ellipsis keeps the subject badge from
-            // overflowing the text column on narrow cards.
-            Row(
-              children: [
-                Flexible(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: cs.surfaceContainer,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      lesson.subject,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        fontWeight: FontWeight.w500,
-                        color: cs.onSurfaceVariant,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ),
+            // Subject badge — sized to its text; wraps to ellipsis on
+            // very narrow cards instead of clipping silently.
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 2,
+              ),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainer,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                lesson.subject,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w500,
+                  color: cs.onSurfaceVariant,
+                  letterSpacing: 0.3,
                 ),
-              ],
+              ),
             ),
             const SizedBox(height: 4),
             Text(

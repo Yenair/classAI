@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/widgets/conflict_banner.dart';
+import 'package:classai/core/widgets/app_side_nav.dart';
 import 'package:classai/core/widgets/status_chip.dart';
 import 'package:classai/core/widgets/sync_indicator.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
@@ -202,7 +203,7 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
     return [
       NavItem(icon: Icons.home_rounded, label: 'Home', route: null),
       NavItem(icon: Icons.menu_book_rounded, label: 'Lessons', route: '/lessons'),
-      NavItem(icon: Icons.fact_check_rounded, label: 'Exams', route: '/exams'),
+      NavItem(icon: Icons.fact_check_rounded, label: 'Tests & Exams', route: '/exams'),
       // NavItem(icon: Icons.inventory_2_rounded, label: 'Vault', route: '/vault'), // Vault feature disabled
       // Scheme of Work is admin-only — teachers plan their term via "Plan My
       // Term" on the Lessons list.
@@ -321,181 +322,44 @@ class _EditorLayoutState extends ConsumerState<EditorLayout> {
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Navigation Drawer ───────────────────────────────────
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeInOut,
-            width: _isSidebarOpen ? 288 : 72,
-            color: cs.surfaceContainerLow,
-            clipBehavior: Clip.antiAlias,
-            child: SingleChildScrollView(
-              physics: (Platform.isAndroid || Platform.isIOS)
-                  ? const BouncingScrollPhysics()
-                  : null,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: 24),
-                  // Logo area — tapping toggles sidebar
-                  InkWell(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                    onTap: () => setState(() => _isSidebarOpen = !_isSidebarOpen),
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: _isSidebarOpen ? 24 : 12,
-                      ),
-                      child: _isSidebarOpen
-                          ? Row(
-                              children: [
-                                Container(
-                                  width: 48,
-                                  height: 48,
-                                  decoration: BoxDecoration(
-                                    color: cs.primaryContainer,
-                                    borderRadius: BorderRadius.circular(
-                                      AppTheme.radiusFull,
-                                    ),
-                                  ),
-                                  child: Icon(
-                                    Icons.person_rounded,
-                                    color: cs.onPrimaryContainer,
-                                    size: 24,
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      FittedBox(
-                                        fit: BoxFit.scaleDown,
-                                        child: Text(
-                                          'ClassAI',
-                                          style: theme.textTheme.headlineMedium
-                                              ?.copyWith(
-                                            fontWeight: FontWeight.w900,
-                                            color: cs.primary,
-                                          ),
-                                        ),
-                                      ),
-                                      Text(
-                                        'Nigerian Academic Partner',
-                                        style: theme.textTheme.bodyMedium
-                                            ?.copyWith(
-                                          color: cs.onSurfaceVariant,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            )
-                          : Center(
-                              child: Container(
-                                width: 48,
-                                height: 48,
-                                decoration: BoxDecoration(
-                                  color: cs.primaryContainer,
-                                  borderRadius: BorderRadius.circular(
-                                    AppTheme.radiusFull,
-                                  ),
-                                ),
-                                child: Icon(
-                                  Icons.menu_rounded,
-                                  color: cs.onPrimaryContainer,
-                                  size: 24,
-                                ),
-                              ),
-                            ),
+          // ── Navigation Drawer (shared AppSideNav — Lesson Editor design) ──
+          Builder(
+            builder: (sidebarContext) {
+              final currentPath =
+                  GoRouter.maybeOf(sidebarContext)?.state.uri.path ?? '/';
+              final teacherName =
+                  ref.read(authProvider).currentTeacher?.teacherName ?? 'Teacher';
+              return AppSideNav(
+                cs: cs,
+                theme: theme,
+                teacherName: teacherName,
+                isOpen: _isSidebarOpen,
+                onToggle: () =>
+                    setState(() => _isSidebarOpen = !_isSidebarOpen),
+                items: [
+                  for (final item in _navItems)
+                    AppSideNavItem(
+                      label: item.label,
+                      icon: item.icon,
+                      isActive: item.route == null
+                          ? currentPath == '/'
+                          : currentPath == item.route ||
+                              currentPath.startsWith('${item.route}/'),
                     ),
-                  ),
-                  const SizedBox(height: 32),
-                // Nav items
-                ...List.generate(_navItems.length, (index) {
-                  final item = _navItems[index];
-                  final currentPath = GoRouter.maybeOf(context)?.state.uri.path ?? '/';
-                  final isActive = item.route == null
-                      ? currentPath == '/'
-                      : currentPath == item.route || currentPath.startsWith('${item.route}/');
-                  return Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: _isSidebarOpen ? 12 : 8,
-                      vertical: 4,
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(
-                          AppTheme.radiusFull,
-                        ),
-                        onTap: () {
-                          if (item.route != null) {
-                            final route = item.route!;
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (context.mounted) {
-                                context.push(route);
-                              }
-                            });
-                          }
-                        },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          transform: isActive
-                              ? Matrix4.translationValues(4.0, 0.0, 0.0)
-                              : Matrix4.identity(),
-                          padding: EdgeInsets.symmetric(
-                            horizontal: _isSidebarOpen ? 16 : 12,
-                            vertical: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isActive
-                                ? cs.secondaryFixed
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(
-                              AppTheme.radiusFull,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: _isSidebarOpen
-                                ? MainAxisAlignment.start
-                                : MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                item.icon,
-                                size: 24,
-                                color: isActive
-                                    ? cs.onSecondaryFixed
-                                    : cs.onSurfaceVariant,
-                              ),
-                              if (_isSidebarOpen) ...[
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Text(
-                                    item.label,
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
-                                    style:
-                                        theme.textTheme.labelLarge?.copyWith(
-                                      fontWeight: isActive
-                                          ? FontWeight.w600
-                                          : FontWeight.w500,
-                                      color: isActive
-                                          ? cs.onSecondaryFixed
-                                          : cs.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }),
-              ],
-            ),
-            ),
+                ],
+                onItemTap: (BuildContext sidebarContext, String label) {
+                  for (final item in _navItems) {
+                    if (item.label == label && item.route != null) {
+                      final route = item.route!;
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (sidebarContext.mounted) context.push(route);
+                      });
+                      return;
+                    }
+                  }
+                },
+              );
+            },
           ),
 
           // ── Main Content Area ───────────────────────────────────
@@ -1015,7 +879,7 @@ class _DailyCreditsInfoRow extends StatelessWidget {
             label,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: cs.onSurface.withValues(alpha: 0.65),
-              overflow: TextOverflow.clip,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ),
@@ -1027,7 +891,7 @@ class _DailyCreditsInfoRow extends StatelessWidget {
             style: theme.textTheme.bodyMedium?.copyWith(
               fontWeight: FontWeight.w600,
               color: cs.onSurface,
-              overflow: TextOverflow.clip,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ),
@@ -1123,7 +987,7 @@ class _RecentLessonsSection extends ConsumerWidget {
                 'Recent Lessons',
                 style: theme.textTheme.titleLarge?.copyWith(
                   color: cs.primary,
-                  overflow: TextOverflow.clip,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ),
@@ -1198,19 +1062,13 @@ class _RecentLessonsSection extends ConsumerWidget {
                                         '${lesson.classLevel} • ${lesson.subject}',
                                     status: lesson.status == 'completed'
                                         ? 'Completed'
-                                        : (lesson.isUnlocked
-                                            ? 'Unlocked'
-                                            : (lesson.status == 'generated'
-                                                ? 'Generated'
-                                                : 'Draft')),
+                                        : (lesson.status == 'generated'
+                                            ? 'Generated'
+                                            : 'Draft'),
                                       accentColor: switch (lesson.status) {
                                         'completed' => kStatusCompletedColor,
-                                        'generated' when lesson.isUnlocked =>
-                                          kStatusUnlockedColor,
                                         'generated' => kStatusGeneratedColor,
-                                        _ => lesson.isUnlocked
-                                            ? kStatusUnlockedColor
-                                            : kStatusDraftColor,
+                                        _ => kStatusDraftColor,
                                       },
                                       needsSync: lesson.serverId == null ||
                                           lesson.serverId!.isEmpty,
@@ -1244,19 +1102,13 @@ class _RecentLessonsSection extends ConsumerWidget {
                                           '${lesson.classLevel} • ${lesson.subject}',
                                       status: lesson.status == 'completed'
                                           ? 'Completed'
-                                          : (lesson.isUnlocked
-                                              ? 'Unlocked'
-                                              : (lesson.status == 'generated'
-                                                  ? 'Generated'
-                                                  : 'Draft')),
+                                          : (lesson.status == 'generated'
+                                              ? 'Generated'
+                                              : 'Draft'),
                                       accentColor: switch (lesson.status) {
                                         'completed' => kStatusCompletedColor,
-                                        'generated' when lesson.isUnlocked =>
-                                          kStatusUnlockedColor,
                                         'generated' => kStatusGeneratedColor,
-                                        _ => lesson.isUnlocked
-                                            ? kStatusUnlockedColor
-                                            : kStatusDraftColor,
+                                        _ => kStatusDraftColor,
                                       },
                                       needsSync: lesson.serverId == null ||
                                           lesson.serverId!.isEmpty,
@@ -1289,19 +1141,13 @@ class _RecentLessonsSection extends ConsumerWidget {
                               subtitle: '${lesson.classLevel} • ${lesson.subject}',
                               status: lesson.status == 'completed'
                                   ? 'Completed'
-                                  : (lesson.isUnlocked
-                                      ? 'Unlocked'
-                                      : (lesson.status == 'generated'
-                                          ? 'Generated'
-                                          : 'Draft')),
+                                  : (lesson.status == 'generated'
+                                      ? 'Generated'
+                                      : 'Draft'),
                               accentColor: switch (lesson.status) {
                                 'completed' => kStatusCompletedColor,
-                                'generated' when lesson.isUnlocked =>
-                                  kStatusUnlockedColor,
                                 'generated' => kStatusGeneratedColor,
-                                _ => lesson.isUnlocked
-                                    ? kStatusUnlockedColor
-                                    : kStatusDraftColor,
+                                _ => kStatusDraftColor,
                               },
                               needsSync: lesson.serverId == null ||
                                   lesson.serverId!.isEmpty,
@@ -1418,7 +1264,6 @@ class _LessonCard extends StatelessWidget {
                                   label: status,
                                   icon: switch (status) {
                                     'Completed' => Icons.check_circle_rounded,
-                                    'Unlocked' => Icons.auto_awesome_rounded,
                                     'Generated' => Icons.lock_open_rounded,
                                     _ => Icons.edit_note_rounded,
                                   },
@@ -1451,7 +1296,7 @@ class _LessonCard extends StatelessWidget {
                         const SizedBox(height: 4),
                         Text(
                           subtitle,
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.labelMedium?.copyWith(
                             color: cs.outline,
@@ -1475,7 +1320,7 @@ class _LessonCard extends StatelessWidget {
                                   timeAgo,
                                   style: theme.textTheme.labelMedium?.copyWith(
                                     color: cs.onSurfaceVariant,
-                                    overflow: TextOverflow.clip,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ),
@@ -1515,12 +1360,10 @@ class _ReaderTotalOverviewPanel extends ConsumerWidget {
     final lessonData = lessonCountAsync.asData?.value;
     final examData = examCountAsync.asData?.value;
 
-    final lessonLabel = lessonData != null
-        ? '${lessonData.total} (${lessonData.secondaryCount} completed)'
-        : '...';
-    final examLabel = examData != null
-        ? '${examData.total} (${examData.secondaryCount} unlocked)'
-        : '...';
+    // Total-only counts (2F.2): the generated/completed breakdown moved out
+    // of the stat labels so the number matches what the list screens show.
+    final lessonLabel = lessonData != null ? '${lessonData.total}' : '...';
+    final examLabel = examData != null ? '${examData.total}' : '...';
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1562,7 +1405,7 @@ class _ReaderTotalOverviewPanel extends ConsumerWidget {
           const SizedBox(height: 12),
           _OverviewStatRow(
             icon: Icons.fact_check_rounded,
-            label: 'Exams',
+            label: 'Tests & Exams',
             value: examCountAsync.isLoading ? '...' : examLabel,
             cs: cs,
             theme: theme,
@@ -1654,12 +1497,8 @@ class _RightColumn extends ConsumerWidget {
     final lessonData = lessonCountAsync.asData?.value;
     final examData = examCountAsync.asData?.value;
 
-    final lessonCountLabel = lessonData != null
-        ? '${lessonData.total} (${lessonData.secondaryCount} completed)'
-        : '...';
-    final examCountLabel = examData != null
-        ? '${examData.total} (${examData.secondaryCount} unlocked)'
-        : '...';
+    final lessonCountLabel = lessonData != null ? '${lessonData.total}' : '...';
+    final examCountLabel = examData != null ? '${examData.total}' : '...';
 
     return Column(
       children: [
@@ -1701,7 +1540,7 @@ class _RightColumn extends ConsumerWidget {
                           Text(
                             'LESSONS CREATED'.toUpperCase(),
                             style: theme.textTheme.labelMedium?.copyWith(
-                              color: cs.onPrimary.withValues(alpha: 0.7),
+                              color: cs.onPrimary.withValues(alpha: 0.8),
                               letterSpacing: 0.5,
                             ),
                           ),
@@ -1714,7 +1553,7 @@ class _RightColumn extends ConsumerWidget {
                             child: Text(
                               lessonCountAsync.isLoading
                                   ? '...'
-                                  : lessonCountLabel,
+                                  : lessonCountLabel, 
                               style: theme.textTheme.headlineMedium?.copyWith(
                                 color: cs.onPrimary,
                               ),
@@ -1739,13 +1578,13 @@ class _RightColumn extends ConsumerWidget {
                         Text(
                           'EXAMS GENERATED'.toUpperCase(),
                           style: theme.textTheme.labelMedium?.copyWith(
-                            color: cs.onPrimary.withValues(alpha: 0.7),
+                            color: cs.onPrimary.withValues(alpha: 0.8),
                             letterSpacing: 0.5,
                           ),
                         ),
                         const SizedBox(height: 4),
                         // Scale the count down (never ellipsize) so long
-                        // labels like "0 (0 unlocked)" fit the card width.
+                        // labels like "0 (0 generated)" fit the card width.
                         FittedBox(
                           fit: BoxFit.scaleDown,
                           alignment: Alignment.centerLeft,
@@ -1762,20 +1601,7 @@ class _RightColumn extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 16),
-              Text(
-                'CONFLICTS RESOLVED'.toUpperCase(),
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: cs.onPrimary.withValues(alpha: 0.7),
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '$conflictCount',
-                style: theme.textTheme.headlineMedium?.copyWith(
-                  color: cs.onPrimary,
-                ),
-              ),
+              
             ],
           ),
         ),
@@ -1882,7 +1708,7 @@ class _ReaderLayoutState extends ConsumerState<ReaderLayout> {
       const _ReaderNavSpec(icon: Icons.home_rounded, label: 'Home', route: 'home'),
       const _ReaderNavSpec(
           icon: Icons.menu_book_rounded, label: 'Lessons', route: '/lessons', isFilled: true),
-      const _ReaderNavSpec(icon: Icons.fact_check_rounded, label: 'Exams', route: 'exams'),
+      const _ReaderNavSpec(icon: Icons.fact_check_rounded, label: 'Tests & Exams', route: 'exams'),
       if (isAdmin)
         const _ReaderNavSpec(
             icon: Icons.calendar_month_rounded, label: 'Scheme of Work', route: '/scheme-of-work'),
@@ -2670,7 +2496,7 @@ class _FreePlanBanner extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              "You're on the Free plan. Upgrade to unlock more features.",
+              "You're on the Free plan. Upgrade to access more features.",
               style: theme.textTheme.bodySmall?.copyWith(
                 color: Colors.amber.shade900,
                 fontWeight: FontWeight.w600,

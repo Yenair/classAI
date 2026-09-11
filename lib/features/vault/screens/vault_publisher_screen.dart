@@ -1058,7 +1058,7 @@ class _FormContent extends StatelessWidget {
                   child: Text(
                     'Offline credits required to acquire:',
                     style: tt.bodyMedium?.copyWith(
-                      overflow: TextOverflow.clip,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
@@ -1225,7 +1225,7 @@ class _RecentSubmissionsPanel extends StatelessWidget {
                   'Recent Submissions',
                   style: tt.titleLarge?.copyWith(
                     color: cs.onSurface,
-                    overflow: TextOverflow.clip,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
@@ -1295,7 +1295,7 @@ class _RecentSubmissionsPanel extends StatelessWidget {
                     style: tt.labelMedium?.copyWith(
                       color: cs.outline,
                       fontWeight: FontWeight.w500,
-                      overflow: TextOverflow.clip,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
@@ -1433,7 +1433,7 @@ class _TimelineNode extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                             color: cs.onSurface,
                           ),
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),

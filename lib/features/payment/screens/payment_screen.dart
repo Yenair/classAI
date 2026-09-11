@@ -1036,7 +1036,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                   'Selected Plan',
                   style: textTheme.bodyMedium?.copyWith(
                     color: cs.onSurfaceVariant,
-                    overflow: TextOverflow.clip,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
@@ -1048,7 +1048,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                   style: textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w500,
                     color: cs.onSurface,
-                    overflow: TextOverflow.clip,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
@@ -1063,7 +1063,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                   'Duration',
                   style: textTheme.bodyMedium?.copyWith(
                     color: cs.onSurfaceVariant,
-                    overflow: TextOverflow.clip,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
@@ -1075,7 +1075,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                   style: textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w500,
                     color: cs.onSurface,
-                    overflow: TextOverflow.clip,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
@@ -1096,7 +1096,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                   style: textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: cs.onSurface,
-                    overflow: TextOverflow.clip,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
@@ -1108,7 +1108,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                   style: textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: cs.primary,
-                    overflow: TextOverflow.clip,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),

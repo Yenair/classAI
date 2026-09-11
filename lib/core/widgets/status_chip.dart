@@ -14,7 +14,6 @@ import 'package:flutter/material.dart';
 // ── Lesson/exam lifecycle statuses ────────────────────────────────────────
 const kStatusDraftColor = Color(0xFF9E9E9E); // grey
 const kStatusGeneratedColor = Color(0xFF2196F3); // blue
-const kStatusUnlockedColor = Color(0xFF7E57C2); // purple
 const kStatusCompletedColor = Color(0xFF4CAF50); // green
 const kStatusNeedsSyncColor = Color(0xFFFFA000); // amber
 
@@ -82,13 +81,12 @@ class StatusChip extends StatelessWidget {
   }
 }
 
-/// Status chip for an exam row. Exams have no separate completed/generated
-/// display today, so a row is either Draft or Unlocked.
-StatusChip examRowStatusChip({required bool unlocked}) => unlocked
+/// Status chip for an exam row. Exams are either Draft or Generated.
+StatusChip examRowStatusChip({required bool generated}) => generated
     ? const StatusChip(
-        label: 'Unlocked',
-        icon: Icons.auto_awesome_rounded,
-        color: kStatusUnlockedColor,
+        label: 'Generated',
+        icon: Icons.lock_open_rounded,
+        color: kStatusGeneratedColor,
       )
     : const StatusChip(
         label: 'Draft',
@@ -97,10 +95,9 @@ StatusChip examRowStatusChip({required bool unlocked}) => unlocked
       );
 
 /// Status chip for a lesson row. Priority:
-/// Completed > Unlocked > Generated > Draft.
+/// Completed > Generated > Draft.
 StatusChip lessonRowStatusChip({
   required bool completed,
-  required bool unlocked,
   required bool generated,
 }) {
   if (completed) {
@@ -108,13 +105,6 @@ StatusChip lessonRowStatusChip({
       label: 'Completed',
       icon: Icons.check_circle_rounded,
       color: kStatusCompletedColor,
-    );
-  }
-  if (unlocked) {
-    return const StatusChip(
-      label: 'Unlocked',
-      icon: Icons.auto_awesome_rounded,
-      color: kStatusUnlockedColor,
     );
   }
   if (generated) {

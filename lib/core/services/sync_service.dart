@@ -3748,7 +3748,9 @@ class SyncService {
         final limit = db.securityConfigDao.getDailyCreditLimit(tier);
 
         await db.securityConfigDao.updateConfig(
-          offlineCredits: limit < 0 ? 0 : limit,
+          // Elite (-1): store the sentinel, not 0, so a stale-tier read can
+          // never display an exhausted balance for an unlimited account.
+          offlineCredits: limit < 0 ? -1 : limit,
           dailyCreditsDate: serverDate,
         );
       }
@@ -5597,6 +5599,13 @@ class SyncService {
   }
 
   void _setState(SyncState next) {
+    // Skip duplicate/heartbeat transitions during bulk merge — the pull loop
+    // fires one _setState per merged record, which previously ballooned
+    // [stateHistory] into tens of thousands of entries on large syncs. That
+    // unbounded list growth ran on the UI isolate and janked scrolling
+    // mid-sync. Keeping only transitions between DIFFERENT states preserves
+    // the diagnostic value of the history while bounding its size.
+    if (_state == next) return;
     _state = next;
     stateHistory.add(next);
   }

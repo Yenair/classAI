@@ -173,10 +173,6 @@ Future<void> _pumpDashboard(
         ),
       ],
       child: MaterialApp(
-        // The test font (Ahem) renders every glyph as a fontSize-wide
-        // square, so narrow-width pumps scale text like the other layout
-        // tests to avoid unrelated Ahem-only overflows outside the lesson
-        // cards. linear(1.0) is a no-op for the default width pumps.
         builder: (context, widget) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
             textScaler: TextScaler.linear(textScale),
@@ -227,27 +223,22 @@ void main() {
   });
 
   testWidgets(
-    'dashboard lesson cards show the Generated chip only while locked '
-    'and the Needs Sync chip only without a serverId',
+    'dashboard lesson cards show Generated chip for generated content '
+    'and Needs Sync chip only without a serverId',
     (tester) async {
       await _seedLesson(
         db,
         fixture,
-        topic: 'Locked Generated Unsynced',
-        status: 'generated',
-      );
-      await _seedLesson(
-        db,
-        fixture,
-        topic: 'Unlocked Generated Unsynced',
+        topic: 'Generated Unsynced',
         status: 'generated',
         unlocked: true,
       );
       await _seedLesson(
         db,
         fixture,
-        topic: 'Locked Generated Synced',
+        topic: 'Generated Synced',
         status: 'generated',
+        unlocked: true,
         serverId: '00000000-0000-0000-0000-00000000ef01',
       );
       await _seedLesson(
@@ -259,91 +250,62 @@ void main() {
 
       await _pumpDashboard(tester, db: db, notifier: notifier);
 
-      // All four seeded lessons render on the Recent Lessons cards.
-      expect(find.text('Locked Generated Unsynced'), findsOneWidget);
-      expect(find.text('Unlocked Generated Unsynced'), findsOneWidget);
-      expect(find.text('Locked Generated Synced'), findsOneWidget);
+      // All three seeded lessons render on the Recent Lessons cards.
+      expect(find.text('Generated Unsynced'), findsOneWidget);
+      expect(find.text('Generated Synced'), findsOneWidget);
       expect(find.text('Draft Synced'), findsOneWidget);
 
-      // Primary status chips: Generated for locked generated,
-      // Unlocked for unlocked generated, Draft for draft.
+      // Primary status chips: Generated for generated lessons, Draft for drafts.
       final chips = find.byType(StatusChip);
       expect(
         find.descendant(of: chips, matching: find.text('Generated')),
-        findsNWidgets(2), // Locked Generated Unsynced + Locked Generated Synced
-      );
-      expect(
-        find.descendant(of: chips, matching: find.text('Unlocked')),
-        findsNWidgets(1), // Unlocked Generated Unsynced
+        findsNWidgets(2), // Generated Unsynced + Generated Synced
       );
       expect(
         find.descendant(of: chips, matching: find.text('Draft')),
         findsNWidgets(1), // Draft Synced
       );
-      // Needs Sync appears on the two serverId-less lessons.
+      // Needs Sync appears on the one serverId-less lesson.
       expect(
         find.descendant(of: chips, matching: find.text('Needs Sync')),
-        findsNWidgets(2),
+        findsNWidgets(1),
       );
       expect(
         find.descendant(
           of: chips,
           matching: find.byIcon(Icons.sync_rounded),
         ),
-        findsNWidgets(2),
+        findsNWidgets(1),
       );
 
-      // Scoped per card: locked generated + unsynced shows Generated
+      // Scoped per card: generated + unsynced shows Generated
       // primary + Needs Sync.
       expect(
         find.descendant(
-          of: _chipsInLessonCard('Locked Generated Unsynced'),
+          of: _chipsInLessonCard('Generated Unsynced'),
           matching: find.text('Generated'),
         ),
         findsOneWidget,
       );
       expect(
         find.descendant(
-          of: _chipsInLessonCard('Locked Generated Unsynced'),
+          of: _chipsInLessonCard('Generated Unsynced'),
           matching: find.text('Needs Sync'),
         ),
         findsOneWidget,
       );
 
-      // Unlocked: primary Unlocked, no Generated, Needs Sync remains.
+      // Generated + synced: Generated primary, no Needs Sync.
       expect(
         find.descendant(
-          of: _chipsInLessonCard('Unlocked Generated Unsynced'),
-          matching: find.text('Unlocked'),
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.descendant(
-          of: _chipsInLessonCard('Unlocked Generated Unsynced'),
-          matching: find.text('Generated'),
-        ),
-        findsNothing,
-      );
-      expect(
-        find.descendant(
-          of: _chipsInLessonCard('Unlocked Generated Unsynced'),
-          matching: find.text('Needs Sync'),
-        ),
-        findsOneWidget,
-      );
-
-      // Synced locked: Generated primary, no Needs Sync.
-      expect(
-        find.descendant(
-          of: _chipsInLessonCard('Locked Generated Synced'),
+          of: _chipsInLessonCard('Generated Synced'),
           matching: find.text('Generated'),
         ),
         findsOneWidget,
       );
       expect(
         find.descendant(
-          of: _chipsInLessonCard('Locked Generated Synced'),
+          of: _chipsInLessonCard('Generated Synced'),
           matching: find.text('Needs Sync'),
         ),
         findsNothing,

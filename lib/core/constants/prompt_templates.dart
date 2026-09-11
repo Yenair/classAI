@@ -84,6 +84,9 @@ class PromptTemplates {
         '## Assessment\n'
         '## Homework\n'
         'Do NOT include any introductory or concluding text. Return ONLY the structured content with the headings above. '
+        'Write every section value as clean, human-readable prose in the style of a professional lesson plan document. '
+        'For Lesson Presentation use numbered steps with a short step title, one activity per line as a dash bullet, and a duration sentence — for example: "Step 1 - Introduction: Set the stage" followed by "- Greet the students." lines and "Duration: 10 minutes". '
+        'NEVER output raw JSON, braces, square brackets, key:value pairs, or stepN: labels inside any section value - that notation belongs only in the outer JSON structure itself. '
         'Return ONLY valid JSON: '
         '{"objectives":[...],"vocabulary":[...],"materials":[...],"presentation":{...},"assessment":"...","homework":"...","diagrams":[{"description":"..."}],"references":[{"title":"...","author":"...","publisher":"...","edition":"...","isbn":"...","relatedTopics":["..."],"searchQuery":"..."}],"attribution":"$attribution"} '
         'Include between 1 and 3 diagram descriptions in the "diagrams" array. '
@@ -109,6 +112,23 @@ class PromptTemplates {
         '${_referenceInstructions()} '
         'Return ONLY valid JSON: '
         '{"references":[{"title":"...","author":"...","publisher":"...","edition":"...","isbn":"...","relatedTopics":["..."],"searchQuery":"..."}],"attribution":"$attribution"}';
+  }
+
+  /// Generate only suggested-image (diagram) descriptions for an existing
+  /// lesson. Used by the Suggested Images section's regenerate action and by
+  /// the post-generation retry when the main lesson call came back without
+  /// usable diagram descriptions. Returns `{"diagrams":[{"description":"..."}]}`.
+  static String diagramsOnly(
+      String subject, String classLevel, int week, String topic,
+      {String teacherName = 'Teacher', String schoolName = 'School'}) {
+    return 'You are a professional educator preparing visual aids for a lesson '
+        'in $subject, $classLevel, Week $week, Topic: "$topic". '
+        'Suggest 1 to 3 educational images that would help pupils understand '
+        'this lesson. Each description is a concise, self-contained prompt '
+        'for generating a single clear educational image (a diagram, chart, '
+        'illustration, or scene) relevant to the topic. Do NOT include any '
+        'other lesson content. Return ONLY valid JSON: '
+        '{"diagrams":[{"description":"..."}]}';
   }
 
   /// Generate a combined exam prompt that supports MCQ, Theory, and Subjective.

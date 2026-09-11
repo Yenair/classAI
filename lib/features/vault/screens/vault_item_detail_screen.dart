@@ -131,7 +131,7 @@ class VaultItemDetailScreen extends ConsumerWidget {
                     'By ${item.authorName}',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: cs.onSurfaceVariant,
-                          overflow: TextOverflow.clip,
+                          overflow: TextOverflow.ellipsis,
                         ),
                   ),
                 ),
@@ -215,7 +215,7 @@ class VaultItemDetailScreen extends ConsumerWidget {
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                           color: cs.tertiary,
-                          overflow: TextOverflow.clip,
+                          overflow: TextOverflow.ellipsis,
                         ),
                   ),
                 ),
@@ -234,7 +234,7 @@ class VaultItemDetailScreen extends ConsumerWidget {
                       'Acquired on ${_formatDate(item.acquisitionDate!)}',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: cs.primary,
-                            overflow: TextOverflow.clip,
+                            overflow: TextOverflow.ellipsis,
                           ),
                     ),
                   ),

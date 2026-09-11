@@ -462,11 +462,16 @@ class _DatabaseBootstrapperState extends State<DatabaseBootstrapper> {
                   return Scaffold(
                     body: Center(
                       child: _isWiping
-                          ? const CircularProgressIndicator()
-                          : const Text(
+                          ? CircularProgressIndicator(
+                              color: Theme.of(screenCtx).colorScheme.primary,
+                            )
+                          : Text(
                               'Your local data could not be opened, likely due '
                               'to a security key issue.',
                               textAlign: TextAlign.center,
+                              style: Theme.of(screenCtx).textTheme.bodyLarge?.copyWith(
+                                color: Theme.of(screenCtx).colorScheme.onSurface,
+                              ),
                             ),
                     ),
                   );
@@ -813,13 +818,16 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const CircularProgressIndicator(),
+                  CircularProgressIndicator(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                   const SizedBox(height: 32),
                   Text(
                     'Getting your saved lessons and exams…',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                   const SizedBox(height: 12),

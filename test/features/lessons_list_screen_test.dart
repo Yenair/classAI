@@ -557,7 +557,7 @@ void main() {
     );
 
     testWidgets(
-      'a generated but unlocked lesson hides the secondary Generated chip',
+      'a generated lesson shows the Generated chip',
       (tester) async {
         fixture = await _seedAuthFixture(db, teacherRole: 'teacher');
         await db.lessonsDao.insertLesson(
@@ -565,7 +565,7 @@ void main() {
             subject: 'Mathematics',
             classLevel: 'JSS 1',
             week: 1,
-            topic: 'Generated Unlocked Lesson',
+            topic: 'Generated Lesson',
             difficulty: 'medium',
             bloomsVerbs: '',
             curriculum: 'NERDC',
@@ -581,27 +581,15 @@ void main() {
 
         final chips = find.byType(StatusChip);
         expect(
-          find.descendant(of: chips, matching: find.text('Unlocked')),
-          findsOneWidget,
-        );
-        expect(
-          find.descendant(
-            of: chips,
-            matching: find.byIcon(Icons.auto_awesome_rounded),
-          ),
-          findsOneWidget,
-        );
-        expect(
           find.descendant(of: chips, matching: find.text('Generated')),
-          findsNothing,
-          reason: 'Unlocked already conveys generated, so no secondary chip',
+          findsOneWidget,
         );
         expect(
           find.descendant(
             of: chips,
             matching: find.byIcon(Icons.lock_open_rounded),
           ),
-          findsNothing,
+          findsOneWidget,
         );
         // Still no serverId, so Needs Sync remains.
         expect(

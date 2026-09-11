@@ -17,6 +17,7 @@ import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/core/widgets/question_cards.dart';
 import 'package:classai/core/widgets/upgrade_request_dialog.dart';
 import 'package:classai/core/theme/app_theme.dart';
+import 'package:classai/core/widgets/app_side_nav.dart';
 import 'package:classai/core/utils/platform_helper.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/dashboard/providers/credit_state_provider.dart';
@@ -62,9 +63,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
   bool _editorSidebarOpen = false;
   bool _sidebarInitialized = false;
   int _dailyCreditBalance = 3;
-  // Unified daily credits (R2): -1 means unlimited (elite). One pool
-  // replaced the old per-feature preview/generation counters (2E.8).
-  int _dailyCredits = 0;
+  // Unified daily credits (R2): -1 means unlimited (elite) or not yet
+  // loaded (display hides while negative; the Generate gate blocks at 0).
+  int _dailyCredits = -1;
   String? _teacherId;
   String? _schoolId;
   String _subscriptionTier = 'free';
@@ -629,6 +630,9 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         }
       }
       if (mounted) setState(() {});
+      // Reload credits now that _subscriptionTier is resolved - the earlier
+      // load may have run with the 'free' fallback tier.
+      await _loadDailyCredits();
       await _loadTeacherLessons();
       await _refreshSourceMissing();
       await _refreshSavedLessonAvailability();
@@ -653,6 +657,24 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
             ref.read(dailyCreditStateProvider).currentDailyCredits);
       }
     } catch (_) {}
+  }
+
+  /// Routes the shared sidebar (AppSideNav) to the standard tabs.
+  void _navigateTo(String label) {
+    switch (label) {
+      case 'Home':
+        context.go('/');
+        break;
+      case 'Lessons':
+        context.go('/lessons');
+        break;
+      case 'Exams':
+        context.go('/exams');
+        break;
+      case 'Admin':
+        context.go('/admin');
+        break;
+    }
   }
 
   Future<void> _showUpgradeRequiredDialog() async {
@@ -1346,7 +1368,7 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
                           padding: const EdgeInsets.only(top: 2),
                           child: Text(summary, style: theme.textTheme.bodySmall?.copyWith(
                             color: cs.onSurfaceVariant,
-                          ), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ), maxLines: 2, overflow: TextOverflow.ellipsis),
                         ),
                     ],
                   ),
@@ -1439,12 +1461,23 @@ class _ExamEditorScreenState extends ConsumerState<ExamEditorScreen> {
         children: [
           // ── Navigation Drawer (tablet+; never on Android) ─────────
           if (PlatformHelper.shouldShowSidebar(context))
-            _NavDrawer(
+            AppSideNav(
               cs: cs,
               theme: theme,
+              teacherName: _teacherName,
               isOpen: _editorSidebarOpen,
-              onToggleSidebar: () => setState(
+              onToggle: () => setState(
                   () => _editorSidebarOpen = !_editorSidebarOpen),
+              items: _navItems
+                  .map(
+                    (item) => AppSideNavItem(
+                      label: item.label,
+                      icon: item.icon,
+                      isActive: item.isActive,
+                    ),
+                  )
+                  .toList(),
+              onItemTap: (BuildContext context, String label) => _navigateTo(label),
             ),
 
           // ── Main Content ─────────────────────────────────────────
@@ -1758,201 +1791,8 @@ class _BottomDef {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Navigation Drawer
-// ═══════════════════════════════════════════════════════════════════════
-class _NavDrawer extends StatelessWidget {
-  final ColorScheme cs;
-  final ThemeData theme;
-  final bool isOpen;
-  final VoidCallback? onToggleSidebar;
-  const _NavDrawer({
-    required this.cs,
-    required this.theme,
-    required this.isOpen,
-    this.onToggleSidebar,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 768 || Platform.isAndroid) return const SizedBox.shrink();
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeInOut,
-          width: isOpen ? 288 : 72,
-          decoration: BoxDecoration(
-            color: cs.surfaceContainerLow,
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            children: [
-              SizedBox(height: isOpen ? 32 : 16),
-              // Logo area — tapping toggles sidebar
-              InkWell(
-                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                onTap: onToggleSidebar,
-                child: Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isOpen ? 24 : 12,
-                  ),
-                  child: isOpen
-                      ? Row(
-                          children: [
-                            Container(
-                              width: 48,
-                              height: 48,
-                              decoration: BoxDecoration(
-                                color: cs.surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(
-                                  AppTheme.radiusFull,
-                                ),
-                              ),
-                              child: Icon(
-                                Icons.person_rounded,
-                                size: 24,
-                                color: cs.onSurface.withValues(alpha: 0.54),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Flexible(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'ClassAI',
-                                    style: theme.textTheme.headlineMedium?.copyWith(
-                                      fontWeight: FontWeight.w900,
-                                      color: cs.primary,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  Text(
-                                    'Nigerian Academic Partner',
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: cs.onSurfaceVariant,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        )
-                      : Center(
-                          child: Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: cs.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(
-                                AppTheme.radiusFull,
-                              ),
-                            ),
-                            child: Icon(
-                              Icons.menu_rounded,
-                              size: 24,
-                              color: cs.onSurface.withValues(alpha: 0.54),
-                            ),
-                          ),
-                        ),
-                ),
-              ),
-              SizedBox(height: isOpen ? 32 : 16),
-              Expanded(
-                child: Column(
-                  children: _ExamEditorScreenState._navItems.map((item) {
-                    return Container(
-                      margin: EdgeInsets.symmetric(
-                        horizontal: isOpen ? 12 : 4,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: item.isActive
-                            ? cs.secondaryFixed
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(
-                          AppTheme.radiusFull,
-                        ),
-                      ),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                        onTap: () => _navigateTo(context, item.label),
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: isOpen ? 16 : 8,
-                            vertical: 12,
-                          ),
-                          child: isOpen
-                              ? Row(
-                                  children: [
-                                    Icon(
-                                      item.icon,
-                                      size: 22,
-                                      color: item.isActive
-                                          ? cs.onSecondaryFixed
-                                          : cs.onSurfaceVariant,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Flexible(
-                                      child: Text(
-                                        item.label,
-                                        style: theme.textTheme.labelLarge?.copyWith(
-                                          fontWeight: item.isActive
-                                              ? FontWeight.w700
-                                              : FontWeight.w500,
-                                          color: item.isActive
-                                              ? cs.onSecondaryFixed
-                                              : cs.onSurfaceVariant,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : Center(
-                                  child: Icon(
-                                    item.icon,
-                                    size: 22,
-                                    color: item.isActive
-                                        ? cs.onSecondaryFixed
-                                        : cs.onSurfaceVariant,
-                                  ),
-                                ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _navigateTo(BuildContext context, String label) {
-    switch (label) {
-      case 'Home':
-        context.go('/');
-        break;
-      case 'Lessons':
-        context.go('/lessons');
-        break;
-      case 'Exams':
-        context.go('/exams');
-        break;
-      // case 'Vault':
-      //   context.go('/vault');
-      //   break;
-      case 'Admin':
-        context.go('/admin');
-        break;
-    }
-  }
-}
-
+// Navigation Drawer — replaced by the shared core/widgets/app_side_nav.dart
+// (AppSideNav), the approved Lesson Editor sidebar design.
 // ═══════════════════════════════════════════════════════════════════════
 // Top Bar
 // ═══════════════════════════════════════════════════════════════════════
@@ -2024,7 +1864,7 @@ class _TopBar extends StatelessWidget {
           Flexible(
             child: Text(
               'Exam Editor',
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w700,
@@ -2207,7 +2047,7 @@ class _ConfigPanel extends StatelessWidget {
                       style: theme.textTheme.titleMedium?.copyWith(
                         color: cs.onPrimaryContainer,
                         fontWeight: FontWeight.w600,
-                        overflow: TextOverflow.clip,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),
@@ -2273,8 +2113,13 @@ class _ConfigPanel extends StatelessWidget {
                         color: cs.onSurface.withValues(alpha: 0.70),
                       ),
                       const SizedBox(height: 4),
-                      SizedBox(
-                        height: AppTheme.touchTarget,
+                      // Constrained (not fixed) height so the field grows
+                      // with the global font-size setting instead of
+                      // clipping scaled text.
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minHeight: AppTheme.touchTarget,
+                        ),
                         child: TextFormField(
                           initialValue: count.toString(),
                           decoration: InputDecoration(
@@ -2445,7 +2290,9 @@ class _ConfigPanel extends StatelessWidget {
                 width: double.infinity,
                 height: AppTheme.touchTarget,
                 child: FilledButton.icon(
-                  onPressed: isGenerating ? null : onGenerate,
+                  onPressed: (isGenerating || remainingDailyGenerations == 0)
+                      ? null
+                      : onGenerate,
                   style: FilledButton.styleFrom(
                     backgroundColor: cs.secondary,
                     foregroundColor: cs.onSecondary,
@@ -2476,13 +2323,16 @@ class _ConfigPanel extends StatelessWidget {
               ),
 
               // Remaining unified daily credits indicator
+              // (-1 = unlimited shows its own label; hidden while loading)
               if (remainingDailyGenerations >= 0)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
-                    remainingDailyGenerations == 0
-                        ? 'No credits left today'
-                        : '$remainingDailyGenerations credit${remainingDailyGenerations == 1 ? '' : 's'} left today',
+                    remainingDailyGenerations < 0
+                        ? 'Unlimited - no daily limit'
+                        : remainingDailyGenerations == 0
+                            ? 'No credits left today'
+                            : '$remainingDailyGenerations credit${remainingDailyGenerations == 1 ? '' : 's'} left today',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: remainingDailyGenerations == 0
                           ? cs.error
@@ -2723,224 +2573,8 @@ class _PreviewPanel extends StatelessWidget {
           // Preview header
           _previewHeader(totalQuestions),
 
-          // Unlocked banner
-          if (hasGenerated && isUnlocked)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: cs.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                  border: Border.all(
-                    color: cs.primary.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.check_circle_rounded, color: cs.primary, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Unlocked — You can edit and save this exam',
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: cs.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: SizedBox(
-                        height: 32,
-                        child: FilledButton.icon(
-                          onPressed: onSave,
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                            ),
-                          ),
-                          icon: const Icon(Icons.save_rounded, size: 16),
-                          label: const Text('Save', style: TextStyle(fontSize: 12)),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-          // Locked overlay
-          if (hasGenerated && !isUnlocked) ...[
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: cs.tertiary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-                  border: Border.all(
-                    color: cs.tertiary.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.lock_rounded,
-                            color: cs.tertiary, size: 20),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Locked — Preview only',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: cs.tertiary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      _buildSummaryText(),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    // Unlock button removed — content auto-unlocks on generate.
-                  ],
-                ),
-              ),
-            ),
-          ],
-
-          // ── Locked preview: MCQ (first 2) ─────────────────────
-          if (hasGenerated && mcqs.isNotEmpty && !isUnlocked) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              child: _SectionHeader(
-                label: 'Section A',
-                subtitle: 'Multiple Choice',
-                cs: cs,
-                theme: theme,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Column(
-                children: [
-                  ...List.generate(
-                    mcqs.length > 2 ? 2 : mcqs.length,
-                    (i) => McqQuestionCard(
-                      index: i,
-                      mcq: mcqs[i],
-                      cs: cs,
-                      theme: theme,
-                      readOnly: true,
-                    ),
-                  ),
-                  if (mcqs.length > 2)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        '... and ${mcqs.length - 2} more MCQ questions',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: cs.tertiary,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
-
-          // ── Locked preview: Theory (first 2) ──────────────────
-          if (hasGenerated && theoryQuestions.isNotEmpty && !isUnlocked) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-              child: _SectionHeader(
-                label: 'Section B',
-                subtitle: 'Theory / Essay',
-                cs: cs,
-                theme: theme,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Column(
-                children: [
-                  ...List.generate(
-                    theoryQuestions.length > 2 ? 2 : theoryQuestions.length,
-                    (i) => TheoryQuestionCard(
-                      index: i,
-                      question: theoryQuestions[i],
-                      cs: cs,
-                      theme: theme,
-                      readOnly: true,
-                    ),
-                  ),
-                  if (theoryQuestions.length > 2)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        '... and ${theoryQuestions.length - 2} more theory questions',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: cs.tertiary,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
-
-          // ── Locked preview: Subjective (first 2) ──────────────
-          if (hasGenerated && subjectiveQuestions.isNotEmpty && !isUnlocked) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-              child: _SectionHeader(
-                label: 'Section C',
-                subtitle: 'Subjective / Practical',
-                cs: cs,
-                theme: theme,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Column(
-                children: [
-                  ...List.generate(
-                    subjectiveQuestions.length > 2 ? 2 : subjectiveQuestions.length,
-                    (i) => TheoryQuestionCard(
-                      index: i,
-                      question: subjectiveQuestions[i],
-                      cs: cs,
-                      theme: theme,
-                      readOnly: true,
-                    ),
-                  ),
-                  if (subjectiveQuestions.length > 2)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        '... and ${subjectiveQuestions.length - 2} more subjective questions',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: cs.tertiary,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
-
-          // MCQ Section (unlocked — full)
-          if (hasGenerated && mcqs.isNotEmpty && isUnlocked) ...[
+          // MCQ Section (full)
+          if (hasGenerated && mcqs.isNotEmpty) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               child: _SectionHeader(
@@ -2967,8 +2601,8 @@ class _PreviewPanel extends StatelessWidget {
             ),
           ],
 
-          // Theory Section (unlocked — full)
-          if (hasGenerated && theoryQuestions.isNotEmpty && isUnlocked) ...[
+          // Theory Section (full)
+          if (hasGenerated && theoryQuestions.isNotEmpty) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
               child: _SectionHeader(
@@ -2994,8 +2628,8 @@ class _PreviewPanel extends StatelessWidget {
             ),
           ],
 
-          // Subjective Questions Section (unlocked — full)
-          if (hasGenerated && subjectiveQuestions.isNotEmpty && isUnlocked) ...[
+          // Subjective Questions Section (full)
+          if (hasGenerated && subjectiveQuestions.isNotEmpty) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
               child: _SectionHeader(
@@ -3105,7 +2739,7 @@ class _PreviewPanel extends StatelessWidget {
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w700,
                 color: cs.onSurface,
-                overflow: TextOverflow.clip,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
@@ -3114,7 +2748,7 @@ class _PreviewPanel extends StatelessWidget {
             Flexible(
               child: Text(
                 '$totalQuestions Questions Total',
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: cs.onSurfaceVariant,
@@ -3382,7 +3016,7 @@ class _SectionHeader extends StatelessWidget {
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w700,
               color: cs.onSurface,
-              overflow: TextOverflow.clip,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ),
@@ -3502,6 +3136,8 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
   bool _isLoadingTopics = true;
   String? _topicsError;
   bool _isGenerating = false;
+  // Unified daily credits: null = still loading, -1 = unlimited (elite).
+  int? _dailyCredits;
   final _totalQuestionsController = TextEditingController(text: '30');
 
   // Phase 3 hybrid: reuse saved lesson questions when available; AI fills
@@ -3516,7 +3152,10 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
     _subject = widget.initialSubject;
     _classLevel = widget.initialClassLevel;
     _term = _terms.contains(widget.initialTerm) ? widget.initialTerm : _terms.first;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadTopics());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadDailyCredits();
+      _loadTopics();
+    });
   }
 
   @override
@@ -3671,6 +3310,41 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
 
   /// The saved-lesson row shown directly above the Generate button: the
   /// tappable checkbox when questions are available, the calm note otherwise.
+  /// Loads the remaining unified daily credits. Reads the tier fresh so
+  /// unlimited (elite) users never see a stale zero balance.
+  Future<void> _loadDailyCredits() async {
+    try {
+      final authTier =
+          ref.read(authProvider).currentSchool?.subscriptionTier.toLowerCase();
+      final db = ref.read(databaseProvider);
+      final school = ref.read(authProvider).currentSchool ?? await db.schoolsDao.get();
+      final tier = authTier ?? school?.subscriptionTier.toLowerCase() ?? 'free';
+      final remaining = await db.securityConfigDao.getRemainingDailyCredits(tier: tier);
+      if (mounted) setState(() => _dailyCredits = remaining);
+    } catch (_) {}
+  }
+
+  /// Credit line under the Generate button: unlimited label for -1, error
+  /// red at 0, hidden while the balance is still loading.
+  Widget _buildCreditLine(ColorScheme cs, ThemeData theme) {
+    final credits = _dailyCredits;
+    if (credits == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Text(
+        credits < 0
+            ? 'Unlimited - no daily limit'
+            : credits == 0
+                ? 'No credits left today'
+                : '$credits credit${credits == 1 ? '' : 's'} left today',
+        textAlign: TextAlign.center,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: credits == 0 ? cs.error : cs.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+
   Widget _buildSavedLessonRow(ColorScheme cs, ThemeData theme) {
     final (covered, needed) = _savedCoverage();
     if (covered == 0) {
@@ -3799,6 +3473,22 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
       return;
     }
 
+    // Debit one unified daily credit when the AI will actually run. When
+    // saved lessons cover every question the service skips the AI call
+    // entirely, so no credit is consumed (same exemption as above).
+    if (needsAi) {
+      final db0 = ref.read(databaseProvider);
+      try {
+        await AiService(db: db0).checkDailyLimit(authTier);
+      } on AiGenerationException catch (e) {
+        if (!mounted) return;
+        showErrorToast(context: context, message: e.message);
+        return;
+      }
+      if (mounted) setState(() => _dailyCredits = null);
+      await _loadDailyCredits();
+    }
+
     setState(() => _isGenerating = true);
     try {
       final db = ref.read(databaseProvider);
@@ -3815,9 +3505,12 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
       }
 
       final service = ExamGenerationService(db);
+      // CA titles read "<Subject> <Term> (N topics)" — e.g. "Mathematics
+      // 1st Term (13 topics)". Term Exams keep their legacy prefix so the
+      // exams list type classifier (startsWith) keeps working.
       final topicTitle = _mode == 'termExam'
           ? 'Term Exam (${selectedTopics.length} topics)'
-          : 'CA Test (${selectedTopics.length} topics)';
+          : '$_subject $_term (${selectedTopics.length} topics)';
       final examId = await service.generateCombinedExam(
         subject: _subject,
         classLevel: _classLevel,
@@ -4140,7 +3833,7 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
-                      onPressed: canGenerate ? _generate : null,
+                      onPressed: (_dailyCredits == 0) ? null : (canGenerate ? _generate : null),
                       icon: _isGenerating
                           ? const SizedBox(
                               width: 18,
@@ -4166,6 +3859,7 @@ class _CombinedExamPanelState extends ConsumerState<_CombinedExamPanel> {
                       ),
                     ),
                   ),
+                  _buildCreditLine(cs, theme),
                 ],
               ),
             ),

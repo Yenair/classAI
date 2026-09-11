@@ -11,6 +11,14 @@ class PlatformHelper {
     return true;
   }
 
+  /// Test seam: when non-null, [isOnline] (and therefore
+  /// [isReliablyOnline]) returns this value without touching the
+  /// connectivity plugin or DNS. Always null in production — only tests
+  /// set it (see test/credits/credit_service_test.dart), and they reset
+  /// it in tearDown.
+  static bool? _isOnlineOverride;
+  static set isOnlineOverride(bool? value) => _isOnlineOverride = value;
+
   /// Returns `true` if the device has network connectivity.
   ///
   /// First tries [connectivity_plus] for a transport-level check.  If that
@@ -20,6 +28,9 @@ class PlatformHelper {
   ///
   /// For an even stricter check, use [isReliablyOnline].
   static Future<bool> isOnline() async {
+    final override = _isOnlineOverride;
+    if (override != null) return override;
+
     final connectivity = Connectivity();
     try {
       final results = await connectivity.checkConnectivity();
@@ -45,6 +56,9 @@ class PlatformHelper {
   /// required (e.g. subscription expiry checks), not in the general sync
   /// flow.
   static Future<bool> isReliablyOnline() async {
+    final override = _isOnlineOverride;
+    if (override != null) return override;
+
     if (!await isOnline()) return false;
 
     try {

@@ -157,7 +157,7 @@ Future<void> _seedExams(AppDatabase db, _AuthFixture fixture) async {
     ExamsCompanion.insert(
       subject: 'Mathematics',
       classLevel: 'JSS 1',
-      topic: 'CA Test (2 topics)',
+      topic: 'Mathematics 1st Term (2 topics)',
       difficulty: 'medium',
       curriculum: 'NERDC',
       content: '{"mcqs":[],"theory":[],"subjective":[]}',
@@ -811,11 +811,13 @@ void main() {
     );
   });
 
-  testWidgets('unlocked exams show the Unlocked chip with its exclusive '
-      'icon', (tester) async {
+  testWidgets('generated exams show the Generated chip with its icon',
+      (tester) async {
     await _seedExams(db, fixture);
     final exams = await db.examsDao.getAll();
-    final caTest = exams.firstWhere((e) => e.topic.startsWith('CA Test'));
+    final caTest = exams.firstWhere(
+        (e) => e.topic == 'Mathematics 1st Term (2 topics)');
+
     await db.examsDao.updateExam(
       caTest.id,
       ExamsCompanion(isUnlocked: const Value(true)),
@@ -824,27 +826,15 @@ void main() {
 
     final chips = find.byType(StatusChip);
     expect(
-      find.descendant(of: chips, matching: find.text('Unlocked')),
+      find.descendant(of: chips, matching: find.text('Generated')),
       findsOneWidget,
-    );
-    expect(
-      find.descendant(
-        of: chips,
-        matching: find.byIcon(Icons.auto_awesome_rounded),
-      ),
-      findsOneWidget,
-    );
-    // Unlocked must not reuse the exam-type or Generated glyphs.
-    expect(
-      find.descendant(of: chips, matching: find.byIcon(Icons.quiz_rounded)),
-      findsNothing,
     );
     expect(
       find.descendant(
         of: chips,
         matching: find.byIcon(Icons.lock_open_rounded),
       ),
-      findsNothing,
+      findsOneWidget,
     );
     expect(
       find.descendant(of: chips, matching: find.text('Draft')),

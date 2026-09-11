@@ -86,10 +86,7 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
   static const _statusFilters = [
     _StatusFilterItem('All', Icons.layers_rounded),
     _StatusFilterItem('Draft', Icons.edit_note_rounded),
-    _StatusFilterItem('Completed', Icons.check_circle_rounded),
-    // 'Unlocked' filter removed (2F.1) — unlock is automatic now.
     _StatusFilterItem('Generated', Icons.auto_awesome_rounded),
-    _StatusFilterItem('Needs Sync', Icons.sync_rounded),
   ];
 
   /// Type tab filter — `All | CA Test (Class Test) | Term Exam`.
@@ -100,6 +97,7 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
   String _selectedTermFilter = 'All';
   String _selectedClassFilter = 'All';
   String _selectedSubjectFilter = 'All';
+  String _selectedSort = 'week';
   bool _filtersExpanded = false;
   bool _schemesLoaded = false;
   final Map<int, SchemeOfWorkData> _schemesById = {};
@@ -122,9 +120,17 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _selectedStatusFilter = prefs.getString('${_prefPrefix}status') ?? 'All';
+      // A removed filter value ('Completed' / 'Needs Sync') falls back to All.
+      final savedStatus = prefs.getString('${_prefPrefix}status') ?? 'All';
+      if (_statusFilters.any((f) => f.label == savedStatus)) {
+        _selectedStatusFilter = savedStatus;
+      } else {
+        _selectedStatusFilter = 'All';
+      }
       _selectedTermFilter = prefs.getString('${_prefPrefix}term') ?? 'All';
       _selectedClassFilter = prefs.getString('${_prefPrefix}class') ?? 'All';
       _selectedSubjectFilter = prefs.getString('${_prefPrefix}subject') ?? 'All';
+      _selectedSort = prefs.getString('${_prefPrefix}sort') ?? 'week';
       // Collapsed by default; the teacher expands "Filter my exams" on demand.
       _filtersExpanded = prefs.getBool('exams_filters_expanded') ?? false;
     });
@@ -202,13 +208,8 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
     switch (_selectedStatusFilter) {
       case 'Draft':
         return !exam.isUnlocked;
-      case 'Completed':
-      case 'Unlocked':
-        return exam.isUnlocked;
       case 'Generated':
         return exam.isUnlocked;
-      case 'Needs Sync':
-        return exam.serverId == null;
       default:
         return true;
     }
@@ -234,6 +235,19 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
     setState(() => _selectedStatusFilter = filter);
     SharedPreferences.getInstance().then((prefs) {
       prefs.setString('${_prefPrefix}status', filter);
+    });
+  }
+
+  /// Sort options for the top filters bar: by week number or by class level.
+  static const _sortOptions = [
+    _SortOption('week', 'Week', Icons.event_repeat_rounded),
+    _SortOption('class', 'Class Level', Icons.school_rounded),
+  ];
+
+  void _setSortOption(String option) {
+    setState(() => _selectedSort = option);
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('${_prefPrefix}sort', option);
     });
   }
 
@@ -633,7 +647,31 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
               ),
               data: (exams) {
                 final filteredExams = _applyFilters(exams);
-                filteredExams.sort((a, b) => (a.weekNumber ?? 0).compareTo(b.weekNumber ?? 0));
+                // Sort per the teacher's choice in the top filters bar.
+                // Class level uses a natural compare so JSS 2 > JSS 10
+                // numerically; ties fall back to week, then newest first.
+                int classLevelRank(Exam e) {
+                  final match = RegExp(r'(\d+)').firstMatch(e.classLevel);
+                  return match != null ? int.parse(match.group(1)!) : 0;
+                }
+
+                String classLevelPrefix(Exam e) {
+                  final match = RegExp(r'^[A-Za-z]+').firstMatch(e.classLevel);
+                  return match != null ? match.group(0)!.toLowerCase() : '';
+                }
+
+                filteredExams.sort((a, b) {
+                  int cmp;
+                  if (_selectedSort == 'class') {
+                    cmp = classLevelPrefix(a).compareTo(classLevelPrefix(b));
+                    if (cmp == 0) cmp = classLevelRank(a).compareTo(classLevelRank(b));
+                  } else {
+                    cmp = (a.weekNumber ?? 0).compareTo(b.weekNumber ?? 0);
+                  }
+                  if (cmp == 0) cmp = (a.weekNumber ?? 0).compareTo(b.weekNumber ?? 0);
+                  if (cmp == 0) cmp = b.createdAt.compareTo(a.createdAt);
+                  return cmp;
+                });
                 final termOptions = _termFilters;
                 final classOptions = _buildFilterOptions(
                   exams.map((exam) => exam.classLevel),
@@ -643,7 +681,8 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
                 );
 
                 // Type tabs — the primary way to filter the list (All |
-                // CA Test (Class Test) | Term Exam).
+                // CA Test (Class Test) | Term Exam) — plus the sort selector
+                // (Week | Class Level) pinned at the end of the same bar.
                 final typeTabs = Padding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
                   child: SingleChildScrollView(
@@ -658,6 +697,20 @@ class _ExamsListScreenState extends ConsumerState<ExamsListScreen> {
                               icon: _typeTabIcon(tab),
                               selected: _selectedTypeTab == tab,
                               onTap: () => _setTypeTab(tab),
+                            ),
+                          ),
+                        const SizedBox(width: 8),
+                        // Sort selector — a single chip that cycles through
+                        // the two sort options on tap. One control, one tap,
+                        // no dropdown: easiest possible model for teachers.
+                        for (final sortOption in _sortOptions)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 4),
+                            child: _TypeTab(
+                              label: 'Sort: ${sortOption.label}',
+                              icon: sortOption.icon,
+                              selected: _selectedSort == sortOption.value,
+                              onTap: () => _setSortOption(sortOption.value),
                             ),
                           ),
                       ],
@@ -943,7 +996,7 @@ class _ExamFiltersPanel extends StatelessWidget {
                             ),
                         ],
                       ),
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -1101,18 +1154,39 @@ class _StatusFilterItem {
   final IconData icon;
 }
 
+/// One sort option in the top filters bar ('week' or 'class').
+class _SortOption {
+  const _SortOption(this.value, this.label, this.icon);
+
+  final String value;
+  final String label;
+  final IconData icon;
+}
+
 /// The two exam types shown as tabs and badges. Type is derived from the
-/// generated topic title: combined exams are prefixed "Term Exam (...)" or
-/// "CA Test (...)". Legacy weekly draft exams (no prefix) carry no type and
-/// show no badge. Colors/icons reuse the shared choice-screen coding (blue
-/// quiz / green assignment) so the mapping is identical wherever a type
-/// appears.
+/// generated topic title: Term Exams are prefixed "Term Exam (...)"; CA
+/// Tests read "<Subject> <Term> (N topics)" (e.g. "Mathematics 1st Term
+/// (2 topics)") and are matched structurally — ends with "(N topics)" and
+/// contains a term label. Legacy weekly draft exams (topic = plain topic
+/// text) carry no type and show no badge. Colors/icons reuse the shared
+/// choice-screen coding (blue quiz / green assignment) so the mapping is
+/// identical wherever a type appears.
 enum _ExamType { caTest, termExam }
+
+/// Legacy "CA Test (N topics)" titles (created before the rename) still
+/// classify as CA Tests so old rows keep their badge.
+final RegExp _legacyCaTitlePattern =
+    RegExp(r'^ca test \(\d+ topics?\)$');
+
+/// Matches new-format CA titles: "<anything> <1st|2nd|3rd> Term (N topics)".
+final RegExp _caTitlePattern =
+    RegExp(r'^.+\s(?:1st|2nd|3rd) term \(\d+ topics?\)$');
 
 _ExamType? _examTypeOf(Exam exam) {
   final topic = exam.topic.trim().toLowerCase();
   if (topic.startsWith('term exam')) return _ExamType.termExam;
-  if (topic.startsWith('ca test')) return _ExamType.caTest;
+  if (_caTitlePattern.hasMatch(topic)) return _ExamType.caTest;
+  if (_legacyCaTitlePattern.hasMatch(topic)) return _ExamType.caTest;
   return null;
 }
 
@@ -1190,9 +1264,9 @@ class _ExamCard extends StatelessWidget {
       spacing: 6,
       runSpacing: 6,
       children: [
-        examRowStatusChip(unlocked: exam.isUnlocked),
-        // Secondary "Needs Sync" chip — the Unlocked primary chip
-        // is the only generated signal for exams, so no Generated
+        examRowStatusChip(generated: exam.isUnlocked),
+        // Secondary "Needs Sync" chip — the Generated primary chip
+        // is the only generated signal for exams, so no extra
         // chip is added here.
         if (exam.serverId == null || exam.serverId!.isEmpty)
           const StatusChip(
@@ -1241,7 +1315,7 @@ class _ExamCard extends StatelessWidget {
           children: [
             Text(
               exam.topic,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w600,

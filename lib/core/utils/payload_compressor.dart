@@ -157,11 +157,16 @@ class PayloadCompressor {
     return _keyMap[key] ?? key;
   }
 
+  /// Reverse lookup table for [decompress] — built once at first use so
+  /// key lengthening is O(1) instead of a linear scan over [keyMap] per
+  /// key. The sync merge path calls [decompress] for every field of every
+  /// pulled record on the UI isolate; the linear scan made that O(fields ×
+  /// mapSize) per record and visibly janked scrolling during sync.
+  static final Map<String, String> _reverseKeyMap = {
+    for (final entry in _keyMap.entries) entry.value: entry.key,
+  };
+
   static String _lengthenKey(String shortKey) {
-    // Reverse lookup
-    for (final entry in _keyMap.entries) {
-      if (entry.value == shortKey) return entry.key;
-    }
-    return shortKey;
+    return _reverseKeyMap[shortKey] ?? shortKey;
   }
 }

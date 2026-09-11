@@ -1153,9 +1153,15 @@ class AppDatabase extends _$AppDatabase {
             // becomes the daily-credit balance; `dailyCreditsDate` records
             // the local day (yyyy-MM-dd) it belongs to so the balance can
             // reset at day rollover. Purely additive — no data is removed.
-            await customStatement(
-              'ALTER TABLE security_config ADD COLUMN daily_credits_date TEXT NULL',
-            );
+            final colExists = await customSelect(
+              "SELECT name FROM pragma_table_info('security_config') "
+              "WHERE name = 'daily_credits_date'",
+            ).get();
+            if (colExists.isEmpty) {
+              await customStatement(
+                'ALTER TABLE security_config ADD COLUMN daily_credits_date TEXT NULL',
+              );
+            }
           }
           if (from < 31) {
             // R2 Block 4 (2A.6a/2A.6b): the manual unlock flow is gone —

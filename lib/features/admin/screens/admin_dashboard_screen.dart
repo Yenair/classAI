@@ -11,6 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' hide AuthException;
 import 'package:classai/features/admin/providers/admin_provider.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/widgets/app_side_nav.dart';
 import 'package:classai/core/services/auth_service.dart';
 import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/providers/config_provider.dart';
@@ -128,8 +129,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-                // === Desktop Nav Drawer ===
-                if (isWide && !Platform.isAndroid) _buildNavDrawer(cs, textTheme),
+                // === Desktop Nav Drawer (shared AppSideNav — Lesson Editor design) ===
+                if (isWide && !Platform.isAndroid) _buildAdminSideNav(cs, textTheme),
 
               // === Main Content Area ===
               Expanded(
@@ -169,148 +170,70 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   }
 
   // ---------------------------------------------------------------
-  // Navigation Drawer (Desktop)
+  // Navigation Drawer (Desktop) — shared AppSideNav (Lesson Editor design)
   // ---------------------------------------------------------------
-  Widget _buildNavDrawer(ColorScheme cs, TextTheme textTheme) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeInOut,
-      width: _sidebarOpen ? 288 : 72,
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        border: Border(
-          right: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.3)),
+  Widget _buildAdminSideNav(ColorScheme cs, TextTheme textTheme) {
+    final authData = ref.read(authProvider);
+    final teacherName =
+        authData.currentTeacher?.teacherName ?? authData.currentTeacher?.email ?? 'Admin';
+    return AppSideNav(
+      cs: cs,
+      theme: Theme.of(context),
+      teacherName: teacherName,
+      isOpen: _sidebarOpen,
+      onToggle: () => setState(() => _sidebarOpen = !_sidebarOpen),
+      items: [
+        AppSideNavItem(
+          icon: Icons.people_rounded,
+          label: 'Teacher Management',
+          isActive: _selectedTabIndex == 0,
         ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          SizedBox(height: _sidebarOpen ? 24 : 16),
-          // Branding header — tapping toggles sidebar
-          InkWell(
-            borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-            onTap: () => setState(() => _sidebarOpen = !_sidebarOpen),
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: _sidebarOpen ? 24 : 12,
-              ),
-              child: _sidebarOpen
-                  ? Row(
-                      children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: cs.primaryContainer,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.school_rounded,
-                            color: cs.onPrimaryContainer,
-                            size: 24,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'ClassAI',
-                              style: textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w900,
-                                color: cs.primary,
-                                fontSize: 28,
-                              ),
-                            ),
-                            Text(
-                              'Nigerian Academic Partner',
-                              style: textTheme.labelSmall?.copyWith(
-                                color: cs.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    )
-                  : Center(
-                      child: Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: cs.primaryContainer,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.menu_rounded,
-                          color: cs.onPrimaryContainer,
-                          size: 24,
-                        ),
-                      ),
-                    ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Divider(
-            height: 1,
-            thickness: 1,
-            color: cs.outlineVariant.withValues(alpha: 0.3),
-          ),
-          const SizedBox(height: 16),
-          // Navigation items — admin-specific sidebar
-          Expanded(
-            child: ListView(
-
-              physics: (Platform.isAndroid || Platform.isIOS)
-                  ? const BouncingScrollPhysics()
-                  : null,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              children: [
-                _NavItem(
-                  icon: Icons.people_rounded,
-                  label: 'Teacher Management',
-                  isActive: _selectedTabIndex == 0,
-                  onTap: () => setState(() => _selectedTabIndex = 0),
-                ),
-                const SizedBox(height: 4),
-                _NavItem(
-                  icon: Icons.person_add_rounded,
-                  label: 'Pending Teachers',
-                  isActive: _selectedTabIndex == 1,
-                  onTap: () => setState(() => _selectedTabIndex = 1),
-                ),
-                const SizedBox(height: 4),
-                // _NavItem( // Vault feature disabled
-                //   icon: Icons.verified_rounded,
-                //   label: 'Vault Approve Queue',
-                //   isActive: _selectedTabIndex == 2,
-                //   onTap: () => setState(() => _selectedTabIndex = 2),
-                // ),
-                // const SizedBox(height: 4),
-                _NavItem(
-                  icon: Icons.sync_rounded,
-                  label: 'Sync Health',
-                  isActive: _selectedTabIndex == 2,
-                  onTap: () => setState(() => _selectedTabIndex = 2),
-                ),
-                const SizedBox(height: 4),
-                _NavItem(
-                  icon: Icons.calendar_month_rounded,
-                  label: 'Scheme of Work',
-                  isActive: false,
-                  onTap: () => context.push('/scheme-of-work'),
-                ),
-                const SizedBox(height: 4),
-                _NavItem(
-                  icon: Icons.settings_rounded,
-                  label: 'Settings',
-                  isActive: false,
-                  onTap: () => context.push('/settings'),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+        AppSideNavItem(
+          icon: Icons.person_add_rounded,
+          label: 'Pending Teachers',
+          isActive: _selectedTabIndex == 1,
+        ),
+        // Vault feature disabled — vault publisher use its own sidebar
+        // AppSideNavItem(
+        //   icon: Icons.verified_rounded,
+        //   label: 'Vault Approve Queue',
+        //   isActive: _selectedTabIndex == 2,
+        // ),
+        AppSideNavItem(
+          icon: Icons.sync_rounded,
+          label: 'Sync Health',
+          isActive: _selectedTabIndex == 2,
+        ),
+        AppSideNavItem(
+          icon: Icons.calendar_month_rounded,
+          label: 'Scheme of Work',
+          isActive: false,
+        ),
+        AppSideNavItem(
+          icon: Icons.settings_rounded,
+          label: 'Settings',
+          isActive: false,
+        ),
+      ],
+      onItemTap: (BuildContext context, String label) {
+        switch (label) {
+          case 'Teacher Management':
+            setState(() => _selectedTabIndex = 0);
+            break;
+          case 'Pending Teachers':
+            setState(() => _selectedTabIndex = 1);
+            break;
+          case 'Sync Health':
+            setState(() => _selectedTabIndex = 2);
+            break;
+          case 'Scheme of Work':
+            context.push('/scheme-of-work');
+            break;
+          case 'Settings':
+            context.push('/settings');
+            break;
+        }
+      },
     );
   }
 
@@ -343,7 +266,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     style: textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: cs.primary,
-                      overflow: TextOverflow.clip,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
@@ -791,61 +714,6 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Navigation Item Helper
-// ---------------------------------------------------------------------------
-class _NavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        margin: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          color: isActive ? cs.secondaryContainer : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        transform: isActive
-            ? Matrix4.translationValues(4.0, 0.0, 0.0)
-            : Matrix4.identity(),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 22,
-              color: isActive ? cs.onSecondaryContainer : cs.onSurfaceVariant,
-            ),
-            const SizedBox(width: 16),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-                    color: isActive
-                        ? cs.onSecondaryContainer
-                        : cs.onSurfaceVariant,
-                  ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-  }
-  
 /// Stitch-style banner displayed on the Free plan.
 ///
 /// Renders an amber/yellow bar with an "Upgrade" CTA. Disappears
@@ -880,7 +748,7 @@ class _FreePlanBanner extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              "You're on the Free plan. Upgrade to unlock more features.",
+              "You're on the Free plan. Upgrade to access more features.",
               style: theme.textTheme.bodySmall?.copyWith(
                 color: Colors.amber.shade900,
                 fontWeight: FontWeight.w600,
@@ -2891,7 +2759,7 @@ class _SyncHealthTab extends ConsumerWidget {
                   'How many teachers are online',
                   style: textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
-                    overflow: TextOverflow.clip,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
@@ -2907,7 +2775,7 @@ class _SyncHealthTab extends ConsumerWidget {
                   style: textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.w900,
                     color: cs.primary,
-                    overflow: TextOverflow.clip,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),

@@ -206,7 +206,7 @@ class _DailyCreditsDetailsDialog extends StatelessWidget {
                   'Available daily credits',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: cs.onSurfaceVariant,
-                        overflow: TextOverflow.clip,
+                        overflow: TextOverflow.ellipsis,
                       ),
                 ),
               ),
@@ -219,7 +219,7 @@ class _DailyCreditsDetailsDialog extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                         color: cs.primary,
                         letterSpacing: -0.25,
-                        overflow: TextOverflow.clip,
+                        overflow: TextOverflow.ellipsis,
                       ),
                 ),
               ),
@@ -234,7 +234,7 @@ class _DailyCreditsDetailsDialog extends StatelessWidget {
                   'Tier',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: cs.onSurfaceVariant,
-                        overflow: TextOverflow.clip,
+                        overflow: TextOverflow.ellipsis,
                       ),
                 ),
               ),
@@ -246,7 +246,7 @@ class _DailyCreditsDetailsDialog extends StatelessWidget {
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
                           fontWeight: FontWeight.w600,
                           color: cs.onPrimaryContainer,
-                          overflow: TextOverflow.clip,
+                          overflow: TextOverflow.ellipsis,
                         ),
                   ),
                   backgroundColor: cs.primaryContainer,
@@ -265,7 +265,7 @@ class _DailyCreditsDetailsDialog extends StatelessWidget {
                   'Plan',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: cs.onSurfaceVariant,
-                        overflow: TextOverflow.clip,
+                        overflow: TextOverflow.ellipsis,
                       ),
                 ),
               ),
@@ -279,7 +279,7 @@ class _DailyCreditsDetailsDialog extends StatelessWidget {
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
                           fontWeight: FontWeight.w600,
                           color: cs.onSecondaryContainer,
-                          overflow: TextOverflow.clip,
+                          overflow: TextOverflow.ellipsis,
                         ),
                   ),
                   backgroundColor: cs.secondaryContainer,
