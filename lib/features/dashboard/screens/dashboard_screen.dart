@@ -1497,7 +1497,9 @@ class _RightColumn extends ConsumerWidget {
     final lessonData = lessonCountAsync.asData?.value;
     final examData = examCountAsync.asData?.value;
 
-    final lessonCountLabel = lessonData != null ? '${lessonData.total}' : '...';
+    final lessonCountLabel = lessonData != null
+        ? '${lessonData.secondaryCount}'
+        : '...';
     final examCountLabel = examData != null ? '${examData.total}' : '...';
 
     return Column(
@@ -1553,7 +1555,7 @@ class _RightColumn extends ConsumerWidget {
                             child: Text(
                               lessonCountAsync.isLoading
                                   ? '...'
-                                  : lessonCountLabel, 
+                                  : '${lessonData.total} (${lessonData.secondaryCount} completed)',
                               style: theme.textTheme.headlineMedium?.copyWith(
                                 color: cs.onPrimary,
                               ),
