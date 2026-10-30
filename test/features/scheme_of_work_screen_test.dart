@@ -1,4 +1,5 @@
 import 'package:classai/core/database/database.dart';
+import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
 import 'package:classai/features/scheme_of_work/screens/scheme_of_work_screen.dart';
 import 'package:classai/main.dart' show databaseProvider;
@@ -154,7 +155,12 @@ Future<void> _pumpSow(
         databaseProvider.overrideWithValue(db),
         authProvider.overrideWith(() => FixedAuthNotifier(authData)),
       ],
-      child: const MaterialApp(home: SchemeOfWorkScreen()),
+      // The real app theme gives buttons an infinite minimum width, which is
+      // what broke the filter row — tests must exercise it.
+      child: MaterialApp(
+        theme: AppTheme.light(),
+        home: const SchemeOfWorkScreen(),
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -409,6 +415,79 @@ void main() {
           await tester.tap(find.text('First').last);
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
+        }
+      },
+    );
+
+    testWidgets(
+      'teacher panel does not overflow at desktop sizes with 5 teachers',
+      (tester) async {
+        final base = await _seedBase(db);
+        final school = await db.schoolsDao.getByLocalId(base.schoolId);
+        final teacher = await db.teachersDao.getById(base.teacherId);
+
+        // 4 extra teachers → 5 total, the seat count of a real school.
+        for (var i = 0; i < 4; i++) {
+          await db.into(db.teachers).insert(
+                TeachersCompanion.insert(
+                  serverId: Value('00000000-0000-0000-0000-00000000091$i'),
+                  email: 'teacher$i@testschool.local',
+                  teacherName: 'Teacher Number $i With A Long Name',
+                  role: const Value('teacher'),
+                  schoolLocalId: base.schoolId,
+                  schoolServerId:
+                      const Value('00000000-0000-0000-0000-000000000801'),
+                  isActive: const Value(true),
+                  forcePasswordReset: const Value(false),
+                  passwordHashVersion: const Value(1),
+                  themeMode: const Value('system'),
+                ),
+              );
+        }
+
+        await _seedSchemeRecords(
+          db,
+          schoolId: base.schoolId,
+          teacherId: base.teacherId,
+          subjectId: base.subjectId,
+          count: 54,
+        );
+
+        // Sync can blank class levels. An empty one used to duplicate the
+        // "All Classes" filter item, which trips DropdownButtonFormField's
+        // single-match assert during build and leaves the card unlaid out.
+        await db.into(db.schemeOfWork).insert(
+              SchemeOfWorkCompanion.insert(
+                schoolId: Value(base.schoolId),
+                teacherId: Value(base.teacherId),
+                subjectId: Value(base.subjectId),
+                term: const Value('first'),
+                weekNumber: const Value(1),
+                topic: const Value(''),
+                objectives: const Value(''),
+                status: const Value('draft'),
+                classLevel: const Value(''),
+              ),
+            );
+
+        // Heights where the teacher list used to overflow the card by
+        // 34–234 px (desktop window resizing).
+        for (final size in const [
+          Size(1400, 900),
+          Size(1400, 740),
+          Size(1234, 700),
+        ]) {
+          final captured = <FlutterErrorDetails>[];
+          await _pumpSow(
+            tester,
+            db: db,
+            authData: _authState(school!, teacher!),
+            surfaceSize: size,
+            capturedErrors: captured,
+          );
+          expect(find.text('Teachers'), findsOneWidget);
+          expect(captured, isEmpty,
+              reason: 'layout errors at $size: ${captured.map((e) => e.exception.toString().split('\n').first).toList()}');
         }
       },
     );

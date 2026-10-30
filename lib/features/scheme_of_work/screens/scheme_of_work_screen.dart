@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/services/scheme_of_work_service.dart';
 import 'package:classai/core/constants/curriculum_types.dart';
+import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/core/widgets/status_chip.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
@@ -142,6 +143,9 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     final options = <String>[..._classLevels];
     for (final record in _existingSowRecords) {
       final normalized = _normalizeClassLevel(record.classLevel);
+      // An empty stored class level (sync can blank these) would duplicate the
+      // "All Classes" item and trip DropdownButton's single-match assert.
+      if (normalized.isEmpty) continue;
       if (!options.contains(normalized)) options.add(normalized);
     }
     return options;
@@ -787,10 +791,21 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            ..._teachers.map(
-              (teacher) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: _buildTeacherSelectorTile(theme, cs, teacher),
+            // The tile list is bounded by the panel's height so a school with
+            // many teachers scrolls instead of overflowing the card.
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ..._teachers.map(
+                      (teacher) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _buildTeacherSelectorTile(theme, cs, teacher),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -944,8 +959,16 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     required List<DropdownMenuItem<T>> items,
     required ValueChanged<T?> onChanged,
   }) {
+    // DropdownButtonFormField asserts that exactly one item matches its value.
+    // A filter value can go stale (record deleted, label blanked by a sync), so
+    // fall back to the first entry ("All …") instead of asserting and taking
+    // the whole screen down with a layout error.
+    final int matchCount = items.where((item) => item.value == value).length;
+    final T safeValue = matchCount == 1 || items.isEmpty
+        ? value
+        : items.first.value as T;
     return DropdownButtonFormField<T>(
-      initialValue: value,
+      initialValue: safeValue,
       isDense: true,
       isExpanded: true,
       decoration: InputDecoration(
@@ -1086,7 +1109,16 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
                     ),
                   ),
                   const SizedBox(width: 12),
+                  // The app theme gives buttons `minimumSize: Size.fromHeight(...)`
+                  // (infinite width). That is only valid when the parent has a
+                  // bounded width; inside this horizontally scrolling row the
+                  // width is unbounded, so the infinite minimum resolves to
+                  // `BoxConstraints(w=Infinity, …)` and the button is never laid
+                  // out. Pin a finite minimum width here.
                   OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, AppTheme.touchTarget),
+                    ),
                     onPressed: () {
                       setState(() {
                         _adminFilterTeacher = null;
