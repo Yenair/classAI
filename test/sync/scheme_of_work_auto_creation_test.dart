@@ -304,7 +304,8 @@ void main() {
         expect(await db.examsDao.getAll(), isEmpty);
 
         // The admin review screen is the only view rendered.
-        expect(find.text('Scheme of Work Review'), findsOneWidget);
+        expect(find.text('Review and update teachers scheme of work'),
+            findsOneWidget);
         expect(find.text('Filter schemes'), findsOneWidget);
       },
     );
@@ -379,7 +380,8 @@ void main() {
         await _pumpSchemeScreen(tester, db: db, authState: authState);
 
         // The admin review view is the only view rendered.
-        expect(find.text('Scheme of Work Review'), findsOneWidget);
+        expect(find.text('Review and update teachers scheme of work'),
+            findsOneWidget);
         expect(find.text('All Schemes (Admin)'), findsOneWidget);
 
         // The removed teacher actions must not exist.

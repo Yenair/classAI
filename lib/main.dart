@@ -40,9 +40,6 @@ final databaseProvider = Provider<AppDatabase>((ref) {
 });
 
 void main() async {
-  //TODO: Update Paystack live key 
-  //in C:\Users\Yene\classai\supabase\functions\init-payment\index.ts or Supabase secrets before launch!
-  
   WidgetsFlutterBinding.ensureInitialized();
 
   FlutterError.onError = (FlutterErrorDetails details) {
@@ -599,7 +596,7 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
   /// Whether the first sync after authentication has completed.
   /// When false and auth is authenticated, a fullscreen loading screen
   /// is shown while the initial sync restores lessons and exams.
-  bool _isFirstSyncComplete = false;
+  bool _firstSyncCompleted = false;
 
   @override
   void initState() {
@@ -692,11 +689,11 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
     // Listen for sync status changes to dismiss the fullscreen loading
     // screen once the first sync completes (synced or error).
     ref.listen<SyncStatusData>(syncStatusProvider, (previous, next) {
-      if (!_isFirstSyncComplete &&
+      if (!_firstSyncCompleted &&
           (next.status == SyncStatus.synced ||
            next.status == SyncStatus.error ||
            next.status == SyncStatus.offline)) {
-        setState(() => _isFirstSyncComplete = true);
+        setState(() => _firstSyncCompleted = true);
       }
     });
 
@@ -718,13 +715,13 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
             previous != AuthState.authenticated) {
           // Reset the flag so the fullscreen loading screen is shown
           // while the initial sync restores lessons and exams.
-          setState(() => _isFirstSyncComplete = false);
+          setState(() => _firstSyncCompleted = false);
           // If sync is already done (e.g. cached), skip the loading screen.
           final currentSync = ref.read(syncStatusProvider);
           if (currentSync.status == SyncStatus.synced ||
               currentSync.status == SyncStatus.error ||
               currentSync.status == SyncStatus.offline) {
-            setState(() => _isFirstSyncComplete = true);
+            setState(() => _firstSyncCompleted = true);
           }
           WidgetsBinding.instance.addPostFrameCallback((_) {
             ref.read(syncStatusProvider.notifier).syncNow();
@@ -802,7 +799,7 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
     // Show a fullscreen loading screen while the initial sync restores
     // lessons and exams. Disappears once the first sync completes or fails.
     final syncData = ref.watch(syncStatusProvider);
-    if (!_isFirstSyncComplete &&
+    if (!_firstSyncCompleted &&
         (syncData.status == SyncStatus.syncing ||
          syncData.status == SyncStatus.offline)) {
       return MaterialApp(
@@ -847,7 +844,7 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
     }
 
     // ── Authenticated — first sync failed ──────────────────────────────
-    if (!_isFirstSyncComplete && syncData.status == SyncStatus.error) {
+    if (!_firstSyncCompleted && syncData.status == SyncStatus.error) {
       return MaterialApp(
         title: 'ClassAI',
         debugShowCheckedModeBanner: false,
@@ -885,7 +882,7 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
                   const SizedBox(height: 32),
                   FilledButton.icon(
                     onPressed: () {
-                      setState(() => _isFirstSyncComplete = false);
+                      setState(() => _firstSyncCompleted = false);
                       ref.read(syncStatusProvider.notifier).syncNow();
                     },
                     icon: const Icon(Icons.refresh),
@@ -894,7 +891,7 @@ class _ClassAiRouterAppState extends ConsumerState<ClassAiRouterApp> {
                   const SizedBox(height: 16),
                   TextButton(
                     onPressed: () {
-                      setState(() => _isFirstSyncComplete = true);
+                      setState(() => _firstSyncCompleted = true);
                     },
                     child: const Text('Continue anyway'),
                   ),

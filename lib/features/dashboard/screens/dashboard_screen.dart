@@ -1496,12 +1496,10 @@ class _RightColumn extends ConsumerWidget {
 
     final lessonData = lessonCountAsync.asData?.value;
     final examData = examCountAsync.asData?.value;
-
-    final lessonCountLabel = lessonData != null
-        ? '${lessonData.secondaryCount}'
-        : '...';
+    final completedCount = lessonData != null ? '${lessonData.secondaryCount}' : '...';
+    final lessonCountLabel = lessonData != null ? '${lessonData.total}' : '...';
     final examCountLabel = examData != null ? '${examData.total}' : '...';
-
+    
     return Column(
       children: [
         // Stats Card
@@ -1555,7 +1553,7 @@ class _RightColumn extends ConsumerWidget {
                             child: Text(
                               lessonCountAsync.isLoading
                                   ? '...'
-                                  : '${lessonData.total} (${lessonData.secondaryCount} completed)',
+                                  : lessonCountLabel + " (" + completedCount +' completed)',
                               style: theme.textTheme.headlineMedium?.copyWith(
                                 color: cs.onPrimary,
                               ),

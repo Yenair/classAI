@@ -2,6 +2,9 @@
 
 A new Flutter project.
 
+YOU NEED TO HAVE FLUTTER INSTALLED TO BE ABLE TO RUN IT. 
+YOU CAN DOWNLOAD FLUTTER EASY FROM THE WEB AND SET 
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.

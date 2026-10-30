@@ -4,6 +4,7 @@
 - NEVER run `flutter clean` or `dart analyze` or `flutter analyze ` ask me if there are any errors, i will tell you, instead.
 
 try to run flutter test, as less often as possible, once confirmed a change, no need to run and re run it again, unless you implement a change. 
+only run flutter tst on targeted scripts or folders because the test files are very large
 
 ## File Modification Scope
 - ONLY modify files explicitly mentioned in the task, even after finding errors in them.

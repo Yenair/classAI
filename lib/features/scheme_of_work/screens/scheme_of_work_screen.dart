@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/services/scheme_of_work_service.dart';
 import 'package:classai/core/constants/curriculum_types.dart';
-import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/core/widgets/app_toast.dart';
 import 'package:classai/core/widgets/status_chip.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
@@ -50,6 +49,10 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
 
   final List<String> _terms = ['First', 'Second', 'Third'];
   final Set<String> _expandedAdminGroups = {};
+
+  /// Wide layout: the teacher panel can be collapsed to a slim rail so the
+  /// scheme list gets the full width.
+  bool _teachersPanelCollapsed = false;
 
   final List<String> _classLevels = [
     'JSS 1', 'JSS 2', 'JSS 3',
@@ -560,12 +563,28 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     return Scaffold(
       backgroundColor: cs.surface,
       appBar: AppBar(
-        title: Text(
-          'Scheme of Work',
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.12,
-          ),
+        toolbarHeight: 68,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Scheme of Work',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.12,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Review and update teachers scheme of work',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+          ],
         ),
         actions: [
           IconButton(
@@ -579,203 +598,93 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
         foregroundColor: cs.onSurface,
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            // Fixed header at top
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-              child: _buildAdminHeader(theme, cs),
-            ),
-            const SizedBox(height: 16),
-            // Scrollable body section (teacher panel + filters + schemes)
-            Expanded(
-              child: isWide
-                  ? Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+        child: isWide
+            ? Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: _teachersPanelCollapsed ? 64 : 320,
+                      child: _buildTeacherSelectorPanel(theme, cs),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          SizedBox(
-                            width: 320,
-                            child: _buildTeacherSelectorPanel(theme, cs),
-                          ),
-                          const SizedBox(width: 24),
+                          _buildAdminFilters(theme, cs),
+                          const SizedBox(height: 16),
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _buildAdminFilters(theme, cs),
-                                const SizedBox(height: 16),
-                                Expanded(
-                                  child: _buildAdminSchemeList(theme, cs),
-                                ),
-                              ],
-                            ),
+                            child: _buildAdminSchemeList(theme, cs),
                           ),
                         ],
                       ),
-                    )
-                  : Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: _buildTeacherDropdown(theme, cs),
-                        ),
-                        const SizedBox(height: 12),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: _buildAdminFilters(theme, cs),
-                        ),
-                        const SizedBox(height: 12),
-                        Expanded(
-                          child: _buildAdminSchemeList(theme, cs),
-                        ),
-                      ],
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAdminHeader(ThemeData theme, ColorScheme cs) {
-    final selectedTeacher = _selectedTeacherId == null
-        ? null
-        : _teachers.firstWhere(
-            (teacher) => teacher.localId == _selectedTeacherId,
-            orElse: () => _teachers.first,
-          );
-
-    return Card(
-      color: cs.surfaceContainerLow,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final narrow = constraints.maxWidth < 480;
-            if (narrow) {
-              // Stack vertically on narrow widths to prevent Row overflow.
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: cs.primaryContainer,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.assignment_rounded,
-                          color: cs.onPrimaryContainer,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Scheme of Work Review',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              selectedTeacher == null
-                                  ? 'Select a teacher to inspect weekly schemes.'
-                                  : 'Review ${selectedTeacher.teacherName}\'s weekly schemes.',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: cs.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (_selectedTeacherSchemes().isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: FilledButton.icon(
-                        onPressed: _bulkApproveSelectedTeacher,
-                        icon: const Icon(Icons.done_all_rounded, size: 18),
-                        label: const Text('Bulk Approve'),
-                      ),
                     ),
                   ],
-                ],
-              );
-            }
-            return Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: cs.primaryContainer,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.assignment_rounded,
-                    color: cs.onPrimaryContainer,
-                  ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Scheme of Work Review',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        selectedTeacher == null
-                            ? 'Select a teacher to inspect weekly schemes.'
-                            : 'Review and approve ${selectedTeacher.teacherName}\'s weekly scheme entries.',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (_selectedTeacherSchemes().isNotEmpty)
-                  Flexible(
-                    child: FilledButton.icon(
-                      onPressed: _bulkApproveSelectedTeacher,
-                      icon: const Icon(Icons.done_all_rounded),
-                      label: const Text('Bulk Approve'),
+              )
+            : Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _buildTeacherDropdown(theme, cs),
                     ),
-                  ),
-              ],
-            );
-          },
-        ),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _buildAdminFilters(theme, cs),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: _buildAdminSchemeList(theme, cs),
+                    ),
+                  ],
+                ),
+              ),
       ),
     );
   }
 
   Widget _buildTeacherSelectorPanel(ThemeData theme, ColorScheme cs) {
+    if (_teachersPanelCollapsed) {
+      // Collapsed: a slim rail that still shows the teacher count.
+      return Card(
+        color: cs.surfaceContainerLow,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                onPressed: () =>
+                    setState(() => _teachersPanelCollapsed = false),
+                icon: const Icon(Icons.chevron_right_rounded),
+                tooltip: 'Show teachers',
+              ),
+              const SizedBox(height: 4),
+              Icon(
+                Icons.groups_rounded,
+                size: 20,
+                color: cs.onSurfaceVariant,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${_teachers.length}',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Card(
       color: cs.surfaceContainerLow,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -784,13 +693,26 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Teachers',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Teachers',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () =>
+                      setState(() => _teachersPanelCollapsed = true),
+                  icon: const Icon(Icons.chevron_left_rounded),
+                  tooltip: 'Collapse teachers',
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 4),
             // The tile list is bounded by the panel's height so a school with
             // many teachers scrolls instead of overflowing the card.
             Expanded(
@@ -1020,6 +942,10 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
                       ],
                       onChanged: (v) => setState(() {
                         _adminFilterTeacher = v;
+                        // Keep the teacher panel — and the Bulk Approve
+                        // action, which is scoped to the selected teacher —
+                        // on the teacher being reviewed.
+                        if (v != null) _selectedTeacherId = v;
                         _applyFilterExpansion();
                       }),
                     ),
@@ -1109,16 +1035,7 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  // The app theme gives buttons `minimumSize: Size.fromHeight(...)`
-                  // (infinite width). That is only valid when the parent has a
-                  // bounded width; inside this horizontally scrolling row the
-                  // width is unbounded, so the infinite minimum resolves to
-                  // `BoxConstraints(w=Infinity, …)` and the button is never laid
-                  // out. Pin a finite minimum width here.
                   OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(0, AppTheme.touchTarget),
-                    ),
                     onPressed: () {
                       setState(() {
                         _adminFilterTeacher = null;
@@ -1187,10 +1104,41 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     final groupKeys = grouped.keys.toList()
       ..sort((a, b) => _compareAdminGroups(a, b, grouped));
 
+    // Schemes of the teacher selected in the side panel that still need a
+    // decision. The bulk action lives in the list header now that the old
+    // review banner is gone.
+    final pendingForTeacher = _selectedTeacherSchemes()
+        .where((record) => record.status != 'approved')
+        .toList();
+
     return ListView(
       padding: EdgeInsets.zero,
       children: [
-        Text('All Schemes (Admin)', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'All Schemes (Admin)',
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ),
+            if (pendingForTeacher.isNotEmpty)
+              Tooltip(
+                message:
+                    'Approve ${pendingForTeacher.length} pending scheme${pendingForTeacher.length != 1 ? 's' : ''} for the selected teacher',
+                child: FilledButton.icon(
+                  onPressed: _bulkApproveSelectedTeacher,
+                  icon: const Icon(Icons.done_all_rounded, size: 18),
+                  label: const Text('Bulk Approve'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 40),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                  ),
+                ),
+              ),
+          ],
+        ),
         const SizedBox(height: 12),
         for (final key in groupKeys) ...[
           _buildAdminGroupSection(theme, cs, key, grouped[key]!),
@@ -1452,24 +1400,38 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
       for (final lesson in lessons)
         Padding(
           padding: const EdgeInsets.only(top: 6),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              lessonStatusChipFor(lesson.status),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  lesson.topic,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                ),
+              Row(
+                children: [
+                  lessonStatusChipFor(lesson.status),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      lesson.topic,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: TextButton(
-                  onPressed: () => context.push('/lessons/${lesson.id}'),
-                  child: const Text('Open lesson', overflow: TextOverflow.ellipsis),
-                ),
+              // Read the notes in place instead of navigating away mid-review.
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 4,
+                children: [
+                  TextButton.icon(
+                    onPressed: () => _showLessonNotesDialog(lesson),
+                    icon: const Icon(Icons.article_outlined, size: 18),
+                    label: const Text('View notes'),
+                  ),
+                  TextButton(
+                    onPressed: () => context.push('/lessons/${lesson.id}'),
+                    child: const Text('Open lesson', overflow: TextOverflow.ellipsis),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1477,4 +1439,381 @@ class _SchemeOfWorkScreenState extends ConsumerState<SchemeOfWorkScreen> {
     ];
   }
 
+  /// Shows the lesson's notes and diagrams in a dialog, so an admin can review
+  /// the content without leaving the scheme of work.
+  Future<void> _showLessonNotesDialog(Lesson lesson) async {
+    final sections = _parseLessonNoteSections(lesson.content);
+    final diagrams = _parseLessonDiagrams(lesson.content);
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        final cs = theme.colorScheme;
+        final media = MediaQuery.of(ctx);
+        return Dialog(
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 720,
+              maxHeight: media.size.height * 0.85,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 8, 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              lesson.topic,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${lesson.subject} · ${lesson.classLevel} · '
+                              'Week ${lesson.weekNumber ?? lesson.week}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                        tooltip: 'Close',
+                      ),
+                    ],
+                  ),
+                ),
+                Divider(height: 1, color: cs.outlineVariant),
+                Flexible(
+                  child: sections.isEmpty && diagrams.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.all(32),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.notes_rounded,
+                                size: 40,
+                                color: cs.onSurfaceVariant
+                                    .withValues(alpha: 0.4),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'No lesson notes yet.',
+                                style: theme.textTheme.bodyLarge?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (final section in sections)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: _buildLessonNoteTile(theme, cs, section),
+                                ),
+                              if (diagrams.isNotEmpty)
+                                _buildLessonDiagramsTile(theme, cs, diagrams),
+                            ],
+                          ),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLessonNoteTile(
+    ThemeData theme,
+    ColorScheme cs,
+    _LessonNoteSection section,
+  ) {
+    return Card(
+      margin: EdgeInsets.zero,
+      color: cs.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(section.icon, size: 18, color: cs.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    section.label,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (section.paragraph.isNotEmpty)
+              Text(
+                section.paragraph,
+                style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+              ),
+            for (final bullet in section.bullets)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '•',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        bullet,
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(height: 1.45),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLessonDiagramsTile(
+    ThemeData theme,
+    ColorScheme cs,
+    List<Map<String, String>> diagrams,
+  ) {
+    return Card(
+      margin: EdgeInsets.zero,
+      color: cs.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.insert_photo_rounded, size: 18, color: cs.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Diagrams',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            for (final diagram in diagrams)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if ((diagram['imageUrl'] ?? '').isNotEmpty)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.network(
+                          diagram['imageUrl']!,
+                          height: 200,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                            height: 120,
+                            color: cs.surfaceContainerHighest,
+                            alignment: Alignment.center,
+                            child: Icon(
+                              Icons.broken_image_outlined,
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ),
+                    if ((diagram['description'] ?? '').isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        diagram['description']!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Reads the lesson content JSON into the note sections an admin needs to
+  /// review, in the same order the lesson editor presents them.
+  List<_LessonNoteSection> _parseLessonNoteSections(String content) {
+    final trimmed = content.trim();
+    if (trimmed.isEmpty) return const [];
+
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(trimmed);
+    } catch (_) {
+      // Legacy rows can hold plain text rather than JSON.
+      return [
+        _LessonNoteSection(
+          label: 'Lesson notes',
+          icon: Icons.notes_rounded,
+          paragraph: trimmed,
+        ),
+      ];
+    }
+    if (decoded is! Map<String, dynamic>) {
+      return [
+        _LessonNoteSection(
+          label: 'Lesson notes',
+          icon: Icons.notes_rounded,
+          paragraph: trimmed,
+        ),
+      ];
+    }
+
+    const specs = <({String key, String label, IconData icon})>[
+      (key: 'objectives', label: 'Objectives', icon: Icons.flag_rounded),
+      (key: 'vocabulary', label: 'Vocabulary', icon: Icons.translate_rounded),
+      (key: 'materials', label: 'Materials', icon: Icons.inventory_2_rounded),
+      (key: 'presentation', label: 'Presentation', icon: Icons.menu_book_rounded),
+      (
+        key: 'assessment',
+        label: 'Assessment',
+        icon: Icons.assignment_turned_in_rounded
+      ),
+      (key: 'homework', label: 'Homework', icon: Icons.home_work_rounded),
+    ];
+
+    final sections = <_LessonNoteSection>[];
+    for (final spec in specs) {
+      final value = decoded[spec.key];
+      final bullets = <String>[];
+      var paragraph = '';
+      if (value is List) {
+        for (final entry in value) {
+          final text = _noteEntryText(entry);
+          if (text.isNotEmpty) bullets.add(text);
+        }
+      } else if (value != null) {
+        paragraph = _noteEntryText(value);
+      }
+      if (bullets.isEmpty && paragraph.isEmpty) continue;
+      sections.add(
+        _LessonNoteSection(
+          label: spec.label,
+          icon: spec.icon,
+          bullets: bullets,
+          paragraph: paragraph,
+        ),
+      );
+    }
+    return sections;
+  }
+
+  String _noteEntryText(dynamic entry) {
+    if (entry == null) return '';
+    if (entry is String) return entry.trim();
+    if (entry is Map) {
+      final title = (entry['title'] ?? entry['heading'] ?? '').toString().trim();
+      final body = (entry['body'] ??
+              entry['content'] ??
+              entry['text'] ??
+              '')
+          .toString()
+          .trim();
+      if (title.isEmpty) return body;
+      if (body.isEmpty) return title;
+      return '$title: $body';
+    }
+    return entry.toString().trim();
+  }
+
+  List<Map<String, String>> _parseLessonDiagrams(String content) {
+    final trimmed = content.trim();
+    if (trimmed.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(trimmed);
+      if (decoded is! Map<String, dynamic>) return const [];
+      final raw = decoded['diagrams'];
+      if (raw is! List) return const [];
+      final diagrams = <Map<String, String>>[];
+      for (final entry in raw) {
+        if (entry is! Map) continue;
+        final description = (entry['description'] ?? '').toString().trim();
+        final imageUrl = (entry['imageUrl'] ?? '').toString().trim();
+        if (description.isEmpty && imageUrl.isEmpty) continue;
+        diagrams.add({'description': description, 'imageUrl': imageUrl});
+      }
+      return diagrams;
+    } catch (_) {
+      return const [];
+    }
+  }
+}
+
+/// One read-only note section shown in the lesson notes dialog.
+class _LessonNoteSection {
+  const _LessonNoteSection({
+    required this.label,
+    required this.icon,
+    this.bullets = const [],
+    this.paragraph = '',
+  });
+
+  final String label;
+  final IconData icon;
+  final List<String> bullets;
+  final String paragraph;
 }

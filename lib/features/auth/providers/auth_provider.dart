@@ -22,6 +22,7 @@ import 'package:classai/main.dart' show databaseProvider, navigatorKey;
 // Dependency providers (to be overridden with real implementations later)
 // ---------------------------------------------------------------------------
 
+
 final authServiceProvider = Provider<AuthService>((ref) {
   // Default production implementation. Override in tests with a mock
   // via ProviderContainer overrides.
@@ -807,6 +808,7 @@ class AuthNotifier extends Notifier<AuthStateData> {
   Future<void> forceLogout() async {
     debugPrint('[AUTH] forceLogout() called; clearing JWT and secure storage.');
     await _performLogout(isForced: true);
+    AuthState.emailVerificationRequired;
   }
 
   /// Scope-delete the outgoing teacher's local data from Drift tables.

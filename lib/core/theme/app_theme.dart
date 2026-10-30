@@ -332,7 +332,15 @@ class AppTheme {
       ),
 
       // ── Filled Button ───────────────────────────────────────────
-      // Stitch `rounded-lg` (4px), 48px touch-target height
+      // Stitch `rounded-lg` (4px), 48px touch-target height.
+      //
+      // The minimum is `Size(0, touchTarget)`, never `Size.fromHeight(...)`:
+      // an infinite minimum width is only valid when the parent hands down a
+      // bounded width. Inside a `Row` (unbounded main axis) or a horizontal
+      // scroll view it resolves to `BoxConstraints(w=Infinity, …)`, which
+      // throws and leaves the button — and every ancestor — unlaid out with
+      // "RenderBox was not laid out". Buttons that should fill the available
+      // width say so explicitly with `SizedBox(width: double.infinity)`.
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: primary,
@@ -342,7 +350,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusLg),
           ),
-          minimumSize: const Size.fromHeight(touchTarget),
+          minimumSize: const Size(0, touchTarget),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           textStyle: inter.labelLarge?.copyWith(
             fontWeight: FontWeight.w600,
@@ -365,6 +373,7 @@ class AppTheme {
       ),
 
       // ── Outlined Button ─────────────────────────────────────────
+      // Finite minimum width — see the Filled Button note above.
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: onSurfaceVariant,
@@ -372,7 +381,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusLg),
           ),
-          minimumSize: const Size.fromHeight(touchTarget),
+          minimumSize: const Size(0, touchTarget),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           textStyle: inter.labelLarge?.copyWith(
             fontWeight: FontWeight.w500,
@@ -606,7 +615,9 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusLg),
           ),
-          minimumSize: const Size.fromHeight(touchTarget),
+          // Finite minimum width — an infinite one breaks in unbounded
+          // parents (Rows, horizontal scroll views). See the light theme.
+          minimumSize: const Size(0, touchTarget),
           padding:
               const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           textStyle: inter.labelLarge?.copyWith(
@@ -638,7 +649,8 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusLg),
           ),
-          minimumSize: const Size.fromHeight(touchTarget),
+          // Finite minimum width — see the light theme.
+          minimumSize: const Size(0, touchTarget),
           padding:
               const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           textStyle: inter.labelLarge?.copyWith(

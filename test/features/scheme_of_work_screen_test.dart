@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:classai/core/database/database.dart';
 import 'package:classai/core/theme/app_theme.dart';
 import 'package:classai/features/auth/providers/auth_provider.dart';
@@ -215,8 +217,13 @@ void main() {
 
         // Verify the screen rendered key elements.
         expect(find.text('Scheme of Work'), findsOneWidget);
-        expect(find.text('Scheme of Work Review'), findsOneWidget);
+        expect(find.text('Review and update teachers scheme of work'),
+            findsOneWidget);
         expect(find.text('All Schemes (Admin)'), findsOneWidget);
+        // The old review banner is gone, so the bulk action now lives in the
+        // list header instead.
+        expect(find.text('Scheme of Work Review'), findsNothing);
+        expect(find.text('Bulk Approve'), findsOneWidget);
 
         // No RenderBox layout errors.
         expect(tester.takeException(), isNull);
@@ -491,5 +498,115 @@ void main() {
         }
       },
     );
+
+    testWidgets('teacher panel collapses and expands', (tester) async {
+      final base = await _seedBase(db);
+      final school = await db.schoolsDao.getByLocalId(base.schoolId);
+      final teacher = await db.teachersDao.getById(base.teacherId);
+
+      await _seedSchemeRecords(
+        db,
+        schoolId: base.schoolId,
+        teacherId: base.teacherId,
+        subjectId: base.subjectId,
+        count: 12,
+      );
+
+      await _pumpSow(
+        tester,
+        db: db,
+        authData: _authState(school!, teacher!),
+        surfaceSize: const Size(1280, 900),
+      );
+
+      expect(find.text('Teachers'), findsOneWidget);
+      await tester.tap(find.byTooltip('Collapse teachers'));
+      await tester.pumpAndSettle();
+      expect(find.text('Teachers'), findsNothing);
+      expect(find.byTooltip('Show teachers'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byTooltip('Show teachers'));
+      await tester.pumpAndSettle();
+      expect(find.text('Teachers'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('lesson notes dialog shows notes and diagrams', (tester) async {
+      final base = await _seedBase(db);
+      final school = await db.schoolsDao.getByLocalId(base.schoolId);
+      final teacher = await db.teachersDao.getById(base.teacherId);
+
+      final schemeId = await db.into(db.schemeOfWork).insert(
+            SchemeOfWorkCompanion.insert(
+              schoolId: Value(base.schoolId),
+              teacherId: Value(base.teacherId),
+              subjectId: Value(base.subjectId),
+              term: const Value('first'),
+              weekNumber: const Value(1),
+              topic: const Value('Cell Structure'),
+              objectives: const Value('Name the parts of a cell'),
+              status: const Value('draft'),
+              classLevel: const Value('JSS 1'),
+            ),
+          );
+
+      await db.lessonsDao.insertLesson(
+        LessonsCompanion.insert(
+          subject: 'Mathematics',
+          classLevel: 'JSS 1',
+          week: 1,
+          topic: 'Cell Structure',
+          difficulty: 'medium',
+          bloomsVerbs: '',
+          curriculum: 'NERDC',
+          content: jsonEncode({
+            'objectives': [
+              'Identify cell organelles',
+              'State their functions',
+            ],
+            'vocabulary': ['mitochondrion', 'nucleus'],
+            'materials': ['Chart of a plant cell'],
+            'presentation': [
+              'Introduction: what is a cell?',
+              'Body: the organelles',
+            ],
+            'assessment': 'Label a cell diagram.',
+            'homework': 'Draw and label a plant cell.',
+            'diagrams': [
+              {'description': 'A labelled plant cell', 'imageUrl': ''},
+            ],
+          }),
+          schemeOfWorkId: Value(schemeId.toString()),
+          weekNumber: const Value(1),
+          isUnlocked: const Value(true),
+          status: const Value('draft'),
+          term: const Value('1st Term'),
+        ),
+      );
+
+      await _pumpSow(
+        tester,
+        db: db,
+        authData: _authState(school!, teacher!),
+        surfaceSize: const Size(1280, 1000),
+      );
+
+      // Expand the class group so the week card (and its linked lesson)
+      // renders.
+      final expandIcons = find.byIcon(Icons.expand_more);
+      expect(expandIcons, findsWidgets);
+      await tester.tap(expandIcons.first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('View notes'), findsOneWidget);
+      await tester.tap(find.text('View notes'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Objectives'), findsOneWidget);
+      expect(find.text('Identify cell organelles'), findsOneWidget);
+      expect(find.text('Diagrams'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
   });
 }
